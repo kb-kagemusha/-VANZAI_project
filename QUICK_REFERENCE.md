@@ -40,6 +40,31 @@ pytest tests/test_csv_import.py -v
 pytest --cov=src --cov-report=html
 ```
 
+### 管理画面ブラウザスモーク
+```powershell
+# ローカルDBを最新スキーマに合わせる
+alembic upgrade head
+
+# APIサーバー起動
+c:/VANZAI_project/.venv/Scripts/python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+
+# 別ターミナルで admin-web 起動
+Set-Location apps/admin-web
+npm run dev -- --host 127.0.0.1 --port 3000
+
+# 別ターミナルで Playwright スモーク実行
+Set-Location apps/admin-web
+$env:ADMIN_WEB_SMOKE_USERNAME='admin_web_smoke'
+$env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'
+$env:ADMIN_WEB_SMOKE_MONTH='2026-01'
+$env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'
+npm run smoke:e2e
+```
+
+補足:
+- `apps/admin-web/e2e/phase1-smoke.spec.ts` 実行時に `scripts/ensure_local_admin.py` と `scripts/ensure_browser_smoke_data.py` が自動実行される
+- 月次画面の from/to は月末日に依存するため、ローカル確認前に古い DB スキーマや古いフロントビルドが残っていないことを確認する
+
 ---
 
 ## 📁 重要ファイルの場所

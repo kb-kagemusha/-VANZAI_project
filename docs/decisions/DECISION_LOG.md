@@ -141,6 +141,31 @@
 
 ---
 
+### DEC-005: アサイン選択セットの共有範囲
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: アサイン一覧の保存済み選択セットはサーバー保存を正本とし、個人セットは ASSIGNMENT_READ 権限者、共有セットは ASSIGNMENT_WRITE 権限者のみ作成可能とする
+- Context:
+  - 一括状態更新で月次の対象集合を再利用したい
+  - ローカル保存のみでは端末依存になり、引き継ぎや複数端末運用に弱い
+  - site_manager / accounting まで無制限に共有作成を許可すると、運用セットが増え過ぎる懸念がある
+- Options:
+  - A: すべてローカル保存のままにする
+  - B: 全 ASSIGNMENT_READ 権限者が共有セットを作成できる
+  - C: 個人セットは広く許可し、共有セットは ASSIGNMENT_WRITE 権限者に限定する
+- Chosen: C
+- Why: 端末依存を解消しつつ、共有セットの増殖は運用担当に寄せて抑制できるため
+- Impact:
+  - Data model: assignment_selection_sets を追加し、period_key / created_by_user_id / is_shared / assignment_ids を保持
+  - UI/UX: アサイン一覧から保存済み選択セットの読み込み・削除ができ、共有チェックは admin / ops のみ有効
+  - Ops/Runbook: 月次確定候補の引き継ぎをブラウザローカルではなく API 保存に統一
+  - Migration: assignment_selection_sets テーブル追加が必要
+- Follow-ups:
+  - 共有セットの名称ルールと棚卸し手順を運用メモへ追記
+  - 将来は project 単位の命名規約やアーカイブ基準を検討
+
+---
+
 ### DEC-005: 税計算方式の確定
 - Date: 2026-01-28
 - Status: Confirmed
@@ -314,6 +339,55 @@
 - Follow-ups:
   - 請求/支払対応表をKintoneに反映するアプリ/フィールド設計の決定
   - 該当稼働者の実データ（worker_id）確定後に introducer_supplier_id を紐付け
+
+---
+
+### DEC-015: 請求書・支払明細 PDF の暫定保存先
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: 請求書と支払明細の PDF は、Cloudflare R2 切替までの暫定運用として storage/pdfs 配下へ保存し、DB には相対 object key を保持する
+- Context:
+  - React 管理画面から PDF 保存先キーを参照できる状態を先に揃えたい
+  - 既存コードには object key を保持する項目が一部あるが、保存処理は統一されていない
+  - R2 連携を待つ間も、版付き PDF の再取得先を安定させる必要がある
+- Options:
+  - A: R2 実装まで都度生成のみで運用する
+  - B: 絶対ファイルパスを DB に保存する
+  - C: ローカル storage/pdfs に保存し、DB には相対 object key を保持する
+- Chosen: C
+- Why: 将来の R2 切替時に DB の参照形式を変えずに済み、管理画面上も保存先キーを先に可視化できるため
+- Impact:
+  - Data model: payouts.pdf_object_key を追加し、invoice/payout の両方で相対 object key を保持
+  - UI/UX: 請求一覧・支払一覧で保存済み PDF の storage key を表示
+  - Ops/Runbook: ローカル開発では storage/pdfs を生成物置き場として扱い、Git 管理から除外
+  - Migration: payouts に pdf_object_key 追加が必要
+- Follow-ups:
+  - Cloudflare R2 / バックアップ先への切替実装
+  - 再発行・訂正版の保管ポリシーと cleanup ルール整理
+
+---
+
+### DEC-016: 支払明細送信の記録単位
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: 支払明細メール送信は payout 単位で送信試行ごとの履歴を payout_deliveries に追記し、支払一覧には最新1件のみを反映する
+- Context:
+  - 稼働者や下請けへの支払明細送付は再送が発生しうる
+  - 送信可否の監査と運用確認は必要だが、一覧画面に全履歴を直接展開すると月次運用の視認性が落ちる
+  - 既存の監査ログだけでは送信先メールアドレスや添付PDFキーの参照に手数がかかる
+- Options:
+  - A: 監査ログのみで送信履歴を管理する
+  - B: payout に送信状態を上書き保存して最後の結果だけ持つ
+  - C: payout_deliveries に試行履歴を保存し、一覧では最新1件だけを表示する
+- Chosen: C
+- Why: 再送履歴を失わずに運用一覧の可読性も維持でき、将来の専用履歴 UI や配信分析へ拡張しやすいため
+- Impact:
+  - Data model: payout_deliveries を追加し、recipient_email、status、provider、pdf_object_key_snapshot、sent_at を保持
+  - UI/UX: 支払一覧は最新送信結果のみ表示し、再送操作は一覧から実行する
+  - Ops/Runbook: 送信失敗時も履歴と監査ログを確認しながら再送判断できる
+  - Migration: payout_deliveries テーブル追加が必要
+- Follow-ups:
+  - 宛先上書き送信時の運用ルールを RUNBOOK に明記
 
 ---
 

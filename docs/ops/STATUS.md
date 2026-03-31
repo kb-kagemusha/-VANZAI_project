@@ -1,6 +1,149 @@
 # 実装状況（STATUS）
 
-最終更新: 2026-01-30
+最終更新: 2026-04-01
+
+---
+
+## React 管理画面の進捗
+
+### Phase 1: 参照系
+- 完了: ログイン、ダッシュボード、実績一覧、アサイン一覧、案件一覧、シフト枠一覧、経費一覧、請求一覧、支払一覧、監査ログ一覧
+- 完了: 単価一覧、マスタ一覧
+- 完了: 権限制御（nav 非表示 + ルートガード）
+
+### Phase 2: 月次運用
+- 完了: CSV取込画面
+  - 案件選択、対象月、取込モード、洗い替え範囲、結果表示、取込履歴、差戻し文面作成
+- 完了: 請求生成 UI
+  - 請求書生成、請求書発行、請求書PDFダウンロード
+- 完了: 支払生成 UI
+  - 支払明細生成、支払確定、支払済み更新、支払明細PDFダウンロード、支払明細メール送信
+  - 支払一覧で最終送信ステータス、送信日時、送信先メールアドレスを参照可能
+- 完了: 締め・締め解除 UI
+  - ダッシュボードの締め状況セクションで仮締め、本締め、解除、監査ログ導線を実装
+- 完了: 差戻し支援 UI
+  - 取込履歴からエラー概要を差戻し文面へ整形し、コピーできる
+- 一部実装: PDFの保存先管理 UI
+  - 請求一覧と支払一覧で保存済み PDF の storage key を参照可能
+  - 請求発行時と支払確定時に PDF を storage/pdfs 配下へ保存し、ダウンロード時は保存済みファイルを優先して返す
+  - Cloudflare R2 への本保存切替は未実装で、現状はローカル保存を暫定運用とする
+- 一部実装: 支払明細送信履歴管理
+  - API では送信履歴を payout_deliveries に保存し、監査ログへ送信成功/失敗を記録する
+  - 管理画面では支払一覧に最終送信結果を表示し、各支払から送信履歴パネルを開いて再送状況を確認できる
+  - 履歴パネルから宛先メールアドレスを上書きして再送でき、空欄なら既定宛先を使用する
+  - 履歴パネルには既定送信先を明示し、未設定時は送信前に不足が分かる
+  - 履歴パネルには既定送信先と過去送信先から組み立てた送信候補を表示し、候補クリックで宛先入力へ反映できる
+  - 支払一覧では既定送信先未設定の支払だけを抽出でき、一覧上でも未設定警告を表示する
+  - 支払一覧では未送信のみ、送信失敗のみの絞り込みができ、再送が必要な明細を先に洗い出せる
+  - 送信履歴には送信理由メモと内部メモを保持し、再送判断の文脈を追跡できる
+  - ダッシュボードと支払一覧上部サマリーで、既定送信先未設定の支払件数を確認できる
+  - 監査ログ一覧の概要欄でも、支払明細送信の宛先・送信理由メモ・内部メモを確認できる
+
+### ローカル検証メモ
+- 管理画面のブラウザスモークは Playwright で再実行できる
+- 事前に `alembic upgrade head` でローカル DB を最新スキーマへ上げる
+- API は `c:/VANZAI_project/.venv/Scripts/python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000` で起動する
+- admin-web は `Set-Location apps/admin-web; npm run dev -- --host 127.0.0.1 --port 3000` で起動する
+- スモークは `Set-Location apps/admin-web; $env:ADMIN_WEB_SMOKE_USERNAME='admin_web_smoke'; $env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'; $env:ADMIN_WEB_SMOKE_MONTH='2026-01'; $env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'; npm run smoke:e2e` で実行する
+- `apps/admin-web/e2e/phase1-smoke.spec.ts` は実行前に `scripts/ensure_local_admin.py` と `scripts/ensure_browser_smoke_data.py` を呼び、最低限のログインユーザーと確認用データをローカル DB に投入する
+- 2026-04-01 時点で、支払送信先未設定サマリーと支払送信監査ログ要約を含むブラウザスモークは成功している
+
+### Phase 3: マスタ管理
+- 着手: 基本マスタの新規登録 UI
+  - マスタ一覧画面でクライアント、現場、案件種別、役割の新規登録が可能
+  - 新規登録は MASTER_WRITE 権限に合わせて admin のみ表示・実行可能
+  - API では `/api/clients`、`/api/sites`、`/api/project-types`、`/api/roles` の POST を追加し、作成時に監査ログを記録する
+- 進展: 稼働者・下請けの登録 / 編集 UI
+  - マスタ一覧画面で稼働者、下請けの新規登録と既存行の編集が可能
+  - API では `/api/workers`、`/api/workers/{id}`、`/api/suppliers`、`/api/suppliers/{id}` を追加し、更新時も監査ログを記録する
+- 進展: 単価管理の編集 UI
+  - 単価一覧画面で売上単価、外注単価、単価ルールの新規登録と既存行の編集が可能
+  - API では `/api/price-rules`、`/api/price-rules/{id}`、`/api/price-sales`、`/api/price-sales/{id}`、`/api/price-outsource`、`/api/price-outsource/{id}` を追加し、PRICE_WRITE 権限で保護する
+- 完了: Phase 3 ブラウザスモーク拡張
+  - Playwright で下請け、単価ルール、売上単価、外注単価の作成 / 更新を自動確認できる
+  - 既存ローカル DB でも作成系 API が通るよう、`TimestampMixin` に Python 側の created_at / updated_at default を追加した
+- 完了: Phase 4 ブラウザスモーク拡張
+  - Playwright で案件、シフト枠の作成 / 更新を自動確認できる
+  - locator は card / row / label 単位にスコープし、`案件` と `ソート` のような部分一致衝突を回避した
+
+### Phase 4: 案件・シフト運用
+- 完了: 案件登録 / 編集 UI
+  - 案件一覧画面から案件の新規作成と既存案件の主要項目更新が可能
+  - API では `/api/projects` と `/api/projects/{id}` を利用し、取引先・現場・担当・期間・notes・稼働状態を一括更新できる
+- 完了: シフト枠作成 / 編集 UI
+  - シフト枠一覧画面から案件・日付・時間帯・シフトラベル・必要人数・notes を登録 / 更新可能
+  - API では `/api/shift-slots` と `/api/shift-slots/{id}` を利用し、アサイン済み枠の案件変更禁止と必要人数下限制約をガードする
+- 完了: アサイン作成 / 状態変更 UI
+  - アサイン一覧画面からシフト枠・スタッフ・役割・ステータスを指定して新規登録が可能
+  - confirmed / tentative / canceled への状態変更と、取消時の理由入力を実装
+  - 実績が有効なアサインは canceled へ変更できないよう API でガード
+- 完了: アサイン編集 UI
+  - アサイン一覧画面からシフト枠・スタッフ・役割・ロック単価の更新が可能
+  - active な実績が残るアサインは、枠・スタッフ・役割の差し替えを API でブロック
+- 完了: 予定 / 確定の状態管理 UI
+  - アサイン単位の tentative / confirmed / canceled 更新は可能
+  - 一覧画面でページ・ステータス切替をまたいで選択を保持しつつ、一括 tentative / confirmed / canceled 更新が可能
+  - 対象月ごとに保存済み選択セットをサーバー保存し、再読み込みできる
+  - 個人用セットは ASSIGNMENT_READ 権限で保存でき、共有セットは admin / ops が保存可能
+  - 一括更新は all-or-nothing で、1件でも取消不可条件に当たると全件を更新しない
+  - 選択セットの削除は作成者または admin のみ可能
+- 完了: 取消理由管理 UI
+  - canceled 更新時の理由入力は可能
+  - 状態変更パネルで対象アサインの監査ログを参照でき、取消・状態変更の履歴を確認可能
+  - canceled 行には再開導線を表示し、tentative / confirmed への復帰操作が可能
+  - 対象月の取消履歴専用一覧を表示し、現在も canceled のアサインは一覧から再開可能
+  - canceled から tentative / confirmed へ復帰する際は復帰理由が必須
+  - 復帰理由は監査ログに記録され、取消履歴一覧でも復帰日時・実行者・理由を参照可能
+  - 単件復帰と一括状態更新の両方で復帰理由入力に対応
+  - admin-web の phase1 smoke にアサイン運用フローを追加し、編集・取消・復帰・選択セット保存/再読込/削除・一括状態更新を通しで検証済み
+- 完了: 運用メモ管理 UI
+  - 案件一覧とシフト枠一覧の編集カードから、notes を他項目と一緒に更新できる
+  - Focused pytest 13件と admin-web build で Phase 4 の追加 PUT フローを検証済み
+
+### Phase 5: スタッフ向けモバイル
+- 完了: `apps/staff-mobile` 初期実装
+  - worker ロール専用のログイン、当日アサイン確認、今月の実績確認を React + Vite で追加
+  - 既存 API の `/api/auth/me`、`/api/assignments`、`/api/actuals` をそのまま利用し、worker スコープで read-only 導線を切り出した
+  - `apps/staff-mobile` の production build を通し、次段の出勤 / 退勤、稼働可否、経費申請の土台を用意した
+- 完了: 出勤 / 退勤、経費申請
+  - worker ロールに自分スコープの `actual_write`、`expense_read`、`expense_submit` を追加し、勤怠打刻と経費一覧 / 申請を許可した
+  - `POST /api/assignments/{id}/check-in` と `POST /api/assignments/{id}/check-out` を追加し、assignment 起点で actual を作成 / 更新する mobile 打刻導線を追加した
+  - `POST /api/expenses` を multipart 対応で追加し、領収書はローカル `storage/receipts` 配下へ object key 形式で保存する
+  - `apps/staff-mobile` に今日の打刻 UI と経費申請 / 今月の申請一覧を追加し、focused pytest 8件と staff-mobile build で検証済み
+- 完了: 予定確認、稼働可否、expense 承認導線
+  - `worker_availability` テーブルと `GET/POST /api/worker-availability` を追加し、worker ロールに `availability_read` / `availability_write` を付与した
+  - `apps/staff-mobile` に月次予定確認画面、日別の稼働可否入力画面、経費一覧からの領収書参照導線を追加した
+  - `POST /api/expenses/{id}/approve`、`POST /api/expenses/{id}/reject`、`GET /api/expenses/{id}/receipt` を追加し、admin-web 経費一覧から承認 / 却下 / 領収書ダウンロードを実行できるようにした
+  - 受領ファイル保存は `ObjectStorage` 抽象に寄せ、Cloudflare R2 切替時に object key 契約を維持できるよう整理した
+  - focused pytest 13件、admin-web build、staff-mobile build で検証済み
+- 完了: 予定確認返信と通知導線
+  - `assignments` に worker 向けの応答状態、依頼日時、回答日時、連絡メモを追加し、worker ロールに `assignment_response` 権限を付与した
+  - `POST /api/assignments/{id}/worker-response` と `GET /api/assignments?response_status=...` を追加し、予定確認の返信と未回答件数の抽出を API で扱えるようにした
+  - `apps/staff-mobile` の予定画面に参加可 / 辞退の返信 UI、下部ナビの確認待ちバッジ、確認依頼 / 回答時刻表示を追加した
+  - scheduler の週次催促を worker 向け未回答予定確認メールへ接続し、対象期間内の pending assignment を worker ごとに集約して送信できるようにした
+  - `GET /api/dashboard` に pending assignment response 監視を追加し、admin-web で未回答件数、要エスカレーション件数、依頼経過・稼働日接近・メール未設定を一覧できるようにした
+  - `GET /api/assignments` に monitoring_status / missing_email_only filter と監視メタデータを追加し、admin-web の `/operations/assignment-responses` で専用の予定確認監視ページを開けるようにした
+  - `POST /api/assignments/reminders/send` を追加し、予定確認監視ページから選択中の pending assignment を worker ごとに束ねて手動再送できるようにした
+  - `POST /api/assignments/reminders/history` を追加し、予定確認監視ページで表示中 assignment に紐づく recipient 単位の直近催促履歴を確認できるようにした
+  - `POST /api/assignments/reminders/escalate` と `assignment_response_escalation_summary` メールを追加し、要エスカレーション assignment を admin / ops / accounting 向けに要約通知できるようにした
+  - `POST /api/assignments/reminders/escalations/history` を追加し、予定確認監視ページで管理者通知の直近エスカレーション履歴も確認できるようにした
+  - 予定確認監視ページでは要エスカレーション行の単件通知と複数選択通知の両方に対応し、通知結果を sent / failed / recipient 数で即時確認できる
+  - Playwright の phase1 スモークに予定確認監視ページの再送 / 通知フローを追加し、2026-04-01 時点で 4 件すべて成功している
+  - staff-mobile に Playwright の phase5 smoke を追加し、当日打刻・予定返信・可否登録・経費申請・実績確認を通しで検証済み
+  - focused pytest 40件、admin-web build、staff-mobile build、admin-web smoke 5件、staff-mobile smoke 1件がすべて成功
+  - `scripts/scheduler_runner.py --run-once weekly_reminder` を追加し、`EMAIL_DRY_RUN=true` の one-shot 検証で scheduler/SMTP 設定を本番相当に寄せた確認ができるようにした
+  - ローカルでは `alembic upgrade head` を適用済みで、focused pytest 36件、assignment API pytest 27件、admin-web build、Playwright smoke 4件で予定確認監視の履歴 / エスカレーション通知まで検証済み
+  - 2026-04-01 の追加回帰で backend pytest 302件、admin-web build、staff-mobile build、admin-web smoke 5件、staff-mobile smoke 1件を再実行し、すべて成功した
+  - 追加回帰で admin 権限マッピングの手動列挙漏れにより `assignment_response` が欠落していたため、admin は `set(Permission)` を使う形へ修正した
+  - admin-web の master 取得系 API で URL を二重構築していた箇所を修正し、backend ログに出ていた不正な query string を解消した
+  - アサイン一覧の edit 用 shift-slot 取得で `limit=300` が backend 上限 `MAX_PAGE_LIMIT=200` を超えていたため 200 に合わせ、再スモーク後の backend ログから 422 を解消した
+  - admin-web の project 作成スモークは即時一覧表示前提で不安定だったため、検索ベースの検証へ寄せて再実行時のページング依存を除去した
+
+### 2026-04-01 引き継ぎメモ
+- この時点の広め回帰は backend pytest 302件、admin-web build、staff-mobile build、admin-web smoke 5件、staff-mobile smoke 1件まで完了している
+- broad regression の再実行時は共有ターミナルの cwd を必ず repo root に戻すこと。`apps/admin-web` 配下のままだと pytest discovery が 0 件に見える
+- 未処理の機能不具合は現時点では残っておらず、残タスクは git 差分の commit 分割と PR 単位の整理が中心
+- commit を切るなら backend schema/API、admin-web assignment response、staff-mobile phase5、docs/scripts の4塊に分けると追いやすい
 
 ---
 
