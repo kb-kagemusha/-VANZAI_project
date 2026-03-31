@@ -66,6 +66,7 @@ test("phase1 admin routes render with local data", async ({ page }) => {
     { path: "/operations/assignments", heading: "アサイン一覧", expectsTable: true },
     { path: "/billing/invoices", heading: "請求一覧", expectsTable: true },
     { path: "/billing/payouts", heading: "支払一覧", expectsTable: true },
+    { path: "/masters/prices", heading: "単価一覧", expectsTable: true },
     { path: "/audit-logs", heading: "監査ログ", expectsTable: true },
     { path: "/operations/projects", heading: "案件一覧", expectsTable: true },
     { path: "/operations/shift-slots", heading: "シフト枠一覧", expectsTable: true },
@@ -86,6 +87,11 @@ test("phase1 admin routes render with local data", async ({ page }) => {
     if (route.path === "/billing/payouts") {
       await expect(page.getByText("支払明細を生成")).toBeVisible();
       await expect(page.getByRole("button", { name: "支払明細生成" })).toBeDisabled();
+    }
+    if (route.path === "/masters/prices") {
+      await expect(page.getByRole("button", { name: "売上単価" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "外注単価" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "単価ルール" })).toBeVisible();
     }
     if (route.path === "/audit-logs") {
       const auditProjectSelect = page.locator("label").filter({ hasText: /^案件/ }).locator("select");

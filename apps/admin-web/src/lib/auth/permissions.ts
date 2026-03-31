@@ -65,6 +65,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/prices",
+    label: "単価一覧",
+    description: "売上・外注・ルール単価を参照",
+    allowedRoles: ["admin", "ops", "accounting"],
+  },
+  {
     to: "/audit-logs",
     label: "監査ログ",
     description: "監査ログを条件検索で参照",
