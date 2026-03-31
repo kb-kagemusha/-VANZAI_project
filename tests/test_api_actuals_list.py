@@ -5,7 +5,8 @@ from decimal import Decimal
 from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
 from src.models.base import generate_ulid
 from src.models.enums import ActualStatus, UserRole
-from src.models.transaction import Actual, ImportBatch, Project
+from src.models.master import Worker
+from src.models.transaction import Actual, Assignment, ImportBatch, Project
 
 
 def _auth_header(username: str) -> dict[str, str]:
@@ -167,3 +168,77 @@ def test_list_actuals_restricts_site_manager_scope(api_client, db_session, proje
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Project access denied"
+
+
+def test_worker_can_check_in_and_out_assignment(api_client, db_session, assignment, project, worker, role):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="worker_attendance",
+        email="worker_attendance@example.com",
+        password="secret123",
+        role=UserRole.WORKER.value,
+    )
+    user.worker_id = worker.id
+    db_session.add(user)
+    db_session.commit()
+
+    check_in_response = api_client.post(
+        f"/api/assignments/{assignment.id}/check-in",
+        json={"action_time": "09:05", "notes": "現場到着"},
+        headers=_auth_header(user.username),
+    )
+
+    assert check_in_response.status_code == 200
+    check_in_payload = check_in_response.json()
+    assert check_in_payload["assignment_id"] == assignment.id
+    assert check_in_payload["start_time"] == "09:05:00"
+    assert check_in_payload["end_time"] is None
+    assert check_in_payload["calc_minutes_billable"] == 0
+
+    check_out_response = api_client.post(
+        f"/api/assignments/{assignment.id}/check-out",
+        json={"action_time": "18:10", "break_minutes_input": 60},
+        headers=_auth_header(user.username),
+    )
+
+    assert check_out_response.status_code == 200
+    check_out_payload = check_out_response.json()
+    assert check_out_payload["end_time"] == "18:10:00"
+    assert check_out_payload["calc_minutes_billable"] == 495
+    assert check_out_payload["import_batch_file_name"].startswith("mobile_attendance_")
+
+    actual = db_session.get(Actual, check_out_payload["actual_id"])
+    assert actual is not None
+    assert actual.start_time == time(9, 5)
+    assert actual.end_time == time(18, 10)
+    assert actual.break_minutes_input == 60
+    assert actual.calc_minutes_billable == 495
+
+
+def test_worker_check_in_blocks_other_workers_assignment(api_client, db_session, assignment):
+    other_worker = Worker(
+        id=generate_ulid(),
+        name="Other Attendance Worker",
+        email="other_attendance_worker@example.com",
+    )
+    db_session.add(other_worker)
+    db_session.flush()
+
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="worker_attendance_other",
+        email="worker_attendance_other@example.com",
+        password="secret123",
+        role=UserRole.WORKER.value,
+    )
+    user.worker_id = other_worker.id
+    db_session.add(user)
+    db_session.commit()
+
+    response = api_client.post(
+        f"/api/assignments/{assignment.id}/check-in",
+        json={"action_time": "09:00"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 404

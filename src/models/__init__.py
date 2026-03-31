@@ -5,9 +5,11 @@ from src.models.transaction import (
     Project,
     ShiftSlot,
     Assignment,
+    AssignmentSelectionSet,
     Actual,
     ImportBatch,
     AuditLog,
+    PayoutDelivery,
 )
 
 __all__ = [
@@ -20,7 +22,9 @@ __all__ = [
     "Project",
     "ShiftSlot",
     "Assignment",
+    "AssignmentSelectionSet",
     "Actual",
     "ImportBatch",
     "AuditLog",
+    "PayoutDelivery",
 ]

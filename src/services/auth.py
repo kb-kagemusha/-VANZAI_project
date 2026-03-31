@@ -18,41 +18,7 @@ from src.models.master import User
 
 # ロール別権限マッピング（仕様5.1, 5.2）
 ROLE_PERMISSIONS = {
-    UserRole.ADMIN: {
-        # 全権限
-        Permission.MASTER_READ,
-        Permission.MASTER_WRITE,
-        Permission.PRICE_READ,
-        Permission.PRICE_WRITE,
-        Permission.PROJECT_READ,
-        Permission.PROJECT_WRITE,
-        Permission.SHIFT_READ,
-        Permission.SHIFT_WRITE,
-        Permission.ASSIGNMENT_READ,
-        Permission.ASSIGNMENT_WRITE,
-        Permission.ACTUAL_READ,
-        Permission.CSV_SUBMIT,
-        Permission.CSV_IMPORT,
-        Permission.INVOICE_READ,
-        Permission.INVOICE_GENERATE,
-        Permission.INVOICE_ISSUE,
-        Permission.INVOICE_CORRECT,
-        Permission.PAYOUT_READ,
-        Permission.PAYOUT_GENERATE,
-        Permission.PAYOUT_APPROVE,
-        Permission.PAYOUT_CORRECT,
-        Permission.SOFT_CLOSE,
-        Permission.SOFT_CLOSE_RELEASE,
-        Permission.HARD_CLOSE,
-        Permission.HARD_CLOSE_RELEASE,
-        Permission.EXPENSE_READ,
-        Permission.EXPENSE_SUBMIT,
-        Permission.EXPENSE_APPROVE,
-        Permission.INCENTIVE_READ,
-        Permission.INCENTIVE_CALCULATE,
-        Permission.INCENTIVE_APPROVE,
-        Permission.AUDIT_LOG_READ,
-    },
+    UserRole.ADMIN: set(Permission),
     UserRole.OPS: {
         # 案件/シフト/アサイン作成、実績取り込み、請求/支払の生成
         Permission.MASTER_READ,
@@ -64,6 +30,8 @@ ROLE_PERMISSIONS = {
         Permission.ASSIGNMENT_READ,
         Permission.ASSIGNMENT_WRITE,
         Permission.ACTUAL_READ,
+        Permission.AVAILABILITY_READ,
+        Permission.AVAILABILITY_WRITE,
         Permission.CSV_IMPORT,
         Permission.INVOICE_READ,
         Permission.INVOICE_GENERATE,
@@ -84,6 +52,8 @@ ROLE_PERMISSIONS = {
         Permission.SHIFT_READ,
         Permission.ASSIGNMENT_READ,
         Permission.ACTUAL_READ,
+        Permission.ACTUAL_WRITE,
+        Permission.AVAILABILITY_READ,
         Permission.INVOICE_READ,
         Permission.INVOICE_ISSUE,
         Permission.INVOICE_CORRECT,
@@ -108,9 +78,15 @@ ROLE_PERMISSIONS = {
         Permission.CSV_SUBMIT,
     },
     UserRole.WORKER: {
-        # 参照のみ（自分のデータ）
+        # 自分のデータ参照と勤怠・経費申請
         Permission.ASSIGNMENT_READ,  # 自分のみ
+        Permission.ASSIGNMENT_RESPONSE,
         Permission.ACTUAL_READ,      # 自分のみ
+        Permission.ACTUAL_WRITE,     # 自分のみ
+        Permission.AVAILABILITY_READ,
+        Permission.AVAILABILITY_WRITE,
+        Permission.EXPENSE_READ,     # 自分のみ
+        Permission.EXPENSE_SUBMIT,   # 自分のみ
     },
 }
 

@@ -5,6 +5,7 @@ EmailTemplateServiceと統合してSMTP経由でメール送信を行う
 Gmail, SendGrid, AWS SES対応
 """
 import smtplib
+from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
@@ -114,6 +115,11 @@ class EmailSender:
         
         # 本文（プレーンテキスト）
         msg.attach(MIMEText(template.body, "plain", "utf-8"))
+
+        for attachment in template.attachments:
+            part = MIMEApplication(attachment.content, _subtype=attachment.content_type.split("/")[-1])
+            part.add_header("Content-Disposition", "attachment", filename=attachment.filename)
+            msg.attach(part)
         
         if dry_run:
             print("=== DRY RUN: Email NOT sent ===")

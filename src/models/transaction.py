@@ -2,7 +2,7 @@
 Transaction models
 仕様参照: DESIGN_SPEC_v0.3 セクション6.1, 6.2, 6.3, 8.1, 9.4-9.6
 """
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -26,7 +26,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.base import Base, TimestampMixin, SoftDeleteMixin, generate_ulid
 from src.models.enums import (
     AssignmentStatus,
+    AssignmentWorkerResponseStatus,
     ActualStatus,
+    AvailabilityStatus,
     ImportMode,
     ImportScopeType,
     ImportBatchStatus,
@@ -185,6 +187,21 @@ class Assignment(Base, TimestampMixin, SoftDeleteMixin):
         nullable=False,
     )
     cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    worker_response_status: Mapped[str | None] = mapped_column(
+        String(20),
+        default=AssignmentWorkerResponseStatus.PENDING.value,
+        nullable=True,
+    )
+    worker_response_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True,
+    )
+    worker_response_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    worker_response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     # 個別単価上書き（仕様6.2, 7.2）
     locked_price_sales: Mapped[Decimal | None] = mapped_column(
@@ -207,6 +224,7 @@ class Assignment(Base, TimestampMixin, SoftDeleteMixin):
         UniqueConstraint("shift_slot_id", "worker_id", name="uq_assignment_slot_worker"),
         Index("ix_assignments_worker_id", "worker_id"),
         Index("ix_assignments_status", "status"),
+        Index("ix_assignments_worker_response_status", "worker_response_status"),
     )
 
 
@@ -414,6 +432,32 @@ class AuditLog(Base):
     )
 
 
+class AssignmentSelectionSet(Base, TimestampMixin, SoftDeleteMixin):
+    """
+    アサイン選択セット
+
+    対象月内で保持した選択済みアサイン ID 群を再利用するための保存テーブル。
+    """
+    __tablename__ = "assignment_selection_sets"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    period_key: Mapped[str] = mapped_column(String(6), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("users.id"), nullable=False
+    )
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    assignment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+
+    __table_args__ = (
+        Index("ix_assignment_selection_sets_period_key", "period_key"),
+        Index("ix_assignment_selection_sets_created_by_user_id", "created_by_user_id"),
+        Index("ix_assignment_selection_sets_shared_period", "is_shared", "period_key"),
+    )
+
+
 class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     """
     請求書
@@ -583,6 +627,9 @@ class Payout(Base, TimestampMixin, SoftDeleteMixin):
     
     # 金額サマリ
     total_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+
+    # PDF保存先
+    pdf_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     
     # 承認・支払日時
     approved_at: Mapped[datetime | None] = mapped_column(
@@ -604,6 +651,7 @@ class Payout(Base, TimestampMixin, SoftDeleteMixin):
     project: Mapped["Project"] = relationship()
     parent_payout: Mapped["Payout"] = relationship(remote_side=[id])
     lines: Mapped[list["PayoutLine"]] = relationship(back_populates="payout")
+    deliveries: Mapped[list["PayoutDelivery"]] = relationship(back_populates="payout")
 
     __table_args__ = (
         Index("ix_payouts_worker_period", "worker_id", "period_key"),
@@ -672,6 +720,36 @@ class PayoutLine(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_payout_lines_payout", "payout_id"),
         Index("ix_payout_lines_actual", "actual_id"),
+    )
+
+
+class PayoutDelivery(Base, TimestampMixin):
+    """支払明細送信記録"""
+    __tablename__ = "payout_deliveries"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    payout_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("payouts.id"), nullable=False
+    )
+    delivery_method: Mapped[str] = mapped_column(String(20), default="email", nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    delivered_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pdf_object_key_snapshot: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    payout: Mapped["Payout"] = relationship(back_populates="deliveries")
+
+    __table_args__ = (
+        Index("ix_payout_deliveries_payout", "payout_id"),
+        Index("ix_payout_deliveries_status", "status"),
+        Index("ix_payout_deliveries_sent_at", "sent_at"),
     )
 
 
@@ -801,6 +879,31 @@ class Expense(Base, TimestampMixin):
         Index("ix_expenses_worker_id", "worker_id"),
         Index("ix_expenses_status", "status"),
         Index("ix_expenses_expense_date", "expense_date"),
+    )
+
+
+class WorkerAvailability(Base, TimestampMixin):
+    """稼働者の稼働可否入力"""
+    __tablename__ = "worker_availability"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    worker_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=False
+    )
+    availability_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default=AvailabilityStatus.UNDECIDED.value, nullable=False
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    worker: Mapped["Worker"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("worker_id", "availability_date", name="uq_worker_availability_worker_date"),
+        Index("ix_worker_availability_worker_date", "worker_id", "availability_date"),
+        Index("ix_worker_availability_status", "status"),
     )
 
 

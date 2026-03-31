@@ -103,6 +103,71 @@ def test_list_workers_blocked_for_worker_role(api_client, db_session):
     assert response.status_code == 403
 
 
+def test_create_worker_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_worker",
+        email="ops_create_worker@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/workers",
+        json={"name": "New Worker", "email": "new-worker@example.com", "is_active": True},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_worker_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_worker",
+        email="admin_create_worker@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/workers",
+        json={"name": "New Worker", "email": "new-worker@example.com", "phone": "09012345678", "notes": "memo", "is_active": True},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Worker"
+    assert payload["email"] == "new-worker@example.com"
+    assert payload["notes"] == "memo"
+
+
+def test_update_worker_succeeds_for_admin(api_client, db_session, worker):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_update_worker",
+        email="admin_update_worker@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.put(
+        f"/api/workers/{worker.id}",
+        json={"name": "Updated Worker", "email": "updated-worker@example.com", "phone": "08000000000", "introducer_supplier_id": None, "notes": "updated", "is_active": False},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "Updated Worker"
+    assert payload["email"] == "updated-worker@example.com"
+    assert payload["is_active"] is False
+
+
 # ===========================
 # /api/suppliers
 # ===========================
@@ -140,6 +205,73 @@ def test_list_suppliers_blocked_for_worker_role(api_client, db_session):
 
     response = api_client.get("/api/suppliers", headers=_auth_header(user.username))
     assert response.status_code == 403
+
+
+def test_create_supplier_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_supplier",
+        email="ops_create_supplier@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/suppliers",
+        json={"name": "New Supplier", "payout_terms_days": 30, "is_active": True},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_supplier_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_supplier",
+        email="admin_create_supplier@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/suppliers",
+        json={"name": "New Supplier", "contact_email": "supplier@example.com", "contact_phone": "0312345678", "payout_terms_days": 30, "default_daily_price": "16500.00", "is_active": True, "notes": "memo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Supplier"
+    assert payload["contact_email"] == "supplier@example.com"
+    assert payload["default_daily_price"] == "16500.00"
+
+
+def test_update_supplier_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_update_supplier",
+        email="admin_update_supplier@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    supplier = Supplier(id=generate_ulid(), name="Before Supplier", payout_terms_days=70, is_active=True)
+    db_session.add(supplier)
+    db_session.commit()
+
+    response = api_client.put(
+        f"/api/suppliers/{supplier.id}",
+        json={"name": "Updated Supplier", "contact_email": "updated-supplier@example.com", "contact_phone": "0399999999", "payout_terms_days": 45, "default_daily_price": "18000.00", "is_active": False, "notes": "updated"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "Updated Supplier"
+    assert payload["payout_terms_days"] == 45
+    assert payload["is_active"] is False
 
 
 # ===========================
@@ -205,6 +337,48 @@ def test_list_clients_blocked_for_worker_role(api_client, db_session):
     assert response.status_code == 403
 
 
+def test_create_client_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_client",
+        email="ops_create_client@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/clients",
+        json={"name": "New Client", "code": "NC001", "contact_name": "担当", "contact_email": "new-client@example.com"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_client_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_client",
+        email="admin_create_client@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/clients",
+        json={"name": "New Client", "code": "NC001", "contact_name": "担当", "contact_email": "new-client@example.com"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Client"
+    assert payload["code"] == "NC001"
+    assert payload["contact_email"] == "new-client@example.com"
+
+
 # ===========================
 # /api/sites
 # ===========================
@@ -240,6 +414,48 @@ def test_list_sites_blocked_for_worker_role(api_client, db_session):
 
     response = api_client.get("/api/sites", headers=_auth_header(user.username))
     assert response.status_code == 403
+
+
+def test_create_site_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_site",
+        email="ops_create_site@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/sites",
+        json={"name": "New Site", "code": "NS001", "address": "Tokyo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_site_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_site",
+        email="admin_create_site@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/sites",
+        json={"name": "New Site", "code": "NS001", "address": "Tokyo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Site"
+    assert payload["code"] == "NS001"
+    assert payload["address"] == "Tokyo"
 
 
 # ===========================
@@ -281,6 +497,48 @@ def test_list_project_types_blocked_for_worker_role(api_client, db_session):
     assert response.status_code == 403
 
 
+def test_create_project_type_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_project_type",
+        email="ops_create_project_type@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/project-types",
+        json={"name": "New Type", "code": "NTYPE", "description": "desc"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_project_type_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_project_type",
+        email="admin_create_project_type@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/project-types",
+        json={"name": "New Type", "code": "NTYPE", "description": "desc"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Type"
+    assert payload["code"] == "NTYPE"
+    assert payload["description"] == "desc"
+
+
 # ===========================
 # /api/roles
 # ===========================
@@ -316,6 +574,48 @@ def test_list_roles_blocked_for_worker_role(api_client, db_session):
 
     response = api_client.get("/api/roles", headers=_auth_header(user.username))
     assert response.status_code == 403
+
+
+def test_create_role_requires_master_write(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_role",
+        email="ops_create_role@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/roles",
+        json={"name": "New Role", "code": "NROLE", "description": "desc"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_role_succeeds_for_admin(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_role",
+        email="admin_create_role@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/roles",
+        json={"name": "New Role", "code": "NROLE", "description": "desc"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "New Role"
+    assert payload["code"] == "NROLE"
+    assert payload["description"] == "desc"
 
 
 # ===========================

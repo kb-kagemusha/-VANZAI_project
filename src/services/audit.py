@@ -25,11 +25,13 @@ from src.models.enums import AuditAction
 TARGET_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
     "actual": ("actual", "actuals"),
     "assignment": ("assignment", "assignments"),
+    "assignment_selection_set": ("assignment_selection_set", "assignment_selection_sets"),
     "closing": ("closing", "closings"),
     "expense": ("expense", "expenses"),
     "import_batch": ("import_batch", "import_batches"),
     "invoice": ("invoice", "invoices"),
     "payout": ("payout", "payouts"),
+    "payout_delivery": ("payout_delivery", "payout_deliveries"),
     "price_outsource": ("price_outsource",),
     "price_sales": ("price_sales",),
     "price_rule": ("price_rule", "price_rules"),
@@ -351,6 +353,8 @@ class AuditService:
                     AuditAction.PAYOUT_APPROVED.value,
                     AuditAction.PAYOUT_PAID.value,
                     AuditAction.PAYOUT_CORRECTED.value,
+                    AuditAction.PAYOUT_DELIVERY_SENT.value,
+                    AuditAction.PAYOUT_DELIVERY_FAILED.value,
                 ]))
             elif filter.action_group == "import_all":
                 conditions.append(AuditLog.action.in_([
@@ -367,6 +371,8 @@ class AuditService:
                 conditions.append(AuditLog.action.in_([
                     AuditAction.ASSIGNMENT_CANCELED.value,
                     AuditAction.ASSIGNMENT_STATUS_CHANGED.value,
+                    AuditAction.ASSIGNMENT_SELECTION_SET_SAVED.value,
+                    AuditAction.ASSIGNMENT_SELECTION_SET_DELETED.value,
                 ]))
             elif filter.action_group == "price_all":
                 conditions.append(AuditLog.action.in_([

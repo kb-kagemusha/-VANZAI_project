@@ -15,6 +15,13 @@ class AssignmentStatus(str, Enum):
     CANCELED = "canceled"    # キャンセル
 
 
+class AssignmentWorkerResponseStatus(str, Enum):
+    """稼働者による予定確認応答ステータス"""
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+
+
 class ActualStatus(str, Enum):
     """
     実績ステータス
@@ -116,10 +123,20 @@ class AuditAction(str, Enum):
     REPLACE_SCOPE_EXECUTED = "replace_scope_executed"
     ACTUAL_SUPERSEDED = "actual_superseded"
     ACTUAL_INVALIDATED = "actual_invalidated"
+    ATTENDANCE_CHECKED_IN = "attendance_checked_in"
+    ATTENDANCE_CHECKED_OUT = "attendance_checked_out"
+    AVAILABILITY_UPDATED = "availability_updated"
     
     # アサイン関連
     ASSIGNMENT_CANCELED = "assignment_canceled"
     ASSIGNMENT_STATUS_CHANGED = "assignment_status_changed"
+    ASSIGNMENT_WORKER_RESPONSE_UPDATED = "assignment_worker_response_updated"
+    ASSIGNMENT_RESPONSE_REMINDER_SENT = "assignment_response_reminder_sent"
+    ASSIGNMENT_RESPONSE_REMINDER_FAILED = "assignment_response_reminder_failed"
+    ASSIGNMENT_RESPONSE_ESCALATION_SENT = "assignment_response_escalation_sent"
+    ASSIGNMENT_RESPONSE_ESCALATION_FAILED = "assignment_response_escalation_failed"
+    ASSIGNMENT_SELECTION_SET_SAVED = "assignment_selection_set_saved"
+    ASSIGNMENT_SELECTION_SET_DELETED = "assignment_selection_set_deleted"
     
     # 単価関連
     PRICE_RULE_CHANGED = "price_rule_changed"
@@ -140,6 +157,11 @@ class AuditAction(str, Enum):
     PAYOUT_APPROVED = "payout_approved"
     PAYOUT_PAID = "payout_paid"
     PAYOUT_CORRECTED = "payout_corrected"
+    PAYOUT_DELIVERY_SENT = "payout_delivery_sent"
+    PAYOUT_DELIVERY_FAILED = "payout_delivery_failed"
+    EXPENSE_SUBMITTED = "expense_submitted"
+    EXPENSE_APPROVED = "expense_approved"
+    EXPENSE_REJECTED = "expense_rejected"
 
 
 
@@ -197,10 +219,14 @@ class Permission(str, Enum):
     SHIFT_READ = "shift_read"
     SHIFT_WRITE = "shift_write"
     ASSIGNMENT_READ = "assignment_read"
+    ASSIGNMENT_RESPONSE = "assignment_response"
     ASSIGNMENT_WRITE = "assignment_write"
     
     # 実績・CSV
     ACTUAL_READ = "actual_read"
+    ACTUAL_WRITE = "actual_write"
+    AVAILABILITY_READ = "availability_read"
+    AVAILABILITY_WRITE = "availability_write"
     CSV_SUBMIT = "csv_submit"
     CSV_IMPORT = "csv_import"
     
@@ -254,6 +280,13 @@ class ExpenseStatus(str, Enum):
     PENDING = "pending"      # 承認待ち
     APPROVED = "approved"    # 承認済み
     REJECTED = "rejected"    # 却下
+
+
+class AvailabilityStatus(str, Enum):
+    """稼働可否ステータス"""
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    UNDECIDED = "undecided"
 
 
 class IncentiveStatus(str, Enum):
