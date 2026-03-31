@@ -71,6 +71,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/data",
+    label: "マスタ一覧",
+    description: "稼働者・下請け・クライアント等のマスタデータを参照",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
     to: "/audit-logs",
     label: "監査ログ",
     description: "監査ログを条件検索で参照",

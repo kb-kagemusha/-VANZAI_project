@@ -11,6 +11,7 @@ import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { InvoicesPage } from "../pages/InvoicesPage";
 import { LoginPage } from "../pages/LoginPage";
+import { MasterDataPage } from "../pages/MasterDataPage";
 import { PayoutsPage } from "../pages/PayoutsPage";
 import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
@@ -104,6 +105,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
                 <PriceManagementPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/data"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <MasterDataPage />
               </PermissionRoute>
             }
           />

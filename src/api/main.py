@@ -37,6 +37,12 @@ from src.api.schemas import (
     PriceRuleListQuery, PriceRuleListItem, PriceRuleListResponse,
     PriceSalesListQuery, PriceSalesListItem, PriceSalesListResponse,
     PriceOutsourceListQuery, PriceOutsourceListItem, PriceOutsourceListResponse,
+    WorkerListQuery, WorkerListItem, WorkerListResponse,
+    SupplierListQuery, SupplierListItem, SupplierListResponse,
+    ClientListQuery, ClientListItem, ClientListResponse,
+    SiteListQuery, SiteListItem, SiteListResponse,
+    ProjectTypeListQuery, ProjectTypeListItem, ProjectTypeListResponse,
+    RoleListQuery, RoleListItem, RoleListResponse,
     InvoiceListQuery, InvoiceListItem, InvoiceListResponse,
     InvoiceGenerateRequest, InvoiceResponse, InvoiceLineResponse,
     PayoutListQuery, PayoutListItem, PayoutListResponse,
@@ -1537,6 +1543,279 @@ async def list_payouts(
         offset=query.offset,
         limit=query.limit,
     )
+
+
+# ===========================
+# マスタ一覧エンドポイント
+# ===========================
+
+@app.get("/api/workers", response_model=WorkerListResponse, tags=["Master"])
+async def list_workers(
+    query: WorkerListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Worker, Supplier
+
+    sort_map = {
+        "name": Worker.name,
+        "email": Worker.email,
+        "created_at": Worker.created_at,
+    }
+    default_sort = Worker.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = (
+        db.query(Worker, Supplier.name.label("supplier_name"))
+        .outerjoin(Supplier, Worker.introducer_supplier_id == Supplier.id)
+        .filter(Worker.deleted_at.is_(None))
+    )
+    if query.is_active is not None:
+        stmt = stmt.filter(Worker.is_active == query.is_active)
+    if query.supplier_id:
+        stmt = stmt.filter(Worker.introducer_supplier_id == query.supplier_id)
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(Worker.name.ilike(pattern) | Worker.email.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, Worker.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        WorkerListItem(
+            id=w.id,
+            name=w.name,
+            email=w.email,
+            phone=w.phone,
+            is_active=w.is_active,
+            introducer_supplier_id=w.introducer_supplier_id,
+            introducer_supplier_name=supplier_name,
+        )
+        for w, supplier_name in rows
+    ]
+    return WorkerListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/suppliers", response_model=SupplierListResponse, tags=["Master"])
+async def list_suppliers(
+    query: SupplierListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """下請け一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Supplier
+
+    sort_map = {
+        "name": Supplier.name,
+        "created_at": Supplier.created_at,
+    }
+    default_sort = Supplier.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(Supplier).filter(Supplier.deleted_at.is_(None))
+    if query.is_active is not None:
+        stmt = stmt.filter(Supplier.is_active == query.is_active)
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(Supplier.name.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, Supplier.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        SupplierListItem(
+            id=s.id,
+            name=s.name,
+            contact_email=s.contact_email,
+            payout_terms_days=s.payout_terms_days,
+            default_daily_price=s.default_daily_price,
+            is_active=s.is_active,
+        )
+        for s in rows
+    ]
+    return SupplierListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/clients", response_model=ClientListResponse, tags=["Master"])
+async def list_clients(
+    query: ClientListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """クライアント一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Client
+
+    sort_map = {
+        "name": Client.name,
+        "code": Client.code,
+    }
+    default_sort = Client.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(Client).filter(Client.deleted_at.is_(None))
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(Client.name.ilike(pattern) | Client.code.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, Client.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        ClientListItem(
+            id=c.id,
+            name=c.name,
+            code=c.code,
+            contact_name=c.contact_name,
+            contact_email=c.contact_email,
+        )
+        for c in rows
+    ]
+    return ClientListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/sites", response_model=SiteListResponse, tags=["Master"])
+async def list_sites(
+    query: SiteListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """現場一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Site
+
+    sort_map = {
+        "name": Site.name,
+        "code": Site.code,
+    }
+    default_sort = Site.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(Site).filter(Site.deleted_at.is_(None))
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(Site.name.ilike(pattern) | Site.code.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, Site.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        SiteListItem(
+            id=s.id,
+            name=s.name,
+            code=s.code,
+            address=s.address,
+        )
+        for s in rows
+    ]
+    return SiteListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/project-types", response_model=ProjectTypeListResponse, tags=["Master"])
+async def list_project_types(
+    query: ProjectTypeListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """案件種別一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import ProjectType
+
+    sort_map = {
+        "name": ProjectType.name,
+        "code": ProjectType.code,
+    }
+    default_sort = ProjectType.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(ProjectType).filter(ProjectType.deleted_at.is_(None))
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(ProjectType.name.ilike(pattern) | ProjectType.code.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, ProjectType.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        ProjectTypeListItem(
+            id=pt.id,
+            name=pt.name,
+            code=pt.code,
+            description=pt.description,
+        )
+        for pt in rows
+    ]
+    return ProjectTypeListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/roles", response_model=RoleListResponse, tags=["Master"])
+async def list_roles(
+    query: RoleListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """役割一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Role
+
+    sort_map = {
+        "name": Role.name,
+        "code": Role.code,
+    }
+    default_sort = Role.name
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(Role).filter(Role.deleted_at.is_(None))
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(Role.name.ilike(pattern) | Role.code.ilike(pattern))
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, Role.id.desc()).offset(query.offset).limit(query.limit).all()
+
+    items = [
+        RoleListItem(
+            id=r.id,
+            name=r.name,
+            code=r.code,
+            description=r.description,
+        )
+        for r in rows
+    ]
+    return RoleListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
 
 
 # ===========================

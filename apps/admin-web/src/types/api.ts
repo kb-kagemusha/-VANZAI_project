@@ -305,3 +305,51 @@ export interface PriceOutsourceListItem {
   valid_to: string | null;
   is_default: boolean;
 }
+
+export interface WorkerListItem {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  introducer_supplier_id: string | null;
+  introducer_supplier_name: string | null;
+}
+
+export interface SupplierListItem {
+  id: string;
+  name: string;
+  contact_email: string | null;
+  payout_terms_days: number;
+  default_daily_price: string | null;
+  is_active: boolean;
+}
+
+export interface ClientListItem {
+  id: string;
+  name: string;
+  code: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+}
+
+export interface SiteListItem {
+  id: string;
+  name: string;
+  code: string | null;
+  address: string | null;
+}
+
+export interface ProjectTypeListItem {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+}
+
+export interface RoleListItem {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+}

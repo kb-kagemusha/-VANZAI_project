@@ -3,6 +3,7 @@ import type {
   AuditLogListItem,
   AssignmentListItem,
   CSVImportResponse,
+  ClientListItem,
   ClosingMutationResponse,
   ExpenseListItem,
   ImportBatchListItem,
@@ -18,8 +19,13 @@ import type {
   PriceRuleListItem,
   PriceSalesListItem,
   ProjectListItem,
+  ProjectTypeListItem,
+  RoleListItem,
   ShiftSlotListItem,
+  SiteListItem,
+  SupplierListItem,
   TokenResponse,
+  WorkerListItem,
 } from "../../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -276,4 +282,32 @@ export function releaseHardCloseProject(projectId: string, periodKey: string, ap
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
+}
+
+// ===========================
+// Master Data
+// ===========================
+
+export function getWorkers(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<WorkerListItem>>(buildUrl("/api/workers", params));
+}
+
+export function getSuppliers(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<SupplierListItem>>(buildUrl("/api/suppliers", params));
+}
+
+export function getClients(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<ClientListItem>>(buildUrl("/api/clients", params));
+}
+
+export function getSites(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<SiteListItem>>(buildUrl("/api/sites", params));
+}
+
+export function getProjectTypes(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<ProjectTypeListItem>>(buildUrl("/api/project-types", params));
+}
+
+export function getRoles(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<RoleListItem>>(buildUrl("/api/roles", params));
 }

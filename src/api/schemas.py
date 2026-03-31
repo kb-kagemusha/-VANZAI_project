@@ -404,6 +404,127 @@ class PriceOutsourceListResponse(PageResponse[PriceOutsourceListItem]):
 
 
 # ===========================
+# Master Data List Schemas
+# ===========================
+
+class WorkerListQuery(PaginationQuery, SortQuery):
+    """稼働者一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+    is_active: Optional[bool] = None
+    supplier_id: Optional[str] = None
+
+
+class WorkerListItem(BaseModel):
+    """稼働者一覧の1行"""
+    id: str
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: bool
+    introducer_supplier_id: Optional[str] = None
+    introducer_supplier_name: Optional[str] = None
+
+
+class WorkerListResponse(PageResponse[WorkerListItem]):
+    """稼働者一覧レスポンス"""
+    pass
+
+
+class SupplierListQuery(PaginationQuery, SortQuery):
+    """下請け一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+    is_active: Optional[bool] = None
+
+
+class SupplierListItem(BaseModel):
+    """下請け一覧の1行"""
+    id: str
+    name: str
+    contact_email: Optional[str] = None
+    payout_terms_days: int
+    default_daily_price: Optional[Decimal] = None
+    is_active: bool
+
+
+class SupplierListResponse(PageResponse[SupplierListItem]):
+    """下請け一覧レスポンス"""
+    pass
+
+
+class ClientListQuery(PaginationQuery, SortQuery):
+    """クライアント一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+
+
+class ClientListItem(BaseModel):
+    """クライアント一覧の1行"""
+    id: str
+    name: str
+    code: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+
+
+class ClientListResponse(PageResponse[ClientListItem]):
+    """クライアント一覧レスポンス"""
+    pass
+
+
+class SiteListQuery(PaginationQuery, SortQuery):
+    """現場一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+
+
+class SiteListItem(BaseModel):
+    """現場一覧の1行"""
+    id: str
+    name: str
+    code: Optional[str] = None
+    address: Optional[str] = None
+
+
+class SiteListResponse(PageResponse[SiteListItem]):
+    """現場一覧レスポンス"""
+    pass
+
+
+class ProjectTypeListQuery(PaginationQuery, SortQuery):
+    """案件種別一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+
+
+class ProjectTypeListItem(BaseModel):
+    """案件種別一覧の1行"""
+    id: str
+    name: str
+    code: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ProjectTypeListResponse(PageResponse[ProjectTypeListItem]):
+    """案件種別一覧レスポンス"""
+    pass
+
+
+class RoleListQuery(PaginationQuery, SortQuery):
+    """役割一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+
+
+class RoleListItem(BaseModel):
+    """役割一覧の1行"""
+    id: str
+    name: str
+    code: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RoleListResponse(PageResponse[RoleListItem]):
+    """役割一覧レスポンス"""
+    pass
+
+
+# ===========================
 # Invoice Schemas
 # ===========================
 
