@@ -1,6 +1,13 @@
 """
 Test fixtures for VANZAI project
 """
+import os
+
+# JWT_SECRET_KEY を1字字でも設定しておかないと、アプリ import で RuntimeError になる。
+# テスト用ダミー値をデフォルトにする（空文字も未設定と同扱いにする）。
+if not os.environ.get("JWT_SECRET_KEY"):
+    os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-only"
+
 import pytest
 from datetime import date, time
 from decimal import Decimal
