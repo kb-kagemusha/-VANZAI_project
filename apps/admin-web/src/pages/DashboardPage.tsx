@@ -33,6 +33,23 @@ type AuditLogSearchOptions = {
   actionType?: string;
 };
 
+type PendingAssignmentResponseDetail = {
+  assignment_id: string;
+  project_id: string;
+  project_name: string;
+  worker_id: string;
+  worker_name: string;
+  worker_email: string | null;
+  work_date: string;
+  shift_label: string | null;
+  worker_response_requested_at: string | null;
+  hours_since_request: number | null;
+  days_until_work: number;
+  escalation_level: "watch" | "escalate";
+  escalation_reasons: string[];
+  reason: string;
+};
+
 const CLOSING_SELECTED_INPUTS_STORAGE_KEY = "vanzai.dashboard.closing.selected";
 const CLOSING_ROW_DRAFTS_STORAGE_KEY = "vanzai.dashboard.closing.rows";
 const CLOSING_SELECTED_ROWS_STORAGE_KEY = "vanzai.dashboard.closing.selectedRows";
@@ -368,6 +385,15 @@ export function DashboardPage() {
   const findCount = (itemType: string) =>
     dashboardQuery.data?.unprocessed_items.find((item) => item.item_type === itemType)?.count ?? 0;
 
+  const findDetails = (itemType: string) =>
+    (dashboardQuery.data?.unprocessed_items.find((item) => item.item_type === itemType)?.details ?? []) as PendingAssignmentResponseDetail[];
+
+  const pendingAssignmentResponses = findDetails("pending_assignment_response");
+  const escalatedAssignmentResponses = pendingAssignmentResponses.filter((item) => item.escalation_level === "escalate");
+
+  const formatEscalationReasons = (row: PendingAssignmentResponseDetail) =>
+    row.escalation_reasons.length > 0 ? row.escalation_reasons.join(" / ") : "継続確認中";
+
   return (
     <div className="page-stack">
       <PageHeader title="ダッシュボード" description="未処理、差異、締め状況を月次単位で確認し、そのまま月次処理を進めます。" eyebrow="月次運用" />
@@ -507,7 +533,73 @@ export function DashboardPage() {
         <SummaryCard label="単価未設定" value={findCount("missing_price")} accent="#d98f2b" />
         <SummaryCard label="未発行請求" value={findCount("unissued_invoice")} accent="#2a6f97" />
         <SummaryCard label="未処理支払" value={findCount("unprocessed_payout")} accent="#4a7c59" />
+        <SummaryCard label="送信先未設定支払" value={findCount("missing_payout_recipient")} accent="#b42318" />
+        <SummaryCard label="予定確認未回答" value={findCount("pending_assignment_response")} accent="#0f766e" />
+        <SummaryCard label="要エスカレ" value={findCount("escalated_assignment_response")} accent="#9f1239" />
         <SummaryCard label="未締め案件" value={findCount("unclosed_projects")} accent="#6a4c93" />
+      </section>
+
+      <section className="upload-card">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <h3 className="section-title">予定確認監視</h3>
+            <p style={{ margin: 0, color: "var(--color-muted)" }}>
+              未回答の予定確認を一覧化し、稼働日接近・依頼経過・メール未設定を要エスカレーションとして監視します。
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link to={`/operations/assignment-responses?month=${monthValue}`}>
+              監視一覧を開く
+            </Link>
+            <Link
+              to={{
+                pathname: "/audit-logs",
+                search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_sent" })}`,
+              }}
+            >
+              催促送信ログ
+            </Link>
+            <Link
+              to={{
+                pathname: "/audit-logs",
+                search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_failed" })}`,
+              }}
+            >
+              催促失敗ログ
+            </Link>
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: "0.35rem", padding: "0.75rem", border: "1px solid var(--color-border, #d0d5dd)", borderRadius: "0.75rem" }}>
+          <strong>監視サマリー</strong>
+          <span>未回答: {pendingAssignmentResponses.length} 件</span>
+          <span>要エスカレーション: {escalatedAssignmentResponses.length} 件</span>
+          <span>継続監視: {pendingAssignmentResponses.length - escalatedAssignmentResponses.length} 件</span>
+        </div>
+        <DataTable
+          columns={[
+            { key: "project", header: "案件", render: (row) => row.project_name },
+            { key: "worker", header: "稼働者", render: (row) => row.worker_name },
+            { key: "date", header: "稼働日", render: (row) => formatDate(row.work_date) },
+            { key: "shift", header: "シフト", render: (row) => row.shift_label || "-" },
+            { key: "requestedAt", header: "依頼日時", render: (row) => formatDateTime(row.worker_response_requested_at) },
+            { key: "hours", header: "経過時間", render: (row) => (row.hours_since_request === null ? "-" : `${row.hours_since_request}h`) },
+            { key: "days", header: "稼働まで", render: (row) => `${row.days_until_work}日` },
+            {
+              key: "level",
+              header: "対応水準",
+              render: (row) => (
+                <span className={`status-badge ${row.escalation_level === "escalate" ? "attention" : "neutral"}`}>
+                  {row.escalation_level === "escalate" ? "要エスカレーション" : "監視中"}
+                </span>
+              ),
+            },
+            { key: "reason", header: "条件", render: (row) => formatEscalationReasons(row) },
+          ]}
+          rows={pendingAssignmentResponses}
+          getRowKey={(row) => row.assignment_id}
+          emptyTitle="未回答の予定確認はありません"
+          emptyDescription="対象月の pending assignment は現時点で検知されていません。"
+        />
       </section>
 
       <section className="two-column-grid">

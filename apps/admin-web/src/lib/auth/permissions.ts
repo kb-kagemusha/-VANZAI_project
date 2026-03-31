@@ -35,6 +35,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
+    to: "/operations/assignment-responses",
+    label: "予定確認監視",
+    description: "未回答と要エスカレーションの監視",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
     to: "/operations/projects",
     label: "案件一覧",
     description: "案件、取引先、現場、期間の参照",

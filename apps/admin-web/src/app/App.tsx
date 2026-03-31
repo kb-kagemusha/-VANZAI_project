@@ -4,6 +4,7 @@ import { AppShell } from "../components/AppShell";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
 import { CsvImportPage } from "../pages/CsvImportPage";
 import { ActualsPage } from "../pages/ActualsPage";
+import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -57,6 +58,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
                 <AssignmentsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/assignment-responses"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <AssignmentResponsesPage />
               </PermissionRoute>
             }
           />

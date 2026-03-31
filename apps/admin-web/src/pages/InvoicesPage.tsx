@@ -9,7 +9,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { StatusBadge } from "../components/StatusBadge";
-import { ApiError, generateInvoice, getInvoices, getProjects, issueInvoice } from "../lib/api/client";
+import { ApiError, downloadInvoicePdf, generateInvoice, getInvoices, getProjects, issueInvoice } from "../lib/api/client";
 import { currentMonthInput, formatCurrency, formatDateTime, toPeriodKey } from "../lib/formatters";
 
 const PAGE_SIZE = 20;
@@ -22,6 +22,7 @@ export function InvoicesPage() {
   const [page, setPage] = useState(0);
   const [genProjectId, setGenProjectId] = useState("");
   const [genError, setGenError] = useState("");
+  const [actionError, setActionError] = useState("");
   const periodKey = toPeriodKey(monthValue);
   const queryClient = useQueryClient();
 
@@ -56,8 +57,13 @@ export function InvoicesPage() {
 
   const issueMutation = useMutation({
     mutationFn: (invoiceId: string) => issueInvoice(invoiceId),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["invoices"] }); },
-    onError: () => { /* 行内にエラー表示は複雑なため将来対応 */ },
+    onSuccess: () => {
+      setActionError("");
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (err: unknown) => {
+      setActionError(err instanceof ApiError ? err.message : "請求書発行に失敗しました");
+    },
   });
 
   if (invoicesQuery.isLoading) {
@@ -102,6 +108,8 @@ export function InvoicesPage() {
         {generateMutation.isSuccess && <span style={{ color: "green", fontSize: "0.875rem" }}>生成しました</span>}
       </section>
 
+      {actionError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{actionError}</p> : null}
+
       <FilterBar>
         <label>
           対象月
@@ -145,20 +153,44 @@ export function InvoicesPage() {
           { key: "status", header: "状態", render: (row) => <StatusBadge value={row.status} /> },
           { key: "amount", header: "合計", render: (row) => formatCurrency(row.total_amount) },
           { key: "issued", header: "発行日時", render: (row) => formatDateTime(row.issued_at) },
-          { key: "pdf", header: "PDF", render: (row) => (row.has_pdf ? "あり" : "なし") },
+          {
+            key: "pdf",
+            header: "PDF",
+            render: (row) => (row.status === "preparing" ? "発行後に可" : row.has_pdf ? "保存済み" : "都度生成"),
+          },
+          {
+            key: "storage",
+            header: "保存先",
+            render: (row) => (row.pdf_storage_key ? row.pdf_storage_key : row.status === "preparing" ? "未生成" : "都度生成のみ"),
+          },
           {
             key: "actions",
             header: "操作",
-            render: (row) =>
-              row.status === "preparing" ? (
-                <button
-                  onClick={() => issueMutation.mutate(row.id)}
-                  disabled={issueMutation.isPending}
-                  style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}
-                >
-                  発行
-                </button>
-              ) : null,
+            render: (row) => (
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {row.status === "preparing" ? (
+                  <button
+                    onClick={() => issueMutation.mutate(row.id)}
+                    disabled={issueMutation.isPending}
+                    style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}
+                  >
+                    発行
+                  </button>
+                ) : null}
+                {row.status !== "preparing" ? (
+                  <button
+                    onClick={() => {
+                      void downloadInvoicePdf(row.id).catch((err: unknown) => {
+                        setActionError(err instanceof ApiError ? err.message : "請求書PDFのダウンロードに失敗しました");
+                      });
+                    }}
+                    style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}
+                  >
+                    PDF
+                  </button>
+                ) : null}
+              </div>
+            ),
           },
         ]}
         rows={invoicesQuery.data.items}

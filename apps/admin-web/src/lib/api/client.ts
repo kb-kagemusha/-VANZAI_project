@@ -1,8 +1,22 @@
 import type {
   ActualListItem,
+  AssignmentCancellationHistoryItem,
+  AssignmentBulkMutationResponse,
+  AssignmentEscalationHistoryResponse,
+  AssignmentEscalationSendResponse,
+  AssignmentReminderHistoryResponse,
+  AssignmentReminderSendResponse,
+  AssignmentSelectionSetCreateRequest,
+  AssignmentSelectionSetItem,
+  AssignmentSelectionSetListResponse,
+  AssignmentBulkStatusUpdateRequest,
+  AssignmentCreateRequest,
+  AssignmentUpdateRequest,
   AuditLogListItem,
   AssignmentListItem,
+  AssignmentStatusUpdateRequest,
   CSVImportResponse,
+  ClientCreateRequest,
   ClientListItem,
   ClosingMutationResponse,
   ExpenseListItem,
@@ -14,18 +28,39 @@ import type {
   MonthlyBillingGenerateResponse,
   PageResponse,
   PayoutListItem,
+  PayoutDeliveryItem,
+  PayoutDeliveryListResponse,
   PayoutResponse,
+  PriceOutsourceCreateRequest,
   PriceOutsourceListItem,
+  PriceOutsourceUpdateRequest,
+  PriceRuleCreateRequest,
   PriceRuleListItem,
+  PriceRuleUpdateRequest,
+  PriceSalesCreateRequest,
   PriceSalesListItem,
+  PriceSalesUpdateRequest,
+  ProjectCreateRequest,
   ProjectListItem,
+  ProjectUpdateRequest,
+  ProjectNotesUpdateRequest,
+  ProjectTypeCreateRequest,
   ProjectTypeListItem,
+  RoleCreateRequest,
   RoleListItem,
+  ShiftSlotCreateRequest,
   ShiftSlotListItem,
+  ShiftSlotUpdateRequest,
+  ShiftSlotNotesUpdateRequest,
+  SiteCreateRequest,
   SiteListItem,
   SupplierListItem,
+  SupplierCreateRequest,
+  SupplierUpdateRequest,
   TokenResponse,
   WorkerListItem,
+  WorkerCreateRequest,
+  WorkerUpdateRequest,
 } from "../../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -123,6 +158,47 @@ export async function apiFetch<T>(
   return payload as T;
 }
 
+async function downloadBinaryFile(path: string, fallbackFileName: string) {
+  const headers = new Headers();
+  const token = getStoredAccessToken();
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(buildUrl(path), { headers });
+
+  if (!response.ok) {
+    const payload = await readResponse(response);
+    const message =
+      typeof payload === "object" && payload !== null && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "object" && payload !== null && "detail" in payload
+          ? String(payload.detail)
+          : response.statusText;
+
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+
+    throw new ApiError(response.status, message || "ファイルのダウンロードに失敗しました", payload);
+  }
+
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get("content-disposition") || "";
+  const matchedFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
+  const fileName = matchedFileName || fallbackFileName;
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}
+
 export async function requestToken(username: string, password: string): Promise<TokenResponse> {
   const form = new URLSearchParams();
   form.set("username", username);
@@ -164,6 +240,83 @@ export function getAssignments(params: Record<string, string | number | boolean 
   return apiFetch<PageResponse<AssignmentListItem>>("/api/assignments", undefined, params);
 }
 
+export function getAssignmentCancellationHistory(params: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<AssignmentCancellationHistoryItem>>("/api/assignments/cancellation-history", undefined, params);
+}
+
+export function getAssignmentSelectionSets(params: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<AssignmentSelectionSetListResponse>("/api/assignments/selection-sets", undefined, params);
+}
+
+export function createAssignmentSelectionSet(body: AssignmentSelectionSetCreateRequest) {
+  return apiFetch<AssignmentSelectionSetItem>("/api/assignments/selection-sets", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteAssignmentSelectionSet(selectionSetId: string) {
+  return apiFetch<null>(`/api/assignments/selection-sets/${selectionSetId}`, {
+    method: "DELETE",
+  });
+}
+
+export function createAssignment(body: AssignmentCreateRequest) {
+  return apiFetch<AssignmentListItem>("/api/assignments", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateAssignment(assignmentId: string, body: AssignmentUpdateRequest) {
+  return apiFetch<AssignmentListItem>(`/api/assignments/${assignmentId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function bulkUpdateAssignmentStatus(body: AssignmentBulkStatusUpdateRequest) {
+  return apiFetch<AssignmentBulkMutationResponse>("/api/assignments/status/bulk", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateAssignmentStatus(assignmentId: string, body: AssignmentStatusUpdateRequest) {
+  return apiFetch<AssignmentListItem>(`/api/assignments/${assignmentId}/status`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function sendAssignmentReminders(body: { assignment_ids: string[]; dry_run?: boolean }) {
+  return apiFetch<AssignmentReminderSendResponse>("/api/assignments/reminders/send", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAssignmentReminderHistory(body: { assignment_ids: string[]; limit?: number }) {
+  return apiFetch<AssignmentReminderHistoryResponse>("/api/assignments/reminders/history", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function sendAssignmentEscalations(body: { assignment_ids: string[]; dry_run?: boolean }) {
+  return apiFetch<AssignmentEscalationSendResponse>("/api/assignments/reminders/escalate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAssignmentEscalationHistory(body: { assignment_ids: string[]; limit?: number }) {
+  return apiFetch<AssignmentEscalationHistoryResponse>("/api/assignments/reminders/escalations/history", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function getInvoices(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<InvoiceListItem>>("/api/invoices", undefined, params);
 }
@@ -183,24 +336,125 @@ export function getProjects(params: Record<string, string | number | boolean | u
   return apiFetch<PageResponse<ProjectListItem>>("/api/projects", undefined, params);
 }
 
+export function createProject(body: ProjectCreateRequest) {
+  return apiFetch<ProjectListItem>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateProject(projectId: string, body: ProjectUpdateRequest) {
+  return apiFetch<ProjectListItem>(`/api/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateProjectNotes(projectId: string, body: ProjectNotesUpdateRequest) {
+  return apiFetch<ProjectListItem>(`/api/projects/${projectId}/notes`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function getShiftSlots(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<ShiftSlotListItem>>("/api/shift-slots", undefined, params);
+}
+
+export function createShiftSlot(body: ShiftSlotCreateRequest) {
+  return apiFetch<ShiftSlotListItem>("/api/shift-slots", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateShiftSlot(shiftSlotId: string, body: ShiftSlotUpdateRequest) {
+  return apiFetch<ShiftSlotListItem>(`/api/shift-slots/${shiftSlotId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateShiftSlotNotes(shiftSlotId: string, body: ShiftSlotNotesUpdateRequest) {
+  return apiFetch<ShiftSlotListItem>(`/api/shift-slots/${shiftSlotId}/notes`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getExpenses(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<ExpenseListItem>>("/api/expenses", undefined, params);
 }
 
+export function approveExpense(expenseId: string) {
+  return apiFetch<ExpenseListItem>(`/api/expenses/${expenseId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectExpense(expenseId: string, rejectReason: string) {
+  return apiFetch<ExpenseListItem>(`/api/expenses/${expenseId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reject_reason: rejectReason }),
+  });
+}
+
+export function downloadExpenseReceipt(expenseId: string) {
+  return downloadBinaryFile(`/api/expenses/${expenseId}/receipt`, `expense_receipt_${expenseId}`);
+}
+
 export function getPriceRules(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<PriceRuleListItem>>("/api/price-rules", undefined, params);
+}
+
+export function createPriceRule(body: PriceRuleCreateRequest) {
+  return apiFetch<PriceRuleListItem>("/api/price-rules", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePriceRule(priceRuleId: string, body: PriceRuleUpdateRequest) {
+  return apiFetch<PriceRuleListItem>(`/api/price-rules/${priceRuleId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getPriceSales(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<PriceSalesListItem>>("/api/price-sales", undefined, params);
 }
 
+export function createPriceSales(body: PriceSalesCreateRequest) {
+  return apiFetch<PriceSalesListItem>("/api/price-sales", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePriceSales(priceSalesId: string, body: PriceSalesUpdateRequest) {
+  return apiFetch<PriceSalesListItem>(`/api/price-sales/${priceSalesId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 export function getPriceOutsource(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<PriceOutsourceListItem>>("/api/price-outsource", undefined, params);
+}
+
+export function createPriceOutsource(body: PriceOutsourceCreateRequest) {
+  return apiFetch<PriceOutsourceListItem>("/api/price-outsource", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePriceOutsource(priceOutsourceId: string, body: PriceOutsourceUpdateRequest) {
+  return apiFetch<PriceOutsourceListItem>(`/api/price-outsource/${priceOutsourceId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export function uploadCsvFile(params: {
@@ -238,6 +492,10 @@ export function issueInvoice(invoiceId: string) {
   return apiFetch<InvoiceResponse>(`/api/invoices/${invoiceId}/issue`, { method: "POST" });
 }
 
+export function downloadInvoicePdf(invoiceId: string) {
+  return downloadBinaryFile(`/api/invoices/${invoiceId}/pdf`, `invoice_${invoiceId}.pdf`);
+}
+
 export function generatePayout(projectId: string, workerId: string, periodKey: string) {
   return apiFetch<PayoutResponse>("/api/payouts/generate", {
     method: "POST",
@@ -247,6 +505,36 @@ export function generatePayout(projectId: string, workerId: string, periodKey: s
 
 export function confirmPayout(payoutId: string) {
   return apiFetch<PayoutResponse>(`/api/payouts/${payoutId}/confirm`, { method: "POST" });
+}
+
+export function markPayoutPaid(payoutId: string) {
+  return apiFetch<PayoutResponse>(`/api/payouts/${payoutId}/paid`, { method: "POST" });
+}
+
+export function downloadPayoutPdf(payoutId: string) {
+  return downloadBinaryFile(`/api/payouts/${payoutId}/pdf`, `payout_${payoutId}.pdf`);
+}
+
+export function deliverPayout(
+  payoutId: string,
+  options?: {
+    recipientEmail?: string;
+    deliveryNote?: string;
+    internalNote?: string;
+  },
+) {
+  return apiFetch<PayoutDeliveryItem>(`/api/payouts/${payoutId}/deliver`, {
+    method: "POST",
+    body: JSON.stringify({
+      recipient_email: options?.recipientEmail || null,
+      delivery_note: options?.deliveryNote || null,
+      internal_note: options?.internalNote || null,
+    }),
+  });
+}
+
+export function getPayoutDeliveries(payoutId: string) {
+  return apiFetch<PayoutDeliveryListResponse>(`/api/payouts/${payoutId}/deliveries`);
 }
 
 export function generateMonthlyBilling(periodKey: string) {
@@ -289,25 +577,81 @@ export function releaseHardCloseProject(projectId: string, periodKey: string, ap
 // ===========================
 
 export function getWorkers(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<WorkerListItem>>(buildUrl("/api/workers", params));
+  return apiFetch<PageResponse<WorkerListItem>>("/api/workers", undefined, params);
+}
+
+export function createWorker(body: WorkerCreateRequest) {
+  return apiFetch<WorkerListItem>("/api/workers", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorker(workerId: string, body: WorkerUpdateRequest) {
+  return apiFetch<WorkerListItem>(`/api/workers/${workerId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getSuppliers(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<SupplierListItem>>(buildUrl("/api/suppliers", params));
+  return apiFetch<PageResponse<SupplierListItem>>("/api/suppliers", undefined, params);
+}
+
+export function createSupplier(body: SupplierCreateRequest) {
+  return apiFetch<SupplierListItem>("/api/suppliers", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateSupplier(supplierId: string, body: SupplierUpdateRequest) {
+  return apiFetch<SupplierListItem>(`/api/suppliers/${supplierId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getClients(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<ClientListItem>>(buildUrl("/api/clients", params));
+  return apiFetch<PageResponse<ClientListItem>>("/api/clients", undefined, params);
+}
+
+export function createClient(body: ClientCreateRequest) {
+  return apiFetch<ClientListItem>("/api/clients", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getSites(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<SiteListItem>>(buildUrl("/api/sites", params));
+  return apiFetch<PageResponse<SiteListItem>>("/api/sites", undefined, params);
+}
+
+export function createSite(body: SiteCreateRequest) {
+  return apiFetch<SiteListItem>("/api/sites", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getProjectTypes(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<ProjectTypeListItem>>(buildUrl("/api/project-types", params));
+  return apiFetch<PageResponse<ProjectTypeListItem>>("/api/project-types", undefined, params);
+}
+
+export function createProjectType(body: ProjectTypeCreateRequest) {
+  return apiFetch<ProjectTypeListItem>("/api/project-types", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getRoles(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<PageResponse<RoleListItem>>(buildUrl("/api/roles", params));
+  return apiFetch<PageResponse<RoleListItem>>("/api/roles", undefined, params);
+}
+
+export function createRole(body: RoleCreateRequest) {
+  return apiFetch<RoleListItem>("/api/roles", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
