@@ -1,0 +1,116 @@
+{
+  "app_id": 146,
+  "app_name": "equipment_loans",
+  "fields": [
+    {
+      "code": "作業者",
+      "type": "STATUS_ASSIGNEE",
+      "label": "作業者",
+      "required": false
+    },
+    {
+      "code": "ラジオボタン_2",
+      "type": "RADIO_BUTTON",
+      "label": "project_id",
+      "required": true
+    },
+    {
+      "code": "ラジオボタン_3",
+      "type": "RADIO_BUTTON",
+      "label": "status",
+      "required": true
+    },
+    {
+      "code": "ステータス",
+      "type": "STATUS",
+      "label": "ステータス",
+      "required": false
+    },
+    {
+      "code": "ラジオボタン",
+      "type": "RADIO_BUTTON",
+      "label": "loan_id",
+      "required": true
+    },
+    {
+      "code": "ラジオボタン_0",
+      "type": "RADIO_BUTTON",
+      "label": "equipment_id",
+      "required": true
+    },
+    {
+      "code": "ドロップダウン",
+      "type": "DROP_DOWN",
+      "label": "notes",
+      "required": false
+    },
+    {
+      "code": "ラジオボタン_1",
+      "type": "RADIO_BUTTON",
+      "label": "worker_id",
+      "required": true
+    },
+    {
+      "code": "カテゴリー",
+      "type": "CATEGORY",
+      "label": "カテゴリー",
+      "required": false
+    },
+    {
+      "code": "数値",
+      "type": "NUMBER",
+      "label": "quantity",
+      "required": false
+    },
+    {
+      "code": "日付_1",
+      "type": "DATE",
+      "label": "actual_return_date",
+      "required": false
+    },
+    {
+      "code": "日付_0",
+      "type": "DATE",
+      "label": "expected_return_date",
+      "required": false
+    },
+    {
+      "code": "日付",
+      "type": "DATE",
+      "label": "loan_date",
+      "required": false
+    }
+  ],
+  "system_fields": [
+    {
+      "code": "レコード番号",
+      "type": "RECORD_NUMBER",
+      "label": "レコード番号",
+      "required": false
+    },
+    {
+      "code": "更新者",
+      "type": "MODIFIER",
+      "label": "更新者",
+      "required": false
+    },
+    {
+      "code": "作成者",
+      "type": "CREATOR",
+      "label": "作成者",
+      "required": false
+    },
+    {
+      "code": "更新日時",
+      "type": "UPDATED_TIME",
+      "label": "更新日時",
+      "required": false
+    },
+    {
+      "code": "作成日時",
+      "type": "CREATED_TIME",
+      "label": "作成日時",
+      "required": false
+    }
+  ]
+}

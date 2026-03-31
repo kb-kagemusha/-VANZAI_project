@@ -1,0 +1,3 @@
+rule_id,name,project_id,condition_type,condition_json,incentive_amount,is_for_invoice,is_for_payout,valid_from,valid_until,is_active
+IR001,皆勤インセンティブ,,皆勤,"{""min_assignments"": 8, ""period"": ""YYYYMM""}",3000,いいえ,はい,2026-01-01,,有効
+IR002,紹介インセンティブ,,紹介,"{""referral_count"": 1}",5000,いいえ,はい,2026-01-01,,有効

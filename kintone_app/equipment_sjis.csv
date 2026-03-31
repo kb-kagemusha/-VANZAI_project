@@ -1,0 +1,4 @@
+equipment_id,name,category,description,total_stock,available_stock
+EQ001,ユニフォーム,ユニフォーム,夏服/冬服,50,45
+EQ002,無線機,無線機,会場連絡用,20,18
+EQ003,ヘルメット,ヘルメット,設営現場用,30,28

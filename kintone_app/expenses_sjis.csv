@@ -1,0 +1,3 @@
+expense_id,project_id,worker_id,expense_date,category,amount,description,receipt_file,status,approved_by,approved_at,target_invoice_id,target_payout_id
+EX0001,P001,W001,2026-01-06,Œğ’Ê”ï,1200,“dÔ‘ã,,pending,,,,
+EX0002,P002,W002,2026-01-11,Ş—¿”ï,800,”õ•iw“ü,,approved,ops,2026-01-12 09:00,,

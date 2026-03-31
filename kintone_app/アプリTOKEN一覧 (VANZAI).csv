@@ -1,0 +1,100 @@
+﻿#,カテゴリ,アプリ名,アプリID,必要な権限,理由,APIトークン,取得日,備考,,,
+🔵 マスタアプリ（5個）,,,,,,,,,,,
+1,マスタ,稼働者マスタ (workers),165,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 退職日自動更新",QcphL2eVijzppj0I0piksMJLgBJd8pZWEwgOPwnw,,,,,運用メモ（APIトークン管理）
+2,マスタ,クライアントマスタ (clients),167,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 請求書番号記録",XFDS1qbHPzdMjdrQENOTVFdbkCtnJM5R3cPOJNBi,,,,,
+3,マスタ,現場マスタ (sites),166,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 現場ステータス更新",ZIsO1wAnZTbPLnDtchr8D0ggxaNqiULBNmKebbv6,,,,,・APIトークンは機密情報です。共有・貼り付け先・権限付与に注意してください。
+4,マスタ,案件種別マスタ (project_types),164,✅ 閲覧,同期: Kintone→DB（読み取り専用）,GtPvBi1Ne221KMvlSViaePrds1297d7Rj4h3xC91,,,,,"・可能なら Excel ではなく、チームのパスワードマネージャ/シークレット管理（例: Vault, AWS Secrets Manager）に保管してください。"
+5,マスタ,役割マスタ (roles),163,✅ 閲覧,同期: Kintone→DB（読み取り専用）,bE0LuU6M2aP5DruXeRTIIMQ1CMDaxYZcfhlKW0hW,,,,,・このシートには「どのアプリに・どんな権限のトークンが必要か」を管理し、トークン自体は最小限の閲覧者に限定するのがおすすめです。
+🟢 単価マスタアプリ（3個）- 閲覧 + 履歴記録のため編集,,,,,,,,,,,・取得日（取得/更新日）を必ず記録し、ローテーションルールがある場合は備考に記載してください。
+6,単価マスタ,売上単価マスタ (price_sales),162,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: スナップショット記録日",EZLzZTqJ3DehDg0urTNoY7scgfs62aSGIRIwF9yb,,,,,
+7,単価マスタ,外注単価マスタ (price_outsource),161,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: スナップショット記録日",Iq5snSN2wm264OMmjrWTtCgb3aW8aSKuHV1funFD,,,,,作成日: 2026-01-27
+8,単価マスタ,単価ルールマスタ (price_rules),157,"✅ 閲覧
+✅ 追加","同期: Kintone→DB
+新規ルール追加可能",C1iMBvfva9KYq9UytDvIvxupeuJbUXjn3IOnB0bI,,,,,
+🟡 トランザクションアプリ（9個）- 閲覧 + 追加 + 編集が必須,,,,,,,,,,,
+9,トランザクション,案件マスタ (projects),160,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 請求書発行日、売上確定日",evJngvB7sRXq3wAIX3A4KMNO5OrzmWQysIpP1Ec6,,,,,
+10,トランザクション,シフト枠 (shift_slots),159,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 予定vs実績の差異",V8qeyfZrqZJ48iJEbz3LPDDOpltsQzoxh9mJ0ubG,,,,,
+11,トランザクション,アサイン (assignments),158,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: キャンセル理由、確定日",T77pVQSfpYExBDREyI7gUGi4e2hXvwTJWRO9VXha,,,,,
+12,トランザクション,実績 (actuals),168,"✅ 閲覧
+✅ 追加
+✅ 編集","最重要
+同期: Kintone→DB（CSV取り込み）
+書き戻し: エラー理由、計算結果",AhtQVqUqKEv7NuiZVkIyDLh3cyojWeucFno24wEA,,,,,
+13,トランザクション,経費 (expenses),151,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 承認ステータス、請求書ID",w6IkV9jBk7ci4dkDaTX97hGaY804MDj3RhW46hox,,,,,
+14,トランザクション,インセンティブ (incentives),150,"✅ 閲覧
+✅ 追加
+✅ 編集","同期: Kintone→DB
+書き戻し: 承認ステータス、支払ID",Hqjkq1gUU0D7FL0pzXga391QzXu5E8QG8VUVbfue,,,,,
+15,トランザクション,請求書 (invoices),,"✅ 閲覧
+✅ 追加
+❌ 編集不要","書き込み専用: DB→Kintone
+システムが自動生成した請求書を記録",,,,,,
+16,トランザクション,支払明細 (payouts),,"✅ 閲覧
+✅ 追加
+❌ 編集不要","書き込み専用: DB→Kintone
+システムが自動生成した支払明細を記録",,,,,,
+17,トランザクション,銀行振込 (bank_transfers),,"✅ 閲覧
+✅ 追加
+❌ 編集不要","書き込み専用: DB→Kintone
+FB-Data出力記録",,,,,,
+,,,,,,,,,,,
+18,,振込バッチ管理 (bank_transfer_batches),170,"✅ 閲覧
+✅ 追加
+✅ 編集",同期: DB→Kintone（書き込み専用）<br>書き戻し: バッチ作成・ステータス更新（exported→sent→completed）,8XnNLTCF4O8JGGKqNabAWTPsfvjtspPD8F8kc2kG,,,,,
+19,,支払明細配信履歴 (payout_deliveries),171,"✅ 閲覧
+✅ 追加
+✅ 編集",同期: DB→Kintone（書き込み専用）<br>書き戻し: メール送信結果・再送ステータス,1029TawwlIUoa3nYDEcvwC0FTqtsBwITpeZzCbQv,,,,,
+20,,インセンティブルールマスタ (incentive_rules),155,"✅ 閲覧
+✅ 追加
+✅ 編集",同期: Kintone→DB<br>自動計算: 月次インセンティブ計算時にルール参照,zw0O84YfyDFnh9AsaI3goIR9kycF8OTPQoAVOxlu,,,,,
+,,,,,,,,,,,
+,,タスクテンプレート(task_templates),153,,,Zr5KMqKJ3KO8eLn8MRwnXO6ZzUxZslx895tpmloV,,,,,
+,,インセンティブルールマスタ (incentive_rules),152,,,zw0O84YfyDFnh9AsaI3goIR9kycF8OTPQoAVOxlu,,,,,
+,,,,,,,,,,,
+,,請求書 (invoices),171,,,L4gHlm84UY4ItWw3w9XGHGYjUHiYwJYzYlx3peBd,,,,,
+,,支払明細 (payouts),173,,,xygZwusecj2Xnpvn3T9CCqtbviTbiVcRwmp1HZgA,,,,,
+,,,,,,,,,,,
+,,機材マスタ (equipment),147,,,KTApcb7SJHHo6cw4hmp8BQXe6tioIBf3641ZpEnd,,,,,
+,,機材貸出管理 (equipment_loans),146,,,LoYR3a1FMBzsHJ0neovlpf6i90sKsr2YP4XQ3pCS,,,,,
+,,タスク管理 (tasks),145,,,0u50U02xpXCFRYrXvJt7piMe3LEc2yolD8BPcdko,,,,,
+,,案件ドキュメント管理 (project_documents),144,,,IvrQt09Mrp3m80tuU4IbZ0khOyXuC65Q8wys3XBZ,,,,,
+,,V：下請け（紹介者）マスタ,187,,,4cOOFehjqp8d8pdVkEWxyGZPaGLiMb5rBNEcGMxz,,,,,
+,,下請けデータ,199,,,c2FvJaCmlDoJE5WoxN9VKMPseyXTCblrShgxBtME,,,,,
+,,,,,,,,,,,
+,,V：ポータル,200,,,IUV4nyeQ4CCKCMtQ164KIZuWMpw9XcRdnP1k2zeY,,,,,
+,,,,,,,,,,,
+,,project_assignments_フィールド定義,307,,,Ki5axXHTyeA2obkyQ8Eybh22qwIZujoBLGegZQXd,,,,,
+,,,,,,,,,,,
+,,スタッフ登録,308,,,bswrUIjIGe4R2sY1FW51vKn4aRKbIq2j4YaeG8Q5,,,,,
+,,クライアント職員,309,,,2Xb3521gJS2GcbXlWaZ0RMc45ZLhSHYlbAcwDMMY,,,,,
+,,法人Googleフォーム連携,311,,,Og981dyD4s6Uyd6WfT1ESJmquaNSHXkGH0IwC7Mc,,,,,
+,,稼働者データ（Googleフォーム連携）,312,,,kgEmJC3VV9g0Soj8erPFWTpQze6N831pNiUnxncb,,,,,
+,,,,,,,,,,,
+,,VANZAI職員,313,,,24tJIXAki9nGOIhsLdv76rqdY8gABE4tJ9nT0vpt,,,,,

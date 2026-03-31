@@ -1,0 +1,4 @@
+project_id,name,client_id,site_id,project_type_id,start_date,end_date,status,notes
+PRJ001,丸の内オフィス警備,C001,S001,PT001,2026-01-01,2026-03-31,operating,24時間体制
+PRJ002,六本木マンション夜間警備,C002,S002,PT001,2026-01-01,2026-12-31,operating,22時〜6時
+PRJ003,品川工事現場警備,C003,S005,PT003,2026-01-15,2026-02-28,operating,平日のみ

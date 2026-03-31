@@ -1,0 +1,95 @@
+{
+  "カテゴリー": {
+    "type": "CATEGORY",
+    "code": "カテゴリー",
+    "label": "カテゴリー",
+    "enabled": false
+  },
+  "レコード番号": {
+    "type": "RECORD_NUMBER",
+    "code": "レコード番号",
+    "label": "レコード番号",
+    "noLabel": false
+  },
+  "作業者": {
+    "type": "STATUS_ASSIGNEE",
+    "code": "作業者",
+    "label": "作業者",
+    "enabled": false
+  },
+  "role_id": {
+    "type": "RADIO_BUTTON",
+    "code": "role_id",
+    "label": "role_id",
+    "noLabel": false,
+    "required": true,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": "__dummy__",
+    "align": "HORIZONTAL"
+  },
+  "更新者": {
+    "type": "MODIFIER",
+    "code": "更新者",
+    "label": "更新者",
+    "noLabel": false
+  },
+  "作成者": {
+    "type": "CREATOR",
+    "code": "作成者",
+    "label": "作成者",
+    "noLabel": false
+  },
+  "name": {
+    "type": "RADIO_BUTTON",
+    "code": "name",
+    "label": "name",
+    "noLabel": false,
+    "required": true,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": "__dummy__",
+    "align": "HORIZONTAL"
+  },
+  "ステータス": {
+    "type": "STATUS",
+    "code": "ステータス",
+    "label": "ステータス",
+    "enabled": false
+  },
+  "description": {
+    "type": "RADIO_BUTTON",
+    "code": "description",
+    "label": "description",
+    "noLabel": false,
+    "required": true,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": "__dummy__",
+    "align": "HORIZONTAL"
+  },
+  "更新日時": {
+    "type": "UPDATED_TIME",
+    "code": "更新日時",
+    "label": "更新日時",
+    "noLabel": false
+  },
+  "作成日時": {
+    "type": "CREATED_TIME",
+    "code": "作成日時",
+    "label": "作成日時",
+    "noLabel": false
+  }
+}

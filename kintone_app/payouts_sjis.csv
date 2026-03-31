@@ -1,0 +1,4 @@
+id,worker_id,project_id,period_key,payment_date,status,version,parent_payout_id,total_amount,approved_at,paid_at,closed_at,notes,created_at,updated_at
+PAY001,WRK001,PRJ001,202601,2026-02-15,approved,1,,180000,2026-02-01 12:00,,2026-02-01 12:00,1月分支払,2026-02-01 10:00,2026-02-01 12:00
+PAY002,WRK002,PRJ001,202601,2026-02-15,preparing,1,,220000,,,,準備中,2026-02-01 10:00,2026-02-01 10:00
+PAY003,WRK003,PRJ002,202601,2026-02-15,approved,1,,150000,2026-02-01 13:00,,2026-02-01 13:00,1月分支払,2026-02-01 11:00,2026-02-01 13:00

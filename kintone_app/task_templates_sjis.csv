@@ -1,0 +1,4 @@
+template_id,project_type_id,title,description,relative_due_days,priority,is_active
+TT001,PT01,現場図面の共有,配置図/集合場所の共有,-3,high,有効
+TT002,PT01,人員確定連絡,確定人数をクライアントへ連絡,-2,high,有効
+TT003,PT03,搬入ルート確認,搬入口と搬入時間の確認,-5,medium,有効

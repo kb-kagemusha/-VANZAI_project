@@ -1,0 +1,3 @@
+delivery_id,payout_id,worker_id,delivery_method,recipient_email,sent_at,status,error_message
+DL0001,PAY-PLACEHOLDER-001,W001,email,aki.tanaka@example.com,2026-01-31 18:00,sent,
+DL0002,PAY-PLACEHOLDER-002,W002,email,hiro.sato@example.com,2026-01-31 18:05,failed,SMTP error

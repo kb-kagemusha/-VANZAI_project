@@ -1,0 +1,4 @@
+id,batch_id,worker_id,payout_id,period_key,bank_code,bank_name,branch_code,branch_name,account_type,account_number,account_holder,transfer_amount,transfer_date,status,notes,created_at,updated_at
+BT001,BTB0001,WRK001,PAY001,202601,0001,みずほ銀行,123,新宿支店,ordinary,1234567,ヤマダタロウ,180000,2026-02-15,exported,1月分振込,2026-02-01 14:00,2026-02-01 14:00
+BT002,BTB0001,WRK002,PAY002,202601,0005,三菱UFJ銀行,456,渋谷支店,ordinary,7654321,タナカハナコ,220000,2026-02-15,exported,1月分振込,2026-02-01 14:00,2026-02-01 14:00
+BT003,BTB0002,WRK003,PAY003,202601,0009,三井住友銀行,789,池袋支店,ordinary,9876543,サトウジロウ,150000,2026-02-15,exported,1月分振込,2026-02-01 14:00,2026-02-01 14:00

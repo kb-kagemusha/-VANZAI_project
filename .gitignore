@@ -1,0 +1,37 @@
+# Python
+.venv/
+**/__pycache__/
+*.py[cod]
+.egg-info/
+**/*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Environment files
+.env
+.env.bak
+.env.*.local
+
+# Local databases and generated storage
+*.db
+storage/bank_transfers/
+
+# Frontend build artifacts
+node_modules/
+apps/admin-web/node_modules/
+apps/admin-web/dist/
+apps/admin-web/.vite/
+apps/admin-web/*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+
+# WebA local artifacts and secrets
+WebA/.venv/
+WebA/uploads/
+WebA/*.pem

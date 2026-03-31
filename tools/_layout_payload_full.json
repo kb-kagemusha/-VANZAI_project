@@ -1,0 +1,391 @@
+{
+  "layout": [
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "assignment_id",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "company_name",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "assignment_title",
+        "size": {
+          "width": "478"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "facility_name",
+          "size": {
+            "width": "375"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "event_name",
+          "size": {
+            "width": "423"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "owner_name",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "main_staff",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "category_major",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "category_middle",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "category_minor",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "start_date",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "end_date",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "address",
+        "size": {
+          "width": "579"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "gathering_time",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "start_time",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "end_time",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "dismissal_time",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "work_hours",
+        "size": {
+          "width": "136"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "detail_url",
+        "size": {
+          "width": "439"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "sales_rule",
+        "size": {
+          "width": "431"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "headcount_required",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "base_reward",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "incentive",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "NUMBER",
+          "code": "headcount_director",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "headcount_staff",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "NUMBER",
+          "code": "base_reward_director",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "base_reward_assistant_director",
+          "size": {
+            "width": "204"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "base_reward_staff",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "notes",
+        "size": {
+          "width": "642"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    }
+  ],
+  "app": 307
+}

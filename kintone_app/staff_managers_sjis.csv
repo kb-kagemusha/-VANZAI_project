@@ -1,0 +1,6 @@
+staff_id,name,role,phone,email,is_active,notes
+STM001,山田太郎,クライアント責任者,090-1234-5678,yamada@example.com,有効,
+STM002,佐藤花子,クライアント担当者,090-2345-6789,sato@example.com,有効,
+STM003,鈴木一郎,クライアント責任者,090-3456-7890,suzuki@example.com,有効,
+STM004,田中美咲,クライアント担当者,090-4567-8901,tanaka@example.com,有効,
+STM005,高橋健太,クライアント責任者,090-5678-9012,takahashi@example.com,有効,

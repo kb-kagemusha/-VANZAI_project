@@ -1,0 +1,3 @@
+rule_id,name,priority,conditions_json,sales_price,outsource_price,valid_from,valid_until,is_active
+PR001,[–éŠ„‘,10,"{""night_minutes_threshold"": 1, ""apply"": true}",2000,1500,2026-01-01,,—LŒø
+PR002,Œğ’Ê”ïŒÅ’è,20,"{""type"": ""allowance"", ""kind"": ""transport_flat""}",0,800,2026-01-01,,—LŒø

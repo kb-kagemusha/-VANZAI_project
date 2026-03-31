@@ -1,0 +1,2823 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" />
+  <title>買い周りサポート（リーダー用）</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fb; color: #1f2937; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+    .muted { color: #6b7280; font-size: 13px; }
+    .guide { background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 10px; padding: 10px; font-size: 13px; color: #0f766e; }
+    .tab-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-bottom: 12px; }
+    .tab-bar button { border: none; border-radius: 10px 10px 0 0; background: #e5e7eb; color: #374151; padding: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .tab-bar button.active { background: #2563eb; color: #fff; }
+    #tabScheduleCheck.active { background: #0d9488; color: #fff; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    /* 予定確認タブ */
+    .sc-avail-o { background:#dbeafe; color:#1d4ed8; }
+    .sc-avail-d { background:#fef9c3; color:#ca8a04; }
+    .sc-avail-x { background:#fee2e2; color:#dc2626; }
+    .sc-avail-n { background:#f3f4f6; color:#9ca3af; }
+    .sc-team-header { font-size:14px;font-weight:700;padding:8px 10px;background:#f1f5f9;border-radius:8px;margin:12px 0 6px; }
+    .sc-avail-btn { border:none;border-radius:6px;padding:3px 8px;font-size:13px;font-weight:700;cursor:pointer;display:block;width:100%;margin-top:2px; }
+    .sc-avail-pending { box-shadow:0 0 0 2px #f97316 !important; }
+    .three { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1fr; }
+    .four { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .stat-box { background: #f1f5f9; border-radius: 10px; padding: 10px; text-align: center; }
+    .stat-box .num { font-size: 24px; font-weight: 800; color: #111827; }
+    .stat-box .lbl { font-size: 12px; color: #6b7280; }
+    .report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .report-table th, .report-table td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+    .report-table th { background: #f1f5f9; font-weight: 700; position: sticky; top: 0; }
+    .report-table tr:nth-child(even) { background: #f8fafc; }
+    .report-table tr.row-selected { background: #fef9c3 !important; outline: 2px solid #f59e0b; outline-offset: -2px; }
+    .table-scroll { max-height: 450px; overflow-y: auto; border-radius: 10px; border: 1px solid #e5e7eb; }
+    label { display: block; font-size: 13px; margin: 4px 0 6px; color: #374151; }
+    input, select { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; font-size: 14px; background: #fff; }
+    .btn-sub { border: none; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; cursor: pointer; background: #e5e7eb; color: #111827; }
+    .btn-primary { border: none; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; cursor: pointer; background: #2563eb; color: #fff; }
+    .team-bar { background: #1e293b; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .team-bar .badge { font-size: 12px; background:#14532d; border:1px solid #166534; color:#e2e8f0; padding:3px 8px; border-radius:999px; }
+    @media (max-width: 700px){ .three, .four { grid-template-columns: 1fr; } }
+    /* ── 代理入力モーダル ── */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:center; justify-content:center; padding:12px; box-sizing:border-box; }
+    .modal-overlay.open { display:flex; }
+    .modal-box { background:#fff; border-radius:14px; padding:20px 18px 18px; width:100%; max-width:540px; max-height:92vh; overflow-y:auto; box-shadow:0 8px 40px rgba(0,0,0,.3); position:relative; }
+    .modal-box h2 { margin:0 0 12px; font-size:17px; }
+    .modal-close { position:absolute; top:12px; right:14px; background:none; border:none; font-size:24px; cursor:pointer; color:#9ca3af; line-height:1; padding:0; }
+    .modal-close:hover { color:#111; }
+    .modal-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .modal-row > div { display:flex; flex-direction:column; }
+    .modal-box label { font-size:13px; color:#374151; margin-bottom:3px; display:block; margin-top:8px; }
+    .modal-box label:first-child { margin-top:0; }
+    .modal-box input, .modal-box select, .modal-box textarea { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:8px; padding:9px 10px; font-size:14px; background:#fff; }
+    .modal-box textarea { resize:vertical; min-height:64px; }
+    @media(max-width:500px){ .modal-row { grid-template-columns:1fr; } }
+    /* ── 削除・undo ── */
+    .btn-danger { border:none; border-radius:10px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer; background:#dc2626; color:#fff; }
+    .btn-danger:hover { background:#b91c1c; }
+    .deleted-row { opacity:.55; background:#fef2f2 !important; }
+    .deleted-badge { display:inline-block; margin-left:5px; font-size:10px; background:#fecaca; color:#991b1b; border-radius:6px; padding:1px 5px; font-weight:700; vertical-align:middle; }
+    #undoToast { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:12px 20px; border-radius:12px; z-index:2000; align-items:center; gap:12px; box-shadow:0 4px 24px rgba(0,0,0,.35); font-size:14px; min-width:260px; }
+  </style>
+</head>
+<body>
+  <div class="team-bar">
+    <strong>リーダー専用画面</strong>
+    <span class="badge">Basic認証: ON</span>
+    <span class="badge" id="serverModeBadge">接続確認中...</span>
+    <span id="leaderEventBanner" style="font-size:13px;font-weight:700;color:#f1f5f9;margin-left:auto;"></span>
+  </div>
+
+  <div class="wrap">
+    <h1>買い周りサポート（リーダー用）</h1>
+
+    <div class="tab-bar">
+      <button id="tabDashboard" class="active" type="button">集計</button>
+      <button id="tabScheduleCheck" type="button">📅 予定確認</button>
+      <button id="tabLeaderSetting" type="button">メンバー設定</button>
+    </div>
+
+    <div id="dashboardView" class="tab-content active">
+      <section class="card">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+          <h2 style="margin:0;">期間サマリ</h2>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label for="eventStartDate" style="margin:0;white-space:nowrap;">🗓 イベント開始日</label>
+            <input type="date" id="eventStartDate" style="width:auto;padding:5px 8px;font-size:13px;border-radius:8px;border:1px solid #d1d5db;" />
+            <button id="eventStartSetBtn" type="button" class="btn-primary" style="padding:5px 10px;font-size:12px;">設定</button>
+            <button id="eventStartClearBtn" type="button" class="btn-sub" style="padding:5px 8px;font-size:12px;display:none;">クリア</button>
+          </div>
+        </div>
+        <div class="three">
+          <div>
+            <label for="filterTeam">チーム</label>
+            <select id="filterTeam"></select>
+          </div>
+          <div>
+            <label for="periodType">集計期間</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button id="ptToday" type="button" class="btn-primary">今日</button>
+              <button id="ptYesterday" type="button" class="btn-sub">昨日</button>
+              <button id="ptWeek" type="button" class="btn-sub">今週（7日）</button>
+              <button id="ptMonth" type="button" class="btn-sub">今月（30日）</button>
+              <button id="ptRange" type="button" class="btn-sub">期間指定</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:end;gap:10px;">
+            <button id="refreshBtn" type="button" class="btn-sub" style="width:100%;">🔄 更新</button>
+          </div>
+        </div>
+
+        <div id="rangePicker" style="display:none;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
+          <input type="date" id="rangeStart" style="max-width:220px;" />
+          <span class="muted">〜</span>
+          <input type="date" id="rangeEnd" style="max-width:220px;" />
+          <button id="rangeApplyBtn" type="button" class="btn-primary">検索</button>
+        </div>
+
+        <div id="summaryBox" style="margin-top:12px;"></div>
+      </section>
+
+      <section class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <h2 style="margin:0;">報告データ一覧（添付確認）</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="reportCountInfo" class="muted" style="font-size:12px;"></span>
+            <button id="toggleDeletedBtn" type="button" class="btn-sub" style="font-size:13px;">🗑 削除済みを表示</button>
+            <button id="proxyEntryBtn" type="button" class="btn-primary" style="font-size:13px;">＋ 代理入力</button>
+            <button id="csvBtn" type="button" class="btn-sub" style="font-size:13px;">⬇ CSV</button>
+          </div>
+        </div>
+        <!-- 報告一覧 日付フィルター -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <button id="rtToday" type="button" class="btn-sub" style="font-size:12px;padding:5px 10px;">今日</button>
+          <button id="rtYesterday" type="button" class="btn-sub" style="font-size:12px;padding:5px 10px;">昨日</button>
+          <button id="rtWeek" type="button" class="btn-primary" style="font-size:12px;padding:5px 10px;">今週（7日）</button>
+          <button id="rtMonth" type="button" class="btn-sub" style="font-size:12px;padding:5px 10px;">今月（30日）</button>
+          <button id="rtRange" type="button" class="btn-sub" style="font-size:12px;padding:5px 10px;">期間指定</button>
+          <div id="rtRangePicker" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+            <input type="date" id="rtStart" style="max-width:160px;padding:5px 8px;font-size:13px;" />
+            <span class="muted">〜</span>
+            <input type="date" id="rtEnd" style="max-width:160px;padding:5px 8px;font-size:13px;" />
+            <button id="rtApplyBtn" type="button" class="btn-primary" style="font-size:12px;padding:5px 10px;">適用</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:#6b7280;font-weight:700;">種別：</span><span style="font-size:11px;color:#9ca3af;">（表示カテゴリ）</span>
+          <button id="tfPurchase" type="button" class="btn-sub" style="font-size:12px;padding:4px 12px;">購入</button>
+          <button id="tfReserve" type="button" class="btn-sub" style="font-size:12px;padding:4px 12px;">予約</button>
+          <button id="tfCant" type="button" class="btn-sub" style="font-size:12px;padding:4px 12px;">不可</button>
+          <button id="tfClearType" type="button" class="btn-sub" style="font-size:11px;padding:3px 9px;color:#6b7280;">解除</button>
+        </div>
+        <div id="deleteBar" style="display:none;align-items:center;gap:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:8px;">
+          <span id="deleteBarCount" style="font-weight:700;font-size:13px;color:#dc2626;"></span>
+          <button id="deleteSelectedBtn" type="button" class="btn-danger">🗑 選択した報告を削除</button>
+          <button id="clearSelectionBtn" type="button" class="btn-sub" style="font-size:12px;padding:6px 10px;">選択解除</button>
+        </div>
+        <div class="table-scroll">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th style="width:32px;text-align:center;"><input type="checkbox" id="selectAllCheckbox" title="全選択"></th>
+                <th>実行者（チーム名）</th>
+                <th>日付</th>
+                <th>購入/予約/不可</th>
+                <th>NOと結果</th>
+                <th>書店名</th>
+                <th>住所</th>
+                <th>写真</th>
+                <th style="width:44px;text-align:center;">編集</th>
+              </tr>
+            </thead>
+            <tbody id="reportTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <div id="scheduleCheckView" class="tab-content">
+      <section class="card">
+        <h2>📅 予定確認</h2>
+        <div class="muted" style="margin-bottom:10px;">各チーム・各メンバーの週間スケジュールを確認・編集できます。◎/△/☓/－をクリックすると予定を変更できます。</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <label for="scTeamSelect" style="margin:0;font-weight:700;">チーム</label>
+          <select id="scTeamSelect" style="max-width:240px;min-width:140px;">
+            <option value="__all__">全チーム</option>
+          </select>
+          <button id="scPrevBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">◄ 前週</button>
+          <span id="scWeekLabel" style="font-weight:700;font-size:13px;min-width:200px;"></span>
+          <button id="scNextBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">次週 ►</button>
+          <button id="scTodayBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">今週</button>
+          <button id="scReloadBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">🔄 更新</button>
+        </div>
+        <div id="scPendingBar" style="display:none;align-items:center;gap:8px;padding:8px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;margin-bottom:8px;">
+          <span id="scPendingCount" style="font-weight:700;font-size:13px;color:#0d9488;"></span>
+          <button id="scApplyBtn" type="button" class="btn-primary" style="background:#0d9488;padding:6px 14px;font-size:13px;">✅ 反映する</button>
+          <button id="scResetBtn" type="button" class="btn-sub" style="font-size:12px;padding:6px 10px;">↩ 変更をリセット</button>
+        </div>
+        <div id="scContent"><div class="muted">チームを選択してください</div></div>
+      </section>
+
+      <section class="card">
+        <h2>担当日 指名管理</h2>
+        <div class="muted" style="margin-bottom:8px;">メンバーを日付ごとに指名します。△でも指名人数に含まれます。下段の <b>◎/△/☓/－</b> をクリックするとそのメンバーの予定を直接編集できます（－→◎→△→☓→－の順でサイクル）。</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <select id="assignTeamSelect" style="display:none;"></select>
+          <button id="assignPrevBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">◄ 前週</button>
+          <span id="assignWeekLabel" style="font-weight:700;font-size:13px;min-width:220px;"></span>
+          <button id="assignNextBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">次週 ►</button>
+          <button id="assignTodayBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">今週</button>
+          <button id="assignReloadBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">🔄 更新</button>
+        </div>
+        <div id="assignPendingBar" style="display:none;align-items:center;gap:8px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:8px;">
+          <span id="assignPendingCount" style="font-weight:700;font-size:13px;color:#c2410c;"></span>
+          <button id="assignApplyBtn" type="button" class="btn-primary" style="background:#f97316;padding:6px 14px;font-size:13px;">✅ 反映する</button>
+          <button id="assignResetBtn" type="button" class="btn-sub" style="font-size:12px;padding:6px 10px;">↩ リセット</button>
+        </div>
+        <div class="table-scroll" style="max-height:none;">
+          <table class="report-table">
+            <thead><tr id="assignHeadRow"></tr></thead>
+            <tbody id="assignBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="leaderSettingView" class="tab-content">
+      <section class="card">
+        <h2>チーム・メンバー管理</h2>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+          <input id="newTeamInput" type="text" placeholder="チームリーダー名（=チーム名）" style="flex:1;min-width:160px;" />
+          <button id="newTeamBtn" type="button" class="btn-primary">チーム 新規作成</button>
+          <button id="reloadTeamMgmtBtn" type="button" class="btn-sub">🔄</button>
+        </div>
+        <div id="settingMsg" style="display:none;margin-bottom:8px;font-weight:700;font-size:13px;"></div>
+        <div id="teamMgmtList"></div>
+      </section>
+
+      <section class="card">
+        <h2>メンバー住所情報（全文表示）</h2>
+        <div class="muted" style="margin-bottom:8px;">住まい・職場住所（番地なし）と移動手段を表示します。</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <label for="profileTeamSelect" style="margin:0;">チーム</label>
+          <select id="profileTeamSelect" style="max-width:220px;"></select>
+          <button id="profileReloadBtn" type="button" class="btn-sub" style="padding:6px 10px;font-size:12px;">🔄 更新</button>
+        </div>
+        <div class="table-scroll" style="max-height:320px;">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>メンバー</th>
+                <th>住まい</th>
+                <th>職場</th>
+                <th>移動手段</th>
+              </tr>
+            </thead>
+            <tbody id="profileTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>リーダー設定</h2>
+        <div class="muted">この画面はサーバー側のBasic認証で保護されています。</div>
+        <div class="guide" style="margin-top:10px;">
+          パスワードを変更する場合は、サーバーの環境変数 <b>LEADER_PASS</b> を変更してアプリを再起動してください。
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>主要変更ログ</h2>
+        <div class="muted" style="margin-bottom:8px;">作成・削除・巻き戻し・アップロード・ログインなど主要操作を表示します。</div>
+        <div class="table-scroll" style="max-height:280px;">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>日時</th>
+                <th>操作</th>
+                <th>実行者</th>
+                <th>対象</th>
+              </tr>
+            </thead>
+            <tbody id="majorLogBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ══ 代理入力モーダル ══ -->
+  <div id="proxyModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="proxyModalTitle">
+    <div class="modal-box">
+      <button class="modal-close" id="proxyModalCloseBtn" type="button" aria-label="閉じる">×</button>
+      <h2 id="proxyModalTitle">📝 代理入力（過去実績）</h2>
+      <div class="guide" style="margin-bottom:12px;font-size:12px;">リーダーがメンバーに代わって過去の実績を入力します。</div>
+      <form id="proxyEntryForm" novalidate>
+        <div class="modal-row">
+          <div>
+            <label for="pTeam">チーム <span style="color:#dc2626;">*</span></label>
+            <select id="pTeam" required></select>
+          </div>
+          <div>
+            <label for="pActor">実行者 <span style="color:#dc2626;">*</span></label>
+            <select id="pActor" required></select>
+          </div>
+        </div>
+        <div id="pActorCustomWrap" style="display:none;">
+          <label for="pActorCustom">実行者（直接入力）</label>
+          <input type="text" id="pActorCustom" placeholder="氏名を入力" maxlength="50" />
+        </div>
+        <div class="modal-row" style="margin-top:8px;">
+          <div>
+            <label for="pReportNo">報告ナンバー <span style="color:#dc2626;">*</span></label>
+            <select id="pReportNo" required>
+              <option value="">選択してください</option>
+              <option value="①">① 購入できた（自分で発見・在庫十分）</option>
+              <option value="②">② 購入できた（自分で発見・棚刺し2冊以上）</option>
+              <option value="③">③ 購入できた（バックヤード在庫から）</option>
+              <option value="④">④ 購入できた（店員案内・在庫十分）</option>
+              <option value="⑤">⑤ 購入できた（店員案内・棚刺し2冊以上）</option>
+              <option value="⑥">⑥ 予約本を購入（陳列あり）</option>
+              <option value="⑦">⑦ 予約本を購入（陳列なし）</option>
+              <option value="⑧">⑧ 予約のみ成功（初回予約）</option>
+              <option value="⑨">⑨ 予約のみ成功（再予約）</option>
+              <option value="⑩">⑩ 未入荷</option>
+              <option value="⑪">⑪ 残り1冊・購入せず（自分で発見・平積み）</option>
+              <option value="⑫">⑫ 残り1冊・購入せず（自分で発見・棚刺し）</option>
+              <option value="⑬">⑬ 残り1冊・購入せず（店員案内・在庫少）</option>
+              <option value="⑭">⑭ 残り1冊・購入せず（店員案内・棚刺し）</option>
+              <option value="⑮">⑮ 予約断られた（再挑戦）</option>
+              <option value="⑯">⑯ 予約断られた（初回）</option>
+              <option value="⑰">⑰ 短期間撤退（1ヶ月未満）</option>
+              <option value="⑱">⑱ 退店（2回目以上の来訪）</option>
+              <option value="⑲">⑲ お金が足りなかった</option>
+              <option value="㉛">㉛ 電話確認：在庫あり・取り置き成功</option>
+              <option value="㉜">㉜ 電話確認：入荷待ち・予約成功</option>
+              <option value="㉝">㉝ 電話確認：予約不可</option>
+            </select>
+          </div>
+          <div>
+            <label for="pResultType">結果（自動）</label>
+            <input type="text" id="pResultType" readonly style="background:#f1f5f9;color:#6b7280;" placeholder="報告Noを選択で自動入力" />
+          </div>
+        </div>
+        <label for="pCreatedAt">報告日時（過去日時OK） <span style="color:#dc2626;">*</span></label>
+        <input type="datetime-local" id="pCreatedAt" required />
+        <div class="modal-row">
+          <div>
+            <label for="pPurchaseAt">購入日時 <span style="color:#dc2626;">*</span></label>
+            <input type="datetime-local" id="pPurchaseAt" required />
+          </div>
+          <div>
+            <label for="pStoreName">店舗名 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="pStoreName" required placeholder="例：紀伊國屋書店 新宿本店" maxlength="200" />
+          </div>
+        </div>
+        <label for="pStoreAddress">住所 <span style="color:#dc2626;">*</span></label>
+        <input type="text" id="pStoreAddress" required placeholder="例：東京都新宿区新宿3-17-7" maxlength="400" />
+        <label for="pComment">コメント（任意）</label>
+        <textarea id="pComment" maxlength="1000" placeholder="特記事項があれば入力"></textarea>
+        <label for="pReceiptPhoto" style="margin-top:8px;">レシート写真（任意）</label>
+        <input type="file" id="pReceiptPhoto" accept="image/*" style="padding:4px 0;" />
+        <div id="pUploadStatus" style="font-size:12px;margin-top:4px;min-height:16px;"></div>
+        <img id="pReceiptPreview" style="display:none;max-width:100%;max-height:160px;border-radius:8px;margin-top:6px;border:1px solid #e2e8f0;cursor:pointer;" alt="プレビュー" />
+        <div id="proxyFormMsg" style="display:none;margin-bottom:8px;font-weight:700;font-size:13px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+          <button type="button" class="btn-sub" id="proxyModalCancelBtn">キャンセル</button>
+          <button type="submit" class="btn-primary" id="proxySubmitBtn">送信する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 報告編集モーダル -->
+  <div id="editReportModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editReportModalTitle">
+    <div class="modal-box">
+      <button class="modal-close" id="editReportModalCloseBtn" type="button" aria-label="閉じる">×</button>
+      <h2 id="editReportModalTitle">✏️ 報告を編集</h2>
+      <form id="editReportForm" novalidate>
+        <input type="hidden" id="eReportId" />
+        <div class="modal-row">
+          <div>
+            <label for="eTeam">チーム</label>
+            <select id="eTeam"></select>
+          </div>
+          <div>
+            <label for="eActor">実行者</label>
+            <select id="eActor"></select>
+          </div>
+        </div>
+        <div id="eActorCustomWrap" style="display:none;">
+          <label for="eActorCustom">実行者（直接入力）</label>
+          <input type="text" id="eActorCustom" placeholder="氏名を入力" maxlength="50" />
+        </div>
+        <div class="modal-row" style="margin-top:8px;">
+          <div>
+            <label for="eReportNo">報告ナンバー</label>
+            <select id="eReportNo">
+              <option value="">選択してください</option>
+              <option value="①">① 購入できた（自分で発見・在庫十分）</option>
+              <option value="②">② 購入できた（自分で発見・棚刺し2冊以上）</option>
+              <option value="③">③ 購入できた（バックヤード在庫から）</option>
+              <option value="④">④ 購入できた（店員案内・在庫十分）</option>
+              <option value="⑤">⑤ 購入できた（店員案内・棚刺し2冊以上）</option>
+              <option value="⑥">⑥ 予約本を購入（陳列あり）</option>
+              <option value="⑦">⑦ 予約本を購入（陳列なし）</option>
+              <option value="⑧">⑧ 予約のみ成功（初回予約）</option>
+              <option value="⑨">⑨ 予約のみ成功（再予約）</option>
+              <option value="⑩">⑩ 未入荷</option>
+              <option value="⑪">⑪ 残り1冊・購入せず（自分で発見・平積み）</option>
+              <option value="⑫">⑫ 残り1冊・購入せず（自分で発見・棚刺し）</option>
+              <option value="⑬">⑬ 残り1冊・購入せず（店員案内・在庫少）</option>
+              <option value="⑭">⑭ 残り1冊・購入せず（店員案内・棚刺し）</option>
+              <option value="⑮">⑮ 予約断られた（再挑戦）</option>
+              <option value="⑯">⑯ 予約断られた（初回）</option>
+              <option value="⑰">⑰ 短期間撤退（1ヶ月未満）</option>
+              <option value="⑱">⑱ 退店（2回目以上の来訪）</option>
+              <option value="⑲">⑲ お金が足りなかった</option>
+              <option value="㉛">㉛ 電話確認：在庫あり・取り置き成功</option>
+              <option value="㉜">㉜ 電話確認：入荷待ち・予約成功</option>
+              <option value="㉝">㉝ 電話確認：予約不可</option>
+            </select>
+          </div>
+          <div>
+            <label for="eResultType">結果（自動）</label>
+            <input type="text" id="eResultType" readonly style="background:#f1f5f9;color:#6b7280;" placeholder="報告Noを選択で自動入力" />
+          </div>
+        </div>
+        <label for="eCreatedAt">報告日時</label>
+        <input type="datetime-local" id="eCreatedAt" />
+        <div class="modal-row">
+          <div>
+            <label for="ePurchaseAt">購入日時</label>
+            <input type="datetime-local" id="ePurchaseAt" />
+          </div>
+          <div>
+            <label for="eStoreName">店舗名</label>
+            <input type="text" id="eStoreName" maxlength="200" />
+          </div>
+        </div>
+        <label for="eStoreAddress">住所</label>
+        <input type="text" id="eStoreAddress" maxlength="400" />
+        <label for="eComment">コメント（任意）</label>
+        <textarea id="eComment" maxlength="1000"></textarea>
+        <div id="editReportMsg" style="display:none;margin-bottom:8px;font-weight:700;font-size:13px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+          <button type="button" class="btn-sub" id="editReportCancelBtn">キャンセル</button>
+          <button type="submit" class="btn-primary" id="editReportSubmitBtn">保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- undo トースト -->
+  <div id="undoToast">
+    <span id="undoToastMsg"></span>
+    <button id="undoBtn" type="button" style="background:#3b82f6;border:none;color:#fff;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;">元に戻す</button>
+    <button id="undoDismissBtn" type="button" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">×</button>
+  </div>
+
+  <script>
+    const API = {
+      health: '/api/health',
+      teams: '/api/teams',
+      members: '/api/members',
+      reports: '/api/reports',
+      profile: '/api/profile',
+      assignments: '/api/assignments',
+      uploads: '/api/uploads',
+      summaryDaily: '/api/summary/daily',
+      summaryWeekly: '/api/summary/weekly',
+      summaryMonthly: '/api/summary/monthly',
+      summaryRange: '/api/summary/range',
+      majorLogs: '/api/logs/major?limit=50'
+    };
+
+    const tabDashboardEl = document.getElementById('tabDashboard');
+    const tabLeaderSettingEl = document.getElementById('tabLeaderSetting');
+    const tabScheduleCheckEl = document.getElementById('tabScheduleCheck');
+    const dashboardViewEl = document.getElementById('dashboardView');
+    const leaderSettingViewEl = document.getElementById('leaderSettingView');
+    const scheduleCheckViewEl = document.getElementById('scheduleCheckView');
+    const filterTeamEl = document.getElementById('filterTeam');
+    const ptTodayEl = document.getElementById('ptToday');
+    const ptYesterdayEl = document.getElementById('ptYesterday');
+    const ptWeekEl = document.getElementById('ptWeek');
+    const ptMonthEl = document.getElementById('ptMonth');
+    const ptRangeEl = document.getElementById('ptRange');
+    const rangePickerEl = document.getElementById('rangePicker');
+    const rangeStartEl = document.getElementById('rangeStart');
+    const rangeEndEl = document.getElementById('rangeEnd');
+    const rangeApplyBtnEl = document.getElementById('rangeApplyBtn');
+    const refreshBtnEl = document.getElementById('refreshBtn');
+    const summaryBoxEl = document.getElementById('summaryBox');
+    const reportTableBodyEl = document.getElementById('reportTableBody');
+    const csvBtnEl = document.getElementById('csvBtn');
+    const majorLogBodyEl = document.getElementById('majorLogBody');
+    const serverModeBadgeEl = document.getElementById('serverModeBadge');
+    const eventStartDateEl   = document.getElementById('eventStartDate');
+    const leaderEventBannerEl = document.getElementById('leaderEventBanner');
+    const assignTeamSelectEl = document.getElementById('assignTeamSelect');
+    const assignWeekLabelEl = document.getElementById('assignWeekLabel');
+    const assignHeadRowEl = document.getElementById('assignHeadRow');
+    const assignBodyEl = document.getElementById('assignBody');
+    const profileTeamSelectEl = document.getElementById('profileTeamSelect');
+    const profileTableBodyEl = document.getElementById('profileTableBody');
+
+    const CATEGORY_MAP = [
+      { label: '購入（①〜⑦）', nos: ['①','②','③','④','⑤','⑥','⑦'] },
+      { label: '予約成功（⑧〜⑨）', nos: ['⑧','⑨'] },
+      { label: '買えなかった・予約未入荷（⑩〜⑭）', nos: ['⑩','⑪','⑫','⑬','⑭'] },
+      { label: '予約断られた（⑮〜⑯）', nos: ['⑮','⑯'] },
+      { label: '撤退・その他（⑰〜⑲）', nos: ['⑰','⑱','⑲'] },
+      { label: '電話確認（㉛〜㉝）', nos: ['㉛','㉜','㉝'] },
+    ];
+
+    const REPORT_NO_RESULT_MAP = {
+      '①': '陳列されていて購入できた',
+      '②': '陳列されていて購入できた',
+      '③': '陳列はなかったが在庫から購入した',
+      '④': '陳列されていて購入できた',
+      '⑤': '陳列されていて購入できた',
+      '⑥': '予約した本を購入できた',
+      '⑦': '予約した本を購入できた',
+      '⑧': '予約できた',
+      '⑨': '予約できた',
+      '⑩': '予約していたが未入荷だった',
+      '⑪': '残り1冊だったため購入せず',
+      '⑫': '残り1冊だったため購入せず',
+      '⑬': '残り1冊だったため購入せず',
+      '⑭': '残り1冊だったため購入せず',
+      '⑮': '予約断られた',
+      '⑯': '予約断られた',
+      '⑰': '短期間に行き過ぎているため撤退',
+      '⑱': '何も考えずに同じ店に来てしまったため退店',
+      '⑲': 'お金が足りなかった',
+      '㉛': '電話確認：在庫あり・取り置き成功',
+      '㉜': '電話確認：入荷待ち・予約成功',
+      '㉝': '電話確認：予約不可',
+    };
+
+    let reports = [];
+    let teams = [];
+    let allMembers = [];
+    let periodType = 'today';
+    let proxyUploadedFileName = '';
+    let showDeleted = false;
+    let showAll = false;
+    let activeTypeFilters = new Set(['purchase','reserve','cant']); // デフォルトは全選択
+    let selectedIds = new Set();
+    let lastDeleteOpId = null;
+    let undoToastTimer = null;
+    let assignWeekOffset = 0;
+    let assignWeekStart = null;
+    let assignmentSet = new Set();
+    let scheduleMap = new Map();
+    let scheduleDetailMap = new Map(); // key: `member@@date`, value: locationDetail JSON obj
+    let memberProfileMap = new Map(); // key: memberName, value: {home, work}
+    let assignPendingChanges = new Map(); // key: `member@@date`, value: 'add'|'remove'
+    let assignPurchaseCountMap = new Map(); // key: `member@@date`, value: 1|2|3
+    let assignCachedMembers = [];
+    let assignCachedDates   = [];
+    let assignCachedTeam    = '';
+    let assignNoteMap = new Map(); // key: `member@@date`, value: note text
+    let _assignNoteEditKey = null; // 編集中モーダルのキー
+    // 報告一覧の日付フィルター
+    let rtMode = 'week';           // today / week / month / range
+    let rtDateStart = '';          // YYYY-MM-DD
+    let rtDateEnd   = '';          // YYYY-MM-DD
+
+    async function compressProxyImage(file) {
+      const MAX_PX = 1920;
+      const QUALITY = 0.70;
+      const MAX_ORIG = 20 * 1024 * 1024;
+      if (file.size > MAX_ORIG) throw new Error(`ファイルサイズが大きすぎます（上限20MB）`);
+      if (!file.type.startsWith('image/')) throw new Error('画像ファイルを選択してください');
+      const originalKB = Math.round(file.size / 1024);
+      const blobUrl = URL.createObjectURL(file);
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+        i.src = blobUrl;
+      });
+      URL.revokeObjectURL(blobUrl);
+      let { naturalWidth: w, naturalHeight: h } = img;
+      if (w > MAX_PX || h > MAX_PX) {
+        if (w >= h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+        else        { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('圧縮に失敗しました')), 'image/jpeg', QUALITY);
+      });
+      const compressedKB = Math.round(blob.size / 1024);
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = ev => { const d = ev.target.result; const c = d.indexOf(','); resolve(c >= 0 ? d.slice(c+1) : d); };
+        r.onerror = () => reject(new Error('Base64変換に失敗しました'));
+        r.readAsDataURL(blob);
+      });
+      return { b64, originalKB, compressedKB };
+    }
+
+    function safeText(value) {
+      return String(value ?? '').trim();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function ymd(d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function getWeekStartMonday(baseDate = new Date(), weekOffset = 0) {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+      const dow = d.getDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      d.setDate(d.getDate() + mondayOffset + (weekOffset * 7));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function weekDates(startDate) {
+      const arr = [];
+      for (let i = 0; i < 7; i += 1) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        arr.push(d);
+      }
+      return arr;
+    }
+
+    // ── 祝日リスト（2025〜2027年） ──
+    const JP_HOLIDAYS = new Set([
+      // 2025
+      '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
+      '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06',
+      '2025-07-21','2025-08-11','2025-09-15','2025-09-23','2025-10-13',
+      '2025-11-03','2025-11-23','2025-11-24',
+      // 2026
+      '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
+      '2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+      '2026-07-20','2026-08-11','2026-09-21','2026-09-23','2026-10-12',
+      '2026-11-03','2026-11-23',
+      // 2027
+      '2027-01-01','2027-01-11','2027-02-11','2027-02-23',
+      '2027-03-21','2027-04-29','2027-05-03','2027-05-04','2027-05-05',
+      '2027-07-19','2027-08-11','2027-09-20','2027-09-23','2027-10-11',
+      '2027-11-03','2027-11-23',
+    ]);
+    // 土→青、日・祝→赤、平日→''  を返す
+    function dayColor(d) {
+      if (d.getDay() === 6) return '#2563eb';
+      if (d.getDay() === 0 || JP_HOLIDAYS.has(ymd(d))) return '#dc2626';
+      return '';
+    }
+
+    function availSymbol(v) {
+      if (v === 'o') return '◎';
+      if (v === 'd') return '△';
+      if (v === 'x') return '☓';
+      return '-';
+    }
+
+    function transportModesToText(modes) {
+      const ms = String(modes || '').split(',').filter(Boolean);
+      if (ms.length === 0) return '未設定';
+      if (ms.length >= 2) return '車・電車';
+      return ms[0] === 'car' ? '車' : '電車';
+    }
+
+    function formatDateTime(value) {
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return safeText(value);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) return await res.json();
+      return null;
+    }
+
+    function switchTab(mode) {
+      const isDashboard      = mode === 'dashboard';
+      const isScheduleCheck  = mode === 'schedule-check';
+      const isLeaderSetting  = mode === 'leader-setting';
+      tabDashboardEl.classList.toggle('active', isDashboard);
+      tabScheduleCheckEl.classList.toggle('active', isScheduleCheck);
+      tabLeaderSettingEl.classList.toggle('active', isLeaderSetting);
+      dashboardViewEl.classList.toggle('active', isDashboard);
+      scheduleCheckViewEl.classList.toggle('active', isScheduleCheck);
+      leaderSettingViewEl.classList.toggle('active', isLeaderSetting);
+      if (isLeaderSetting) loadTeamMgmt();
+      if (isScheduleCheck) initScheduleCheckTab();
+    }
+
+    async function loadTeamMgmt() {
+      try {
+        const teamRows = await apiFetch(API.teams, { method: 'GET' });
+        teams = Array.isArray(teamRows) ? teamRows.map(t => safeText(t.name)).filter(Boolean) : [];
+        const memberRows = await apiFetch(API.members, { method: 'GET' });
+        allMembers = Array.isArray(memberRows) ? memberRows : [];
+      } catch {
+        allMembers = [];
+      }
+      renderTeamMgmt();
+      renderSettingTeamSelectors();
+      await loadProfileTable();
+    }
+
+    function renderTeamMgmt() {
+      const listEl = document.getElementById('teamMgmtList');
+      if (!listEl) return;
+      if (teams.length === 0) {
+        listEl.innerHTML = '<div class="muted">チームがありません。</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      for (const team of teams) {
+        const members = allMembers.filter(m => m.team === team);
+        const otherTeams = teams.filter(t => t !== team);
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;';
+
+        // チームヘッダー
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;';
+        header.innerHTML = `<strong style="font-size:15px;">👥 ${escapeHtml(team)}</strong>`;
+        const headerBtns = document.createElement('div');
+        headerBtns.style.cssText = 'display:flex;gap:6px;';
+        const renameTeamBtn = document.createElement('button');
+        renameTeamBtn.type = 'button';
+        renameTeamBtn.className = 'btn-sub';
+        renameTeamBtn.style.cssText = 'font-size:12px;padding:4px 8px;';
+        renameTeamBtn.textContent = '✏️ 名称変更';
+        const delTeamBtn = document.createElement('button');
+        delTeamBtn.type = 'button';
+        delTeamBtn.className = 'btn-sub';
+        delTeamBtn.style.cssText = 'font-size:12px;padding:4px 8px;color:#dc2626;';
+        delTeamBtn.textContent = 'チーム削除';
+        delTeamBtn.addEventListener('click', () => deleteTeam(team));
+        headerBtns.appendChild(renameTeamBtn);
+        headerBtns.appendChild(delTeamBtn);
+        header.appendChild(headerBtns);
+        card.appendChild(header);
+
+        // チーム名変更行（折りたたみ）
+        const renameRow = document.createElement('div');
+        renameRow.style.cssText = 'display:none;gap:6px;margin-bottom:8px;';
+        const renameInput = document.createElement('input');
+        renameInput.type = 'text';
+        renameInput.value = team;
+        renameInput.style.cssText = 'flex:1;font-size:13px;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;';
+        const renameConfirmBtn = document.createElement('button');
+        renameConfirmBtn.type = 'button';
+        renameConfirmBtn.className = 'btn-primary';
+        renameConfirmBtn.style.cssText = 'font-size:12px;padding:5px 10px;white-space:nowrap;';
+        renameConfirmBtn.textContent = '変更確定';
+        const renameCancelBtn = document.createElement('button');
+        renameCancelBtn.type = 'button';
+        renameCancelBtn.className = 'btn-sub';
+        renameCancelBtn.style.cssText = 'font-size:12px;padding:5px 8px;white-space:nowrap;';
+        renameCancelBtn.textContent = 'キャンセル';
+        renameTeamBtn.addEventListener('click', () => {
+          const open = renameRow.style.display !== 'none';
+          renameRow.style.display = open ? 'none' : 'flex';
+          if (!open) { renameInput.value = team; renameInput.focus(); renameInput.select(); }
+        });
+        renameConfirmBtn.addEventListener('click', () => renameTeam(team, renameInput.value));
+        renameCancelBtn.addEventListener('click', () => { renameRow.style.display = 'none'; });
+        renameInput.addEventListener('keydown', e => { if (e.key === 'Enter') renameConfirmBtn.click(); if (e.key === 'Escape') renameCancelBtn.click(); });
+        renameRow.appendChild(renameInput);
+        renameRow.appendChild(renameConfirmBtn);
+        renameRow.appendChild(renameCancelBtn);
+        card.appendChild(renameRow);
+
+        // メンバー一覧
+        if (members.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.style.marginBottom = '8px';
+          empty.textContent = 'メンバーなし';
+          card.appendChild(empty);
+        } else {
+          for (const m of members) {
+            const row = document.createElement('div');
+            row.style.cssText = 'margin-bottom:8px;padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;';
+            // 氏名（1行目・全幅）
+            const nameSpan = document.createElement('div');
+            nameSpan.style.cssText = 'font-size:14px;font-weight:500;margin-bottom:4px;word-break:break-all;';
+            nameSpan.textContent = m.name;
+            row.appendChild(nameSpan);
+            // コントロール行（2行目）
+            const ctrl = document.createElement('div');
+            ctrl.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+            // 移動先選択
+            if (otherTeams.length > 0) {
+              const sel = document.createElement('select');
+              sel.style.cssText = 'flex:1;min-width:80px;font-size:12px;padding:3px 6px;border:1px solid #d1d5db;border-radius:6px;';
+              sel.innerHTML = `<option value="">移動先...</option>`
+                + otherTeams.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+              const moveBtn = document.createElement('button');
+              moveBtn.type = 'button';
+              moveBtn.className = 'btn-sub';
+              moveBtn.style.cssText = 'font-size:12px;padding:3px 8px;white-space:nowrap;';
+              moveBtn.textContent = '移動';
+              moveBtn.addEventListener('click', () => {
+                const dest = safeText(sel.value);
+                if (!dest) { showSettingMsg('移動先チームを選んでください', 'warn'); return; }
+                moveMember(m.id, dest);
+              });
+              ctrl.appendChild(sel);
+              ctrl.appendChild(moveBtn);
+            }
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'btn-sub';
+            delBtn.style.cssText = 'font-size:12px;padding:3px 8px;color:#dc2626;white-space:nowrap;';
+            delBtn.textContent = '削除';
+            delBtn.addEventListener('click', () => deleteMember(m.id, m.name));
+            // ★ リーダーチェックボタン
+            const isLeader = !!m.is_leader;
+            const leaderBtn = document.createElement('button');
+            leaderBtn.type = 'button';
+            leaderBtn.className = 'btn-sub';
+            leaderBtn.textContent = isLeader ? '★' : '☆';
+            leaderBtn.title = isLeader ? 'リーダー解除' : 'リーダーに設定';
+            leaderBtn.style.cssText = isLeader
+              ? 'font-size:14px;padding:2px 7px;white-space:nowrap;background:#fef3c7;color:#92400e;border-color:#fcd34d;'
+              : 'font-size:14px;padding:2px 7px;white-space:nowrap;color:#9ca3af;';
+            leaderBtn.addEventListener('click', () => setLeader(m.id, !isLeader));
+            // ↑/↓ 並べ替えボタン
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'btn-sub';
+            upBtn.style.cssText = 'font-size:12px;padding:3px 7px;white-space:nowrap;';
+            upBtn.textContent = '↑';
+            upBtn.title = '上に移動';
+            upBtn.disabled = members.indexOf(m) === 0 || isLeader;
+            upBtn.addEventListener('click', () => reorderMember(team, m.id, 'up'));
+            const dnBtn = document.createElement('button');
+            dnBtn.type = 'button';
+            dnBtn.className = 'btn-sub';
+            dnBtn.style.cssText = 'font-size:12px;padding:3px 7px;white-space:nowrap;';
+            dnBtn.textContent = '↓';
+            dnBtn.title = '下に移動';
+            dnBtn.disabled = members.indexOf(m) === members.length - 1 || isLeader;
+            dnBtn.addEventListener('click', () => reorderMember(team, m.id, 'down'));
+            ctrl.appendChild(leaderBtn);
+            ctrl.appendChild(upBtn);
+            ctrl.appendChild(dnBtn);
+            ctrl.appendChild(delBtn);
+            row.appendChild(ctrl);
+            card.appendChild(row);
+          }
+        }
+
+        // メンバー一括追加エリア
+        const addSection = document.createElement('div');
+        addSection.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb;';
+        const addLabel = document.createElement('div');
+        addLabel.style.cssText = 'font-size:11px;color:#6b7280;margin-bottom:4px;';
+        addLabel.textContent = '追加するメンバー名（複数の場合は1行1名でペースト可）';
+        const bulkTextarea = document.createElement('textarea');
+        bulkTextarea.rows = 3;
+        bulkTextarea.placeholder = '例:\n山田 太郎\n鈴木 花子\n佐藤 次郎';
+        bulkTextarea.style.cssText = 'width:100%;font-size:13px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;resize:vertical;';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn-primary';
+        addBtn.style.cssText = 'width:100%;font-size:13px;padding:6px 0;margin-top:4px;';
+        addBtn.textContent = '追加する';
+        addBtn.addEventListener('click', () => addMembersBulk(team, bulkTextarea.value, addBtn, bulkTextarea));
+        addSection.appendChild(addLabel);
+        addSection.appendChild(bulkTextarea);
+        addSection.appendChild(addBtn);
+        card.appendChild(addSection);
+
+        listEl.appendChild(card);
+      }
+    }
+
+    async function setLeader(memberId, isLeader) {
+      try {
+        await apiFetch(`/api/members/${memberId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_leader: isLeader }),
+        });
+        await loadTeamMgmt();
+      } catch (e) {
+        showSettingMsg(e?.message || 'リーダー設定失敗', 'warn');
+      }
+    }
+
+    async function reorderMember(team, memberId, direction) {
+      const teamMembers = allMembers.filter(m => m.team === team);
+      const idx = teamMembers.findIndex(m => m.id === memberId);
+      if (idx < 0) return;
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= teamMembers.length) return;
+      // ローカルで並び替えてIDリストを作成
+      const newOrder = teamMembers.map(m => m.id);
+      [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+      try {
+        await apiFetch('/api/members/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team, ids: newOrder }),
+        });
+        await loadTeamMgmt();
+      } catch (e) {
+        showSettingMsg(e?.message || '並び替え失敗', 'warn');
+      }
+    }
+
+    function showSettingMsg(msg, type = 'ok') {
+      const el = document.getElementById('settingMsg');
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = type === 'warn' ? '#dc2626' : '#16a34a';
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 2500);
+    }
+
+    async function createTeam() {
+      const input = document.getElementById('newTeamInput');
+      const name = safeText(input ? input.value : '');
+      if (!name) { showSettingMsg('チーム名を入力してください', 'warn'); return; }
+      try {
+        await apiFetch(API.teams, { method: 'POST', body: JSON.stringify({ name }), headers: { 'Content-Type': 'application/json' } });
+        if (input) input.value = '';
+        showSettingMsg(`チーム「${name}」を作成しました`);
+        await loadTeamMgmt();
+        renderTeamFilter();
+      } catch (e) {
+        showSettingMsg(e?.message || '作成失敗', 'warn');
+      }
+    }
+
+    async function renameTeam(oldName, newNameRaw) {
+      const newName = safeText(newNameRaw);
+      if (!newName) { showSettingMsg('チーム名を入力してください', 'warn'); return; }
+      if (newName === oldName) { showSettingMsg('同じ名前です', 'warn'); return; }
+      if (!confirm(`チーム名を「${oldName}」→「${newName}」に変更します。\nメンバー・報告データも自動で更新されます。よろしいですか？`)) return;
+      try {
+        await apiFetch(`/api/teams/${encodeURIComponent(oldName)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: newName }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        showSettingMsg(`チーム名を「${newName}」に変更しました`);
+        await loadTeamMgmt();
+        renderTeamFilter();
+      } catch (e) {
+        showSettingMsg(e?.message || '変更失敗', 'warn');
+      }
+    }
+
+    async function deleteTeam(name) {
+      if (!confirm(`チーム「${name}」とそのメンバーを全て削除します。報告データは別チームに移動されます。決定しますか？`)) return;
+      try {
+        await apiFetch(`/api/teams/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        showSettingMsg(`チーム「${name}」を削除しました`);
+        await loadTeamMgmt();
+        renderTeamFilter();
+      } catch (e) {
+        showSettingMsg(e?.message || '削除失敗', 'warn');
+      }
+    }
+
+    async function addMember(team, nameVal) {
+      const name = safeText(nameVal);
+      if (!name) { showSettingMsg('メンバー名を入力してください', 'warn'); return; }
+      try {
+        await apiFetch(API.members, { method: 'POST', body: JSON.stringify({ name, team }), headers: { 'Content-Type': 'application/json' } });
+        showSettingMsg(`「${name}」を追加しました`);
+        await loadTeamMgmt();
+      } catch (e) {
+        showSettingMsg(e?.message || '追加失敗', 'warn');
+      }
+    }
+
+    async function addMembersBulk(team, text, btn, textarea) {
+      const names = text.split(/[\n\r]+/).map(s => s.trim()).filter(Boolean);
+      if (names.length === 0) { showSettingMsg('名前を入力してください', 'warn'); return; }
+      btn.disabled = true;
+      btn.textContent = '追加中...';
+      let added = 0, skipped = 0;
+      for (const name of names) {
+        try {
+          await apiFetch(API.members, { method: 'POST', body: JSON.stringify({ name, team }), headers: { 'Content-Type': 'application/json' } });
+          added++;
+        } catch (e) {
+          skipped++; // 重複などはスキップ
+        }
+      }
+      btn.disabled = false;
+      btn.textContent = '追加する';
+      textarea.value = '';
+      const msg = skipped > 0
+        ? `${added}名追加（${skipped}名は重複のためスキップ）`
+        : `${added}名を追加しました`;
+      showSettingMsg(msg, added > 0 ? 'ok' : 'warn');
+      await loadTeamMgmt();
+    }
+
+    async function deleteMember(id, name) {
+      if (!confirm(`「${name}」を削除しますか？`)) return;
+      try {
+        await apiFetch(`/api/members/${id}`, { method: 'DELETE' });
+        showSettingMsg(`「${name}」を削除しました`);
+        await loadTeamMgmt();
+      } catch (e) {
+        showSettingMsg(e?.message || '削除失敗', 'warn');
+      }
+    }
+
+    async function moveMember(id, newTeam) {
+      try {
+        await apiFetch(`/api/members/${id}`, { method: 'PATCH', body: JSON.stringify({ team: newTeam }), headers: { 'Content-Type': 'application/json' } });
+        showSettingMsg(`チーム「${newTeam}」に移動しました`);
+        await loadTeamMgmt();
+      } catch (e) {
+        showSettingMsg(e?.message || '移動失敗', 'warn');
+      }
+    }
+
+    function renderTeamFilter() {
+      const prev = safeText(filterTeamEl.value);
+      filterTeamEl.innerHTML = '';
+      const all = document.createElement('option');
+      all.value = '__ALL__';
+      all.textContent = '全体';
+      filterTeamEl.appendChild(all);
+      for (const t of teams) {
+        const op = document.createElement('option');
+        op.value = t;
+        op.textContent = t;
+        filterTeamEl.appendChild(op);
+      }
+      filterTeamEl.value = teams.includes(prev) ? prev : '__ALL__';
+    }
+
+    function _rtDateRange() {
+      const today = new Date();
+      const todayStr = ymd(today);
+      if (rtMode === 'today') {
+        return { start: todayStr, end: todayStr };
+      } else if (rtMode === 'yesterday') {
+        const d = new Date(today); d.setDate(d.getDate() - 1);
+        const ystr = ymd(d);
+        return { start: ystr, end: ystr };
+      } else if (rtMode === 'week') {
+        const d = new Date(today); d.setDate(d.getDate() - 6);
+        return { start: ymd(d), end: todayStr };
+      } else if (rtMode === 'month') {
+        const d = new Date(today); d.setDate(d.getDate() - 29);
+        return { start: ymd(d), end: todayStr };
+      } else {
+        return { start: rtDateStart, end: rtDateEnd };
+      }
+    }
+
+    function setRtMode(mode) {
+      rtMode = mode;
+      document.getElementById('rtToday').className = mode === 'today' ? 'btn-primary' : 'btn-sub';
+      document.getElementById('rtToday').style.cssText = 'font-size:12px;padding:5px 10px;';
+      document.getElementById('rtYesterday').className = mode === 'yesterday' ? 'btn-primary' : 'btn-sub';
+      document.getElementById('rtYesterday').style.cssText = 'font-size:12px;padding:5px 10px;';
+      document.getElementById('rtWeek').className  = mode === 'week'  ? 'btn-primary' : 'btn-sub';
+      document.getElementById('rtWeek').style.cssText = 'font-size:12px;padding:5px 10px;';
+      document.getElementById('rtMonth').className = mode === 'month' ? 'btn-primary' : 'btn-sub';
+      document.getElementById('rtMonth').style.cssText = 'font-size:12px;padding:5px 10px;';
+      document.getElementById('rtRange').className = mode === 'range' ? 'btn-primary' : 'btn-sub';
+      document.getElementById('rtRange').style.cssText = 'font-size:12px;padding:5px 10px;';
+      const picker = document.getElementById('rtRangePicker');
+      picker.style.display = mode === 'range' ? 'flex' : 'none';
+      renderReportTable();
+    }
+
+    const _TF_PUR = new Set(['①','②','③','④','⑤','⑥','⑦']);
+    const _TF_RSV = new Set(['⑧','⑨']);
+    function _reportTypeKey(r) {
+      const no = safeText(r.reportNo);
+      if (_TF_PUR.has(no)) return 'purchase';
+      if (_TF_RSV.has(no)) return 'reserve';
+      if (no) return 'cant';
+      return null;
+    }
+    function _filteredReports() {
+      const team = safeText(filterTeamEl.value);
+      const { start, end } = _rtDateRange();
+      let all = showDeleted ? [...reports] : reports.filter(r => !r.deletedAt);
+      if (team && team !== '__ALL__') all = all.filter(r => safeText(r.team) === team);
+      // 日付フィルター（購入日ベース・なければ報告日で判定）
+      if (start || end) {
+        all = all.filter(r => {
+          const base = r.purchaseAt || r.createdAt;
+          if (!base) return false;
+          const d = new Date(new Date(base).getTime() + 9 * 60 * 60 * 1000)
+            .toISOString().slice(0, 10);
+          if (start && d < start) return false;
+          if (end   && d > end)   return false;
+          return true;
+        });
+      }
+      // 種別フィルター（3種全選のときはスキップ）
+      if (activeTypeFilters.size > 0 && activeTypeFilters.size < 3) {
+        all = all.filter(r => activeTypeFilters.has(_reportTypeKey(r)));
+      }
+      all.sort((a, b) => new Date(b.purchaseAt || b.createdAt) - new Date(a.purchaseAt || a.createdAt));
+      return all;
+    }
+
+    function renderReportTable() {
+      const all = _filteredReports();
+      const rows = all;  // 期間内は全件表示
+      const countInfoEl = document.getElementById('reportCountInfo');
+      if (countInfoEl) {
+        countInfoEl.innerHTML = `${rows.length}件`;
+      }
+      selectedIds = new Set();
+      updateDeleteBar();
+      const selectAllCb = document.getElementById('selectAllCheckbox');
+      if (selectAllCb) selectAllCb.checked = false;
+      reportTableBodyEl.innerHTML = '';
+      if (rows.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="9">該当データはありません。</td>';
+        reportTableBodyEl.appendChild(tr);
+        return;
+      }
+      for (const r of rows) {
+        const fileName = safeText(r.receiptFileName);
+        const hasFile = !!fileName && fileName !== '未選択';
+        let attachHtml = '—';
+        if (hasFile) {
+          const lower = fileName.toLowerCase();
+          const encName = encodeURIComponent(fileName);
+          const dlAttr = `download="${escapeHtml(fileName)}"`;
+          if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp')) {
+            attachHtml = `<a href="/uploads/${encName}" target="_blank" rel="noopener"><img src="/uploads/${encName}" style="width:44px;height:44px;object-fit:cover;border:1px solid #d1d5db;border-radius:6px;" alt="receipt"></a> <a href="/uploads/${encName}" ${dlAttr} style="font-size:11px;color:#2563eb;">保存</a>`;
+          } else {
+            attachHtml = `<a href="/uploads/${encName}" target="_blank" rel="noopener" ${dlAttr}>DL</a>`;
+          }
+        }
+        // 購入日（UTC→JST変換して表示）
+        const dateOnly = r.purchaseAt
+          ? new Date(new Date(r.purchaseAt).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          : '';
+        // 購入/予約/不可バッジ（reportNoで正確に分類）
+        const rt = safeText(r.resultType);
+        const reportNo = safeText(r.reportNo);
+        const _PUR_NOS = new Set(['①','②','③','④','⑤','⑥','⑦']);
+        const _RSV_NOS = new Set(['⑧','⑨','㉛','㉜']);
+        let ptLabel, ptStyle;
+        if (_PUR_NOS.has(reportNo)) {
+          ptLabel = '購入'; ptStyle = 'background:#dcfce7;color:#166534;border:1px solid #86efac;';
+        } else if (_RSV_NOS.has(reportNo)) {
+          ptLabel = '予約'; ptStyle = 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;';
+        } else if (reportNo) {
+          // 旧形式等フォールバック: resultTypeのテキストで判定
+          if (rt.includes('購入できた') || rt.includes('在庫から購入')) {
+            ptLabel = '購入'; ptStyle = 'background:#dcfce7;color:#166534;border:1px solid #86efac;';
+          } else if (rt.includes('予約できた') || rt.includes('予約した本')) {
+            ptLabel = '予約'; ptStyle = 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;';
+          } else {
+            ptLabel = '不可'; ptStyle = 'background:#4b5563;color:#fff;border:1px solid #374151;';
+          }
+        } else {
+          ptLabel = '—'; ptStyle = 'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;';
+        }
+        const ptBadge = `<span style="display:inline-block;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;${ptStyle}">${ptLabel}</span>`;
+        const addrRaw = safeText(r.storeAddress);
+        const isDeleted = !!r.deletedAt;
+        const tr = document.createElement('tr');
+        if (isDeleted) tr.classList.add('deleted-row');
+        const deletedBadge = isDeleted ? `<span class="deleted-badge">削除済</span>` : '';
+        // チェックボックスセル
+        const checkTd = document.createElement('td');
+        checkTd.style.cssText = 'width:32px;text-align:center;';
+        if (!isDeleted) {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.dataset.id = r.id;
+          cb.addEventListener('change', () => {
+            if (cb.checked) { selectedIds.add(r.id); tr.classList.add('row-selected'); }
+            else { selectedIds.delete(r.id); tr.classList.remove('row-selected'); }
+            updateDeleteBar();
+            const allCbs = reportTableBodyEl.querySelectorAll('input[type=checkbox]');
+            const selectAll = document.getElementById('selectAllCheckbox');
+            if (selectAll) selectAll.checked = allCbs.length > 0 && [...allCbs].every(c => c.checked);
+          });
+          checkTd.appendChild(cb);
+        }
+        tr.appendChild(checkTd);
+        tr.insertAdjacentHTML('beforeend', `
+          <td style="white-space:nowrap;">${escapeHtml(r.actor || '未設定')}${deletedBadge}<br><span style="font-size:11px;color:#6b7280;">(${escapeHtml(r.team)})</span></td>
+          <td style="white-space:nowrap;">${escapeHtml(dateOnly)}</td>
+          <td style="text-align:center;">${ptBadge}</td>
+          <td style="font-size:12px;">${escapeHtml(r.reportNo)}<br><span style="color:#6b7280;font-size:11px;">${escapeHtml(rt)}</span></td>
+          <td>${escapeHtml(r.storeName || '—')}</td>
+          <td style="font-size:12px;">${escapeHtml(addrRaw || '—')}</td>
+          <td>${attachHtml}</td>
+        `);
+        // 編集ボタン
+        const editTd = document.createElement('td');
+        editTd.style.cssText = 'width:44px;text-align:center;';
+        if (!isDeleted) {
+          const editBtn = document.createElement('button');
+          editBtn.textContent = '✏️';
+          editBtn.className = 'btn-sub';
+          editBtn.style.cssText = 'padding:4px 8px;font-size:13px;';
+          editBtn.title = '編集';
+          editBtn.addEventListener('click', () => openEditModal(r));
+          editTd.appendChild(editBtn);
+        }
+        tr.appendChild(editTd);
+        reportTableBodyEl.appendChild(tr);
+      }
+    }
+
+    function updateDeleteBar() {
+      const bar = document.getElementById('deleteBar');
+      const countEl = document.getElementById('deleteBarCount');
+      if (!bar || !countEl) return;
+      const n = selectedIds.size;
+      bar.style.display = n > 0 ? 'flex' : 'none';
+      countEl.textContent = n > 0 ? `${n}件選択中` : '';
+    }
+
+    async function deleteSelectedReports() {
+      const ids = [...selectedIds];
+      if (ids.length === 0) return;
+      if (!confirm(`選択した${ids.length}件の報告を削除します。\n（画面下の「元に戻す」ボタンで復元できます）`)) return;
+      try {
+        const result = await apiFetch('/api/reports/delete', { method: 'POST', body: JSON.stringify({ ids }), headers: { 'Content-Type': 'application/json' } });
+        lastDeleteOpId = result.opId;
+        await loadData();
+        showUndoToast(`${result.affected || ids.length}件を削除しました`);
+      } catch (err) {
+        alert('削除失敗: ' + (err?.message || 'unknown'));
+      }
+    }
+
+    function showUndoToast(msg) {
+      const toast = document.getElementById('undoToast');
+      const msgEl = document.getElementById('undoToastMsg');
+      if (!toast || !msgEl) return;
+      msgEl.textContent = msg;
+      toast.style.display = 'flex';
+      clearTimeout(undoToastTimer);
+      undoToastTimer = setTimeout(() => { toast.style.display = 'none'; }, 15000);
+    }
+
+    async function undoLastDelete() {
+      if (!lastDeleteOpId) return;
+      const opId = lastDeleteOpId;
+      lastDeleteOpId = null;
+      document.getElementById('undoToast').style.display = 'none';
+      clearTimeout(undoToastTimer);
+      try {
+        const result = await apiFetch('/api/deletions/undo', { method: 'POST', body: JSON.stringify({ opId }), headers: { 'Content-Type': 'application/json' } });
+        await loadData();
+        showUndoToast(`✅ ${result.affected || 0}件を元に戻しました`);
+        lastDeleteOpId = null;
+      } catch (err) {
+        alert('元に戻しに失敗しました: ' + (err?.message || 'unknown'));
+      }
+    }
+
+    function downloadCsv() {
+      const rows = _filteredReports();
+      const headers = ['日時','チーム','実行者','報告No','結果','添付ファイル名','購入日時','店舗名','住所','コメント'];
+      const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [
+        headers.map(escape).join(','),
+        ...rows.map(r => [
+          formatDateTime(r.createdAt), r.team, r.actor || '未設定', r.reportNo,
+          r.resultType, r.receiptFileName || '', r.purchaseAt || '',
+          r.storeName || '', r.storeAddress || '', r.comment || ''
+        ].map(escape).join(','))
+      ];
+      const bom = '\uFEFF';
+      const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reports_${ymd(new Date())}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function countCategory(byReportNo, nos) {
+      return nos.reduce((sum, n) => sum + (Number(byReportNo?.[n] || 0)), 0);
+    }
+
+    function renderSummary(data) {
+      const total = Number(data?.total || 0);
+      const prevTotal = Number(data?.prevTotal || 0);
+      const diff = total - prevTotal;
+      const diffSign = diff > 0 ? `+${diff}` : `${diff}`;
+      const byReportNo = data?.byReportNo || {};
+      const prevByReportNo = data?.prevByReportNo || {};
+      const byActor = data?.byActor || {};
+      const byActorDetail = data?.byActorDetail || {};
+
+      let periodLabel = '';
+      let compareLabel = '';
+      if (data.date) {
+        periodLabel = String(data.date);
+        compareLabel = `前日（${data.prevDate || '-'}）比較`;
+      } else if (data.startDate || data.endDate) {
+        periodLabel = `${data.startDate || '?'}〜${data.endDate || '?'}`;
+        compareLabel = `直前同期間（${data.prevStartDate || '-'}〜${data.prevEndDate || '-'}）比較`;
+      } else {
+        periodLabel = '集計中...';
+        compareLabel = '';
+      }
+
+      let html = `
+        <div class="guide" style="margin-bottom:10px;">対象期間: ${escapeHtml(periodLabel)} / ${escapeHtml(compareLabel)}</div>
+        <div class="stat-box" style="margin-bottom:10px;">
+          <div class="num">${total}</div>
+          <div class="lbl">合計（比較差分: ${diffSign}）</div>
+        </div>
+      `;
+
+      html += `<table class="report-table" style="margin-bottom:10px;"><thead><tr>
+        <th>カテゴリー</th><th>今期</th><th>前期</th><th>差分</th>
+      </tr></thead><tbody>`;
+      for (const c of CATEGORY_MAP) {
+        const cur = countCategory(byReportNo, c.nos);
+        const prev = countCategory(prevByReportNo, c.nos);
+        const d = cur - prev;
+        const dSign = d > 0 ? `<span style="color:#16a34a;font-weight:700;">+${d}</span>` : d < 0 ? `<span style="color:#dc2626;font-weight:700;">${d}</span>` : `<span style="color:#6b7280;">±0</span>`;
+        html += `<tr><td>${escapeHtml(c.label)}</td><td style="font-weight:700;">${cur}</td><td style="color:#6b7280;">${prev}</td><td>${dSign}</td></tr>`;
+      }
+      html += '</tbody></table>';
+
+      const members = Object.entries(byActor).sort((a, b) => Number(b[1]) - Number(a[1]));
+      html += '<div class="card" style="margin:0;padding:10px;"><h2 style="margin-bottom:6px;">メンバー別</h2>';
+      if (members.length === 0) {
+        html += '<div class="muted">データがありません。</div>';
+      } else {
+        // report_no → カテゴリー判定ヘルパー
+        const PURCHASE_NOS = new Set(['①','②','③','④','⑤','⑥','⑦']);
+        const RESV_NOS     = new Set(['⑧','⑨','㉛','㉜']);
+        const CANT_NOS     = new Set(['⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','㉝']);
+        function countNos(detail, nos) {
+          let s = 0;
+          for (const no of nos) s += Number(detail[no] || 0);
+          return s;
+        }
+        html += '<table class="report-table"><thead><tr>'
+          + '<th>実行者</th><th>購入</th><th>予約</th><th>予約不可等</th><th>合計</th>'
+          + '</tr></thead><tbody>';
+        for (const [name, count] of members) {
+          const det = byActorDetail[name] || {};
+          const pur  = countNos(det, PURCHASE_NOS);
+          const resv = countNos(det, RESV_NOS);
+          const cant = countNos(det, CANT_NOS);
+          const purCell  = pur  > 0 ? `<span style="color:#16a34a;font-weight:700;">${pur}</span>`  : `<span style="color:#9ca3af;">0</span>`;
+          const resvCell = resv > 0 ? `<span style="color:#2563eb;font-weight:700;">${resv}</span>` : `<span style="color:#9ca3af;">0</span>`;
+          const cantCell = cant > 0 ? `<span style="color:#dc2626;">${cant}</span>`                 : `<span style="color:#9ca3af;">0</span>`;
+          html += `<tr><td>${escapeHtml(name || '未設定')}</td><td>${purCell}</td><td>${resvCell}</td><td>${cantCell}</td><td style="font-weight:700;">${Number(count || 0)}</td></tr>`;
+        }
+        html += '</tbody></table>';
+      }
+      html += '</div>';
+
+      summaryBoxEl.innerHTML = html;
+    }
+
+    function setPeriod(next) {
+      periodType = next;
+      ptTodayEl.className = next === 'today' ? 'btn-primary' : 'btn-sub';
+      ptYesterdayEl.className = next === 'yesterday' ? 'btn-primary' : 'btn-sub';
+      ptWeekEl.className = next === 'week' ? 'btn-primary' : 'btn-sub';
+      ptMonthEl.className = next === 'month' ? 'btn-primary' : 'btn-sub';
+      ptRangeEl.className = next === 'range' ? 'btn-primary' : 'btn-sub';
+      rangePickerEl.style.display = next === 'range' ? 'flex' : 'none';
+      if (next !== 'range') loadSummary();
+    }
+
+    async function loadSummary() {
+      const team = safeText(filterTeamEl.value);
+      const teamQuery = team && team !== '__ALL__' ? `&team=${encodeURIComponent(team)}` : '';
+      const today = ymd(new Date());
+      let url = '';
+      if (periodType === 'today') {
+        url = `${API.summaryDaily}?date=${today}${teamQuery}`;
+      } else if (periodType === 'yesterday') {
+        const d = new Date(); d.setDate(d.getDate() - 1);
+        url = `${API.summaryDaily}?date=${ymd(d)}${teamQuery}`;
+      } else if (periodType === 'week') {
+        url = `${API.summaryWeekly}?date=${today}&days=7${teamQuery}`;
+      } else if (periodType === 'month') {
+        url = `${API.summaryMonthly}?date=${today}&days=30${teamQuery}`;
+      } else {
+        const start = safeText(rangeStartEl.value);
+        const end = safeText(rangeEndEl.value);
+        if (!start || !end) {
+          summaryBoxEl.innerHTML = '<div class="muted">期間指定の開始日・終了日を入力してください。</div>';
+          return;
+        }
+        url = `${API.summaryRange}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${teamQuery}`;
+      }
+      try {
+        const data = await apiFetch(url, { method: 'GET' });
+        renderSummary(data || {});
+      } catch (e) {
+        summaryBoxEl.innerHTML = `<div class="muted">集計取得エラー: ${escapeHtml(e?.message || 'unknown')}</div>`;
+      }
+    }
+
+    function actionLabel(action) {
+      const map = {
+        create_team: 'チーム作成',
+        delete_team: 'チーム削除',
+        rename_team: 'チーム名変更',
+        create_report: '報告作成',
+        delete_reports: '報告削除',
+        reset_reports: '全件リセット',
+        undo_delete: '削除巻き戻し',
+        upload_file: 'ファイル添付',
+        add_member: 'メンバー追加',
+        delete_member: 'メンバー削除',
+        move_member: 'メンバー移動',
+      };
+      return map[action] || action;
+    }
+
+    function renderMajorLogs(items) {
+      majorLogBodyEl.innerHTML = '';
+      if (!Array.isArray(items) || items.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="4">ログはまだありません。</td>';
+        majorLogBodyEl.appendChild(tr);
+        return;
+      }
+      for (const row of items) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(formatDateTime(row.at))}</td>
+          <td>${escapeHtml(actionLabel(row.action))}</td>
+          <td>${escapeHtml(row.actor || 'unknown')}</td>
+          <td>${escapeHtml(`${row.targetType || '-'}:${row.targetId || '-'}`)}</td>
+        `;
+        majorLogBodyEl.appendChild(tr);
+      }
+    }
+
+    async function loadMajorLogs() {
+      try {
+        const rows = await apiFetch(API.majorLogs, { method: 'GET' });
+        renderMajorLogs(rows);
+      } catch {
+        renderMajorLogs([]);
+      }
+    }
+
+    async function loadData() {
+      const health = await apiFetch(API.health, { method: 'GET' });
+      serverModeBadgeEl.textContent = health?.ok ? 'サーバー共有DB: ON' : 'ローカル';
+
+      // 全チームを /api/teams から取得（報告がないチームも含む）
+      try {
+        const teamRows = await apiFetch(API.teams, { method: 'GET' });
+        teams = Array.isArray(teamRows) ? teamRows.map(t => safeText(t.name)).filter(Boolean).sort() : [];
+      } catch {
+        teams = [];
+      }
+
+      reports = await apiFetch(API.reports + '?include_deleted=1', { method: 'GET' });
+      if (!Array.isArray(reports)) reports = [];
+
+      // 報告に包まれるチームのうちリストにないものもマージ
+      const reportTeams = [...new Set(reports.map(r => safeText(r.team)).filter(Boolean))];
+      for (const t of reportTeams) {
+        if (!teams.includes(t)) teams.push(t);
+      }
+      teams.sort();
+
+      renderTeamFilter();
+      renderSettingTeamSelectors();
+      populateScTeamSelect();
+      renderReportTable();
+      await loadSummary();
+      await loadMajorLogs();
+    }
+
+    // ══ 代理入力モーダル ══
+    const proxyModalEl = document.getElementById('proxyModal');
+    const proxyEntryFormEl = document.getElementById('proxyEntryForm');
+    const pTeamEl = document.getElementById('pTeam');
+    const pActorEl = document.getElementById('pActor');
+    const pActorCustomWrapEl = document.getElementById('pActorCustomWrap');
+    const pActorCustomEl = document.getElementById('pActorCustom');
+    const pReportNoEl = document.getElementById('pReportNo');
+    const pResultTypeEl = document.getElementById('pResultType');
+    const pCreatedAtEl = document.getElementById('pCreatedAt');
+    const pPurchaseAtEl = document.getElementById('pPurchaseAt');
+    const pStoreNameEl = document.getElementById('pStoreName');
+    const pStoreAddressEl = document.getElementById('pStoreAddress');
+    const pCommentEl = document.getElementById('pComment');
+    const pReceiptPhotoEl = document.getElementById('pReceiptPhoto');
+    const pUploadStatusEl = document.getElementById('pUploadStatus');
+    const pReceiptPreviewEl = document.getElementById('pReceiptPreview');
+    const proxyFormMsgEl = document.getElementById('proxyFormMsg');
+
+    function _localDatetimeStr(d) {
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function openProxyModal() {
+      // デフォルト日時: 現在(ローカル)
+      const now = new Date();
+      pCreatedAtEl.value = _localDatetimeStr(now);
+      pPurchaseAtEl.value = _localDatetimeStr(now);
+      // チーム・メンバーを最新化（設定タブ未訪問でも動く）
+      try {
+        const teamRows = await apiFetch(API.teams, { method: 'GET' });
+        if (Array.isArray(teamRows)) teams = teamRows.map(t => safeText(t.name)).filter(Boolean).sort();
+        const memberRows = await apiFetch(API.members, { method: 'GET' });
+        if (Array.isArray(memberRows)) allMembers = memberRows;
+        renderTeamFilter();
+      } catch { /* teams が空でもフォームは開く */ }
+      // チーム選択肢を最新に
+      pTeamEl.innerHTML = '';
+      for (const t of teams) {
+        const op = document.createElement('option');
+        op.value = t; op.textContent = t;
+        pTeamEl.appendChild(op);
+      }
+      updateProxyMembers();
+      // フオームリセット
+      pReportNoEl.value = '';
+      pResultTypeEl.value = '';
+      pStoreNameEl.value = '';
+      pStoreAddressEl.value = '';
+      pCommentEl.value = '';
+      proxyFormMsgEl.style.display = 'none';
+      document.getElementById('proxySubmitBtn').disabled = false;
+      document.getElementById('proxySubmitBtn').textContent = '送信する';
+      // 写真リセット
+      proxyUploadedFileName = '';
+      pReceiptPhotoEl.value = '';
+      pUploadStatusEl.textContent = '';
+      pUploadStatusEl.style.color = '';
+      pReceiptPreviewEl.style.display = 'none';
+      pReceiptPreviewEl.src = '';
+      proxyModalEl.classList.add('open');
+      pTeamEl.focus();
+    }
+
+    function closeProxyModal() {
+      proxyModalEl.classList.remove('open');
+    }
+
+    // ══ 報告編集モーダル ══
+    const editReportModalEl = document.getElementById('editReportModal');
+    const eReportIdEl      = document.getElementById('eReportId');
+    const eTeamEl          = document.getElementById('eTeam');
+    const eActorEl         = document.getElementById('eActor');
+    const eActorCustomWrapEl = document.getElementById('eActorCustomWrap');
+    const eActorCustomEl   = document.getElementById('eActorCustom');
+    const eReportNoEl      = document.getElementById('eReportNo');
+    const eResultTypeEl    = document.getElementById('eResultType');
+    const eCreatedAtEl     = document.getElementById('eCreatedAt');
+    const ePurchaseAtEl    = document.getElementById('ePurchaseAt');
+    const eStoreNameEl     = document.getElementById('eStoreName');
+    const eStoreAddressEl  = document.getElementById('eStoreAddress');
+    const eCommentEl       = document.getElementById('eComment');
+    const editReportMsgEl  = document.getElementById('editReportMsg');
+
+    function _toDatetimeLocal(isoStr) {
+      if (!isoStr) return '';
+      try {
+        const d = new Date(isoStr);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } catch { return ''; }
+    }
+
+    function _updateEditMembers() {
+      const team = safeText(eTeamEl.value);
+      const members = allMembers.filter(m => m.team === team);
+      const prevActor = safeText(eActorEl.value);
+      eActorEl.innerHTML = '';
+      for (const m of members) {
+        const op = document.createElement('option');
+        op.value = m.name; op.textContent = m.name;
+        eActorEl.appendChild(op);
+      }
+      const other = document.createElement('option');
+      other.value = '__OTHER__'; other.textContent = '-- その他（直接入力）--';
+      eActorEl.appendChild(other);
+      // 以前の選択値を復元
+      if ([...eActorEl.options].some(o => o.value === prevActor)) {
+        eActorEl.value = prevActor;
+      } else if (prevActor && prevActor !== '__OTHER__') {
+        eActorEl.value = '__OTHER__';
+        eActorCustomEl.value = prevActor;
+        eActorCustomWrapEl.style.display = 'block';
+        return;
+      }
+      eActorCustomWrapEl.style.display = eActorEl.value === '__OTHER__' ? 'block' : 'none';
+    }
+
+    async function openEditModal(r) {
+      // チーム・メンバー最新化
+      try {
+        const teamRows = await apiFetch(API.teams, { method: 'GET' });
+        if (Array.isArray(teamRows)) teams = teamRows.map(t => safeText(t.name)).filter(Boolean).sort();
+        const memberRows = await apiFetch(API.members, { method: 'GET' });
+        if (Array.isArray(memberRows)) allMembers = memberRows;
+      } catch { /* fallback */ }
+
+      eReportIdEl.value = r.id;
+
+      // チーム選択肢
+      eTeamEl.innerHTML = '';
+      for (const t of teams) {
+        const op = document.createElement('option');
+        op.value = t; op.textContent = t;
+        eTeamEl.appendChild(op);
+      }
+      eTeamEl.value = r.team || '';
+      if (!eTeamEl.value && teams.length > 0) eTeamEl.value = teams[0];
+
+      // メンバー選択肢を組み立ててから実行者をセット
+      const members = allMembers.filter(m => m.team === eTeamEl.value);
+      eActorEl.innerHTML = '';
+      for (const m of members) {
+        const op = document.createElement('option');
+        op.value = m.name; op.textContent = m.name;
+        eActorEl.appendChild(op);
+      }
+      const other = document.createElement('option');
+      other.value = '__OTHER__'; other.textContent = '-- その他（直接入力）--';
+      eActorEl.appendChild(other);
+      const actor = r.actor || '';
+      if ([...eActorEl.options].some(o => o.value === actor)) {
+        eActorEl.value = actor;
+        eActorCustomWrapEl.style.display = 'none';
+        eActorCustomEl.value = '';
+      } else {
+        eActorEl.value = '__OTHER__';
+        eActorCustomEl.value = actor;
+        eActorCustomWrapEl.style.display = 'block';
+      }
+
+      eReportNoEl.value      = r.reportNo || '';
+      eResultTypeEl.value    = r.resultType || '';
+      eCreatedAtEl.value     = _toDatetimeLocal(r.createdAt);
+      ePurchaseAtEl.value    = _toDatetimeLocal(r.purchaseAt);
+      eStoreNameEl.value     = r.storeName || '';
+      eStoreAddressEl.value  = r.storeAddress || '';
+      eCommentEl.value       = r.comment || '';
+
+      editReportMsgEl.style.display = 'none';
+      document.getElementById('editReportSubmitBtn').disabled = false;
+      document.getElementById('editReportSubmitBtn').textContent = '保存する';
+      editReportModalEl.classList.add('open');
+      eTeamEl.focus();
+    }
+
+    function closeEditReportModal() {
+      editReportModalEl.classList.remove('open');
+    }
+
+    function showEditMsg(msg, isError) {
+      editReportMsgEl.textContent = msg;
+      editReportMsgEl.style.color = isError ? '#dc2626' : '#16a34a';
+      editReportMsgEl.style.display = 'block';
+    }
+
+    async function submitEditReport(e) {
+      e.preventDefault();
+      const id = safeText(eReportIdEl.value);
+      if (!id) { showEditMsg('報告IDが不明です', true); return; }
+
+      const team = safeText(eTeamEl.value);
+      let actor = '';
+      if (eActorEl.value === '__OTHER__') {
+        actor = safeText(eActorCustomEl.value);
+        if (!actor) { showEditMsg('実行者の氏名を入力してください', true); return; }
+      } else {
+        actor = safeText(eActorEl.value);
+      }
+      const reportNo   = safeText(eReportNoEl.value);
+      const resultType = safeText(eResultTypeEl.value);
+      const createdAt  = eCreatedAtEl.value ? new Date(eCreatedAtEl.value).toISOString() : '';
+      const purchaseAt = ePurchaseAtEl.value ? new Date(ePurchaseAtEl.value).toISOString() : '';
+      const storeName    = safeText(eStoreNameEl.value);
+      const storeAddress = safeText(eStoreAddressEl.value);
+      const comment      = safeText(eCommentEl.value);
+
+      const submitBtn = document.getElementById('editReportSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '保存中…';
+      try {
+        await apiFetch(`/api/reports/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team, actor, report_no: reportNo, result_type: resultType,
+            created_at: createdAt, purchase_at: purchaseAt,
+            store_name: storeName, store_address: storeAddress, comment }),
+        });
+        showEditMsg('保存しました', false);
+        // ローカルデータを更新
+        const idx = reports.findIndex(r => r.id === id);
+        if (idx >= 0) {
+          reports[idx] = { ...reports[idx], team, actor,
+            reportNo, resultType, createdAt, purchaseAt,
+            storeName, storeAddress, comment };
+        }
+        renderReportTable();
+        await loadSummary();
+        setTimeout(() => closeEditReportModal(), 600);
+      } catch (err) {
+        showEditMsg('保存に失敗しました: ' + (err?.message || err), true);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '保存する';
+      }
+    }
+
+    function updateProxyMembers() {
+      const team = safeText(pTeamEl.value);
+      const members = allMembers.filter(m => m.team === team);
+      pActorEl.innerHTML = '';
+      for (const m of members) {
+        const op = document.createElement('option');
+        op.value = m.name; op.textContent = m.name;
+        pActorEl.appendChild(op);
+      }
+      const other = document.createElement('option');
+      other.value = '__OTHER__'; other.textContent = '-- その他（直接入力）--';
+      pActorEl.appendChild(other);
+      // メンバーが0人の場合は直接入力欄を自動表示
+      const noMembers = members.length === 0;
+      pActorCustomWrapEl.style.display = noMembers ? 'block' : 'none';
+      if (noMembers) pActorEl.value = '__OTHER__';
+      pActorCustomEl.value = '';
+    }
+
+    function showProxyMsg(msg, isError) {
+      proxyFormMsgEl.textContent = msg;
+      proxyFormMsgEl.style.color = isError ? '#dc2626' : '#16a34a';
+      proxyFormMsgEl.style.display = 'block';
+    }
+
+    async function submitProxyReport(e) {
+      e.preventDefault();
+      const team = safeText(pTeamEl.value);
+      let actor = '';
+      if (pActorEl.value === '__OTHER__') {
+        actor = safeText(pActorCustomEl.value);
+        if (!actor) { showProxyMsg('実行者の氏名を入力してください', true); return; }
+      } else {
+        actor = safeText(pActorEl.value);
+      }
+      const reportNo = safeText(pReportNoEl.value);
+      const resultType = safeText(pResultTypeEl.value);
+      const createdAtLocal = safeText(pCreatedAtEl.value);
+      const purchaseAt = safeText(pPurchaseAtEl.value);
+      const storeName = safeText(pStoreNameEl.value);
+      const storeAddress = safeText(pStoreAddressEl.value);
+      const comment = safeText(pCommentEl.value);
+
+      if (!team)          { showProxyMsg('チームを選択してください', true); return; }
+      if (!actor)         { showProxyMsg('実行者を選択または入力してください', true); return; }
+      if (!reportNo)      { showProxyMsg('報告ナンバーを選択してください', true); return; }
+      if (!resultType)    { showProxyMsg('報告ナンバーを再選択してください', true); return; }
+      if (!createdAtLocal){ showProxyMsg('報告日時を入力してください', true); return; }
+      if (!purchaseAt)    { showProxyMsg('購入日時を入力してください', true); return; }
+      if (!storeName)     { showProxyMsg('店舗名を入力してください', true); return; }
+      if (!storeAddress)  { showProxyMsg('住所を入力してください', true); return; }
+
+      // datetime-local → UTC ISO (ローカル時刻として解釈)
+      const createdAtISO = new Date(createdAtLocal).toISOString();
+
+      // ID生成
+      const d = new Date(createdAtLocal);
+      const pad = n => String(n).padStart(2,'0');
+      const reportId = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}-${Math.random().toString(36).slice(2,6)}-leader`;
+
+      const body = { id: reportId, createdAt: createdAtISO, team, actor, resultType, reportNo, purchaseAt, storeName, storeAddress, receiptFileName: proxyUploadedFileName || '未選択', comment };
+
+      const btn = document.getElementById('proxySubmitBtn');
+      btn.disabled = true; btn.textContent = '送信中...';
+      proxyFormMsgEl.style.display = 'none';
+
+      try {
+        await apiFetch(API.reports, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+        showProxyMsg(`✅ 送信しました（${actor} / ${reportNo}）`, false);
+        await loadData();
+        setTimeout(closeProxyModal, 1200);
+      } catch (err) {
+        showProxyMsg(`送信失敗: ${escapeHtml(err?.message || 'unknown')}`, true);
+        btn.disabled = false; btn.textContent = '送信する';
+      }
+    }
+
+    function renderSettingTeamSelectors() {
+      const teamList = teams.slice();
+      if (assignTeamSelectEl) {
+        const cur = assignTeamSelectEl.value;
+        assignTeamSelectEl.innerHTML = teamList.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        if (cur && teamList.includes(cur)) assignTeamSelectEl.value = cur;
+        else if (teamList.length) assignTeamSelectEl.value = teamList[0];
+      }
+      if (profileTeamSelectEl) {
+        const cur = profileTeamSelectEl.value;
+        profileTeamSelectEl.innerHTML = teamList.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        if (cur && teamList.includes(cur)) profileTeamSelectEl.value = cur;
+        else if (teamList.length) profileTeamSelectEl.value = teamList[0];
+      }
+    }
+
+    function renderAssignWeekLabel() {
+      if (!assignWeekLabelEl) return;
+      const s = assignWeekStart || getWeekStartMonday(new Date(), assignWeekOffset);
+      const e = new Date(s);
+      e.setDate(s.getDate() + 6);
+      const fmt = (d) => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      assignWeekLabelEl.textContent = `${fmt(s)}(月) - ${fmt(e)}(日)`;
+    }
+
+    async function loadAssignmentPanel() {
+      if (!assignBodyEl || !assignHeadRowEl) return;
+      const scSel = document.getElementById('scTeamSelect');
+      const scVal = scSel ? scSel.value : '';
+      const team  = (!scVal || scVal === '__all__') ? '' : safeText(scVal);
+      if (!team) {
+        assignCachedTeam = '';
+        assignHeadRowEl.innerHTML = '';
+        assignBodyEl.innerHTML = '<tr><td style="color:#6b7280;">上の「チーム」でチームを1つ選択すると指名管理が表示されます。</td></tr>';
+        return;
+      }
+      assignCachedTeam = team;
+      assignWeekStart = getWeekStartMonday(new Date(), assignWeekOffset);
+      renderAssignWeekLabel();
+      assignCachedDates = weekDates(assignWeekStart);
+      const from = ymd(assignCachedDates[0]);
+      const to = ymd(assignCachedDates[6]);
+      try {
+        const [membersRes, assignmentsRes, scheduleRes, notesRes] = await Promise.all([
+          apiFetch(`${API.members}?team=${encodeURIComponent(team)}`, { method: 'GET' }),
+          apiFetch(`${API.assignments}?team=${encodeURIComponent(team)}&from=${from}&to=${to}`, { method: 'GET' }),
+          apiFetch(`/api/schedules?team=${encodeURIComponent(team)}&from=${from}&to=${to}`, { method: 'GET' }),
+          apiFetch(`/api/assignment-notes?team=${encodeURIComponent(team)}&from=${from}&to=${to}`, { method: 'GET' }).catch(() => []),
+        ]);
+        assignCachedMembers = (Array.isArray(membersRes) ? membersRes : []).map((m) => safeText(m.name)).filter(Boolean);
+        // プロフィール（住所）を並行取得
+        const profileResults = await Promise.all(assignCachedMembers.map(m =>
+          apiFetch(`${API.profile}?team=${encodeURIComponent(team)}&member=${encodeURIComponent(m)}`, { method: 'GET' }).catch(() => null)
+        ));
+        memberProfileMap = new Map(assignCachedMembers.map((m, i) => {
+          const p = profileResults[i];
+          return [m, { home: safeText(p?.homeArea || ''), work: safeText(p?.workArea || '') }];
+        }));
+        assignmentSet = new Set((assignmentsRes || []).map((x) => `${x.member}@@${x.date}`));
+        assignPurchaseCountMap = new Map((assignmentsRes || []).map((x) => [`${x.member}@@${x.date}`, x.purchaseCount || 1]));
+        scheduleMap = new Map((scheduleRes || []).map((x) => [`${x.member}@@${x.date}`, x.availability]));
+        scheduleDetailMap = new Map((scheduleRes || []).map((x) => {
+          try { return [`${x.member}@@${x.date}`, JSON.parse(x.locationDetail || '{}')]; }
+          catch { return [`${x.member}@@${x.date}`, {}]; }
+        }));
+        assignNoteMap = new Map((notesRes || []).map((x) => [`${x.member}@@${x.date}`, x.text]));
+        _renderAssignFromCache();
+      } catch (e) {
+        assignBodyEl.innerHTML = `<tr><td colspan="8">読込エラー: ${escapeHtml(e?.message || 'unknown')}</td></tr>`;
+      }
+    }
+
+    function _renderAssignFromCache() {
+      if (!assignBodyEl || !assignHeadRowEl) return;
+      const team    = assignCachedTeam;
+      const members = assignCachedMembers;
+      const dates   = assignCachedDates;
+      if (!team || !dates.length) return;
+      // ペンディングを加味した日付別カウント
+      const countByDate = {};
+      const namesByDate = {};
+      for (const d of dates) {
+        const date = ymd(d);
+        countByDate[date] = 0;
+        namesByDate[date] = [];
+      }
+      const booksByDate = {};
+      for (const d of dates) booksByDate[ymd(d)] = 0;
+      for (const name of members) {
+        for (const d of dates) {
+          const date = ymd(d);
+          const key  = `${name}@@${date}`;
+          const pend = assignPendingChanges.get(key);
+          const eff  = pend === 'add' ? true : pend === 'remove' ? false : assignmentSet.has(key);
+          if (eff) {
+            countByDate[date]++;
+            namesByDate[date].push(name);
+            booksByDate[date] = (booksByDate[date] || 0) + (assignPurchaseCountMap.get(key) || 1);
+          }
+        }
+      }
+      assignHeadRowEl.innerHTML = `<th>メンバー</th>${dates.map((d) => {
+        const date = ymd(d);
+        const dow  = ['日','月','火','水','木','金','土'][d.getDay()];
+        const dc   = dayColor(d);
+        const cnt  = countByDate[date] || 0;
+        const books = booksByDate[date] || 0;
+        const nameList = (namesByDate[date] || []).map(n => `<div style="font-size:10px;color:#92400e;white-space:nowrap;">${escapeHtml(n)}</div>`).join('');
+        const cntBadge = cnt > 0
+          ? `<span style="display:inline-block;font-size:11px;font-weight:700;background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;margin-top:2px;">${cnt}人（${books}冊）</span>${nameList}`
+          : `<span style="font-size:10px;color:#9ca3af;">0人</span>`;
+        return `<th style="text-align:center;${dc ? `color:${dc};` : ''}">${d.getMonth()+1}/${d.getDate()}(${dow})<br>${cntBadge}</th>`;
+      }).join('')}`;
+      if (members.length === 0) {
+        assignBodyEl.innerHTML = '<tr><td colspan="8">メンバーがいません。</td></tr>';
+        _updateAssignApplyBar();
+        return;
+      }
+      assignBodyEl.innerHTML = members.map((name) => {
+        const tds = dates.map((d) => {
+          const date = ymd(d);
+          const key  = `${name}@@${date}`;
+          const on   = assignmentSet.has(key);
+          const av   = scheduleMap.get(key) || '';
+          const avLabel = av === 'o' ? '◎' : av === 'd' ? '△' : av === 'x' ? '☓' : '－';
+          const avBg    = av === 'o' ? '#dbeafe' : av === 'd' ? '#fef9c3' : av === 'x' ? '#fee2e2' : '#f3f4f6';
+          const avFg    = av === 'o' ? '#1d4ed8' : av === 'd' ? '#ca8a04' : av === 'x' ? '#dc2626' : '#9ca3af';
+          const badge = `<span style="display:block;border-radius:6px;padding:2px 8px;font-size:13px;font-weight:700;background:${avBg};color:${avFg};margin-top:3px;text-align:center;width:100%;box-sizing:border-box;" title="${avLabel}（変更不可）">${avLabel}</span>`;
+          const noteText = assignNoteMap.get(key) || '';
+          const locDet = scheduleDetailMap.get(key) || {};
+          const otherNote = locDet.note ? locDet.note.trim() : '';
+          const otherBadge = otherNote
+            ? `<div style="margin-top:3px;width:100%;font-size:10px;padding:2px 5px;background:#f0fdf4;border:1px solid #86efac;border-radius:4px;color:#166534;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(otherNote)}">📝 ${escapeHtml(otherNote.slice(0,18))}${otherNote.length>18?'…':''}</div>`
+            : '';
+          const noteIcon = noteText
+            ? `<button type="button" onclick="openAssignNoteModal(decodeURIComponent('${encodeURIComponent(name)}'),'${date}')" style="margin-top:3px;width:100%;font-size:11px;padding:2px 4px;background:#fef3c7;border:1px solid #f59e0b;border-radius:5px;cursor:pointer;color:#92400e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(noteText)}">📋 ${escapeHtml(noteText.split('\n')[0].slice(0,16))}${noteText.length > 16 ? '…' : ''}</button>`
+            : otherNote
+              ? `<button type="button" onclick="openAssignNoteModal(decodeURIComponent('${encodeURIComponent(name)}'),'${date}')" style="margin-top:3px;width:100%;font-size:11px;padding:2px 4px;background:#fef9c3;border:1px solid #fbbf24;border-radius:5px;cursor:pointer;color:#78350f;">📝 その他あり</button>`
+              : `<button type="button" onclick="openAssignNoteModal(decodeURIComponent('${encodeURIComponent(name)}'),'${date}')" style="margin-top:3px;width:100%;font-size:11px;padding:2px 4px;background:#f9fafb;border:1px dashed #d1d5db;border-radius:5px;cursor:pointer;color:#9ca3af;">＋メモ追加</button>`;
+          const isBlocked = av === 'x' || av === '';
+          const pendAction = assignPendingChanges.get(key);
+          const effectiveOn = pendAction === 'add' ? true : pendAction === 'remove' ? false : on;
+          const isPending = pendAction !== undefined;
+          let assignBtn;
+          if (effectiveOn) {
+            const pendStyle = isPending ? 'border-style:dashed;' : '';
+            const curCount = assignPurchaseCountMap.get(key) || 1;
+            const countSel = `<select onchange="setAssignPurchaseCount(decodeURIComponent('${encodeURIComponent(name)}'),'${date}',parseInt(this.value))" style="margin-top:4px;width:100%;font-size:12px;padding:2px 4px;border:1px solid #f59e0b;border-radius:5px;background:#fff;">
+              <option value="1" ${curCount===1?'selected':''}>×1</option>
+              <option value="2" ${curCount===2?'selected':''}>×2</option>
+              <option value="3" ${curCount===3?'selected':''}>×3</option>
+            </select>`;
+            assignBtn = `<button type="button" onclick="toggleAssignment(decodeURIComponent('${encodeURIComponent(name)}'),'${date}',false)" style="border:2px solid #f59e0b;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:700;cursor:pointer;background:#fef3c7;color:#92400e;${pendStyle}">${isPending ? '★ 追加中' : '指名済み'}</button>${countSel}`;
+          } else if (isBlocked) {
+            assignBtn = `<button type="button" disabled style="border:none;border-radius:8px;padding:6px 8px;font-size:12px;font-weight:700;cursor:not-allowed;background:#f1f5f9;color:#9ca3af;opacity:0.55;">${av === 'x' ? '指名不可' : '予定未入力'}</button>`;
+          } else {
+            const pendStyle = isPending ? 'border-style:dashed;' : '';
+            assignBtn = `<button type="button" onclick="toggleAssignment(decodeURIComponent('${encodeURIComponent(name)}'),'${date}',true)" style="border:2px solid transparent;border-radius:8px;padding:6px 8px;font-size:12px;font-weight:700;cursor:pointer;background:#e5e7eb;color:#374151;${pendStyle}">${isPending ? '─ 解除中' : '指名する'}</button>`;
+          }
+          const tdBg = effectiveOn ? 'background:#fffbeb;outline:2px solid #f59e0b;outline-offset:-2px;' : (isPending ? 'background:#fff7ed;' : '');
+          return `<td style="text-align:center;${tdBg}">
+            ${assignBtn}
+            ${badge}
+            ${noteIcon}
+          </td>`;
+        }).join('');
+        const hasAny = dates.some(d => {
+          const k = `${name}@@${ymd(d)}`;
+          const p = assignPendingChanges.get(k);
+          return p === 'add' ? true : p === 'remove' ? false : assignmentSet.has(k);
+        });
+        const nameCellStyle = hasAny ? 'font-weight:700;color:#92400e;background:#fffbeb;' : '';
+        return `<tr><td style="padding:4px 8px;${nameCellStyle}">${escapeHtml(name)}</td>${tds}</tr>`;
+      }).join('');
+      _updateAssignApplyBar();
+    }
+
+    function _updateAssignApplyBar() {
+      const bar      = document.getElementById('assignPendingBar');
+      const countEl  = document.getElementById('assignPendingCount');
+      const applyBtn = document.getElementById('assignApplyBtn');
+      const resetBtn = document.getElementById('assignResetBtn');
+      if (!bar) return;
+      const n = assignPendingChanges.size;
+      if (n === 0) {
+        bar.style.display = 'none';
+      } else {
+        bar.style.display = 'flex';
+        if (countEl) countEl.textContent = `${n}件の変更が未反映`;
+      }
+      if (applyBtn) applyBtn.onclick = assignApplyChanges;
+      if (resetBtn) resetBtn.onclick = () => { assignPendingChanges = new Map(); assignPurchaseCountMap = new Map(); loadAssignmentPanel(); };
+    }
+
+    function openAssignNoteModal(member, date) {
+      const key = `${member}@@${date}`;
+      _assignNoteEditKey = key;
+      const modal = document.getElementById('assignNoteModal');
+      const label = document.getElementById('assignNoteModalLabel');
+      const ta    = document.getElementById('assignNoteTextarea');
+      const otherEl = document.getElementById('assignNoteOtherArea');
+      label.textContent = `${member} / ${date}`;
+      ta.value = assignNoteMap.get(key) || '';
+      // 「その他」メモをハイライト表示
+      const locDet = scheduleDetailMap.get(key) || {};
+      const otherNote = locDet.note ? locDet.note.trim() : '';
+      const prof = memberProfileMap.get(member) || {};
+      // 表示ライン生成（住所があれば常に表示、チェック済みは✅で強調）
+      const lines = [];
+      if (prof.home) lines.push(`${locDet.home ? '✅' : '◻️'} 自宅：${prof.home}`);
+      if (prof.work) lines.push(`${locDet.work ? '✅' : '◻️'} 職場：${prof.work}`);
+      if (otherNote) lines.push(`📝 その他：${otherNote}`);
+      if (otherEl) {
+        if (lines.length > 0) {
+          otherEl.innerHTML = lines.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+          otherEl.style.display = 'block';
+        } else {
+          otherEl.style.display = 'none';
+        }
+      }
+      modal.style.display = 'flex';
+      ta.focus();
+    }
+
+    function closeAssignNoteModal() {
+      document.getElementById('assignNoteModal').style.display = 'none';
+      _assignNoteEditKey = null;
+    }
+
+    async function saveAssignNote() {
+      if (!_assignNoteEditKey) return;
+      const [member, date] = _assignNoteEditKey.split('@@');
+      const text = document.getElementById('assignNoteTextarea').value.trim();
+      const team = assignCachedTeam;
+      try {
+        await apiFetch('/api/assignment-notes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team, member, date, text }),
+        });
+        if (text) {
+          assignNoteMap.set(_assignNoteEditKey, text);
+        } else {
+          assignNoteMap.delete(_assignNoteEditKey);
+        }
+        closeAssignNoteModal();
+        _renderAssignFromCache();
+      } catch (e) {
+        alert(`保存失敗: ${e?.message || 'unknown'}`);
+      }
+    }
+
+    function setAssignPurchaseCount(member, date, count) {
+      const key = `${member}@@${date}`;
+      assignPurchaseCountMap.set(key, count);
+      // ペンディングに「add」を必ず入れておく（数値変更も反映要となる）
+      if (!assignPendingChanges.has(key)) {
+        assignPendingChanges.set(key, 'add');
+      }
+      _renderAssignFromCache();
+    }
+
+    function toggleAssignment(member, date, toAdd) {
+      // ペンディングMapを更新してキャッシュから即再描画（APIは反映ボタンで一括送信）
+      const key = `${member}@@${date}`;
+      const currentInSet = assignmentSet.has(key);
+      if (toAdd === currentInSet) {
+        assignPendingChanges.delete(key);
+      } else {
+        assignPendingChanges.set(key, toAdd ? 'add' : 'remove');
+      }
+      _renderAssignFromCache();
+    }
+
+    async function assignApplyChanges() {
+      if (assignPendingChanges.size === 0) return;
+      const applyBtn = document.getElementById('assignApplyBtn');
+      if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '保存中…'; }
+      const team = assignCachedTeam;
+      if (!team) { if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '✅ 反映する'; } return; }
+      try {
+        const assignments = [];
+        for (const [key, action] of assignPendingChanges) {
+          const [member, date] = key.split('@@');
+          const purchaseCount = assignPurchaseCountMap.get(key) || 1;
+          assignments.push({ member, date, action, purchaseCount });
+        }
+        const result = await apiFetch(`${API.assignments}/bulk`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Actor': 'leader' },
+          body: JSON.stringify({ team, assignments }),
+        });
+        if (!result?.ok) {
+          throw new Error('サーバーから正常なレスポンスが返りませんでした。ページを再読み込みしてください。');
+        }
+        assignPendingChanges = new Map();
+        await loadAssignmentPanel();
+      } catch (e) {
+        alert(`指名の反映に失敗しました: ${e?.message || 'unknown'}`);
+      } finally {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '✅ 反映する'; }
+        _updateAssignApplyBar();
+      }
+    }
+
+    async function loadProfileTable() {
+      if (!profileTeamSelectEl || !profileTableBodyEl) return;
+      const team = safeText(profileTeamSelectEl.value);
+      if (!team) {
+        profileTableBodyEl.innerHTML = '<tr><td colspan="4">チームを選択してください</td></tr>';
+        return;
+      }
+      try {
+        const membersRes = await apiFetch(`${API.members}?team=${encodeURIComponent(team)}`, { method: 'GET' });
+        const members = (Array.isArray(membersRes) ? membersRes : []).map((m) => safeText(m.name)).filter(Boolean);
+        if (members.length === 0) {
+          profileTableBodyEl.innerHTML = '<tr><td colspan="4">メンバーがいません。</td></tr>';
+          return;
+        }
+        const rows = await Promise.all(members.map(async (m) => {
+          try {
+            const p = await apiFetch(`${API.profile}?team=${encodeURIComponent(team)}&member=${encodeURIComponent(m)}`, { method: 'GET' });
+            return {
+              member: m,
+              home: safeText(p?.homeArea || ''),
+              work: safeText(p?.workArea || ''),
+              transport: safeText(p?.transportModes || ''),
+            };
+          } catch {
+            return { member: m, home: '', work: '', transport: '' };
+          }
+        }));
+        profileTableBodyEl.innerHTML = rows.map((r) => `
+          <tr>
+            <td>${escapeHtml(r.member)}</td>
+            <td>${escapeHtml(r.home || '未設定')}</td>
+            <td>${escapeHtml(r.work || '未設定')}</td>
+            <td>${escapeHtml(transportModesToText(r.transport))}</td>
+          </tr>`).join('');
+      } catch (e) {
+        profileTableBodyEl.innerHTML = `<tr><td colspan="4">読込エラー: ${escapeHtml(e?.message || 'unknown')}</td></tr>`;
+      }
+    }
+
+    async function setMemberAvail(name, date, currentAv) {
+      const scSel = document.getElementById('scTeamSelect');
+      const team  = safeText(scSel && scSel.value !== '__all__' ? scSel.value : '');
+      if (!team) return;
+      const cycle = { '': 'o', 'o': 'd', 'd': 'x', 'x': '' };
+      const nextAv = (currentAv in cycle) ? cycle[currentAv] : 'o';
+      try {
+        if (nextAv === '') {
+          await apiFetch(
+            `/api/schedules?team=${encodeURIComponent(team)}&member=${encodeURIComponent(name)}&date=${encodeURIComponent(date)}`,
+            { method: 'DELETE', headers: { 'X-Actor': 'leader' } },
+          );
+        } else {
+          await apiFetch('/api/schedules/bulk', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Actor': 'leader' },
+            body: JSON.stringify({ team, member: name, entries: [{ date, availability: nextAv }] }),
+          });
+        }
+        // キャッシュを直接更新して即再描画（APIを再度呼ばない）
+        const key = `${name}@@${date}`;
+        if (nextAv === '') scheduleMap.delete(key);
+        else scheduleMap.set(key, nextAv);
+        _renderAssignFromCache();
+      } catch (e) {
+        alert(`予定の更新に失敗しました: ${e?.message || 'unknown'}`);
+      }
+    }
+
+    window.toggleAssignment     = toggleAssignment;
+    window.setAssignPurchaseCount = setAssignPurchaseCount;
+    window.setMemberAvail       = setMemberAvail;
+
+    // ===== 予定確認タブ =====
+    let scWeekOffset = 0;
+    let scWeekStart  = null;
+    let scPendingChanges = new Map();  // key: `${team}@@${name}@@${date}`, value: 'o'|'d'|'x'|''
+    let scCachedChunks = [];           // [{team, members, sm, as_}]
+    let scCachedDates  = [];           // Date[] for current week
+
+    function renderScWeekLabel() {
+      const el = document.getElementById('scWeekLabel');
+      if (!el) return;
+      const s = getWeekStartMonday(new Date(), scWeekOffset);
+      const e = new Date(s); e.setDate(e.getDate() + 6);
+      const fmt = (d) => `${d.getMonth()+1}/${d.getDate()}`;
+      el.textContent = `${fmt(s)}(月) - ${fmt(e)}(日)`;
+    }
+
+    function scAvailClass(av) {
+      return av === 'o' ? 'sc-avail-o' : av === 'd' ? 'sc-avail-d' : av === 'x' ? 'sc-avail-x' : 'sc-avail-n';
+    }
+    function scAvailLabel(av) {
+      return av === 'o' ? '◎' : av === 'd' ? '△' : av === 'x' ? '☓' : '－';
+    }
+
+    function buildScTable(team, members, dates, schedMap, assignSet, pendingChanges, pcMap) {
+      if (!pendingChanges) pendingChanges = new Map();
+      if (!pcMap) pcMap = new Map();
+      if (members.length === 0) return `<div class="muted">メンバーがいません。</div>`;
+      const countByDate = {};
+      const booksByDate = {};
+      for (const d of dates) {
+        const date = ymd(d);
+        let cnt = 0;
+        let books = 0;
+        for (const m of members) {
+          if (assignSet.has(`${m}@@${date}`)) {
+            cnt++;
+            books += pcMap.get(`${m}@@${date}`) || 1;
+          }
+        }
+        countByDate[date] = cnt;
+        booksByDate[date] = books;
+      }
+      const headCols = dates.map((d) => {
+        const date = ymd(d);
+        const dow = ['日','月','火','水','木','金','土'][d.getDay()];
+        const dc = dayColor(d);
+        const people = countByDate[date] || 0;
+        const books = booksByDate[date] || 0;
+        const label = people > 0 ? `${people}人（${books}冊）` : '0人';
+        return `<th style="text-align:center;min-width:58px;${dc ? `color:${dc};` : ''}">${d.getMonth()+1}/${d.getDate()}(${dow})<br><span style="font-size:10px;color:#6b7280;">指名${label}</span></th>`;
+      }).join('');
+      const bodyRows = members.map((name) => {
+        const tds = dates.map((d) => {
+          const date = ymd(d);
+          const schedKey = `${name}@@${date}`;
+          const pendKey  = `${team}@@${name}@@${date}`;
+          const baseAv   = schedMap.get(schedKey) || '';
+          const isPending = pendingChanges.has(pendKey);
+          const av = isPending ? pendingChanges.get(pendKey) : baseAv;
+          const on   = assignSet.has(schedKey);
+          const avClass = scAvailClass(av);
+          const avLabel = scAvailLabel(av);
+          const pendMark = isPending ? '<span style="font-size:9px;color:#f97316;display:block;line-height:1;">●</span>' : '';
+          // 指名されている場合はラベルを「◎指名」のようにマージ
+          const cellLabel = on ? `${avLabel}<span style="font-size:9px;display:block;color:#92400e;line-height:1.2;margin-top:1px;">指名</span>` : avLabel;
+          const cellStyle = on ? `${avClass} sc-avail-pending` : avClass;  // 指名中は枚色枚色枚色枚色枚色
+          const tdStyle = on ? 'text-align:center;background:#fffbeb;' : 'text-align:center;';
+          return `<td style="${tdStyle}">
+            <button type="button" class="sc-avail-btn ${avClass}${isPending ? ' sc-avail-pending' : ''}${on ? ' sc-assigned' : ''}" title="クリックで予定変更" onclick="scClickCell(decodeURIComponent('${encodeURIComponent(team)}'),decodeURIComponent('${encodeURIComponent(name)}'),'${date}')">${cellLabel}</button>
+            ${pendMark}
+          </td>`;
+        }).join('');
+        return `<tr><td>${escapeHtml(name)}</td>${tds}</tr>`;
+      }).join('');
+      return `<div class="table-scroll" style="max-height:none;">
+        <table class="report-table">
+          <thead><tr><th>メンバー</th>${headCols}</tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    async function loadScTeam(team, dates) {
+      const from = ymd(dates[0]);
+      const to   = ymd(dates[6]);
+      const [membersRes, schedRes, assignRes] = await Promise.all([
+        apiFetch(`${API.members}?team=${encodeURIComponent(team)}`, { method: 'GET' }),
+        apiFetch(`/api/schedules?team=${encodeURIComponent(team)}&from=${from}&to=${to}`, { method: 'GET' }),
+        apiFetch(`${API.assignments}?team=${encodeURIComponent(team)}&from=${from}&to=${to}`, { method: 'GET' }),
+      ]);
+      const members = (Array.isArray(membersRes) ? membersRes : []).map((m) => safeText(m.name)).filter(Boolean);
+      const sm  = new Map((Array.isArray(schedRes)  ? schedRes  : []).map((x) => [`${x.member}@@${x.date}`, x.availability]));
+      const as_ = new Set((Array.isArray(assignRes) ? assignRes : []).map((x) => `${x.member}@@${x.date}`));
+      const pcMap = new Map((Array.isArray(assignRes) ? assignRes : []).map((x) => [`${x.member}@@${x.date}`, x.purchaseCount || 1]));
+      return { members, sm, as_, pcMap };
+    }
+
+    async function renderScContent() {
+      const contentEl = document.getElementById('scContent');
+      if (!contentEl) return;
+      contentEl.innerHTML = '<div class="muted">読込中...</div>';
+      scWeekStart = getWeekStartMonday(new Date(), scWeekOffset);
+      renderScWeekLabel();
+      scCachedDates = weekDates(scWeekStart);
+      const sel = document.getElementById('scTeamSelect');
+      if (!sel) return;
+      const val = sel.value;
+      try {
+        if (val === '__all__') {
+          scCachedChunks = await Promise.all(
+            teams.map(async (team) => {
+              const { members, sm, as_, pcMap } = await loadScTeam(team, scCachedDates);
+              return { team, members, sm, as_, pcMap };
+            })
+          );
+        } else {
+          const { members, sm, as_, pcMap } = await loadScTeam(val, scCachedDates);
+          scCachedChunks = [{ team: val, members, sm, as_, pcMap }];
+        }
+        scPendingChanges = new Map();  // キャッシュ更新時にペンディングをリセット
+        _renderScFromCache();
+      } catch (e) {
+        contentEl.innerHTML = `<div style="color:#dc2626;">読込エラー: ${escapeHtml(e?.message || 'unknown')}</div>`;
+      }
+    }
+
+    function _renderScFromCache() {
+      const contentEl = document.getElementById('scContent');
+      if (!contentEl || scCachedChunks.length === 0) return;
+      // スクロール位置を保存（タップのたびに画面上部へ飛ぶのを防ぐ）
+      const savedScrollY = window.scrollY;
+      const prevTableEl = contentEl.querySelector('.table-scroll');
+      const savedTableTop = prevTableEl ? prevTableEl.scrollTop : 0;
+      const sel = document.getElementById('scTeamSelect');
+      const isAll = !sel || sel.value === '__all__';
+      if (isAll) {
+        contentEl.innerHTML = scCachedChunks.map(({ team, members, sm, as_, pcMap }) =>
+          `<div class="sc-team-header">👥 ${escapeHtml(team)}</div>
+           ${buildScTable(team, members, scCachedDates, sm, as_, scPendingChanges, pcMap)}`
+        ).join('');
+      } else {
+        const chunk = scCachedChunks[0];
+        if (chunk) contentEl.innerHTML = buildScTable(chunk.team, chunk.members, scCachedDates, chunk.sm, chunk.as_, scPendingChanges, chunk.pcMap);
+      }
+      _updateScApplyBar();
+      // スクロール位置を復元
+      requestAnimationFrame(() => {
+        window.scrollTo(0, savedScrollY);
+        const newTableEl = contentEl.querySelector('.table-scroll');
+        if (newTableEl) newTableEl.scrollTop = savedTableTop;
+      });
+    }
+
+    function _updateScApplyBar() {
+      const bar      = document.getElementById('scPendingBar');
+      const countEl  = document.getElementById('scPendingCount');
+      const applyBtn = document.getElementById('scApplyBtn');
+      if (!bar) return;
+      const n = scPendingChanges.size;
+      bar.style.display = n > 0 ? 'flex' : 'none';
+      if (countEl) countEl.textContent = `${n}件の変更が未反映`;
+      if (applyBtn) applyBtn.disabled = n === 0;
+    }
+
+    function scClickCell(team, name, date) {
+      const schedKey = `${name}@@${date}`;
+      const pendKey  = `${team}@@${name}@@${date}`;
+      const chunk = scCachedChunks.find(c => c.team === team);
+      const baseAv = chunk ? (chunk.sm.get(schedKey) || '') : '';
+      const currentAv = scPendingChanges.has(pendKey) ? scPendingChanges.get(pendKey) : baseAv;
+      const cycle = { '': 'o', 'o': 'd', 'd': 'x', 'x': '' };
+      const nextAv = (currentAv in cycle) ? cycle[currentAv] : 'o';
+      if (nextAv === baseAv) {
+        scPendingChanges.delete(pendKey);  // 元の値に戻った → ペンディング解除
+      } else {
+        scPendingChanges.set(pendKey, nextAv);
+      }
+      _renderScFromCache();
+    }
+
+    async function scApplyChanges() {
+      if (scPendingChanges.size === 0) return;
+      const applyBtn = document.getElementById('scApplyBtn');
+      if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '保存中…'; }
+      try {
+        // チームごとにまとめる
+        const byTeam = new Map();
+        for (const [pendKey, av] of scPendingChanges) {
+          const [team, name, date] = pendKey.split('@@');
+          if (!byTeam.has(team)) byTeam.set(team, { toSet: [], toDel: [] });
+          if (av === '') byTeam.get(team).toDel.push({ name, date });
+          else byTeam.get(team).toSet.push({ name, date, av });
+        }
+        const promises = [];
+        for (const [team, { toSet, toDel }] of byTeam) {
+          if (toSet.length > 0) {
+            // メンバーごとにバルクPUT
+            const byMember = new Map();
+            for (const { name, date, av } of toSet) {
+              if (!byMember.has(name)) byMember.set(name, []);
+              byMember.get(name).push({ date, availability: av });
+            }
+            for (const [member, entries] of byMember) {
+              promises.push(apiFetch('/api/schedules/bulk', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Actor': 'leader' },
+                body: JSON.stringify({ team, member, entries }),
+              }));
+            }
+          }
+          for (const { name, date } of toDel) {
+            promises.push(apiFetch(
+              `/api/schedules?team=${encodeURIComponent(team)}&member=${encodeURIComponent(name)}&date=${encodeURIComponent(date)}`,
+              { method: 'DELETE', headers: { 'X-Actor': 'leader' } },
+            ));
+          }
+        }
+        await Promise.all(promises);
+        scPendingChanges = new Map();
+        await Promise.all([renderScContent(), loadAssignmentPanel()]);  // 予定確認＋担当指名管理の両方を再読込
+      } catch (e) {
+        alert(`予定の反映に失敗しました: ${e?.message || 'unknown'}`);
+      } finally {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '✅ 反映する'; }
+        _updateScApplyBar();
+      }
+    }
+
+    window.scClickCell = scClickCell;
+
+    function populateScTeamSelect() {
+      const sel = document.getElementById('scTeamSelect');
+      if (!sel) return;
+      const cur = sel.value || '__all__';
+      sel.innerHTML = `<option value="__all__">全チーム</option>`
+        + teams.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+      if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+      else sel.value = '__all__';
+    }
+
+    async function initScheduleCheckTab() {
+      populateScTeamSelect();
+      renderSettingTeamSelectors();
+      if (!assignWeekStart) assignWeekStart = getWeekStartMonday(new Date(), assignWeekOffset);
+      await Promise.all([renderScContent(), loadAssignmentPanel()]);
+    }
+
+    function bindEvents() {
+      tabDashboardEl.addEventListener('click', () => switchTab('dashboard'));
+      tabScheduleCheckEl.addEventListener('click', () => switchTab('schedule-check'));
+      tabLeaderSettingEl.addEventListener('click', () => switchTab('leader-setting'));
+      // 予定確認タブ操作
+      const scTeamSel  = document.getElementById('scTeamSelect');
+      const scPrevBtn  = document.getElementById('scPrevBtn');
+      const scNextBtn  = document.getElementById('scNextBtn');
+      const scTodayBtn = document.getElementById('scTodayBtn');
+      const scReloadBtn= document.getElementById('scReloadBtn');
+      if (scTeamSel)   scTeamSel.addEventListener('change', () => { renderScContent(); assignPendingChanges = new Map(); loadAssignmentPanel(); });
+      if (scPrevBtn)   scPrevBtn.addEventListener('click',  () => { scWeekOffset -= 1; renderScContent(); });
+      if (scNextBtn)   scNextBtn.addEventListener('click',  () => { scWeekOffset += 1; renderScContent(); });
+      if (scTodayBtn)  scTodayBtn.addEventListener('click', () => { scWeekOffset  = 0; renderScContent(); });
+      if (scReloadBtn) scReloadBtn.addEventListener('click', renderScContent);
+      const scApplyBtn = document.getElementById('scApplyBtn');
+      const scResetBtn = document.getElementById('scResetBtn');
+      if (scApplyBtn) scApplyBtn.addEventListener('click', scApplyChanges);
+      if (scResetBtn) scResetBtn.addEventListener('click', () => {
+        scPendingChanges = new Map();
+        _renderScFromCache();
+      });
+      document.getElementById('newTeamBtn').addEventListener('click', createTeam);
+      document.getElementById('reloadTeamMgmtBtn').addEventListener('click', loadTeamMgmt);
+      document.getElementById('newTeamInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('newTeamBtn').click();
+      });
+      const assignPrevBtn = document.getElementById('assignPrevBtn');
+      const assignNextBtn = document.getElementById('assignNextBtn');
+      const assignTodayBtn = document.getElementById('assignTodayBtn');
+      const assignReloadBtn = document.getElementById('assignReloadBtn');
+      if (assignPrevBtn) assignPrevBtn.addEventListener('click', () => { assignWeekOffset -= 1; assignPendingChanges = new Map(); loadAssignmentPanel(); });
+      if (assignNextBtn) assignNextBtn.addEventListener('click', () => { assignWeekOffset += 1; assignPendingChanges = new Map(); loadAssignmentPanel(); });
+      if (assignTodayBtn) assignTodayBtn.addEventListener('click', () => { assignWeekOffset = 0; assignPendingChanges = new Map(); loadAssignmentPanel(); });
+      if (assignReloadBtn) assignReloadBtn.addEventListener('click', loadAssignmentPanel);
+
+      if (profileTeamSelectEl) profileTeamSelectEl.addEventListener('change', loadProfileTable);
+      const profileReloadBtn = document.getElementById('profileReloadBtn');
+      if (profileReloadBtn) profileReloadBtn.addEventListener('click', loadProfileTable);
+
+      filterTeamEl.addEventListener('change', async () => { renderReportTable(); await loadSummary(); });
+      refreshBtnEl.addEventListener('click', loadData);
+      // 報告一覧 日付フィルター
+      document.getElementById('rtToday').addEventListener('click', () => setRtMode('today'));
+      document.getElementById('rtYesterday').addEventListener('click', () => setRtMode('yesterday'));
+      document.getElementById('rtWeek').addEventListener('click',  () => setRtMode('week'));
+      document.getElementById('rtMonth').addEventListener('click', () => setRtMode('month'));
+      document.getElementById('rtRange').addEventListener('click', () => setRtMode('range'));
+      document.getElementById('rtApplyBtn').addEventListener('click', () => {
+        rtDateStart = safeText(document.getElementById('rtStart').value);
+        rtDateEnd   = safeText(document.getElementById('rtEnd').value);
+        renderReportTable();
+      });
+      // 種別フィルターボタン
+      const _TF_STYLE_BASE = 'font-size:12px;padding:4px 12px;border-radius:8px;cursor:pointer;font-weight:700;border:none;';
+      const _TF_ON = {
+        purchase: _TF_STYLE_BASE + 'background:#16a34a;color:#fff;',
+        reserve:  _TF_STYLE_BASE + 'background:#2563eb;color:#fff;',
+        cant:     _TF_STYLE_BASE + 'background:#4b5563;color:#fff;',
+      };
+      const _TF_OFF = 'font-size:12px;padding:4px 12px;';
+      function _updateTypeFilterBtns() {
+        const pfBtn = document.getElementById('tfPurchase');
+        const rsBtn = document.getElementById('tfReserve');
+        const ctBtn = document.getElementById('tfCant');
+        if (activeTypeFilters.has('purchase')) { pfBtn.className=''; pfBtn.style.cssText=_TF_ON.purchase; }
+        else { pfBtn.className='btn-sub'; pfBtn.style.cssText=_TF_OFF; }
+        if (activeTypeFilters.has('reserve'))  { rsBtn.className=''; rsBtn.style.cssText=_TF_ON.reserve; }
+        else { rsBtn.className='btn-sub'; rsBtn.style.cssText=_TF_OFF; }
+        if (activeTypeFilters.has('cant'))     { ctBtn.className=''; ctBtn.style.cssText=_TF_ON.cant; }
+        else { ctBtn.className='btn-sub'; ctBtn.style.cssText=_TF_OFF; }
+      }
+      function _toggleTypeFilter(key) {
+        if (activeTypeFilters.has(key)) activeTypeFilters.delete(key);
+        else activeTypeFilters.add(key);
+        _updateTypeFilterBtns();
+        renderReportTable();
+      }
+      document.getElementById('tfPurchase').addEventListener('click', () => _toggleTypeFilter('purchase'));
+      document.getElementById('tfReserve').addEventListener('click',  () => _toggleTypeFilter('reserve'));
+      document.getElementById('tfCant').addEventListener('click',     () => _toggleTypeFilter('cant'));
+      document.getElementById('tfClearType').addEventListener('click', () => {
+        activeTypeFilters = new Set(['purchase','reserve','cant']);
+        _updateTypeFilterBtns();
+        renderReportTable();
+      });
+      _updateTypeFilterBtns(); // 初期表示を全選択色に設定
+      ptTodayEl.addEventListener('click', () => setPeriod('today'));
+      ptYesterdayEl.addEventListener('click', () => setPeriod('yesterday'));
+      ptWeekEl.addEventListener('click', () => setPeriod('week'));
+      ptMonthEl.addEventListener('click', () => setPeriod('month'));
+      ptRangeEl.addEventListener('click', () => setPeriod('range'));
+      rangeApplyBtnEl.addEventListener('click', loadSummary);
+      csvBtnEl.addEventListener('click', downloadCsv);
+      // 代理入力モーダル
+      document.getElementById('toggleDeletedBtn').addEventListener('click', () => {
+        showDeleted = !showDeleted;
+        const btn = document.getElementById('toggleDeletedBtn');
+        btn.textContent = showDeleted ? '🗑 削除済みを非表示' : '🗑 削除済みを表示';
+        btn.className = showDeleted ? 'btn-primary' : 'btn-sub';
+        renderReportTable();
+      });
+      document.getElementById('selectAllCheckbox').addEventListener('change', function() {
+        const allCbs = reportTableBodyEl.querySelectorAll('input[type=checkbox]');
+        allCbs.forEach(cb => {
+          cb.checked = this.checked;
+          if (this.checked) { selectedIds.add(cb.dataset.id); cb.closest('tr').classList.add('row-selected'); }
+          else { selectedIds.delete(cb.dataset.id); cb.closest('tr').classList.remove('row-selected'); }
+        });
+        updateDeleteBar();
+      });
+      document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedReports);
+      document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+        selectedIds = new Set();
+        reportTableBodyEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+          cb.checked = false;
+          cb.closest('tr').classList.remove('row-selected');
+        });
+        const selectAllCb = document.getElementById('selectAllCheckbox');
+        if (selectAllCb) selectAllCb.checked = false;
+        updateDeleteBar();
+      });
+      document.getElementById('undoBtn').addEventListener('click', undoLastDelete);
+      document.getElementById('undoDismissBtn').addEventListener('click', () => {
+        document.getElementById('undoToast').style.display = 'none';
+        clearTimeout(undoToastTimer);
+      });
+      document.getElementById('proxyEntryBtn').addEventListener('click', openProxyModal);
+      document.getElementById('proxyModalCloseBtn').addEventListener('click', closeProxyModal);
+      document.getElementById('proxyModalCancelBtn').addEventListener('click', closeProxyModal);
+      proxyModalEl.addEventListener('click', e => { if (e.target === proxyModalEl) closeProxyModal(); });
+      pTeamEl.addEventListener('change', updateProxyMembers);
+      pActorEl.addEventListener('change', () => {
+        pActorCustomWrapEl.style.display = pActorEl.value === '__OTHER__' ? 'block' : 'none';
+      });
+      pReportNoEl.addEventListener('change', () => {
+        pResultTypeEl.value = REPORT_NO_RESULT_MAP[pReportNoEl.value] || '';
+      });
+      proxyEntryFormEl.addEventListener('submit', submitProxyReport);
+      // 報告編集モーダル
+      document.getElementById('editReportModalCloseBtn').addEventListener('click', closeEditReportModal);
+      document.getElementById('editReportCancelBtn').addEventListener('click', closeEditReportModal);
+      editReportModalEl.addEventListener('click', e => { if (e.target === editReportModalEl) closeEditReportModal(); });
+      eTeamEl.addEventListener('change', _updateEditMembers);
+      eActorEl.addEventListener('change', () => {
+        eActorCustomWrapEl.style.display = eActorEl.value === '__OTHER__' ? 'block' : 'none';
+      });
+      eReportNoEl.addEventListener('change', () => {
+        eResultTypeEl.value = REPORT_NO_RESULT_MAP[eReportNoEl.value] || '';
+      });
+      document.getElementById('editReportForm').addEventListener('submit', submitEditReport);
+      // 写真選択→圧縮→アップロード
+      pReceiptPhotoEl.addEventListener('change', async () => {
+        const file = pReceiptPhotoEl.files[0];
+        proxyUploadedFileName = '';
+        pUploadStatusEl.textContent = '';
+        pUploadStatusEl.style.color = '';
+        pReceiptPreviewEl.style.display = 'none';
+        pReceiptPreviewEl.src = '';
+        if (!file) return;
+        // プレビュー（元画像）
+        const pr = new FileReader();
+        pr.onload = ev => { pReceiptPreviewEl.src = ev.target.result; pReceiptPreviewEl.style.display = 'block'; };
+        pr.readAsDataURL(file);
+        // サーバーにアップロード
+        pUploadStatusEl.textContent = '圧縮・アップロード中… ⏳';
+        pUploadStatusEl.style.color = '#6b7280';
+        try {
+          const { b64, originalKB, compressedKB } = await compressProxyImage(file);
+          pUploadStatusEl.textContent = `圧縮中... ${originalKB}KB → ${compressedKB}KB ⏳`;
+          const result = await apiFetch(API.uploads, { method: 'POST', body: JSON.stringify({ filename: file.name, dataBase64: b64 }) });
+          proxyUploadedFileName = result.storedName;
+          pUploadStatusEl.textContent = `✅ アップロード完了（${originalKB}KB → ${compressedKB}KB）`;
+          pUploadStatusEl.style.color = '#16a34a';
+        } catch (err) {
+          const msg = err?.message || '';
+          pUploadStatusEl.textContent = msg ? `❌ ${msg}` : '❌ アップロード失敗 — 再選択してください';
+          pUploadStatusEl.style.color = '#dc2626';
+        }
+      });
+      // プレビュークリックで拡大
+      pReceiptPreviewEl.addEventListener('click', () => {
+        if (pReceiptPreviewEl.src) window.open(pReceiptPreviewEl.src, '_blank');
+      });
+    }
+
+    // ── イベント開始日バナー ──
+    const EVENT_START_KEY = 'leaderEventStartDate';
+
+    function refreshEventBanner() {
+      const el = leaderEventBannerEl;
+      if (!el) return;
+      const today = new Date();
+      const dow = ['日','月','火','水','木','金','土'][today.getDay()];
+      const dateStr = `${today.getMonth()+1}月${today.getDate()}日（${dow}）`;
+      const startVal = eventStartDateEl ? eventStartDateEl.value : '';
+      if (!startVal) {
+        el.textContent = dateStr;
+        return;
+      }
+      const startDate = new Date(startVal + 'T00:00:00');
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const diffDays = Math.floor((todayDate - startDate) / 86400000);
+      const dayNum = diffDays + 1;
+      if (dayNum <= 0) {
+        el.textContent = `${dateStr}（開始前）`;
+      } else {
+        el.textContent = `${dateStr}（${dayNum}日目）`;
+      }
+    }
+
+    async function init() {
+      // 期間指定ピッカーのデフォルト値（今日 〜 6日前）
+      const _today = new Date();
+      const _six = new Date(_today); _six.setDate(_six.getDate() - 6);
+      const rtEndEl   = document.getElementById('rtEnd');
+      const rtStartEl = document.getElementById('rtStart');
+      if (rtEndEl)   rtEndEl.value   = ymd(_today);
+      if (rtStartEl) rtStartEl.value = ymd(_six);
+      bindEvents();
+      setPeriod('today');
+      await loadData();
+      switchTab('dashboard');
+
+      // イベント開始日: localStorage から復元
+      const savedStart = localStorage.getItem(EVENT_START_KEY);
+      if (savedStart && eventStartDateEl) eventStartDateEl.value = savedStart;
+      // サーバーからもロード（リーダーが別ブラウザで更新した場合に対応）
+      const teamForSettings = safeText(filterTeamEl.value);
+      if (teamForSettings && teamForSettings !== '__ALL__') {
+        try {
+          const tsRes = await fetch(`/api/team-settings?team=${encodeURIComponent(teamForSettings)}`);
+          if (tsRes.ok) {
+            const tsData = await tsRes.json();
+            if (tsData.eventStartDate && eventStartDateEl) {
+              eventStartDateEl.value = tsData.eventStartDate;
+              localStorage.setItem(EVENT_START_KEY, tsData.eventStartDate);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // ロック状態切り替え
+      const setLocked = (locked) => {
+        if (!eventStartDateEl) return;
+        const setBtn2 = document.getElementById('eventStartSetBtn');
+        const clearBtn2 = document.getElementById('eventStartClearBtn');
+        if (locked) {
+          eventStartDateEl.disabled = true;
+          eventStartDateEl.style.background = '#f3f4f6';
+          eventStartDateEl.style.color = '#9ca3af';
+          eventStartDateEl.style.cursor = 'not-allowed';
+          if (setBtn2) setBtn2.style.display = 'none';
+          if (clearBtn2) clearBtn2.style.display = '';
+        } else {
+          eventStartDateEl.disabled = false;
+          eventStartDateEl.style.background = '';
+          eventStartDateEl.style.color = '';
+          eventStartDateEl.style.cursor = '';
+          if (setBtn2) setBtn2.style.display = '';
+          if (clearBtn2) clearBtn2.style.display = 'none';
+        }
+      };
+      // 初期設定済みならロック
+      if (eventStartDateEl && eventStartDateEl.value) setLocked(true);
+
+      // イベント開始日保存共通関数
+      const saveEventStartDate = async (val) => {
+        if (val) {
+          localStorage.setItem(EVENT_START_KEY, val);
+        } else {
+          localStorage.removeItem(EVENT_START_KEY);
+        }
+        const team = safeText(filterTeamEl.value);
+        if (team && team !== '__ALL__') {
+          try {
+            await apiFetch('/api/team-settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ team: team, eventStartDate: val }),
+            });
+          } catch (_) {}
+        }
+        refreshEventBanner();
+      };
+
+      // 「設定」ボタン
+      const setBtn = document.getElementById('eventStartSetBtn');
+      if (setBtn) {
+        setBtn.addEventListener('click', async () => {
+          if (!eventStartDateEl || !eventStartDateEl.value) {
+            alert('日付を選択してください');
+            return;
+          }
+          // 全チームに一括保存
+          const allTeams = Array.from(filterTeamEl.options)
+            .map(o => safeText(o.value))
+            .filter(v => v && v !== '__ALL__');
+          if (allTeams.length === 0) {
+            alert('チームが見つかりません');
+            return;
+          }
+          try {
+            localStorage.setItem(EVENT_START_KEY, eventStartDateEl.value);
+            await Promise.all(allTeams.map(t =>
+              apiFetch('/api/team-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team: t, eventStartDate: eventStartDateEl.value }),
+              })
+            ));
+            setLocked(true);
+            refreshEventBanner();
+          } catch (err) {
+            alert('保存に失敗しました: ' + err.message);
+          }
+        });
+      }
+
+      if (eventStartDateEl) {
+        // changeイベントは山口入力等のみ（ボタン進めのロックを优先）
+        eventStartDateEl.addEventListener('change', async () => {
+          await saveEventStartDate(eventStartDateEl.value);
+        });
+      }
+      const clearBtn = document.getElementById('eventStartClearBtn');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+          setLocked(false);
+          if (eventStartDateEl) eventStartDateEl.value = '';
+          localStorage.removeItem(EVENT_START_KEY);
+          const allTeams = Array.from(filterTeamEl.options)
+            .map(o => safeText(o.value))
+            .filter(v => v && v !== '__ALL__');
+          await Promise.all(allTeams.map(t =>
+            apiFetch('/api/team-settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ team: t, eventStartDate: '' }),
+            }).catch(() => {})
+          ));
+          refreshEventBanner();
+        });
+      }
+      refreshEventBanner();
+    }
+
+    init();
+  </script>
+
+  <!-- 担当メモ編集モーダル -->
+  <div id="assignNoteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeAssignNoteModal()">
+    <div style="background:#fff;border-radius:12px;padding:20px 24px;width:min(92vw,420px);box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px;">📋 担当日メモ</div>
+      <div id="assignNoteModalLabel" style="font-size:13px;color:#6b7280;margin-bottom:8px;"></div>
+      <div id="assignNoteOtherArea" style="display:none;background:#fef9c3;border:1px solid #fbbf24;border-radius:7px;padding:8px 12px;font-size:13px;font-weight:700;color:#78350f;margin-bottom:10px;word-break:break-all;"></div>
+      <textarea id="assignNoteTextarea" rows="6"
+        placeholder="書店リスト（1店舗1行）&#10;例：〇〇書店&#10;△△書店"
+        style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:14px;resize:vertical;"></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end;">
+        <button onclick="closeAssignNoteModal()" style="padding:9px 18px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;cursor:pointer;font-size:14px;">閉じる</button>
+        <button onclick="saveAssignNote()" style="padding:9px 18px;border:none;border-radius:8px;background:#3b82f6;color:#fff;cursor:pointer;font-size:14px;font-weight:700;">💾 保存</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

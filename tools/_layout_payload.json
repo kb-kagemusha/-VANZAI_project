@@ -1,0 +1,559 @@
+{
+  "layout": [
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行_",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__0",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__20",
+        "size": {
+          "width": "478"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__21",
+          "size": {
+            "width": "375"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__22",
+          "size": {
+            "width": "423"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__1",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__2",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__3",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__4",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__5",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "start_date",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__7",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__8",
+        "size": {
+          "width": "579"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__9",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__10",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__11",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "SINGLE_LINE_TEXT",
+          "code": "文字列__1行__12",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__13",
+        "size": {
+          "width": "136"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__14",
+        "size": {
+          "width": "439"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__15",
+        "size": {
+          "width": "431"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__16",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__17",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__18",
+        "size": {
+          "width": "274"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "NUMBER",
+          "code": "数値",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "数値_0",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": [
+        {
+          "type": "NUMBER",
+          "code": "数値_1",
+          "size": {
+            "width": "193"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "数値_5",
+          "size": {
+            "width": "204"
+          }
+        },
+        {
+          "type": "NUMBER",
+          "code": "数値_4",
+          "size": {
+            "width": "193"
+          }
+        }
+      ]
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "文字列__1行__19",
+        "size": {
+          "width": "642"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": null
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "sales_rule",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "NUMBER",
+        "code": "base_reward_staff",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "address",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "assignment_title",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "gathering_time",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "category_middle",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "category_minor",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "owner_name",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "category_major",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "incentive",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "start_time",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "NUMBER",
+        "code": "headcount_staff",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "base_reward",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "end_date",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "event_name",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "facility_name",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "headcount_required",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "NUMBER",
+        "code": "headcount_director",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "NUMBER",
+        "code": "base_reward_director",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "main_staff",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "dismissal_time",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "company_name",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "end_time",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "NUMBER",
+        "code": "base_reward_assistant_director",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "assignment_id",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "notes",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "detail_url",
+        "size": {
+          "width": "193"
+        }
+      }
+    },
+    {
+      "type": "ROW",
+      "fields": {
+        "type": "SINGLE_LINE_TEXT",
+        "code": "work_hours",
+        "size": {
+          "width": "193"
+        }
+      }
+    }
+  ],
+  "app": 307
+}

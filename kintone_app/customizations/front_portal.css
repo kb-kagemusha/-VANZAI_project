@@ -1,0 +1,24 @@
+.vanzai-front{font-family:"Noto Sans JP","Segoe UI",sans-serif;color:#222}
+.vanzai-front *{box-sizing:border-box}
+.vanzai-front .vf-header{padding:24px 32px;background:#1f2a44;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vanzai-front .vf-h1{margin:0;font-size:24px}
+.vanzai-front .vf-sub{margin:0;opacity:.9}
+.vanzai-front .vf-main{padding:24px 32px 40px}
+.vanzai-front .vf-note{margin:0 0 16px 0;font-size:12px;color:#6b7280}
+.vanzai-front .vf-note a{color:inherit}
+.vanzai-front .vf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.vanzai-front .vf-card{display:block;background:#fff;border-radius:12px;padding:16px;text-decoration:none;color:inherit;box-shadow:0 6px 20px rgba(31,42,68,.08);border:1px solid #e7e9f0;border-top:4px solid #2a5bd7}
+.vanzai-front .vf-cat-billing{border-top-color:#ef4444}
+.vanzai-front .vf-cat-master{border-top-color:#10b981}
+.vanzai-front .vf-cat-internal{border-top-color:#0ea5e9}
+.vanzai-front .vf-cat-field{border-top-color:#f59e0b}
+.vanzai-front .vf-cat-other{border-top-color:#8b5cf6}
+.vanzai-front .vf-disabled{opacity:.55;pointer-events:none}
+.vanzai-front .vf-card-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.vanzai-front .vf-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#2a5bd7;color:#fff;text-decoration:none;font-size:12px}
+.vanzai-front .vf-btn.vf-secondary{background:#0f766e}
+.vanzai-front .vf-btn.vf-disabled{background:#cbd5e1;pointer-events:none}
+.vanzai-front .vf-card-title{font-weight:700;margin-bottom:6px}
+.vanzai-front .vf-card-desc{font-size:13px;color:#5a6479;min-height:36px}
+.vanzai-front .vf-card-badge{margin-top:12px;display:inline-flex;align-items:center;justify-content:center;min-height:24px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#dbeafe;color:#1e40af;border:1px solid #93c5fd}
+.vanzai-front .vf-disabled .vf-card-badge{background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db}

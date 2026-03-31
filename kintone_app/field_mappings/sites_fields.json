@@ -1,0 +1,119 @@
+{
+  "レコード番号": {
+    "type": "RECORD_NUMBER",
+    "code": "レコード番号",
+    "label": "レコード番号",
+    "noLabel": false
+  },
+  "作業者": {
+    "type": "STATUS_ASSIGNEE",
+    "code": "作業者",
+    "label": "作業者",
+    "enabled": false
+  },
+  "code": {
+    "type": "DROP_DOWN",
+    "code": "code",
+    "label": "code",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": ""
+  },
+  "address": {
+    "type": "DROP_DOWN",
+    "code": "address",
+    "label": "address",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": ""
+  },
+  "notes": {
+    "type": "SINGLE_LINE_TEXT",
+    "code": "notes",
+    "label": "notes",
+    "noLabel": false,
+    "required": false,
+    "minLength": "",
+    "maxLength": "200",
+    "expression": "",
+    "hideExpression": false,
+    "unique": false,
+    "defaultValue": ""
+  },
+  "更新者": {
+    "type": "MODIFIER",
+    "code": "更新者",
+    "label": "更新者",
+    "noLabel": false
+  },
+  "作成者": {
+    "type": "CREATOR",
+    "code": "作成者",
+    "label": "作成者",
+    "noLabel": false
+  },
+  "ステータス": {
+    "type": "STATUS",
+    "code": "ステータス",
+    "label": "ステータス",
+    "enabled": false
+  },
+  "更新日時": {
+    "type": "UPDATED_TIME",
+    "code": "更新日時",
+    "label": "更新日時",
+    "noLabel": false
+  },
+  "カテゴリー": {
+    "type": "CATEGORY",
+    "code": "カテゴリー",
+    "label": "カテゴリー",
+    "enabled": false
+  },
+  "site_id": {
+    "type": "DROP_DOWN",
+    "code": "site_id",
+    "label": "site_id",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": ""
+  },
+  "name": {
+    "type": "DROP_DOWN",
+    "code": "name",
+    "label": "name",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "__dummy__": {
+        "label": "__dummy__",
+        "index": "0"
+      }
+    },
+    "defaultValue": ""
+  },
+  "作成日時": {
+    "type": "CREATED_TIME",
+    "code": "作成日時",
+    "label": "作成日時",
+    "noLabel": false
+  }
+}

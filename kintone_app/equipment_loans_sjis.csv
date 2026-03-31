@@ -1,0 +1,4 @@
+loan_id,equipment_id,worker_id,project_id,loan_date,expected_return_date,actual_return_date,quantity,status,notes
+EL0001,EQ001,W001,P001,2026-01-08,2026-01-20,,1,loaned,
+EL0002,EQ002,W002,P001,2026-01-08,2026-01-20,2026-01-18,1,returned,
+EL0003,EQ003,W003,P003,2026-01-16,2026-01-26,,1,overdue,テスト用

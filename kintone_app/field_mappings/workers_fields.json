@@ -1,0 +1,92 @@
+{
+  "app_id": 165,
+  "app_name": "workers",
+  "fields": [
+    {
+      "code": "作業者",
+      "type": "STATUS_ASSIGNEE",
+      "label": "作業者",
+      "required": false
+    },
+    {
+      "code": "is_active",
+      "type": "RADIO_BUTTON",
+      "label": "is_active",
+      "required": true
+    },
+    {
+      "code": "notes",
+      "type": "SINGLE_LINE_TEXT",
+      "label": "notes",
+      "required": false
+    },
+    {
+      "code": "ステータス",
+      "type": "STATUS",
+      "label": "ステータス",
+      "required": false
+    },
+    {
+      "code": "worker_id",
+      "type": "DROP_DOWN",
+      "label": "worker_id",
+      "required": false
+    },
+    {
+      "code": "カテゴリー",
+      "type": "CATEGORY",
+      "label": "カテゴリー",
+      "required": false
+    },
+    {
+      "code": "phone",
+      "type": "DROP_DOWN",
+      "label": "phone",
+      "required": false
+    },
+    {
+      "code": "name",
+      "type": "DROP_DOWN",
+      "label": "name",
+      "required": false
+    },
+    {
+      "code": "email",
+      "type": "LINK",
+      "label": "email",
+      "required": false
+    }
+  ],
+  "system_fields": [
+    {
+      "code": "レコード番号",
+      "type": "RECORD_NUMBER",
+      "label": "レコード番号",
+      "required": false
+    },
+    {
+      "code": "更新者",
+      "type": "MODIFIER",
+      "label": "更新者",
+      "required": false
+    },
+    {
+      "code": "作成者",
+      "type": "CREATOR",
+      "label": "作成者",
+      "required": false
+    },
+    {
+      "code": "更新日時",
+      "type": "UPDATED_TIME",
+      "label": "更新日時",
+      "required": false
+    },
+    {
+      "code": "作成日時",
+      "type": "CREATED_TIME",
+      "label": "作成日時",
+      "required": false
+    }
+  ]
+}

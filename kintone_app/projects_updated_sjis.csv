@@ -1,0 +1,4 @@
+project_id,name,client_id,site_id,project_type_id,start_date,end_date,status,notes,primary_manager_id,secondary_manager_id,has_incentive
+P001,Vh“~‚Ü‚Â‚èŒx”õ,C001,S001,PT01,2026-01-05,2026-01-31,operating,,W001,W002,‚Í‚¢
+P002,‰¡•lƒ}ƒ‰ƒ\ƒ“—U“±,C002,S002,PT01,2026-01-10,2026-01-20,operating,,W002,,‚¢‚¢‚¦
+P003,–k‹ãBƒXƒ^ƒWƒAƒ€İ‰c,C003,S003,PT03,2026-01-15,2026-01-25,operating,,W001,,‚Í‚¢

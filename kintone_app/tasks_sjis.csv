@@ -1,0 +1,7 @@
+task_id,project_id,task_template_id,title,description,assignee_id,due_date,status,priority,completed_at,completed_by,notes
+T0001,P001,TT001,現場図面の共有,,W001,2026-01-02,not_started,high,,,
+T0002,P001,TT002,人員確定連絡,,W001,2026-01-03,not_started,high,,,
+T0003,P002,TT001,現場図面の共有,,W002,2026-01-07,not_started,high,,,
+T0004,P002,TT002,人員確定連絡,,W002,2026-01-08,not_started,high,,,
+T0005,P003,TT001,現場図面の共有,,W001,2026-01-12,not_started,high,,,
+T0006,P003,TT002,人員確定連絡,,W001,2026-01-13,not_started,high,,,

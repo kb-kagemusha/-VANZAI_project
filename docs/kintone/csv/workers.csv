@@ -1,0 +1,11 @@
+worker_id,name,email,phone,is_active,notes
+W001,山田太郎,yamada@example.com,090-1111-1111,有効,警備経験5年
+W002,佐藤花子,sato@example.com,090-2222-2222,有効,責任者経験あり
+W003,鈴木一郎,suzuki@example.com,090-3333-3333,有効,夜勤専門
+W004,田中美咲,tanaka@example.com,090-4444-4444,有効,
+W005,高橋健太,takahashi@example.com,090-5555-5555,有効,
+W006,伊藤真由美,ito@example.com,090-6666-6666,有効,
+W007,渡辺和也,watanabe@example.com,090-7777-7777,有効,
+W008,中村雄大,nakamura@example.com,090-8888-8888,有効,
+W009,小林麻衣,kobayashi@example.com,090-9999-9999,有効,
+W010,加藤直樹,kato@example.com,090-0000-0000,有効,

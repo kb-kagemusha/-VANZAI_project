@@ -1,0 +1,11 @@
+app_name,field_label_jp,field_code,type,required,default_value,options,note
+suppliers,紹介者ID,supplier_id,数値,TRUE,,,自動採番不要
+suppliers,紹介者名,name,文字列(1行),TRUE,,,会社名/個人名
+suppliers,連絡先メール,contact_email,文字列(1行),FALSE,,,
+suppliers,連絡先電話,contact_phone,文字列(1行),FALSE,,,
+suppliers,支払サイト（日数）,payout_terms_days,数値,TRUE,30,,デフォルト: 30
+suppliers,日額単価,default_daily_price,数値,TRUE,16000,,デフォルト: 16000
+suppliers,有効フラグ,is_active,ドロップダウン,TRUE,有効,有効 / 無効,選択肢: 有効/無効
+suppliers,備考,notes,文字列(複数行),FALSE,,,
+suppliers,作成日時,created_at,作成日時,-,,,自動（標準フィールド）
+suppliers,更新日時,updated_at,更新日時,-,,,自動（標準フィールド）

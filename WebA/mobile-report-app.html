@@ -1,0 +1,3560 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://nominatim.openstreetmap.org https://zipcloud.ibsnet.co.jp; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" />
+  <title>買い周りサポート</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fb; color: #1f2937; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    .muted { color: #6b7280; font-size: 13px; }
+    .line { border-top: 1px solid #e5e7eb; margin: 12px 0; }
+    .q { font-size: 18px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; }
+
+    .progress { font-size: 13px; color: #374151; margin-bottom: 8px; font-weight: 600; }
+    .btn-row { display: grid; gap: 10px; }
+    button, .btn { border: 2px solid transparent; border-radius: 10px; padding: 20px 16px; font-size: 20px; font-weight: 700; cursor: pointer; background: transparent; }
+    .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .btn-sub { background: #e5e7eb; color: #111827; border-color: #e5e7eb; }
+    .btn-success { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .req-star { color: #ef4444; margin-left: 3px; font-weight: 700; }
+    .resv-field-wrap { transition: opacity .2s; }
+    .resv-field-wrap.disabled-field { opacity: 0.38; pointer-events: none; }
+    .choice { background: transparent; color: #b45309; border: 2.5px solid #b45309; text-align: left; padding: 22px 16px; font-size: 20px; }
+    .choice.red { background: transparent; color: #6d28d9; border: 2.5px solid #6d28d9; }
+    .choice.tel { background: transparent; color: #0e7490; border: 2.5px solid #0e7490; }
+    .control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .result { font-size: 22px; font-weight: 800; margin: 6px 0 2px; }
+    label { display: block; font-size: 13px; margin: 10px 0 6px; color: #374151; }
+    input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; font-size: 15px; background: #fff; }
+    textarea { min-height: 100px; resize: vertical; }
+    .two { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .three { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1fr; }
+    .copy { width: 100%; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 10px; font-size: 12px; }
+    .helper { background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;margin:6px 0 4px; }
+    .helper-grid { display:grid;grid-template-columns:1fr auto;gap:8px; }
+    .toast {
+      position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+      background: #111827; color: #fff; padding: 10px 14px; border-radius: 999px;
+      font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .guide { background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 10px; padding: 10px; font-size: 13px; color: #0f766e; }
+    .warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 10px; font-size: 13px; margin-top: 10px; }
+    /* タブ切替 */
+    .tab-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 12px; }
+    .tab-bar button { border-radius: 10px 10px 0 0; background: #e5e7eb; color: #374151; font-size: 15px; padding: 10px; border: none; font-weight: 700; cursor: pointer; }
+    .tab-bar button.active { background: #2563eb; color: #fff; }
+    #tabFlow.active { background: #374151; color: #fff; }
+    #tabReport.active { background: #16a34a; color: #fff; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    /* チーム選択 */
+    .team-bar { background: #1e293b; color: #fff; padding: 8px 16px; display: flex; flex-direction: column; gap: 5px; }
+    .team-bar-row { display: flex; align-items: center; gap: 10px; }
+    .team-bar-group { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+    .team-bar label { color: #94a3b8; margin: 0; font-size: 13px; white-space: nowrap; }
+    .btn-reload { background: none; border: 1px solid #475569; color: #94a3b8; border-radius: 6px; padding: 2px 8px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .btn-reload:active { background: #334155; }
+    .team-bar select { flex: 1; min-width: 0; border-radius: 8px; padding: 7px 8px; font-size: 14px; font-weight: 700; background: #0f172a; color: #38bdf8; border: 2px solid #38bdf8; letter-spacing: 0.03em; }
+    .team-bar-group input { flex: 1; min-width: 0; font-size: 14px; padding: 7px 8px; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: #e2e8f0; }
+    .team-bar .team-name-display { font-weight: 700; font-size: 15px; color: #38bdf8; }
+    /* 集計テーブル */
+    .report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .report-table th, .report-table td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+    .report-table th { background: #f1f5f9; font-weight: 700; position: sticky; top: 0; }
+    .report-table tr:nth-child(even) { background: #f8fafc; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .stat-box { background: #f1f5f9; border-radius: 10px; padding: 10px; text-align: center; }
+    .stat-box .num { font-size: 28px; font-weight: 800; color: #111827; }
+    .stat-box .lbl { font-size: 11px; color: #6b7280; }
+    .table-scroll { max-height: 400px; overflow-y: auto; border-radius: 10px; border: 1px solid #e5e7eb; }
+    .del-btn { background: none; border: none; color: #dc2626; font-size: 16px; cursor: pointer; padding: 2px 6px; }
+    /* チーム設定 */
+    .team-editor { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+    .team-list { list-style: none; padding: 0; margin: 8px 0 0; }
+    .team-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #f8fafc; border-radius: 8px; margin-bottom: 4px; font-size: 14px; }
+    @media (max-width: 520px){ .two, .control-row { grid-template-columns: 1fr; } .three { grid-template-columns: 1fr; } .q { font-size: 17px; } .helper-grid { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; } }
+    /* 写真アップロード */
+    .receipt-preview { display:none; max-width:100%; max-height:160px; border-radius:8px; margin-top:8px; object-fit:contain; border:1px solid #e5e7eb; }
+    .upload-status { display:block; font-size:13px; margin-top:4px; min-height:1.4em; }
+    .uploading { color:#6b7280; }
+    .uploaded  { color:#059669; font-weight:600; }
+    .upload-error { color:#dc2626; }
+    .thumb-img { width:44px; height:44px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid #e5e7eb; transition:transform .15s; }
+    .thumb-img:hover { transform:scale(1.12); }
+    .team-gate {
+      position: fixed; inset: 0; z-index: 120;
+      background: rgba(15,23,42,.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .team-gate-card { max-width: 420px; width: 100%; background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 12px 30px rgba(15,23,42,.25); }
+    .team-gate.hide { display: none; }
+    /* ===== スケジュール機能 ===== */
+    .sched-nav-btn { background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;color:#374151;white-space:nowrap; }
+    .sched-nav-btn:active { background:#e5e7eb; }
+    .sched-week-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px; }
+    .sched-cell { border:2px solid #e5e7eb;border-radius:10px;padding:6px 2px;text-align:center;background:#fff; }
+    .sched-cell.today { border-color:#2563eb;background:#eff6ff; }
+    .sched-cell.reported { background:#dcfce7 !important;border-color:#16a34a !important; }
+    .sched-avail-row { display:flex;gap:2px;margin-top:4px;justify-content:center; }
+    .sched-avail-btn { flex:1;min-width:0;border:1.5px solid #d1d5db;border-radius:6px;padding:5px 0;font-size:15px;font-weight:700;cursor:pointer;background:#f9fafb;color:#9ca3af;line-height:1; }
+    .sched-avail-btn.sel-o { background:#dcfce7;border-color:#16a34a;color:#16a34a; }
+    .sched-avail-btn.sel-d { background:#fef9c3;border-color:#ca8a04;color:#ca8a04; }
+    .sched-avail-btn.sel-x { background:#fee2e2;border-color:#dc2626;color:#dc2626; }
+    .ts-table { border-collapse:collapse;min-width:100%;font-size:12px; }
+    .ts-table th,.ts-table td { border:1px solid #e5e7eb;padding:5px 4px;text-align:center;white-space:nowrap; }
+    .ts-table th { background:#f1f5f9;font-weight:700;position:sticky;top:0; }
+    .ts-table .me-row > td:first-child { color:#2563eb;font-weight:700; }
+    .ts-table .assigned-cell { background:#fef3c7 !important; }
+    .ts-table .reported-cell { background:#dcfce7 !important; }
+    .avail-o { color:#16a34a;font-weight:700; }
+    .avail-d { color:#ca8a04;font-weight:700; }
+    .avail-x { color:#dc2626;font-weight:700; }
+    #tabSchedule.active { background:#7c3aed;color:#fff; }
+    @media (max-width:400px){ .sched-avail-btn { font-size:13px;padding:4px 0; } }
+    .sched-detail-area { margin-top:5px;background:#eff6ff;border-radius:5px;padding:4px 3px;text-align:left;position:relative;overflow:visible; }
+    .sched-detail-chk  { display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:3px;font-size:11px;line-height:1.4;color:#374151;min-height:22px; }
+    .sched-detail-chk input[type=checkbox] { width:14px;height:14px;flex:none;-webkit-flex:none;margin:0;vertical-align:middle;position:relative;top:0; }
+    .sched-detail-note { width:100%;font-size:11px;padding:2px 4px;border:1px solid #93c5fd;border-radius:3px;margin-top:3px;box-sizing:border-box;transition:width 0.2s ease,box-shadow 0.2s ease; }
+    .sched-detail-note.expanded { position:absolute;width:220px;z-index:50;background:#fff;border-color:#2563eb;box-shadow:0 3px 12px rgba(0,0,0,0.22);border-radius:5px; }
+  </style>
+</head>
+<body>
+  <!-- ── チーム選択バー ── -->
+  <div class="team-bar">
+    <div class="team-bar-row">
+      <div class="team-bar-group">
+        <label>チーム</label>
+        <select id="teamSelect"></select>
+      </div>
+      <div class="team-bar-group">
+        <label>氏名</label>
+        <input id="actorName" type="text" placeholder="名前" />
+        <span id="teamLockBadge" title="テストチーム以外は変更できません" style="display:none;font-size:13px;color:#94a3b8;">🔒</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="serverModeBadge" style="font-size:11px;background:#334155;border:1px solid #475569;color:#e2e8f0;padding:2px 8px;border-radius:999px;white-space:nowrap;">接続確認中...</span>
+      <button class="btn-reload" onclick="location.href=location.pathname+'?r='+Date.now()" title="最新版に更新">🔄 更新</button>
+    </div>
+    <div id="todayBanner" style="padding:4px 2px 2px 2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:24px;"></div>
+  </div>
+
+  <div id="teamGate" class="team-gate hide">
+    <div class="team-gate-card">
+      <h2>チームと氏名を選択してください</h2>
+      <div class="muted">選択内容はこの端末に保存され、次回以降は自動で適用されます。</div>
+      <label for="gateTeamSelect" style="margin-top:12px;">① チームを選ぶ</label>
+      <select id="gateTeamSelect" style="width:100%;font-size:16px;padding:10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box;margin-top:4px;"></select>
+      <label for="gateActorSelect" style="margin-top:14px;">② 自分の名前を選ぶ</label>
+      <select id="gateActorSelect" style="width:100%;font-size:16px;padding:10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box;margin-top:4px;"></select>
+      <div id="gateActorCustomDiv" style="display:none;margin-top:6px;">
+        <input id="gateActorCustom" type="text" placeholder="氏名を入力（例：山田 太郎）" style="width:100%;font-size:16px;padding:10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box;" />
+      </div>
+      <button id="gateStartBtn" type="button" class="btn-primary" style="width:100%;margin-top:12px;">このチームで開始</button>
+    </div>
+  </div>
+
+  <div class="wrap" id="appWrap">
+    <h1>買い周りサポート（スマホ用）</h1>
+
+    <!-- ── タブ切替 ── -->
+    <div class="tab-bar" style="grid-template-columns:1fr 1fr 1fr;">
+      <button id="tabFlow" class="active" type="button">やること</button>
+      <button id="tabReport" type="button">報告する</button>
+      <button id="tabSchedule" type="button">📅 予定</button>
+    </div>
+
+    <!-- ════════════ フロータブ ════════════ -->
+    <div id="flowView" class="tab-content active">
+      <section class="card" id="flowCard">
+        <h2>フロー判定</h2>
+        <div class="line"></div>
+        <div id="flowArea"></div>
+      </section>
+    </div><!-- /flowView -->
+
+    <!-- ════════════ 報告タブ ════════════ -->
+    <div id="reportView" class="tab-content">
+
+    <section class="card">
+      <h2>報告テンプレート</h2>
+      <form id="reportForm" novalidate>
+        <label for="resultType">1）結果（選択式）<span class="req-star">*</span></label>
+        <select id="resultType" required>
+          <option value="">選択してください</option>
+          <option>陳列されていて購入できた</option>
+          <option>陳列はなかったが在庫から購入した</option>
+          <option>予約した本を購入できた</option>
+          <option>予約できた</option>
+          <option>予約していたが未入荷だった</option>
+          <option>残り1冊だったため購入せず</option>
+          <option>予約断られた</option>
+          <option>短期間に行き過ぎているため撤退</option>
+          <option>何も考えずに同じ店に来てしまったため退店</option>
+          <option>お金が足りなかった</option>
+          <option>電話確認：在庫あり・取り置き成功</option>
+          <option>電話確認：入荷待ち・予約成功</option>
+          <option>電話確認：予約不可</option>
+        </select>
+
+        <label for="reportNo">2）報告ナンバー（自動）</label>
+        <input id="reportNo" readonly placeholder="フロー判定後に自動入力" />
+
+        <label for="purchaseAt">3）購入日と購入時刻（予約時は予約日時）<span class="req-star">*</span></label>
+        <input id="purchaseAt" type="datetime-local" required />
+
+        <label for="storeName">4）店舗名<span class="req-star">*</span></label>
+        <input id="storeName" required placeholder="例：紀伊國屋書店新宿本店" />
+
+        <div class="helper">
+          <details id="storeHelperDetails" open>
+            <summary style="font-size:13px;font-weight:700;color:#0369a1;cursor:pointer;padding:4px 0;list-style:none;display:flex;align-items:center;gap:4px;">&#128205; 近くの本屋を Google Maps で探す &#9660;</summary>
+
+            <button type="button" id="nearbyBookstoreBtn" class="btn-sub" style="width:100%;margin-top:8px;font-size:14px;padding:12px;">&#128205; Google Maps で近くの本屋を探す</button>
+            <div id="nearbyGuideMsg" style="display:none;"></div>
+            <div id="mapsMsg" style="font-size:12px;margin-top:6px;min-height:1.2em;color:#6b7280;"></div>
+          </details>
+        </div>
+
+        <label for="storeAddress">5）購入店舗の住所<span class="req-star">*</span></label>
+        <textarea id="storeAddress" required placeholder="例：〒160-0022 東京都新宿区新宿3-17-7"></textarea>
+        <button type="button" id="mapsCheckBtn" class="btn-sub" style="width:100%;margin-top:6px;font-size:13px;padding:10px;">🗺 Maps で店舗を確認する</button>
+        <div id="mapsCheckMsg" style="font-size:12px;color:#6b7280;margin-top:4px;min-height:1em;"></div>
+
+        <label for="receiptPhoto">6）購入費用レシートの写真（任意・カメラ撮影またはファイルから選択）</label>
+        <input id="receiptPhoto" type="file" accept="image/*" />
+        <span id="receiptUploadStatus" class="upload-status"></span>
+        <img id="receiptPreview" src="" alt="プレビュー" class="receipt-preview" />
+
+        <label for="remainingStock">8）書店内の残り冊数（任意）</label>
+        <input id="remainingStock" type="number" min="0" step="1" placeholder="例：3（冊）">
+
+        <div id="resvFieldWrap" class="resv-field-wrap disabled-field">
+          <label for="arrivalDate">（予約時）入荷予定時期（任意）</label>
+          <input id="arrivalDate" type="text" placeholder="例：来週末頃、3月中旬 など" />
+          <label for="holdPeriod" style="margin-top:10px;">（予約時）取り置き可能期間（任意・自由記述）</label>
+          <textarea id="holdPeriod" placeholder="例：2週間、3月20日まで など"></textarea>
+        </div>
+
+        <label for="comment" style="display:flex;align-items:center;gap:6px;">7）連絡事項・コメント（自由回答）<button type="button" id="actorResetBtn" title="氏名・チーム設定をリセット" style="background:none;border:1px solid #fca5a5;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;font-weight:700;color:#ef4444;margin-left:auto;line-height:1.6;display:none;">リセット</button><button type="button" id="actorUnlockBtn" title="氏名・チームを変更" style="background:none;border:none;padding:2px 4px;cursor:pointer;font-size:13px;color:#9ca3af;opacity:0.4;line-height:1;">&#128274;</button></label>
+        <div id="actorChangePanel" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 10px 8px;margin-bottom:6px;">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:6px;">氏名・チームを変更</div>
+          <div style="display:grid;grid-template-columns:3em 1fr;gap:4px 8px;align-items:center;margin-bottom:8px;">
+            <span style="font-size:12px;color:#374151;">氏名</span>
+            <div>
+              <select id="actorChangeMemberSelect" style="font-size:13px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;width:100%;"></select>
+              <input id="actorChangeInput" type="text" placeholder="リスト外の場合は直接入力" style="font-size:13px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;margin-top:4px;display:none;width:100%;box-sizing:border-box;" />
+            </div>
+            <span style="font-size:12px;color:#374151;">チーム</span>
+            <select id="actorChangeTeamSelect" style="font-size:13px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;"></select>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button type="button" id="actorChangeCancelBtn" class="btn-sub" style="font-size:13px;padding:6px 12px;">キャンセル</button>
+            <button type="button" id="actorChangeConfirmBtn" class="btn-primary" style="font-size:13px;padding:6px 16px;">変更する</button>
+          </div>
+        </div>
+        <textarea id="comment" placeholder="なければ空欄でOK"></textarea>
+
+        <div class="two" style="margin-top:12px">
+          <button class="btn-primary" type="button" id="previewBtn">上記の内容を確認する</button>
+          <button class="btn-sub" type="button" id="resetBtn">全リセット</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" id="outputCard" style="display:none">
+      <h2>📋 報告内容の確認</h2>
+      <pre id="output" style="white-space:pre-wrap;word-break:break-all;font-size:13px;color:#111827;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;"></pre>
+      <div class="two" style="margin-top:12px">
+        <button class="btn-success" type="button" id="submitBtn" style="font-size:18px;padding:18px;">✅ 報告する</button>
+        <button class="btn-sub" type="button" id="redoBtn" style="font-size:18px;padding:18px;">↩ やりなおす</button>
+      </div>
+      <button class="btn-sub copy" id="copyBtn" type="button" style="width:100%;margin-top:8px;font-size:14px;">テキストをコピー</button>
+    </section>
+
+    <section class="card" id="doneCard" style="display:none;text-align:center;">
+      <div style="font-size:52px;margin-bottom:8px;">&#9989;</div>
+      <div style="font-size:26px;font-weight:800;color:#111827;margin-bottom:20px;">報告しました！</div>
+      <!-- Discord用コピーエリア -->
+      <div id="doneCopyArea" style="margin-bottom:20px;text-align:left;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;">
+        <div style="font-size:13px;color:#6b7280;margin-bottom:8px;font-weight:600;">📣 Discord用コピー</div>
+        <pre id="doneCopyText" style="margin:0 0 12px;font-size:15px;line-height:1.8;white-space:pre-wrap;word-break:break-all;color:#111827;font-family:inherit;"></pre>
+        <button type="button" id="doneCopyBtn" class="btn-primary" style="font-size:15px;padding:14px;width:100%;">📋 コピーする</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <button type="button" id="doneCloseBtn" class="btn-sub" style="font-size:17px;padding:16px;">&#x25A2; 閉じる</button>
+        <button type="button" id="doneRestartBtn" class="btn-primary" style="font-size:17px;padding:16px;">&#8617; 最初に戻る</button>
+      </div>
+    </section>
+
+    </div><!-- /reportView -->
+
+    <!-- ════════════ 集計タブ（リーダー用） ════════════ -->
+    <div id="dashboardView" class="tab-content">
+
+      <section class="card" style="padding:16px 12px 12px;">
+        <!-- 期間選択タブ -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+          <button onclick="setDashPeriod('today')" id="ptToday" class="btn-primary" style="font-size:13px;padding:8px 14px;">今日</button>
+          <button onclick="setDashPeriod('week')"  id="ptWeek"  class="btn-sub"     style="font-size:13px;padding:8px 14px;">今週（7日）</button>
+          <button onclick="setDashPeriod('month')" id="ptMonth" class="btn-sub"     style="font-size:13px;padding:8px 14px;">今月（30日）</button>
+          <button onclick="setDashPeriod('range')" id="ptRange" class="btn-sub"     style="font-size:13px;padding:8px 14px;">期間指定</button>
+          <button onclick="_loadSummary()" style="font-size:13px;padding:8px 14px;margin-left:auto;background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;cursor:pointer;font-weight:600;color:#374151;">🔄 更新</button>
+        </div>
+        <!-- 期間指定行 -->
+        <div id="rangePicker" style="display:none;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;">
+          <input type="date" id="dsStart" style="border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:14px;">
+          <span style="color:#6b7280;">〜</span>
+          <input type="date" id="dsEnd" style="border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:14px;">
+          <button onclick="_loadSummary()" class="btn-primary" style="font-size:14px;padding:8px 14px;">検索</button>
+        </div>
+        <!-- 集計ボックス -->
+        <div id="summaryBox"><div style="text-align:center;color:#9ca3af;padding:32px;font-size:14px;">集計タブを開くと自動で読み込みます</div></div>
+      </section>
+
+      <!-- 報告一覧（添付確認） -->
+      <section class="card" style="padding:16px 12px 12px;margin-top:12px;">
+        <div style="font-weight:700;font-size:15px;margin-bottom:10px;">📋 報告一覧（添付確認）</div>
+        <div id="reportListBox"><div style="text-align:center;color:#9ca3af;padding:24px;font-size:14px;">集計タブを開くと自動で読み込みます</div></div>
+      </section>
+
+    </div><!-- /dashboardView -->
+
+    <!-- ════════════ スケジュールタブ ════════════ -->
+    <div id="scheduleView" class="tab-content">
+
+      <!-- 警告バナー -->
+      <div id="schedWarnBanner" style="display:none;margin-bottom:10px;"></div>
+
+      <!-- 週スケジュール入力 -->
+      <section class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <h2 style="margin:0;">🗓 自分の予定</h2>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;">
+          <button class="sched-nav-btn" onclick="schedWeekPrev()">◄ 前週</button>
+          <span id="schedWeekLabel" style="font-weight:700;font-size:13px;text-align:center;flex:1;"></span>
+          <button class="sched-nav-btn" onclick="schedWeekNext()">次週 ►</button>
+        </div>
+        <div id="schedInputGrid" class="sched-week-grid"></div>
+        <div id="schedEditBtns" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+          <button onclick="schedGoToToday()" class="btn-sub" style="padding:10px;font-size:14px;">📅 今週に戻る</button>
+          <button onclick="saveMySchedule()" class="btn-primary" style="padding:10px;font-size:14px;">💾 保存</button>
+        </div>
+        <div id="assignNoteArea" style="margin-top:10px;"></div>
+      </section>
+
+      <button id="schedEditToggleBtn" onclick="toggleSchedEditMode()" class="btn-sub" style="width:100%;padding:12px;font-size:15px;font-weight:700;margin-bottom:12px;border:2px solid #7c3aed;">✏️ 自分の予定入力</button>
+
+      <!-- チームの今週の予定 -->
+      <section class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <h2 style="margin:0;">👥 チームの今週の予定</h2>
+          <button onclick="loadAndRenderTeamSchedule()" style="font-size:12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;cursor:pointer;">🔄 更新</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <button onclick="teamSchedWeekPrev()" class="sched-nav-btn">◄ 前週</button>
+          <span id="teamSchedWeekLabel" style="font-weight:700;font-size:13px;text-align:center;flex:1;"></span>
+          <button onclick="teamSchedWeekNext()" class="sched-nav-btn">次週 ►</button>
+          <button onclick="teamSchedGoToCurrentWeek()" class="sched-nav-btn" style="font-size:11px;padding:4px 8px;">今週</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <div id="teamSchedTable"></div>
+        </div>
+      </section>
+
+      <!-- 自分の担当日確認 -->
+      <section class="card">
+        <button onclick="toggleMyAssignments()" class="btn-sub" style="width:100%;padding:14px;font-size:16px;">📌 自分の担当日を確認</button>
+        <div id="myAssignmentsArea" style="display:none;margin-top:10px;"></div>
+      </section>
+
+      <!-- 自分のデータ -->
+      <section class="card" id="profileCard">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleProfileEdit()">
+          <h2 style="margin:0;">👤 自分のデータ</h2>
+          <span id="profileEditToggle" style="font-size:18px;color:#6b7280;">▶</span>
+        </div>
+        <div id="profileSummary" style="font-size:13px;color:#374151;margin-top:6px;line-height:2;"></div>
+        <div id="profileEditArea" style="display:none;margin-top:10px;">
+          <label>住まい（番地なし）</label>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">
+            <input id="profHomeZip" type="tel" placeholder="郵便番号（例：3120057）" maxlength="8" style="width:160px;flex:none;" oninput="onZipInput(this,'profHomeArea')">
+            <span id="profHomeZipStatus" style="font-size:12px;color:#6b7280;"></span>
+          </div>
+          <input id="profHomeArea" type="text" placeholder="例：茨城県ひたちなか市中根" maxlength="200">
+          <label style="margin-top:10px;">職場</label>
+          <div style="display:flex;align-items:center;gap:10px;margin:4px 0 6px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:15px;margin:0;"><input type="checkbox" id="profHasWork" onchange="onHasWorkChange(this)"> 職場あり</label>
+            <span style="font-size:12px;color:#6b7280;">(チェックなしは「―」)</span>
+          </div>
+          <div id="profWorkFields" style="display:none;">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">
+              <input id="profWorkZip" type="tel" placeholder="郵便番号（例：1000005）" maxlength="8" style="width:160px;flex:none;" oninput="onZipInput(this,'profWorkArea')">
+              <span id="profWorkZipStatus" style="font-size:12px;color:#6b7280;"></span>
+            </div>
+            <input id="profWorkArea" type="text" placeholder="例：東京都千代田区丸の内" maxlength="200">
+          </div>
+          <label>移動手段</label>
+          <div style="display:flex;gap:16px;margin-top:6px;font-size:16px;padding:6px 0;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" id="profCar"> 車</label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" id="profTrain"> 電車</label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" id="profWalk"> 徒歩のみ</label>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:4px;">※ 自分とリーダーのみ閲覧できます</div>
+          <button class="btn-primary" style="margin-top:12px;width:100%;padding:14px;font-size:16px;" onclick="saveProfile()">💾 保存</button>
+        </div>
+      </section>
+
+    </div><!-- /scheduleView -->
+
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script id="embeddedFlowData" type="application/json">
+  {
+    "start": "store_type",
+    "nodes": {
+      "store_type": {
+        "type": "question",
+        "title": "これから向かう店は「紀伊國屋書店」あるいは「丸善ジュンク堂」ですか？",
+        "choices": [
+          { "label": "YES　そうです", "next": "cash_ready" },
+          { "label": "NO　違います", "next": "cash_ready_other" }
+        ]
+      },
+      "cash_ready": {
+        "type": "question",
+        "title": "2200円以上の現金を用意できた？",
+        "choices": [
+          { "label": "YES　用意できた", "next": "repeat_visit" },
+          { "label": "NO　できていない", "next": "R19" }
+        ]
+      },
+      "repeat_visit": {
+        "type": "question",
+        "title": "今日、この店に来るのは2回目以上？",
+        "choices": [
+          { "label": "YES　2回目以上", "next": "R18" },
+          { "label": "NO　今日初めて", "next": "reserved_now" }
+        ]
+      },
+      "reserved_now": {
+        "type": "question",
+        "title": "今、このお店で「マイキー本」の予約をしている？",
+        "choices": [
+          { "label": "YES　このお店で予約中", "next": "reserved_arrived" },
+          { "label": "NO　予約していない", "next": "search_instruction" }
+        ]
+      },
+      "reserved_arrived": {
+        "type": "question",
+        "title": "予約した本は入荷している？",
+        "choices": [
+          { "label": "YES　入荷した", "next": "reserved_buy_first" },
+          { "label": "NO　まだ来ていない", "next": "R10" }
+        ]
+      },
+      "reserved_buy_first": {
+        "type": "instruction",
+        "message": "予約した本を購入してください\n\n✗ ポイントカード使用禁止\n✗ カバーは付けない\n✗ 袋は買わない\n\n【レシートを必ずもらう】\n✗ 領収書はNG・レシートのみ",
+        "buttonLabel": "購入・レシートを受け取った →",
+        "next": "R6"
+      },
+      "reserved_display_check_instr": {
+        "type": "instruction",
+        "message": "店内にマイキー本が陳列されているか確認してください",
+        "buttonLabel": "確認しました →",
+        "next": "display_check_reserved"
+      },
+      "display_check_reserved": {
+        "type": "question",
+        "title": "店内にマイキー本がまだ陳列されている？",
+        "choices": [
+          { "label": "YES　陳列されている", "next": "R6" },
+          { "label": "NO　陳列されていない", "next": "R7" }
+        ]
+      },
+      "search_instruction": {
+        "type": "instruction",
+        "message": "では、店内でマイキー本を探してください。\nビジネス系においてあると予測できます。",
+        "buttonLabel": "探しました → 次へ",
+        "next": "find_book"
+      },
+      "find_book": {
+        "type": "question",
+        "title": "店内で本が見つかった？",
+        "choices": [
+          { "label": "YES　見つかった", "next": "count4_direct" },
+          { "label": "NO　見つからなかった", "next": "ask_staff_instruction" }
+        ]
+      },
+      "stacked_direct": {
+        "type": "question",
+        "title": "平積みされている？",
+        "choices": [
+          { "label": "YES　平積みされている", "next": "count4_direct" },
+          { "label": "NO　棚に刺さっている", "next": "count2_direct" }
+        ]
+      },
+      "count4_direct": {
+        "type": "question",
+        "title": "2冊以上ある？",
+        "choices": [
+          { "label": "YES　2冊以上", "next": "R1" },
+          { "label": "NO　1冊だけ", "next": "R11" }
+        ]
+      },
+      "count2_direct": {
+        "type": "question",
+        "title": "2冊以上ある？",
+        "choices": [
+          { "label": "YES　2冊以上", "next": "R2" },
+          { "label": "NO　1冊だけ", "next": "R12" }
+        ]
+      },
+      "ask_staff_instruction": {
+        "type": "instruction",
+        "message": "店員さんを探して、本を尋ねてください。",
+        "buttonLabel": "尋ねました → 次へ",
+        "next": "staff_help"
+      },
+      "staff_help": {
+        "type": "question",
+        "title": "店員に聞いたら本を出してくれた？",
+        "choices": [
+          { "label": "YES　出してくれた", "next": "staff_source" },
+          { "label": "NO　出なかった", "next": "reserved_past" }
+        ]
+      },
+      "staff_source": {
+        "type": "question",
+        "title": "どこから出してくれた？",
+        "choices": [
+          { "label": "バックヤード（在庫）から持ってきた", "next": "R3" },
+          { "label": "棚を案内してくれた", "next": "count4_staff" }
+        ]
+      },
+      "stacked_staff": {
+        "type": "question",
+        "title": "残っている本は平積みされている？",
+        "choices": [
+          { "label": "YES　平積みされている", "next": "count4_staff" },
+          { "label": "NO　棚に刺さっている", "next": "count2_staff" }
+        ]
+      },
+      "count4_staff": {
+        "type": "question",
+        "title": "4冊以上ある？",
+        "choices": [
+          { "label": "YES　4冊以上", "next": "R4" },
+          { "label": "NO　3冊以下", "next": "R13" }
+        ]
+      },
+      "count2_staff": {
+        "type": "question",
+        "title": "2冊以上ある？",
+        "choices": [
+          { "label": "YES　2冊以上", "next": "R5" },
+          { "label": "NO　1冊だけ", "next": "R14" }
+        ]
+      },
+      "reserved_past": {
+        "type": "question",
+        "title": "過去にこの店で「マイキー本」を予約したことがある？",
+        "choices": [
+          { "label": "YES　予約したことがある", "next": "after_month" },
+          { "label": "NO　一度もない", "next": "reserve_try_new" }
+        ]
+      },
+      "after_month": {
+        "type": "question",
+        "title": "前回の予約本を受け取ってから1ヶ月以上経った？",
+        "choices": [
+          { "label": "YES　1ヶ月以上経過", "next": "reserve_try_old" },
+          { "label": "NO　1ヶ月未満", "next": "R17" }
+        ]
+      },
+      "reserve_try_old": {
+        "type": "question",
+        "title": "今日、再度予約できた？",
+        "choices": [
+          { "label": "YES　予約できた", "next": "R9" },
+          { "label": "NO　断られた", "next": "R15" }
+        ]
+      },
+      "reserve_try_new": {
+        "type": "question",
+        "title": "今日、予約できた？",
+        "choices": [
+          { "label": "YES　予約できた", "next": "R8" },
+          { "label": "NO　断られた", "next": "R16" }
+        ]
+      },
+      "cash_ready_other": {
+        "type": "question",
+        "title": "2200円以上の現金を用意できた？",
+        "choices": [
+          { "label": "YES　用意できた", "next": "repeat_visit_other" },
+          { "label": "NO　できていない", "next": "R19" }
+        ]
+      },
+      "repeat_visit_other": {
+        "type": "question",
+        "title": "今日、この店に来るのは2回目以上？",
+        "choices": [
+          { "label": "YES　2回目以上", "next": "R18" },
+          { "label": "NO　今日初めて", "next": "reserved_now_other" }
+        ]
+      },
+      "reserved_now_other": {
+        "type": "question",
+        "title": "今、このお店で「マイキー本」の予約をしている？",
+        "choices": [
+          { "label": "YES　このお店で予約中", "next": "reserved_arrived" },
+          { "label": "NO　予約していない", "next": "search_instruction_other" }
+        ]
+      },
+      "search_instruction_other": {
+        "type": "instruction",
+        "message": "では、店内でマイキー本を探してください。\nビジネス系においてあると予測できます。",
+        "buttonLabel": "探しました → 次へ",
+        "next": "find_book_other"
+      },
+      "find_book_other": {
+        "type": "question",
+        "title": "店内で本が見つかった？",
+        "choices": [
+          { "label": "YES　見つかった", "next": "count2a_direct_other" },
+          { "label": "NO　見つからなかった", "next": "ask_staff_instruction_other" }
+        ]
+      },
+      "stacked_direct_other": {
+        "type": "question",
+        "title": "平積みされている？",
+        "choices": [
+          { "label": "YES　平積みされている", "next": "count2a_direct_other" },
+          { "label": "NO　棚に刺さっている", "next": "count2_direct" }
+        ]
+      },
+      "count2a_direct_other": {
+        "type": "question",
+        "title": "2冊以上ある？",
+        "choices": [
+          { "label": "YES　2冊以上", "next": "R1" },
+          { "label": "NO　1冊だけ", "next": "R1" }
+        ]
+      },
+      "ask_staff_instruction_other": {
+        "type": "instruction",
+        "message": "店員さんを探して、本を尋ねてください。",
+        "buttonLabel": "尋ねました → 次へ",
+        "next": "staff_help_other"
+      },
+      "staff_help_other": {
+        "type": "question",
+        "title": "店員に聞いたら本を出してくれた？",
+        "choices": [
+          { "label": "YES　出してくれた", "next": "staff_source_other" },
+          { "label": "NO　出なかった", "next": "reserved_past" }
+        ]
+      },
+      "staff_source_other": {
+        "type": "question",
+        "title": "どこから出してくれた？",
+        "choices": [
+          { "label": "バックヤード（在庫）から持ってきた", "next": "R3" },
+          { "label": "棚を案内してくれた", "next": "count2a_staff_other" }
+        ]
+      },
+      "stacked_staff_other": {
+        "type": "question",
+        "title": "残っている本は平積みされている？",
+        "choices": [
+          { "label": "YES　平積みされている", "next": "count2a_staff_other" },
+          { "label": "NO　棚に刺さっている", "next": "count2_staff" }
+        ]
+      },
+      "count2a_staff_other": {
+        "type": "question",
+        "title": "2冊以上ある？",
+        "choices": [
+          { "label": "YES　2冊以上", "next": "R4" },
+          { "label": "NO　1冊だけ", "next": "R4" }
+        ]
+      },
+      "R1":  { "type": "purchase_steps", "number": "①", "resultType": "陳列されていて購入できた" },
+      "R2":  { "type": "purchase_steps", "number": "②", "resultType": "陳列されていて購入できた" },
+      "R3":  { "type": "purchase_steps", "number": "③", "resultType": "陳列はなかったが在庫から購入した" },
+      "R4":  { "type": "purchase_steps", "number": "④", "resultType": "陳列されていて購入できた" },
+      "R5":  { "type": "purchase_steps", "number": "⑤", "resultType": "陳列されていて購入できた" },
+      "R6":  { "type": "purchase_steps", "number": "⑥", "resultType": "予約した本を購入できた", "skipBuy": true },
+      "R7":  { "type": "purchase_steps", "number": "⑦", "resultType": "予約した本を購入できた", "skipBuy": true },
+      "R8":  { "type": "report", "number": "⑧", "resultType": "予約できた" },
+      "R9":  { "type": "report", "number": "⑨", "resultType": "予約できた" },
+      "R10": { "type": "report", "number": "⑩", "resultType": "予約していたが未入荷だった" },
+      "R11": { "type": "report", "number": "⑪", "resultType": "残り1冊だったため購入せず" },
+      "R12": { "type": "report", "number": "⑫", "resultType": "残り1冊だったため購入せず" },
+      "R13": { "type": "report", "number": "⑬", "resultType": "残り1冊だったため購入せず" },
+      "R14": { "type": "report", "number": "⑭", "resultType": "残り1冊だったため購入せず" },
+      "R15": { "type": "report", "number": "⑮", "resultType": "予約断られた" },
+      "R16": { "type": "report", "number": "⑯", "resultType": "予約断られた" },
+      "R17": { "type": "report", "number": "⑰", "resultType": "短期間に行き過ぎているため撤退" },
+      "R18": { "type": "report", "number": "⑱", "resultType": "何も考えずに同じ店に来てしまったため退店" },
+      "R19": { "type": "report", "number": "⑲", "resultType": "お金が足りなかった" }
+    }
+  }
+  </script>
+
+  <!-- 写真モーダル (クリックで閉じる) -->
+  <div id="photoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9998;cursor:pointer;align-items:center;justify-content:center;">
+    <img id="photoModalImg" src="" alt="レシート写真" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 32px rgba(0,0,0,.6);" />
+  </div>
+
+  <script>
+    const STORAGE_KEYS = {
+      teams: 'mc_teams_v1',
+      activeTeam: 'mc_active_team_v1',
+      reports: 'mc_reports_v1',
+      actor: 'mc_actor_v1',
+      flowState: 'mc_flow_state_v1'
+    };
+
+    function saveFlowProgress(nodeKey) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.flowState, JSON.stringify({
+          nodeKey,
+          historyStack: historyStack.slice()
+        }));
+      } catch {}
+    }
+
+    function clearFlowProgress() {
+      try { localStorage.removeItem(STORAGE_KEYS.flowState); } catch {}
+    }
+
+    function restoreFlowProgress() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.flowState));
+        if (saved && saved.nodeKey && flowData && flowData.nodes[saved.nodeKey]) {
+          historyStack = Array.isArray(saved.historyStack) ? saved.historyStack : [];
+          renderQuestion(saved.nodeKey);
+          showToast('中断した場所から再開しました');
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+
+    const API = {
+      health: '/api/health',
+      teams: '/api/teams',
+      members: '/api/members',
+      reports: '/api/reports',
+      summaryDaily: '/api/summary/daily',
+      summaryWeekly: '/api/summary/weekly',
+      summaryMonthly: '/api/summary/monthly',
+      summaryRange: '/api/summary/range',
+      deleteReports: '/api/reports/delete',
+      undoDeletion: '/api/deletions/undo',
+      deletions: '/api/deletions',
+      logs: '/api/logs',
+      uploads: '/api/uploads'
+    };
+
+    const DEFAULT_TEAMS = ['チームA', 'チームB', 'チームC'];
+
+    const flowArea = document.getElementById('flowArea');
+    const reportNoInput = document.getElementById('reportNo');
+    const form = document.getElementById('reportForm');
+    const outputCard = document.getElementById('outputCard');
+    const output = document.getElementById('output');
+    const toast = document.getElementById('toast');
+
+    const resultTypeEl = document.getElementById('resultType');
+    const purchaseAtEl = document.getElementById('purchaseAt');
+    const storeNameEl = document.getElementById('storeName');
+    const storeAddressEl = document.getElementById('storeAddress');
+    const remainingStockEl = document.getElementById('remainingStock');
+    const arrivalDateEl = document.getElementById('arrivalDate');
+    const holdPeriodEl = document.getElementById('holdPeriod');
+    const resvFieldWrap = document.getElementById('resvFieldWrap');
+    function updateResvFields() {
+      const isResv = /予約|取り置き/.test(resultTypeEl.value);
+      resvFieldWrap.classList.toggle('disabled-field', !isResv);
+      if (!isResv) { arrivalDateEl.value = ''; holdPeriodEl.value = ''; }
+    }
+    resultTypeEl.addEventListener('change', updateResvFields);
+    const receiptPhotoEl = document.getElementById('receiptPhoto');
+    const receiptPreviewEl = document.getElementById('receiptPreview');
+    const receiptUploadStatusEl = document.getElementById('receiptUploadStatus');
+    const commentEl = document.getElementById('comment');
+    const mapsMsgEl = document.getElementById('mapsMsg');
+
+    const teamSelectEl = document.getElementById('teamSelect');
+    const actorNameEl = document.getElementById('actorName');
+    const teamDisplayEl = document.getElementById('teamDisplay') || { textContent: '' };
+    const serverModeBadgeEl = document.getElementById('serverModeBadge');
+    const tabFlowEl = document.getElementById('tabFlow');
+    const tabReportEl = document.getElementById('tabReport');
+    const tabDashboardEl = document.getElementById('tabDashboard');
+    const tabScheduleEl = document.getElementById('tabSchedule');
+    const flowViewEl = document.getElementById('flowView');
+    const reportViewEl = document.getElementById('reportView');
+    const dashboardViewEl = document.getElementById('dashboardView');
+    const scheduleViewEl = document.getElementById('scheduleView');
+    const hasDashboard = !!(tabDashboardEl && dashboardViewEl && document.getElementById('summaryBox'));
+
+    const newTeamNameEl = document.getElementById('newTeamName');
+    const addTeamBtnEl = document.getElementById('addTeamBtn');
+    const teamListEl = document.getElementById('teamList');
+    const filterTeamEl = document.getElementById('filterTeam');
+    const dailySummaryBoxEl = document.getElementById('dailySummaryBox');
+    const weeklySummaryBoxEl = document.getElementById('weeklySummaryBox');
+    const monthlySummaryBoxEl = document.getElementById('monthlySummaryBox');
+    const rangeStartDateEl = document.getElementById('rangeStartDate');
+    const rangeEndDateEl = document.getElementById('rangeEndDate');
+    const rangeSummaryBtnEl = document.getElementById('rangeSummaryBtn');
+    const rangeSummaryBoxEl = document.getElementById('rangeSummaryBox');
+    const statsAreaEl = document.getElementById('statsArea');
+    const reportTableBodyEl = document.getElementById('reportTableBody');
+    const selectAllReportsEl = document.getElementById('selectAllReports');
+    const exportCsvBtnEl = document.getElementById('exportCsvBtn');
+    const exportTextBtnEl = document.getElementById('exportTextBtn');
+    const clearAllBtnEl = document.getElementById('clearAllBtn');
+    const deleteSelectedBtnEl = document.getElementById('deleteSelectedBtn');
+    const undoDeleteBtnEl = document.getElementById('undoDeleteBtn');
+    const refreshLogsBtnEl = document.getElementById('refreshLogsBtn');
+    const deleteByIdsInputEl = document.getElementById('deleteByIdsInput');
+    const deleteByIdsBtnEl = document.getElementById('deleteByIdsBtn');
+    const deleteLogListEl = document.getElementById('deleteLogList');
+    const logStartDateEl = document.getElementById('logStartDate');
+    const logEndDateEl = document.getElementById('logEndDate');
+    const logActorFilterEl = document.getElementById('logActorFilter');
+    const logActionFilterEl = document.getElementById('logActionFilter');
+    const applyLogFilterBtnEl = document.getElementById('applyLogFilterBtn');
+    const exportLogCsvBtnEl = document.getElementById('exportLogCsvBtn');
+    const auditLogListEl = document.getElementById('auditLogList');
+    const teamGateEl = document.getElementById('teamGate');
+    const gateTeamSelectEl = document.getElementById('gateTeamSelect');
+    const gateActorSelectEl = document.getElementById('gateActorSelect');
+    const gateStartBtnEl = document.getElementById('gateStartBtn');
+
+    let flowData = null;
+    let historyStack = [];
+    let teams = [];
+    let activeTeam = '';
+    let reports = [];
+    let serverMode = false;
+    let selectedReportIds = new Set();
+    let lastDeleteOpId = '';
+    let actorName = '';
+    let lastAuditLogs = [];
+    let uploadedFileName = '';  // アップロード済み写真のUUIDファイル名
+
+    async function loadGateMembers(team) {
+      if (!gateActorSelectEl) return;
+      gateActorSelectEl.innerHTML = '';
+      let members = [];
+      if (serverMode && team) {
+        try {
+          const rows = await apiFetch(`${API.members}?team=${encodeURIComponent(team)}`, { method: 'GET' });
+          members = Array.isArray(rows) ? rows : [];
+        } catch { members = []; }
+      }
+      for (const m of members) {
+        const op = document.createElement('option');
+        op.value = m.name;
+        op.textContent = m.name;
+        gateActorSelectEl.appendChild(op);
+      }
+      const other = document.createElement('option');
+      other.value = '__OTHER__';
+      other.textContent = 'その他（手入力）';
+      gateActorSelectEl.appendChild(other);
+      // 保存済み氏名を事前選択
+      const saved = safeText(localStorage.getItem(STORAGE_KEYS.actor));
+      if (saved && saved !== '未設定') {
+        const found = [...gateActorSelectEl.options].some(o => o.value === saved);
+        if (found) gateActorSelectEl.value = saved;
+      }
+      updateGateActorCustom();
+    }
+
+    function updateGateActorCustom() {
+      const customDiv = document.getElementById('gateActorCustomDiv');
+      if (!customDiv || !gateActorSelectEl) return;
+      customDiv.style.display = safeText(gateActorSelectEl.value) === '__OTHER__' ? 'block' : 'none';
+    }
+
+    function renderTeamGateOptions() {
+      if (!gateTeamSelectEl) return;
+      gateTeamSelectEl.innerHTML = '';
+      for (const team of teams) {
+        const op = document.createElement('option');
+        op.value = team;
+        op.textContent = team;
+        gateTeamSelectEl.appendChild(op);
+      }
+      if (teams.includes(activeTeam)) gateTeamSelectEl.value = activeTeam;
+      // 選択中チームのメンバーを読込
+      if (serverMode) loadGateMembers(safeText(gateTeamSelectEl.value));
+    }
+
+    function updateTeamGateVisibility() {
+      if (!teamGateEl) return;
+      const hasValidTeam  = !!(activeTeam && teams.includes(activeTeam));
+      const hasValidActor = !!(actorName && actorName !== '未設定');
+      const valid = hasValidTeam && hasValidActor;
+      teamGateEl.classList.toggle('hide', valid);
+      applyTeamLock();
+    }
+
+    function applyTeamLock() {
+      const isTest = activeTeam.includes('テスト');
+      const locked = !!activeTeam && teams.includes(activeTeam) && !isTest;
+      teamSelectEl.disabled = locked;
+      actorNameEl.readOnly = locked;
+      actorNameEl.style.background = locked ? '#f3f4f6' : '';
+      actorNameEl.style.color     = locked ? '#9ca3af' : '';
+      actorNameEl.title = locked ? 'テストチーム以外は変更できません' : '';
+      const badge = document.getElementById('teamLockBadge');
+      if (badge) badge.style.display = locked ? 'inline' : 'none';
+    }
+
+    function safeText(value) {
+      return String(value ?? '').trim();
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1500);
+    }
+
+    function createButton(label, className, onClick) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = className;
+      button.textContent = label;
+      button.addEventListener('click', onClick);
+      return button;
+    }
+
+    function readJsonStorage(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeJsonStorage(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function setServerModeBadge() {
+      if (serverMode) {
+        serverModeBadgeEl.textContent = 'サーバー共有DB: ON';
+        serverModeBadgeEl.style.background = '#14532d';
+        serverModeBadgeEl.style.borderColor = '#166534';
+      } else {
+        serverModeBadgeEl.textContent = 'ローカル保存: ON';
+        serverModeBadgeEl.style.background = '#7c2d12';
+        serverModeBadgeEl.style.borderColor = '#9a3412';
+      }
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Actor': encodeURIComponent(safeText(actorName) || 'unknown'),
+          ...(options.headers || {})
+        }
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) return await res.json();
+      return null;
+    }
+
+    async function detectServerMode() {
+      try {
+        const data = await apiFetch(API.health, { method: 'GET' });
+        serverMode = !!(data && data.ok);
+      } catch {
+        serverMode = false;
+      }
+      setServerModeBadge();
+    }
+
+    function parseEmbeddedFlowData() {
+      const raw = document.getElementById('embeddedFlowData').textContent;
+      return JSON.parse(raw);
+    }
+
+    async function loadFlowData() {
+      try {
+        const res = await fetch('./flow-data.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('fetch failed');
+        flowData = await res.json();
+      } catch {
+        flowData = parseEmbeddedFlowData();
+        showToast('ローカルモードで起動しました');
+      }
+    }
+
+    async function loadTeamData() {
+      actorName = safeText(localStorage.getItem(STORAGE_KEYS.actor));
+      if (!actorName) actorName = '未設定';
+      actorNameEl.value = actorName;
+
+      activeTeam = safeText(localStorage.getItem(STORAGE_KEYS.activeTeam));
+
+      if (serverMode) {
+        try {
+          const teamRows = await apiFetch(API.teams, { method: 'GET' });
+          teams = Array.isArray(teamRows) ? teamRows.map(t => safeText(t.name)) : DEFAULT_TEAMS.slice();
+          if (teams.length === 0) teams = DEFAULT_TEAMS.slice();
+          if (!teams.includes(activeTeam)) activeTeam = teams[0];
+        } catch {
+          teams = DEFAULT_TEAMS.slice();
+          if (!teams.includes(activeTeam)) activeTeam = teams[0];
+        }
+
+        try {
+          if (hasDashboard) {
+            reports = await apiFetch(API.reports, { method: 'GET' });
+            if (!Array.isArray(reports)) reports = [];
+          } else {
+            reports = [];
+          }
+        } catch {
+          reports = [];
+        }
+
+        localStorage.setItem(STORAGE_KEYS.activeTeam, activeTeam);
+      } else {
+        teams = readJsonStorage(STORAGE_KEYS.teams, DEFAULT_TEAMS.slice());
+        if (!Array.isArray(teams) || teams.length === 0) teams = DEFAULT_TEAMS.slice();
+        teams = [...new Set(teams.map(safeText).filter(Boolean))];
+        if (teams.length === 0) teams = DEFAULT_TEAMS.slice();
+
+        if (!teams.includes(activeTeam)) activeTeam = teams[0];
+
+        reports = readJsonStorage(STORAGE_KEYS.reports, []);
+        if (!Array.isArray(reports)) reports = [];
+
+        persistTeamData();
+      }
+    }
+
+    function persistTeamData() {
+      localStorage.setItem(STORAGE_KEYS.activeTeam, activeTeam);
+      localStorage.setItem(STORAGE_KEYS.actor, safeText(actorName) || '未設定');
+      if (!serverMode) {
+        writeJsonStorage(STORAGE_KEYS.teams, teams);
+        writeJsonStorage(STORAGE_KEYS.reports, reports);
+      }
+    }
+
+    function toLocalDateTimeValue(date = new Date()) {
+      const z = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${z(date.getMonth() + 1)}-${z(date.getDate())}T${z(date.getHours())}:${z(date.getMinutes())}`;
+    }
+
+    function formatDateTime(value) {
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return safeText(value);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function todayYmd() {
+      const d = new Date();
+      const z = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+    }
+
+    async function renderDailySummary() {
+      if (!serverMode) {
+        dailySummaryBoxEl.textContent = '日次サマリ（共有DB）はサーバーモード時に表示されます。';
+        return;
+      }
+
+      try {
+        const team = filterTeamEl.value || '__ALL__';
+        const date = todayYmd();
+        const data = await apiFetch(`${API.summaryDaily}?date=${encodeURIComponent(date)}&team=${encodeURIComponent(team)}`, { method: 'GET' });
+        const byResult = Object.entries(data.byResult || {})
+          .map(([k, v]) => `${k}: ${v}件`)
+          .join(' / ');
+        dailySummaryBoxEl.textContent = `今日（${data.date}）のサマリ | 合計: ${data.total}件 | ${byResult || '結果データなし'}`;
+      } catch {
+        dailySummaryBoxEl.textContent = '日次サマリの取得に失敗しました。';
+      }
+    }
+
+    async function renderWeeklySummary() {
+      if (!serverMode) {
+        weeklySummaryBoxEl.textContent = '週次サマリ（共有DB）はサーバーモード時に表示されます。';
+        return;
+      }
+
+      try {
+        const team = filterTeamEl.value || '__ALL__';
+        const date = todayYmd();
+        const data = await apiFetch(`${API.summaryWeekly}?date=${encodeURIComponent(date)}&days=7&team=${encodeURIComponent(team)}`, { method: 'GET' });
+        const byResult = Object.entries(data.byResult || {})
+          .map(([k, v]) => `${k}: ${v}件`)
+          .join(' / ');
+        weeklySummaryBoxEl.textContent = `直近${data.days}日（${data.startDate}〜${data.endDate}） | 合計: ${data.total}件 | ${byResult || '結果データなし'}`;
+      } catch {
+        weeklySummaryBoxEl.textContent = '週次サマリの取得に失敗しました。';
+      }
+    }
+
+    async function renderMonthlySummary() {
+      if (!serverMode) {
+        monthlySummaryBoxEl.textContent = '月次サマリ（共有DB）はサーバーモード時に表示されます。';
+        return;
+      }
+
+      try {
+        const team = filterTeamEl.value || '__ALL__';
+        const date = todayYmd();
+        const data = await apiFetch(`${API.summaryMonthly}?date=${encodeURIComponent(date)}&days=30&team=${encodeURIComponent(team)}`, { method: 'GET' });
+        const byResult = Object.entries(data.byResult || {})
+          .map(([k, v]) => `${k}: ${v}件`)
+          .join(' / ');
+        monthlySummaryBoxEl.textContent = `直近${data.days}日（${data.startDate}〜${data.endDate}） | 合計: ${data.total}件 | ${byResult || '結果データなし'}`;
+      } catch {
+        monthlySummaryBoxEl.textContent = '月次サマリの取得に失敗しました。';
+      }
+    }
+
+    async function renderRangeSummary() {
+      if (!serverMode) {
+        rangeSummaryBoxEl.textContent = '期間指定サマリ（共有DB）はサーバーモード時に利用できます。';
+        return;
+      }
+      const start = safeText(rangeStartDateEl.value);
+      const end = safeText(rangeEndDateEl.value);
+      if (!start || !end) {
+        rangeSummaryBoxEl.textContent = '開始日と終了日を入力してください。';
+        return;
+      }
+      try {
+        const team = filterTeamEl.value || '__ALL__';
+        const data = await apiFetch(`${API.summaryRange}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&team=${encodeURIComponent(team)}`, { method: 'GET' });
+        const byResult = Object.entries(data.byResult || {})
+          .map(([k, v]) => `${k}: ${v}件`)
+          .join(' / ');
+        rangeSummaryBoxEl.textContent = `期間（${data.startDate}〜${data.endDate}） | 合計: ${data.total}件 | ${byResult || '結果データなし'}`;
+      } catch {
+        rangeSummaryBoxEl.textContent = '期間指定サマリの取得に失敗しました。';
+      }
+    }
+
+    function renderTeamSelectors() {
+      teamSelectEl.innerHTML = '';
+      if (filterTeamEl) filterTeamEl.innerHTML = '';
+
+      for (const team of teams) {
+        const op1 = document.createElement('option');
+        op1.value = team;
+        op1.textContent = team;
+        teamSelectEl.appendChild(op1);
+
+        if (filterTeamEl) {
+          const op2 = document.createElement('option');
+          op2.value = team;
+          op2.textContent = team;
+          filterTeamEl.appendChild(op2);
+        }
+      }
+
+      if (filterTeamEl) {
+        const all = document.createElement('option');
+        all.value = '__ALL__';
+        all.textContent = '全チーム';
+        filterTeamEl.prepend(all);
+      }
+
+      teamSelectEl.value = activeTeam;
+      teamDisplayEl.textContent = `現在：${activeTeam}`;
+      if (filterTeamEl && !filterTeamEl.value) filterTeamEl.value = '__ALL__';
+      renderTeamGateOptions();
+      updateTeamGateVisibility();
+      applyTeamLock();
+    }
+
+    function renderTeamList() {
+      if (!teamListEl) return;
+      teamListEl.innerHTML = '';
+      for (const team of teams) {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = team;
+        li.appendChild(name);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-sub';
+        del.style.fontSize = '12px';
+        del.style.padding = '4px 8px';
+        del.textContent = '削除';
+        del.addEventListener('click', async () => {
+          if (teams.length <= 1) {
+            showToast('チームは1つ以上必要です');
+            return;
+          }
+          try {
+            if (serverMode) {
+              await apiFetch(`${API.teams}/${encodeURIComponent(team)}`, { method: 'DELETE' });
+              teams = (await apiFetch(API.teams, { method: 'GET' })).map(t => safeText(t.name));
+              reports = await apiFetch(API.reports, { method: 'GET' });
+            } else {
+              teams = teams.filter(t => t !== team);
+            }
+            if (activeTeam === team) activeTeam = teams[0];
+            persistTeamData();
+            renderTeamSelectors();
+            renderTeamList();
+            renderDashboard();
+            showToast(`チーム「${team}」を削除しました`);
+          } catch {
+            showToast('チーム削除に失敗しました');
+          }
+        });
+        li.appendChild(del);
+        teamListEl.appendChild(li);
+      }
+    }
+
+    function renderQuestion(nodeKey) {
+      saveFlowProgress(nodeKey);
+      const node = flowData.nodes[nodeKey];
+      if (!node) {
+        showToast('フローデータに問題があります');
+        return;
+      }
+      if (node.type === 'report') {
+        renderReport(node.number, node.resultType || '');
+        return;
+      }
+      if (node.type === 'purchase_steps') {
+        renderPurchaseSteps(nodeKey, node.number, node.resultType || '');
+        return;
+      }
+      if (node.type === 'instruction') {
+        flowArea.innerHTML = '';
+        const progress = document.createElement('div');
+        progress.className = 'progress';
+        progress.textContent = `ステップ ${historyStack.length + 1}（${activeTeam}）`;
+        flowArea.appendChild(progress);
+        const msg = document.createElement('div');
+        msg.className = 'guide';
+        msg.style.cssText = 'font-size:16px;font-weight:700;line-height:1.7;white-space:pre-line;';
+        msg.textContent = node.message;
+        flowArea.appendChild(msg);
+        const btnRow = document.createElement('div');
+        btnRow.className = 'btn-row';
+        btnRow.style.marginTop = '12px';
+        btnRow.appendChild(createButton(node.buttonLabel || '次へ進む →', 'btn-primary', () => {
+          if (node.directReport) {
+            const targetNode = flowData.nodes[node.next];
+            if (targetNode) {
+              reportNoInput.value = safeText(targetNode.number || '');
+              resultTypeEl.value = targetNode.resultType || '';
+              updateResvFields();
+            }
+            switchTab('report');
+            return;
+          }
+          historyStack.push(nodeKey);
+          renderQuestion(node.next);
+        }));
+        flowArea.appendChild(btnRow);
+        const controls = document.createElement('div');
+        controls.className = 'control-row';
+        controls.appendChild(createButton('1つ戻る', 'btn-sub', () => {
+          const prev = historyStack.pop();
+          if (!prev) { showToast('これ以上戻れません'); return; }
+          renderQuestion(prev);
+        }));
+        controls.appendChild(createButton('最初から', 'btn-sub', startFlow));
+        flowArea.appendChild(controls);
+        return;
+      }
+
+      flowArea.innerHTML = '';
+
+      const progress = document.createElement('div');
+      progress.className = 'progress';
+      progress.textContent = `ステップ ${historyStack.length + 1}（${activeTeam}）`;
+      flowArea.appendChild(progress);
+
+      const question = document.createElement('div');
+      question.className = 'q';
+      question.textContent = node.title;
+      flowArea.appendChild(question);
+
+
+      const choicesWrap = document.createElement('div');
+      choicesWrap.className = 'btn-row';
+
+      for (const choice of node.choices) {
+        const isNo = choice.cls ? choice.cls === 'red' : /NO|NG|断|ない|未満|できていない/.test(choice.label);
+        const displayLabel = choice.label.replace(/^(YES|NO)[\u3000\s]+/, '');
+        const btn = createButton(displayLabel, `choice ${isNo ? 'red' : ''}`.trim(), () => {
+          historyStack.push(nodeKey);
+          renderQuestion(choice.next);
+        });
+        choicesWrap.appendChild(btn);
+      }
+      flowArea.appendChild(choicesWrap);
+
+      const controls = document.createElement('div');
+      controls.className = 'control-row';
+      controls.appendChild(createButton('1つ戻る', 'btn-sub', () => {
+        const prev = historyStack.pop();
+        if (!prev) {
+          showToast('これ以上戻れません');
+          return;
+        }
+        renderQuestion(prev);
+      }));
+      controls.appendChild(createButton('最初から', 'btn-sub', startFlow));
+      flowArea.appendChild(controls);
+    }
+
+    function renderReport(number, resultType) {
+      reportNoInput.value = safeText(number);
+      if (resultType) resultTypeEl.value = resultType;
+      updateResvFields();
+      flowArea.innerHTML = '';
+
+      const done = document.createElement('div');
+      done.className = 'muted';
+      done.textContent = `判定完了（${activeTeam}）`;
+      flowArea.appendChild(done);
+
+      const result = document.createElement('div');
+      result.className = 'result';
+      result.textContent = `報告ナンバー：${safeText(number)}`;
+      flowArea.appendChild(result);
+
+      const reportBtn = createButton('📝 これを報告する', 'btn-success', () => {
+        switchTab('report');
+      });
+      reportBtn.style.cssText = 'width:100%;margin-top:12px;';
+      flowArea.appendChild(reportBtn);
+
+      const controls = document.createElement('div');
+      controls.className = 'control-row';
+      controls.style.marginTop = '8px';
+      controls.appendChild(createButton('1つ戻る', 'btn-sub', () => {
+        const prev = historyStack.pop();
+        if (!prev) {
+          showToast('これ以上戻れません');
+          return;
+        }
+        renderQuestion(prev);
+      }));
+      controls.appendChild(createButton('最初から', 'btn-sub', startFlow));
+      flowArea.appendChild(controls);
+
+      showToast(`報告ナンバー ${safeText(number)} を入力しました`);
+    }
+
+    function renderPurchaseSteps(nodeKey, number, resultType) {
+      reportNoInput.value = safeText(number);
+      if (resultType) resultTypeEl.value = resultType;
+      updateResvFields();
+
+      const currentNode = flowData.nodes[nodeKey];
+      const isSkipBuy = !!(currentNode && currentNode.skipBuy);
+
+      const steps = isSkipBuy ? [
+        {
+          title: '本を丁寧にしまう',
+          notes: [],
+          btn: 'しまいました →'
+        },
+        {
+          title: '店内の陳列を探す',
+          notes: [],
+          choices: [
+            { label: '✔ 陳列されていた', cls: 'choice' },
+            { label: '✖ 陳列がなかった', cls: 'choice red' }
+          ]
+        },
+        {
+          title: '店を出る',
+          notes: [],
+          btn: '店を出ました →'
+        },
+        {
+          title: '店を出てから\nレシートを写真に撮る',
+          notes: ['報告タブのレシート欄で添付できます'],
+          btn: '📝 撮りました・報告する',
+          last: true
+        }
+      ] : [
+        {
+          title: '現金で「1冊だけ」購入する',
+          notes: ['✗ ポイントカード使用禁止', '✗ カバーは付けない', '✗ 袋は買わない'],
+          warn: '【レシートを必ずもらう】\n✗ 領収書はNG・レシートのみ',
+          btn: '購入・レシートを受け取りました →'
+        },
+        {
+          title: '本を丁寧にしまって、店を出る',
+          notes: [],
+          btn: '店を出ました →'
+        },
+        {
+          title: '店を出てから\nレシートを写真に撮る',
+          notes: ['報告タブのレシート欄で添付できます'],
+          btn: '📝 撮りました・報告する',
+          last: true
+        }
+      ];
+
+      function showStep(idx) {
+        flowArea.innerHTML = '';
+
+        const prog = document.createElement('div');
+        prog.className = 'progress';
+        prog.textContent = `購入手順 ${idx + 1} / ${steps.length}（${activeTeam}）　報告ナンバー：${safeText(number)}`;
+        flowArea.appendChild(prog);
+
+        const step = steps[idx];
+
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:16px;margin:10px 0;';
+
+        const title = document.createElement('div');
+        title.style.cssText = 'font-size:20px;font-weight:800;color:#111827;white-space:pre-line;line-height:1.5;';
+        title.textContent = step.title;
+        card.appendChild(title);
+
+        step.notes.forEach(note => {
+          const n = document.createElement('div');
+          n.style.cssText = 'font-size:14px;color:#b45309;margin-top:8px;font-weight:600;';
+          n.textContent = note;
+          card.appendChild(n);
+        });
+
+        if (step.warn) {
+          const w = document.createElement('div');
+          w.style.cssText = 'font-size:15px;color:#dc2626;margin-top:12px;font-weight:700;white-space:pre-line;border-top:1px solid #fca5a5;padding-top:10px;';
+          w.textContent = step.warn;
+          card.appendChild(w);
+        }
+
+        flowArea.appendChild(card);
+
+        if (step.choices) {
+          step.choices.forEach(ch => {
+            const b = createButton(ch.label, ch.cls, () => showStep(idx + 1));
+            b.style.cssText = 'width:100%;margin-top:8px;font-size:20px;padding:20px 16px;';
+            flowArea.appendChild(b);
+          });
+        } else {
+          const nextBtn = createButton(step.btn, step.last ? 'btn-success' : 'btn-primary', () => {
+            if (step.last) {
+              switchTab('report');
+            } else {
+              showStep(idx + 1);
+            }
+          });
+          nextBtn.style.cssText = 'width:100%;margin-top:4px;font-size:22px;padding:22px 16px;';
+          flowArea.appendChild(nextBtn);
+        }
+
+        const controls = document.createElement('div');
+        controls.className = 'control-row';
+        controls.style.marginTop = '8px';
+        controls.appendChild(createButton('1つ戻る', 'btn-sub', () => {
+          if (idx > 0) {
+            showStep(idx - 1);
+          } else {
+            const prev = historyStack.pop();
+            if (!prev) { showToast('これ以上戻れません'); return; }
+            renderQuestion(prev);
+          }
+        }));
+        controls.appendChild(createButton('最初から', 'btn-sub', startFlow));
+        flowArea.appendChild(controls);
+      }
+
+      showStep(0);
+      showToast(`報告ナンバー ${safeText(number)} を入力しました`);
+    }
+
+    function startFlow() {
+      historyStack = [];
+      reportNoInput.value = '';
+      clearFlowProgress();
+      if (!flowData || !flowData.start) {
+        flowArea.innerHTML = '<div class="muted" style="padding:8px;">フローデータを読み込み中...</div>';
+        return;
+      }
+      renderQuestion(flowData.start);
+    }
+
+    function validateForm() {
+      const missing = [];
+      if (!safeText(resultTypeEl.value)) missing.push('1）結果');
+      if (!safeText(reportNoInput.value)) missing.push('2）報告ナンバー（フロー判定が必要）');
+      if (!safeText(purchaseAtEl.value)) missing.push('3）購入日時');
+      if (!safeText(storeNameEl.value)) missing.push('4）店舗名');
+      if (!safeText(storeAddressEl.value)) missing.push('5）住所');
+      return missing;
+    }
+
+    function buildReportText(data) {
+      return [
+        '【報告テンプレート】',
+        `実行者：${data.actor || '未設定'}`,
+
+        `チーム：${data.team}`,
+        `報告ID：${data.id}`,
+        `１）結果：${data.resultType}`,
+        `２）報告ナンバー：${data.reportNo}`,
+        `３）購入日と購入時刻：${data.purchaseAt}`,
+        `４）店舗名：${data.storeName}`,
+        `５）購入店舗の住所：${data.storeAddress}`,
+        `６）購入費用レシートの写真：${data.receiptFileName}`,
+        `８）書店内の残り冊数：${data.remainingStock !== '' && data.remainingStock !== undefined ? data.remainingStock + '冊' : '未記入'}`,
+        ...(data.arrivalDate ? [`（予約）入荷予定時期：${data.arrivalDate}`] : []),
+        ...(data.holdPeriod  ? [`（予約）取り置き可能期間：${data.holdPeriod}`] : []),
+        `７）連絡事項・コメント：${data.comment || 'なし'}`
+      ].join('\n');
+    }
+
+    function buildReportRecord() {
+      const now = new Date();
+      const reportId = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}-${Math.random().toString(36).slice(2,6)}`;
+
+      return {
+        id: reportId,
+        createdAt: now.toISOString(),
+        actor: safeText(actorName) || '未設定',
+        team: activeTeam,
+        resultType: safeText(resultTypeEl.value),
+        reportNo: safeText(reportNoInput.value),
+        purchaseAt: safeText(purchaseAtEl.value),
+        storeName: safeText(storeNameEl.value),
+        storeAddress: safeText(storeAddressEl.value),
+        receiptFileName: uploadedFileName || (receiptPhotoEl.files[0] ? safeText(receiptPhotoEl.files[0].name) : '未選択'),
+        remainingStock: safeText(remainingStockEl.value),
+        arrivalDate: /予約/.test(safeText(resultTypeEl.value)) ? safeText(arrivalDateEl.value) : '',
+        holdPeriod:  /予約/.test(safeText(resultTypeEl.value)) ? safeText(holdPeriodEl.value)  : '',
+        comment: safeText(commentEl.value)
+      };
+    }
+
+    async function saveReport(record) {
+      if (serverMode) {
+        await apiFetch(API.reports, {
+          method: 'POST',
+          body: JSON.stringify(record)
+        });
+        if (hasDashboard) {
+          reports = await apiFetch(API.reports, { method: 'GET' });
+        }
+      } else {
+        reports.unshift(record);
+        persistTeamData();
+      }
+      renderDashboard();
+    }
+
+    function getFilteredReports() {
+      if (!filterTeamEl) return reports;
+      const ft = filterTeamEl.value;
+      if (ft === '__ALL__' || !ft) return reports;
+      return reports.filter(r => r.team === ft);
+    }
+
+    function renderStats(items) {
+      const total = items.length;
+      const uniqueTeams = new Set(items.map(r => r.team)).size;
+      const byResult = {};
+      for (const item of items) {
+        byResult[item.resultType] = (byResult[item.resultType] || 0) + 1;
+      }
+
+      statsAreaEl.innerHTML = '';
+      const stats = [
+        { label: '総報告数', num: total },
+        { label: '対象チーム数', num: uniqueTeams }
+      ];
+      for (const [k, v] of Object.entries(byResult)) {
+        stats.push({ label: k, num: v });
+      }
+
+      for (const stat of stats) {
+        const box = document.createElement('div');
+        box.className = 'stat-box';
+        const n = document.createElement('div');
+        n.className = 'num';
+        n.textContent = String(stat.num);
+        const l = document.createElement('div');
+        l.className = 'lbl';
+        l.textContent = stat.label;
+        box.appendChild(n);
+        box.appendChild(l);
+        statsAreaEl.appendChild(box);
+      }
+    }
+
+    function renderReportTable(items) {
+      reportTableBodyEl.innerHTML = '';
+      selectedReportIds = new Set([...selectedReportIds].filter(id => items.some(r => r.id === id)));
+      selectAllReportsEl.checked = items.length > 0 && selectedReportIds.size === items.length;
+
+      if (items.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 8;
+        td.textContent = '報告データはまだありません。';
+        tr.appendChild(td);
+        reportTableBodyEl.appendChild(tr);
+        return;
+      }
+
+      for (const row of items) {
+        const tr = document.createElement('tr');
+
+        const tdCheck = document.createElement('td');
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = selectedReportIds.has(row.id);
+        chk.addEventListener('change', () => {
+          if (chk.checked) selectedReportIds.add(row.id);
+          else selectedReportIds.delete(row.id);
+          selectAllReportsEl.checked = items.length > 0 && selectedReportIds.size === items.length;
+        });
+        tdCheck.appendChild(chk);
+        tr.appendChild(tdCheck);
+
+        const tdDate = document.createElement('td');
+        tdDate.textContent = formatDateTime(row.createdAt);
+        tr.appendChild(tdDate);
+
+        const tdTeam = document.createElement('td');
+        tdTeam.textContent = safeText(row.team);
+        tr.appendChild(tdTeam);
+
+        const tdNo = document.createElement('td');
+        tdNo.textContent = safeText(row.reportNo);
+        tr.appendChild(tdNo);
+
+        const tdResult = document.createElement('td');
+        tdResult.textContent = safeText(row.resultType);
+        tr.appendChild(tdResult);
+
+        const tdStore = document.createElement('td');
+        tdStore.textContent = safeText(row.storeName);
+        tr.appendChild(tdStore);
+
+        const tdPhoto = document.createElement('td');
+        tdPhoto.style.cssText = 'text-align:center;min-width:52px;';
+        if (row.receiptFileName && row.receiptFileName !== '未選択') {
+          const thumb = document.createElement('img');
+          thumb.src = `/uploads/${encodeURIComponent(safeText(row.receiptFileName))}`;
+          thumb.alt = '写真';
+          thumb.className = 'thumb-img';
+          thumb.title = 'クリックで拡大';
+          thumb.addEventListener('click', () => {
+            const modal = document.getElementById('photoModal');
+            document.getElementById('photoModalImg').src = thumb.src;
+            modal.style.display = 'flex';
+          });
+          thumb.addEventListener('error', () => {
+            thumb.style.display = 'none';
+            const sp = document.createElement('span');
+            sp.title = safeText(row.receiptFileName);
+            sp.textContent = '📎';
+            tdPhoto.appendChild(sp);
+          });
+          tdPhoto.appendChild(thumb);
+        } else {
+          tdPhoto.textContent = '-';
+        }
+        tr.appendChild(tdPhoto);
+
+        const tdDel = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'del-btn';
+        btn.textContent = '🗑';
+        btn.title = 'この報告を削除';
+        btn.addEventListener('click', async () => {
+          try {
+            if (serverMode) {
+              const result = await apiFetch(`${API.reports}/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
+              lastDeleteOpId = safeText(result?.opId || '');
+              reports = await apiFetch(API.reports, { method: 'GET' });
+            } else {
+              reports = reports.filter(r => r.id !== row.id);
+              persistTeamData();
+            }
+            selectedReportIds.delete(row.id);
+            renderDashboard();
+            showToast('1件削除しました');
+          } catch {
+            showToast('削除に失敗しました');
+          }
+        });
+        tdDel.appendChild(btn);
+        tr.appendChild(tdDel);
+
+        reportTableBodyEl.appendChild(tr);
+      }
+    }
+
+    async function renderDeletionLogs() {
+      if (!serverMode) {
+        deleteLogListEl.textContent = 'サーバーモード時のみ削除ログを表示します。';
+        return;
+      }
+      try {
+        const rows = await apiFetch(`${API.deletions}?limit=10`, { method: 'GET' });
+        if (!Array.isArray(rows) || rows.length === 0) {
+          deleteLogListEl.textContent = '削除ログはありません。';
+          return;
+        }
+        deleteLogListEl.innerHTML = '';
+        for (const row of rows) {
+          const line = document.createElement('div');
+          line.style.display = 'grid';
+          line.style.gridTemplateColumns = '1fr auto';
+          line.style.gap = '8px';
+          line.style.alignItems = 'center';
+          const affected = row?.details?.affected ?? 0;
+          const text = document.createElement('div');
+          const actor = safeText(row?.details?.actor || 'unknown');
+          text.textContent = `${formatDateTime(row.at)} | ${row.action} | ${affected}件 | 担当=${actor} | opId=${row.opId}`;
+          line.appendChild(text);
+
+          const undoBtn = document.createElement('button');
+          undoBtn.type = 'button';
+          undoBtn.className = 'btn-sub';
+          undoBtn.style.fontSize = '12px';
+          undoBtn.style.padding = '4px 8px';
+          undoBtn.textContent = 'この削除を戻す';
+          undoBtn.addEventListener('click', async () => {
+            try {
+              const result = await apiFetch(API.undoDeletion, {
+                method: 'POST',
+                body: JSON.stringify({ opId: row.opId })
+              });
+              lastDeleteOpId = row.opId;
+              reports = await apiFetch(API.reports, { method: 'GET' });
+              renderDashboard();
+              showToast(`${result?.affected ?? 0}件を巻き戻しました`);
+            } catch {
+              showToast('巻き戻しに失敗しました');
+            }
+          });
+          line.appendChild(undoBtn);
+          deleteLogListEl.appendChild(line);
+        }
+      } catch {
+        deleteLogListEl.textContent = '削除ログの取得に失敗しました。';
+      }
+    }
+
+    function buildLogQueryParams(limit = 200) {
+      const params = new URLSearchParams();
+      params.set('limit', String(limit));
+      const start = safeText(logStartDateEl.value);
+      const end = safeText(logEndDateEl.value);
+      const actor = safeText(logActorFilterEl.value);
+      const action = safeText(logActionFilterEl.value);
+      if (start) params.set('start', start);
+      if (end) params.set('end', end);
+      if (actor) params.set('actor', actor);
+      if (action) params.set('action', action);
+      return params;
+    }
+
+    async function renderAuditLogs() {
+      if (!serverMode) {
+        auditLogListEl.textContent = 'サーバーモード時のみ監査ログを表示します。';
+        lastAuditLogs = [];
+        return;
+      }
+      try {
+        const params = buildLogQueryParams(200);
+        const rows = await apiFetch(`${API.logs}?${params.toString()}`, { method: 'GET' });
+        lastAuditLogs = Array.isArray(rows) ? rows : [];
+        if (lastAuditLogs.length === 0) {
+          auditLogListEl.textContent = '該当する監査ログはありません。';
+          return;
+        }
+
+        auditLogListEl.innerHTML = '';
+        for (const row of lastAuditLogs.slice(0, 50)) {
+          const div = document.createElement('div');
+          const actor = safeText(row.actor || row?.details?.actor || 'unknown');
+          div.textContent = `${formatDateTime(row.at)} | action=${row.action} | actor=${actor} | opId=${row.opId} | target=${row.targetType}:${safeText(row.targetId)}`;
+          auditLogListEl.appendChild(div);
+        }
+      } catch {
+        auditLogListEl.textContent = '監査ログ取得に失敗しました。';
+      }
+    }
+
+    function exportAuditLogsCsv() {
+      if (!serverMode) {
+        showToast('サーバーモード時のみログCSV出力できます');
+        return;
+      }
+      if (!Array.isArray(lastAuditLogs) || lastAuditLogs.length === 0) {
+        showToast('出力する監査ログがありません');
+        return;
+      }
+      const header = ['at', 'opId', 'action', 'actor', 'targetType', 'targetId', 'details'];
+      const csv = [
+        header.join(','),
+        ...lastAuditLogs.map(r => {
+          const details = JSON.stringify(r.details || {}, null, 0);
+          const row = [
+            safeText(r.at),
+            safeText(r.opId),
+            safeText(r.action),
+            safeText(r.actor || r?.details?.actor || 'unknown'),
+            safeText(r.targetType),
+            safeText(r.targetId),
+            details
+          ];
+          return row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+        })
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit_logs_${todayYmd()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('監査ログCSVを出力しました');
+    }
+
+    async function deleteSelectedReports() {
+      if (selectedReportIds.size === 0) {
+        showToast('削除対象を選択してください');
+        return;
+      }
+      if (!confirm(`選択 ${selectedReportIds.size} 件を削除しますか？`)) return;
+
+      try {
+        if (serverMode) {
+          const ids = Array.from(selectedReportIds);
+          const result = await apiFetch(API.deleteReports, {
+            method: 'POST',
+            body: JSON.stringify({ ids })
+          });
+          lastDeleteOpId = safeText(result?.opId || '');
+          reports = await apiFetch(API.reports, { method: 'GET' });
+          selectedReportIds.clear();
+          renderDashboard();
+          showToast(`${result?.affected ?? 0}件削除しました`);
+        } else {
+          const idSet = new Set(selectedReportIds);
+          reports = reports.filter(r => !idSet.has(r.id));
+          persistTeamData();
+          selectedReportIds.clear();
+          renderDashboard();
+          showToast('ローカル削除しました（巻き戻し不可）');
+        }
+      } catch {
+        showToast('選択削除に失敗しました');
+      }
+    }
+
+    async function deleteReportsByIdsInput() {
+      const raw = safeText(deleteByIdsInputEl.value);
+      if (!raw) {
+        showToast('削除する報告IDを入力してください');
+        return;
+      }
+      const ids = raw.split(',').map(x => safeText(x)).filter(Boolean);
+      if (ids.length === 0) {
+        showToast('有効なIDがありません');
+        return;
+      }
+      if (!confirm(`${ids.length}件をID指定で削除しますか？`)) return;
+
+      try {
+        if (serverMode) {
+          const result = await apiFetch(API.deleteReports, {
+            method: 'POST',
+            body: JSON.stringify({ ids })
+          });
+          lastDeleteOpId = safeText(result?.opId || '');
+          reports = await apiFetch(API.reports, { method: 'GET' });
+        } else {
+          const idSet = new Set(ids);
+          reports = reports.filter(r => !idSet.has(r.id));
+          persistTeamData();
+        }
+        deleteByIdsInputEl.value = '';
+        selectedReportIds.clear();
+        renderDashboard();
+        showToast('ID指定削除を実行しました');
+      } catch {
+        showToast('ID指定削除に失敗しました');
+      }
+    }
+
+    async function undoLastDeletion() {
+      if (!serverMode) {
+        showToast('サーバーモード時のみ巻き戻しできます');
+        return;
+      }
+      if (!lastDeleteOpId) {
+        showToast('巻き戻し対象のopIdがありません');
+        return;
+      }
+      try {
+        const result = await apiFetch(API.undoDeletion, {
+          method: 'POST',
+          body: JSON.stringify({ opId: lastDeleteOpId })
+        });
+        reports = await apiFetch(API.reports, { method: 'GET' });
+        renderDashboard();
+        showToast(`${result?.affected ?? 0}件を巻き戻しました`);
+      } catch {
+        showToast('巻き戻しに失敗しました');
+      }
+    }
+
+    const REPORT_CATEGORIES = [
+      { key: 'buy',   label: '購入（①〜⑦）',              color: '#16a34a', bg: '#f0fdf4', nos: ['①','②','③','④','⑤','⑥','⑦'] },
+      { key: 'rsv',   label: '予約（⑧〜⑨）',              color: '#2563eb', bg: '#eff6ff', nos: ['⑧','⑨'] },
+      { key: 'miss',  label: '買えなかった/予約未入荷（⑩〜⑮）', color: '#d97706', bg: '#fffbeb', nos: ['⑩','⑪','⑫','⑬','⑭','⑮'] },
+      { key: 'noact', label: 'アクション不可（⑯〜⑰）',     color: '#7c3aed', bg: '#f5f3ff', nos: ['⑯','⑰'] },
+      { key: 'unk',   label: 'どういうこと？（⑱〜⑲）',    color: '#dc2626', bg: '#fef2f2', nos: ['⑱','⑲'] },
+      { key: 'tel',   label: '電話確認（㉛〜㉝）',          color: '#0891b2', bg: '#ecfeff', nos: ['㉛','㉜','㉝'] },
+    ];
+
+    let _dashPeriod = 'today';
+
+    function setDashPeriod(p) {
+      _dashPeriod = p;
+      ['today','week','month','range'].forEach(k => {
+        const id = 'pt' + k.charAt(0).toUpperCase() + k.slice(1);
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.className = k === p ? 'btn-primary' : 'btn-sub';
+          btn.style.cssText = 'font-size:13px;padding:8px 14px;';
+        }
+      });
+      const picker = document.getElementById('rangePicker');
+      if (picker) picker.style.display = p === 'range' ? 'flex' : 'none';
+      if (p !== 'range') _loadSummary();
+    }
+
+    function _loadSummary() {
+      const box = document.getElementById('summaryBox');
+      if (!box) return;
+      box.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:32px;font-size:14px;">読み込み中…</div>';
+      const today = new Date().toISOString().slice(0, 10);
+      let url;
+      if (_dashPeriod === 'today') {
+        url = '/api/summary/daily?date=' + today;
+      } else if (_dashPeriod === 'week') {
+        url = '/api/summary/weekly?days=7&date=' + today;
+      } else if (_dashPeriod === 'month') {
+        url = '/api/summary/monthly?days=30&date=' + today;
+      } else if (_dashPeriod === 'range') {
+        const s = (document.getElementById('dsStart') || {}).value || '';
+        const e = (document.getElementById('dsEnd')   || {}).value || '';
+        if (!s || !e) {
+          box.innerHTML = '<div style="color:#b45309;padding:16px;">開始日・終了日を選択してください</div>';
+          return;
+        }
+        url = '/api/summary/range?start=' + s + '&end=' + e;
+      }
+      if (!url) return;
+      fetch(url, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => _renderSummaryBox(box, data))
+        .catch(() => { box.innerHTML = '<div style="color:#dc2626;padding:16px;">読み込みエラー</div>'; });
+
+      // 報告一覧も最新化
+      const listBox = document.getElementById('reportListBox');
+      if (listBox && serverMode) {
+        listBox.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:16px;font-size:14px;">読み込み中…</div>';
+        fetch('/api/reports', { credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(rows => { if (Array.isArray(rows)) { reports = rows; } _renderReportList(listBox, reports || []); })
+          .catch(() => { listBox.innerHTML = '<div style="color:#dc2626;padding:12px;">読み込みエラー</div>'; });
+      } else if (listBox) {
+        _renderReportList(listBox, reports || []);
+      }
+    }
+
+    function _renderSummaryBox(box, data) {
+      const total   = data.total  || 0;
+      const prev    = (data.prevTotal != null) ? data.prevTotal : null;
+      const byRN    = data.byReportNo || {};
+      const byActor = data.byActor    || {};
+      const prevRN  = data.prevByReportNo || {};
+
+      let periodLabel = '';
+      if (data.date)      periodLabel = data.date;
+      else if (data.startDate) periodLabel = data.startDate + ' 〜 ' + data.endDate;
+
+      let prevLabel = '';
+      if (prev !== null) {
+        if (data.prevDate)      prevLabel = '前日（' + data.prevDate + '）';
+        else if (data.prevStartDate) prevLabel = '直前同期間（' + data.prevStartDate + '〜' + data.prevEndDate + '）';
+      }
+
+      let cmpHtml = '';
+      if (prev !== null) {
+        const diff  = total - prev;
+        const sign  = diff > 0 ? '+' : '';
+        const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '±';
+        const col   = diff > 0 ? '#16a34a' : diff < 0 ? '#dc2626' : '#6b7280';
+        cmpHtml = '<span style="color:' + col + ';font-size:14px;margin-left:10px;">' + arrow + sign + diff + '件（' + escH(prevLabel) + '比）</span>';
+      }
+
+      let html = '<div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;margin-bottom:16px;">'
+        + '<span style="font-size:13px;color:#6b7280;">' + escH(periodLabel) + '&nbsp;</span>'
+        + '<span style="font-size:32px;font-weight:800;color:#111827;">' + total + '件</span>'
+        + cmpHtml
+        + '</div>';
+
+      html += '<div style="margin-bottom:18px;">';
+      for (const cat of REPORT_CATEGORIES) {
+        const cnt     = cat.nos.reduce((s, n) => s + (byRN[n]   || 0), 0);
+        const prevCnt = cat.nos.reduce((s, n) => s + (prevRN[n] || 0), 0);
+        const pct     = total > 0 ? Math.round(cnt / total * 100) : 0;
+        let catDiff = '';
+        if (prev !== null) {
+          const d  = cnt - prevCnt;
+          const sg = d > 0 ? '+' : '';
+          const ar = d > 0 ? '▲' : d < 0 ? '▼' : '±';
+          const cl = d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9ca3af';
+          catDiff = '<span style="color:' + cl + ';font-size:12px;margin-left:6px;">' + ar + sg + d + '</span>';
+        }
+        html += '<div style="background:' + cat.bg + ';border-left:4px solid ' + cat.color + ';border-radius:6px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">'
+          + '<div style="font-size:13px;font-weight:700;color:' + cat.color + ';">' + escH(cat.label) + '</div>'
+          + '<div style="font-size:18px;font-weight:800;color:#111827;">' + cnt + '件' + catDiff
+          + '<span style="font-size:12px;color:#9ca3af;margin-left:6px;">(' + pct + '%)</span>'
+          + '</div></div>';
+      }
+      html += '</div>';
+
+      const actors = Object.entries(byActor).sort((a, b) => b[1] - a[1]);
+      if (actors.length > 0) {
+        html += '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:8px;">👤 メンバー別</div>'
+          + '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
+          + '<table style="width:100%;border-collapse:collapse;font-size:14px;">'
+          + '<thead><tr style="background:#f9fafb;">'
+          + '<th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;">実行者</th>'
+          + '<th style="padding:8px 12px;text-align:right;color:#6b7280;font-weight:600;">件数</th>'
+          + '</tr></thead><tbody>';
+        for (const [actor, cnt] of actors) {
+          html += '<tr style="border-top:1px solid #f3f4f6;">'
+            + '<td style="padding:8px 12px;">' + escH(actor) + '</td>'
+            + '<td style="padding:8px 12px;text-align:right;font-weight:700;">' + cnt + '</td>'
+            + '</tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+
+      box.innerHTML = html;
+    }
+
+    function _renderReportList(box, rows) {
+      if (!rows || rows.length === 0) {
+        box.innerHTML = '<div style="color:#9ca3af;padding:16px;text-align:center;">報告データがありません</div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;">'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px;">'
+        + '<thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">'
+        + '<th style="padding:8px;text-align:left;color:#6b7280;">日時</th>'
+        + '<th style="padding:8px;text-align:left;color:#6b7280;">実行者</th>'
+        + '<th style="padding:8px;text-align:left;color:#6b7280;">No</th>'
+        + '<th style="padding:8px;text-align:left;color:#6b7280;">結果</th>'
+        + '<th style="padding:8px;text-align:left;color:#6b7280;">店舗</th>'
+        + '<th style="padding:8px;text-align:center;color:#6b7280;">添付</th>'
+        + '<th style="padding:8px;text-align:center;color:#6b7280;">削除</th>'
+        + '</tr></thead><tbody>';
+      for (const r of rows) {
+        const dt    = (r.createdAt || '').replace('T', ' ').slice(0, 16);
+        const fname = r.receiptFileName || '';
+        const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(fname);
+        let imgCell;
+        if (isImg) {
+          imgCell = '<a href="/uploads/' + escH(fname) + '" target="_blank" rel="noopener">'
+            + '<img src="/uploads/' + escH(fname) + '" alt="レシート" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;">'
+            + '</a>';
+        } else if (fname && fname !== '未選択') {
+          imgCell = '<a href="/uploads/' + escH(fname) + '" target="_blank" rel="noopener" style="font-size:11px;color:#2563eb;">📎 表示</a>';
+        } else {
+          imgCell = '<span style="color:#d1d5db;">—</span>';
+        }
+        html += '<tr style="border-bottom:1px solid #f3f4f6;">'
+          + '<td style="padding:8px;white-space:nowrap;color:#6b7280;">' + escH(dt) + '</td>'
+          + '<td style="padding:8px;">' + escH(r.actor || '') + '</td>'
+          + '<td style="padding:8px;font-weight:700;">' + escH(r.reportNo || '') + '</td>'
+          + '<td style="padding:8px;font-size:12px;">' + escH(r.resultType || '') + '</td>'
+          + '<td style="padding:8px;font-size:12px;">' + escH(r.storeName || '') + '</td>'
+          + '<td style="padding:8px;text-align:center;">' + imgCell + '</td>'
+          + '<td style="padding:8px;text-align:center;"><button onclick="deleteReport(' + r.id + ')" style="font-size:11px;padding:2px 8px;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;">削除</button></td>'
+          + '</tr>';
+      }
+      html += '</tbody></table></div>';
+      box.innerHTML = html;
+    }
+
+    async function deleteReport(id) {
+      if (!confirm('この報告を削除しますか？')) return;
+      try {
+        const res = await fetch('/api/reports/' + id, { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        reports = reports.filter(r => r.id !== id);
+        renderDashboard();
+        showToast('報告を削除しました');
+      } catch (e) {
+        showToast('削除に失敗しました: ' + e.message);
+      }
+    }
+
+    function escH(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderDashboard() {
+      const box = document.getElementById('summaryBox');
+      if (!box) return;
+      const dashView   = document.getElementById('dashboardView');
+      const isActive   = dashView && dashView.classList.contains('active');
+      const listBox    = document.getElementById('reportListBox');
+      if (listBox) _renderReportList(listBox, reports || []);
+      if (isActive) _loadSummary();
+    }
+
+    function exportCsv() {
+      const rows = getFilteredReports();
+      if (rows.length === 0) {
+        showToast('出力するデータがありません');
+        return;
+      }
+      const columns = [
+        { header: 'タイムスタンプ',           getValue: r => r.createdAt ?? '' },
+        { header: '購入者',                   getValue: r => r.actor ?? '' },
+        { header: '結果',                     getValue: r => r.resultType ?? '' },
+        { header: '在庫は何冊あったか？',     getValue: r => r.remainingStock ?? '' },
+        { header: '報告ナンバー',             getValue: r => r.reportNo ?? '' },
+        { header: '購入日',                   getValue: r => (r.purchaseAt ?? '').slice(0, 10) },
+        { header: '購入時刻',                 getValue: r => (r.purchaseAt ?? '').slice(11) },
+        { header: '店舗名',                   getValue: r => r.storeName ?? '' },
+        { header: '購入店舗の住所',           getValue: r => r.storeAddress ?? '' },
+        { header: '購入費用レシートの写真',   getValue: r => r.receiptFileName ?? '' },
+        { header: '連絡事項・コメント',       getValue: r => r.comment ?? '' },
+      ];
+      const csv = [
+        columns.map(c => `"${c.header}"`).join(','),
+        ...rows.map(r => columns.map(c => `"${String(c.getValue(r)).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reports_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('CSVを出力しました');
+    }
+
+    function exportText() {
+      const rows = getFilteredReports();
+      if (rows.length === 0) {
+        showToast('出力するデータがありません');
+        return;
+      }
+
+      const text = rows.map(r => [
+        `【${r.team} / ${r.id}】`,
+        `作成日時: ${formatDateTime(r.createdAt)}`,
+        `結果: ${r.resultType}`,
+        `報告No: ${r.reportNo}`,
+        `購入日時: ${r.purchaseAt}`,
+        `店舗: ${r.storeName}`,
+        `住所: ${r.storeAddress}`,
+        `レシート: ${r.receiptFileName}`,
+        `コメント: ${r.comment || 'なし'}`,
+        '---'
+      ].join('\n')).join('\n');
+
+      output.textContent = text;
+      outputCard.style.display = 'block';
+      outputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast('テキスト出力しました');
+    }
+
+    function switchTab(mode) {
+      const isFlow     = mode === 'flow';
+      const isReport   = mode === 'report';
+      const isDashboard = mode === 'dashboard';
+      const isSchedule = mode === 'schedule';
+
+      if (tabFlowEl)     tabFlowEl.classList.toggle('active', isFlow);
+      if (tabReportEl)   tabReportEl.classList.toggle('active', isReport);
+      if (tabDashboardEl) tabDashboardEl.classList.toggle('active', isDashboard);
+      if (tabScheduleEl) tabScheduleEl.classList.toggle('active', isSchedule);
+
+      if (flowViewEl)      flowViewEl.classList.toggle('active', isFlow);
+      if (reportViewEl)    reportViewEl.classList.toggle('active', isReport);
+      if (dashboardViewEl) dashboardViewEl.classList.toggle('active', isDashboard);
+      if (scheduleViewEl)  scheduleViewEl.classList.toggle('active', isSchedule);
+
+      if (isDashboard && hasDashboard) renderDashboard();
+      if (isSchedule) {
+        initScheduleTab();
+        // リーダー側の変更を取り込むため、タブ表示中は60秒ごとにチーム予定を自動更新
+        if (schedPollTimer) clearInterval(schedPollTimer);
+        schedPollTimer = setInterval(() => { loadAndRenderTeamSchedule(); }, 60_000);
+      } else {
+        // 予定タブから離れたらポーリング停止
+        if (schedPollTimer) { clearInterval(schedPollTimer); schedPollTimer = null; }
+      }
+    }
+
+    // ===== スケジュール機能 =====
+    let scheduleReady = false;
+    let schedPollTimer = null;   // チーム予定自動更新タイマー
+    let profileExpanded = false;
+    let schedWeekStart = null;
+    let schedWeekOffset = 0;
+    let teamSchedWeekOffset = 0;
+    let myProfile = { homeArea: '', workArea: '', transportModes: '' };
+    let myWeekSchedule = {};      // date -> o|d|x
+    let myWeekSchedDetail = {};   // date -> {home,work,noteEnabled,note}
+    let teamWeekSchedule = [];    // [{member,date,availability}]
+    let teamWeekAssignments = []; // [{member,date}]
+    let myWeekAssignedDates = new Set(); // 自分の担当日Set
+    let myReportedDates = new Set();
+
+    function toYmd(d) {
+      const z = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+    }
+
+    function parseDateYmd(ymd) {
+      const [y, m, d] = ymd.split('-').map(Number);
+      return new Date(y, (m || 1) - 1, d || 1);
+    }
+
+    function getWeekStartMonday(baseDate = new Date(), weekOffset = 0) {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+      const dow = d.getDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      d.setDate(d.getDate() + mondayOffset + (weekOffset * 7));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function weekDates(startDate) {
+      const arr = [];
+      for (let i = 0; i < 7; i += 1) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        arr.push(d);
+      }
+      return arr;
+    }
+
+    function availSymbol(v) {
+      if (v === 'o') return '◎';
+      if (v === 'd') return '△';
+      if (v === 'x') return '☓';
+      return '-';
+    }
+
+    function transportModesToText(modes) {
+      const ms = (modes || '').split(',').filter(Boolean);
+      if (ms.length === 0) return '未設定';
+      const labels = ms.map(m => m === 'car' ? '車' : m === 'train' ? '電車' : m === 'walk' ? '徒歩のみ' : m);
+      return labels.join('・');
+    }
+
+    function scheduleDateRange() {
+      const start = schedWeekStart || getWeekStartMonday(new Date(), schedWeekOffset);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 13);
+      return { from: toYmd(start), to: toYmd(end) };
+    }
+
+    async function apiGetJson(url) {
+      return apiFetch(url, { method: 'GET' });
+    }
+
+    async function apiPutJson(url, payload) {
+      return apiFetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    function updateProfileSummary() {
+      const box = document.getElementById('profileSummary');
+      if (!box) return;
+      const h = myProfile.homeArea || '未設定';
+      const w = myProfile.workArea ? myProfile.workArea : '―';
+      const t = transportModesToText(myProfile.transportModes);
+      box.innerHTML = `住まい: <strong>${escH(h)}</strong><br>職場: <strong>${escH(w)}</strong><br>移動: <strong>${escH(t)}</strong>`;
+    }
+
+    function syncProfileInputs() {
+      const homeEl    = document.getElementById('profHomeArea');
+      const workEl    = document.getElementById('profWorkArea');
+      const homeZipEl = document.getElementById('profHomeZip');
+      const workZipEl = document.getElementById('profWorkZip');
+      const hasWorkEl = document.getElementById('profHasWork');
+      const workFields = document.getElementById('profWorkFields');
+      const carEl   = document.getElementById('profCar');
+      const trainEl = document.getElementById('profTrain');
+      const walkEl  = document.getElementById('profWalk');
+      if (!homeEl || !carEl || !trainEl) return;
+      homeEl.value = myProfile.homeArea || '';
+      if (homeZipEl) homeZipEl.value = myProfile.homeZip || '';
+      const hasWork = !!(myProfile.workArea);
+      if (hasWorkEl) hasWorkEl.checked = hasWork;
+      if (workFields) workFields.style.display = hasWork ? 'block' : 'none';
+      if (workEl) workEl.value = myProfile.workArea || '';
+      if (workZipEl) workZipEl.value = myProfile.workZip || '';
+      const ms = (myProfile.transportModes || '').split(',').filter(Boolean);
+      carEl.checked = ms.includes('car');
+      trainEl.checked = ms.includes('train');
+      if (walkEl) walkEl.checked = ms.includes('walk');
+    }
+
+    function onHasWorkChange(chk) {
+      const fields = document.getElementById('profWorkFields');
+      if (fields) fields.style.display = chk.checked ? 'block' : 'none';
+    }
+
+    // 郵便番号→市区町村自動入力（zipcloud API）
+    async function onZipInput(zipInputEl, areaFieldId) {
+      const statusId = zipInputEl.id.replace('Zip', 'ZipStatus');
+      const statusEl = document.getElementById(statusId);
+      const areaEl   = document.getElementById(areaFieldId);
+      const raw = zipInputEl.value.replace(/[^ー−\-0-9０-９]/g, '').replace(/[ー−－]/g, '-');
+      const digits = raw.replace(/-/g, '');
+      if (digits.length < 7) {
+        if (statusEl) statusEl.textContent = '';
+        return;
+      }
+      const zip7 = digits.slice(0, 7);
+      if (statusEl) statusEl.textContent = '検索中...';
+      try {
+        const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip7}`);
+        const json = await res.json();
+        if (json.results && json.results.length > 0) {
+          const r = json.results[0];
+          const addr = (r.address1 || '') + (r.address2 || '') + (r.address3 || '');
+          if (areaEl) areaEl.value = addr;
+          if (statusEl) statusEl.textContent = '✅ 反映済';
+        } else {
+          if (statusEl) statusEl.textContent = '‼︎ 該当なし';
+        }
+      } catch {
+        if (statusEl) statusEl.textContent = '取得失敗';
+      }
+    }
+
+    function toggleProfileEdit() {
+      profileExpanded = !profileExpanded;
+      const area = document.getElementById('profileEditArea');
+      const tg = document.getElementById('profileEditToggle');
+      if (area) area.style.display = profileExpanded ? 'block' : 'none';
+      if (tg) tg.textContent = profileExpanded ? '▼' : '▶';
+      if (profileExpanded) syncProfileInputs();
+    }
+
+    async function loadProfile() {
+      if (!activeTeam || !actorName) return;
+      try {
+        const data = await apiGetJson(`/api/profile?team=${encodeURIComponent(activeTeam)}&member=${encodeURIComponent(actorName)}`);
+        myProfile = {
+          homeArea: safeText(data.homeArea || ''),
+          workArea: safeText(data.workArea || ''),
+          transportModes: safeText(data.transportModes || ''),
+        };
+        updateProfileSummary();
+        syncProfileInputs();
+      } catch (e) {
+        console.error('loadProfile:', e);
+      }
+    }
+
+    async function saveProfile() {
+      const homeEl    = document.getElementById('profHomeArea');
+      const workEl    = document.getElementById('profWorkArea');
+      const hasWorkEl = document.getElementById('profHasWork');
+      const carEl     = document.getElementById('profCar');
+      const trainEl   = document.getElementById('profTrain');
+      const walkEl    = document.getElementById('profWalk');
+      if (!homeEl || !carEl || !trainEl) return;
+      if (!activeTeam || !actorName) {
+        showToast('先にチームと氏名を設定してください');
+        return;
+      }
+      const modes = [];
+      if (carEl.checked)   modes.push('car');
+      if (trainEl.checked) modes.push('train');
+      if (walkEl && walkEl.checked) modes.push('walk');
+      const hasWork = hasWorkEl ? hasWorkEl.checked : false;
+      const workArea = (hasWork && workEl) ? safeText(workEl.value.trim()) : '';
+      try {
+        await apiPutJson('/api/profile', {
+          team: activeTeam,
+          member: actorName,
+          homeArea: safeText(homeEl.value.trim()),
+          workArea,
+          transportModes: modes.join(','),
+        });
+        myProfile = {
+          homeArea: safeText(homeEl.value.trim()),
+          workArea,
+          transportModes: modes.join(','),
+        };
+        updateProfileSummary();
+        // 保存後に畳む
+        profileExpanded = false;
+        const _area = document.getElementById('profileEditArea');
+        const _tg   = document.getElementById('profileEditToggle');
+        if (_area) _area.style.display = 'none';
+        if (_tg)   _tg.textContent = '▶';
+        showToast('保存しました');
+      } catch (e) {
+        console.error('saveProfile:', e);
+        showToast('保存に失敗しました');
+      }
+    }
+
+    let schedEditMode = false;
+
+    function toggleSchedEditMode() {
+      // プロフィール未入力チェック
+      if (!schedEditMode && !(myProfile && myProfile.homeArea)) {
+        // トースト通知
+        let toast = document.getElementById('_profileToast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = '_profileToast';
+          toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e3a5f;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.3);text-align:center;pointer-events:none;transition:opacity 0.4s;';
+          document.body.appendChild(toast);
+        }
+        toast.textContent = '⚠️ 先に「自分のデータ」を入力してください';
+        toast.style.opacity = '1';
+        setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+        // 自分のデータカードを開いてスクロール
+        const card = document.getElementById('profileCard');
+        if (card) {
+          if (!profileExpanded) toggleProfileEdit();
+          setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+        }
+        return;
+      }
+      schedEditMode = !schedEditMode;
+      const btn  = document.getElementById('schedEditToggleBtn');
+      const btns = document.getElementById('schedEditBtns');
+      if (btn)  btn.style.background = schedEditMode ? '#7c3aed' : '';
+      if (btn)  btn.style.color = schedEditMode ? '#fff' : '';
+      if (btns) btns.style.display = schedEditMode ? 'grid' : 'none';
+      renderMyScheduleGrid();
+    }
+
+    function renderSchedWeekLabel() {
+      const el = document.getElementById('schedWeekLabel');
+      if (!el) return;
+      const s = schedWeekStart || getWeekStartMonday(new Date(), schedWeekOffset);
+      const e = new Date(s);
+      e.setDate(s.getDate() + 6);
+      const fmt = (d) => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      el.textContent = `${fmt(s)}(月) - ${fmt(e)}(日)`;
+    }
+
+    function renderMyScheduleGrid() {
+      const root = document.getElementById('schedInputGrid');
+      if (!root) return;
+      const dates = weekDates(schedWeekStart || getWeekStartMonday(new Date(), schedWeekOffset));
+      const today = toYmd(new Date());
+      const wd = ['月', '火', '水', '木', '金', '土', '日'];
+      const avClassMap = { 'o': 'avail-o', 'd': 'avail-d', 'x': 'avail-x', '': '' };
+      const avLabelMap = { 'o': '◎', 'd': '△', 'x': '☓', '': '―' };
+      root.innerHTML = dates.map((d, idx) => {
+        const ymd = toYmd(d);
+        const selected = myWeekSchedule[ymd] || '';
+        const rep = myReportedDates.has(ymd);
+        let availHtml;
+        if (schedEditMode) {
+          const det = myWeekSchedDetail[ymd] || {};
+          const showDetail = (selected === 'o' || selected === 'd');
+          const hasWork = !!(myProfile && myProfile.workArea);
+          const detailHtml = showDetail ? `<div class="sched-detail-area">
+              <label class="sched-detail-chk"><input type="checkbox" ${det.home ? 'checked' : ''} onchange="setSchedDetail('${ymd}','home',this.checked)"> 自宅</label>
+              ${hasWork ? `<label class="sched-detail-chk"><input type="checkbox" ${det.work ? 'checked' : ''} onchange="setSchedDetail('${ymd}','work',this.checked)"> 職場</label>` : ''}
+              <label class="sched-detail-chk"><input type="checkbox" ${det.noteEnabled ? 'checked' : ''} onchange="setSchedDetail('${ymd}','noteEnabled',this.checked)"> その他</label>
+              <input id="sched-note-${ymd}" type="text" class="sched-detail-note" style="${det.noteEnabled ? '' : 'display:none;'}" value="${(det.note||'').replace(/"/g,'&quot;')}" placeholder="内容を入力" onfocus="this.classList.add('expanded')" onblur="this.classList.remove('expanded')" oninput="if(!myWeekSchedDetail['${ymd}'])myWeekSchedDetail['${ymd}']={};myWeekSchedDetail['${ymd}'].note=this.value">
+            </div>` : '';
+          availHtml = `<div class="sched-avail-row">
+              <button type="button" class="sched-avail-btn ${selected === 'o' ? 'sel-o' : ''}" onclick="setSchedAvail('${ymd}','o')">◎</button>
+              <button type="button" class="sched-avail-btn ${selected === 'd' ? 'sel-d' : ''}" onclick="setSchedAvail('${ymd}','d')">△</button>
+              <button type="button" class="sched-avail-btn ${selected === 'x' ? 'sel-x' : ''}" onclick="setSchedAvail('${ymd}','x')">☓</button>
+            </div>${detailHtml}`;
+        } else {
+          const cls = avClassMap[selected];
+          const lbl = avLabelMap[selected];
+          availHtml = `<div style="font-size:22px;font-weight:700;margin-top:4px;line-height:1;" class="${cls}">${lbl}</div>`;
+        }
+        const isMeAssigned = myWeekAssignedDates.has(ymd);
+        return `
+          <div class="sched-cell ${ymd === today ? 'today' : ''} ${rep ? 'reported' : ''}" style="${isMeAssigned ? 'border-color:#f97316 !important;box-shadow:0 0 0 1.5px #f97316;' : ''}">
+            <div style="font-size:12px;color:#6b7280;">${wd[idx]}</div>
+            <div style="font-size:13px;font-weight:700;">${d.getMonth()+1}/${d.getDate()}</div>
+            ${availHtml}
+          </div>`;
+      }).join('');
+    }
+
+    function setSchedAvail(ymd, avail) {
+      if (myWeekSchedule[ymd] === avail) {
+        delete myWeekSchedule[ymd];
+        delete myWeekSchedDetail[ymd];
+      } else {
+        myWeekSchedule[ymd] = avail;
+        // 初めて選択するとき（未登録日）のみ自宅をデフォルトチェック
+        if ((avail === 'o' || avail === 'd') && !myWeekSchedDetail[ymd]) {
+          myWeekSchedDetail[ymd] = { home: true };
+        }
+      }
+      renderMyScheduleGrid();
+      renderWarnBanner();
+    }
+
+    function setSchedDetail(ymd, field, value) {
+      if (!myWeekSchedDetail[ymd]) myWeekSchedDetail[ymd] = {};
+      myWeekSchedDetail[ymd][field] = value;
+      if (field === 'noteEnabled') {
+        const inp = document.getElementById(`sched-note-${ymd}`);
+        if (inp) {
+          inp.style.display = value ? '' : 'none';
+          if (!value) { myWeekSchedDetail[ymd].note = ''; inp.value = ''; }
+        }
+      }
+    }
+
+    async function loadMyWeekSchedule() {
+      if (!activeTeam || !actorName) return;
+      const s = schedWeekStart || getWeekStartMonday(new Date(), schedWeekOffset);
+      const e = new Date(s);
+      e.setDate(s.getDate() + 6);
+      try {
+        const [arr, assignArr] = await Promise.all([
+          apiGetJson(`/api/schedules?team=${encodeURIComponent(activeTeam)}&from=${toYmd(s)}&to=${toYmd(e)}`),
+          apiGetJson(`/api/assignments?team=${encodeURIComponent(activeTeam)}&from=${toYmd(s)}&to=${toYmd(e)}`),
+        ]);
+        myWeekSchedule = {};
+        myWeekSchedDetail = {};
+        (arr || []).forEach((r) => {
+          if (r.member === actorName && r.date && r.availability) {
+            myWeekSchedule[r.date] = r.availability;
+            if (r.locationDetail) {
+              try {
+                const det = JSON.parse(r.locationDetail);
+                myWeekSchedDetail[r.date] = { home: !!det.home, work: !!det.work, noteEnabled: !!(det.note), note: det.note || '' };
+              } catch (ex) { /* ignore malformed */ }
+            }
+          }
+        });
+        myWeekAssignedDates = new Set(
+          (assignArr || []).filter(a => a.member === actorName).map(a => a.date)
+        );
+      } catch (e2) {
+        console.error('loadMyWeekSchedule:', e2);
+      }
+    }
+
+    async function loadMyReportedDates() {
+      if (!activeTeam || !actorName) return;
+      const range = scheduleDateRange();
+      try {
+        const arr = await apiGetJson(`/api/reported-dates?team=${encodeURIComponent(activeTeam)}&member=${encodeURIComponent(actorName)}&from=${range.from}&to=${range.to}`);
+        myReportedDates = new Set((arr || []).map((x) => x.date).filter(Boolean));
+      } catch (e) {
+        myReportedDates = new Set();
+        console.error('loadMyReportedDates:', e);
+      }
+    }
+
+    async function saveMySchedule() {
+      if (!activeTeam || !actorName) {
+        showToast('先にチームと氏名を設定してください');
+        return;
+      }
+      try {
+        const entries = Object.keys(myWeekSchedule).map((date) => {
+          const av = myWeekSchedule[date];
+          const det = (av === 'o' || av === 'd') ? (myWeekSchedDetail[date] || {}) : {};
+          const locationDetail = (av === 'o' || av === 'd') ? JSON.stringify({ home: !!det.home, work: !!det.work, note: det.note || '' }) : '';
+          return { date, availability: av, locationDetail };
+        });
+        await apiPutJson('/api/schedules/bulk', { team: activeTeam, member: actorName, entries });
+        showToast('予定を保存しました');
+        // 保存後は自動的に表示モードに戻る
+        schedEditMode = false;
+        const editBtn  = document.getElementById('schedEditToggleBtn');
+        const editBtns = document.getElementById('schedEditBtns');
+        if (editBtn)  { editBtn.style.background = ''; editBtn.style.color = ''; }
+        if (editBtns) editBtns.style.display = 'none';
+        renderMyScheduleGrid();  // 保存後グリッドを表示モードで再描画
+        await loadAndRenderTeamSchedule();
+      } catch (e) {
+        console.error('saveMySchedule:', e);
+        showToast('保存に失敗しました');
+      }
+    }
+
+    function schedWeekPrev() {
+      schedWeekOffset -= 1;
+      schedWeekStart = getWeekStartMonday(new Date(), schedWeekOffset);
+      initScheduleTab();
+    }
+
+    function schedWeekNext() {
+      schedWeekOffset += 1;
+      schedWeekStart = getWeekStartMonday(new Date(), schedWeekOffset);
+      initScheduleTab();
+    }
+
+    function schedGoToToday() {
+      schedWeekOffset = 0;
+      schedWeekStart = getWeekStartMonday(new Date(), 0);
+      initScheduleTab();
+    }
+
+    function nextWeekRangeFromToday() {
+      const today = new Date();
+      const thisMon = getWeekStartMonday(today, 0);
+      const nextMon = new Date(thisMon);
+      nextMon.setDate(thisMon.getDate() + 7);
+      const nextSun = new Date(nextMon);
+      nextSun.setDate(nextMon.getDate() + 6);
+      return { from: toYmd(nextMon), to: toYmd(nextSun), mon: nextMon, sun: nextSun };
+    }
+
+    async function checkWarningData() {
+      if (!activeTeam || !actorName) return { nextWeekFilled: true };
+      const n = nextWeekRangeFromToday();
+      try {
+        const arr = await apiGetJson(`/api/schedules?team=${encodeURIComponent(activeTeam)}&from=${n.from}&to=${n.to}`);
+        let filled = false;
+        (arr || []).forEach((r) => {
+          if (r.member === actorName && r.availability) filled = true;
+        });
+        return { nextWeekFilled: filled };
+      } catch (e) {
+        return { nextWeekFilled: true };
+      }
+    }
+
+    function renderWarnBanner() {
+      const b = document.getElementById('schedWarnBanner');
+      if (!b) return;
+      b.style.display = 'none';
+      b.innerHTML = '';
+      checkWarningData().then(({ nextWeekFilled }) => {
+        const now = new Date();
+        const day = now.getDay(); // 0 Sun ... 5 Fri ... 1 Mon
+        const isFriOrLater = (day === 5 || day === 6 || day === 0);
+        const isMon = (day === 1);
+        if (isMon && !nextWeekFilled) {
+          b.innerHTML = '<div class="warn">⚠ 来週（月〜日）の予定が未入力です。来週のスケジュールを埋めてください。</div>';
+          b.style.display = 'block';
+          return;
+        }
+        if (isFriOrLater && !nextWeekFilled) {
+          b.innerHTML = '<div class="warn">⚠ 再来週のスケジュール入力を準備してください。</div>';
+          b.style.display = 'block';
+        }
+      });
+    }
+
+    async function loadAndRenderTeamSchedule() {
+      const root = document.getElementById('teamSchedTable');
+      if (!root || !activeTeam) return;
+      const s = getWeekStartMonday(new Date(), teamSchedWeekOffset);
+      // ラベル更新
+      const labelEl = document.getElementById('teamSchedWeekLabel');
+      if (labelEl) {
+        const e2 = new Date(s); e2.setDate(s.getDate() + 6);
+        labelEl.textContent = `${s.getMonth()+1}/${s.getDate()} 〜 ${e2.getMonth()+1}/${e2.getDate()}`;
+      }
+      const e = new Date(s); e.setDate(s.getDate() + 6);
+      const from = toYmd(s);
+      const to = toYmd(e);
+      try {
+        const [membersRes, schedRes, assignRes, reportedRes, teamPurchaseRes, teamReservRes] = await Promise.all([
+          apiGetJson(`/api/members?team=${encodeURIComponent(activeTeam)}`),
+          apiGetJson(`/api/schedules?team=${encodeURIComponent(activeTeam)}&from=${from}&to=${to}`),
+          apiGetJson(`/api/assignments?team=${encodeURIComponent(activeTeam)}&from=${from}&to=${to}`),
+          apiGetJson(`/api/reported-dates?team=${encodeURIComponent(activeTeam)}&member=${encodeURIComponent(actorName)}&from=${from}&to=${to}`),
+          apiGetJson(`/api/reported-dates?team=${encodeURIComponent(activeTeam)}&from=${from}&to=${to}&type=purchase`),
+          apiGetJson(`/api/reported-dates?team=${encodeURIComponent(activeTeam)}&from=${from}&to=${to}&type=reservation`),
+        ]);
+        teamWeekSchedule = schedRes || [];
+        teamWeekAssignments = assignRes || [];
+        myReportedDates = new Set((reportedRes || []).map((x) => x.date).filter(Boolean));
+
+        // チーム購入実績＆予約数: 日付→件数マップ
+        const teamPurchaseCountByDate = {};
+        (teamPurchaseRes || []).forEach((x) => { if (x.date) teamPurchaseCountByDate[x.date] = x.count || 0; });
+        const teamReservCountByDate = {};
+        (teamReservRes || []).forEach((x) => { if (x.date) teamReservCountByDate[x.date] = x.count || 0; });
+
+        const mnames = (membersRes || []).map((m) => m.name);
+        const dates = weekDates(s);
+        const schedMap = new Map();
+        teamWeekSchedule.forEach((r) => schedMap.set(`${r.member}@@${r.date}`, r.availability));
+        const assignCountMap = new Map(teamWeekAssignments.map((a) => [`${a.member}@@${a.date}`, a.purchaseCount || 1]));
+        const assignCountByDate = {};
+        const bookCountByDate = {};
+        teamWeekAssignments.forEach((a) => {
+          assignCountByDate[a.date] = (assignCountByDate[a.date] || 0) + 1;
+          bookCountByDate[a.date] = (bookCountByDate[a.date] || 0) + (a.purchaseCount || 1);
+        });
+
+        const headDates = dates.map((d) => {
+          const dow = d.getDay();
+          const thColor = dow === 0 ? '#ef4444' : dow === 6 ? '#3b82f6' : '';
+          const thStyle = thColor ? ` style="color:${thColor};"` : '';
+          const people = assignCountByDate[toYmd(d)] || 0;
+          const books = bookCountByDate[toYmd(d)] || 0;
+          const label = people > 0 ? `${people}人（${books}冊）` : '0人';
+          return `<th${thStyle}>${d.getMonth()+1}/${d.getDate()}<br><span style="font-size:10px;color:#6b7280;">指名${label}</span></th>`;
+        }).join('');
+        const rows = mnames.map((name) => {
+          const tds = dates.map((d) => {
+            const ymd = toYmd(d);
+            const av = schedMap.get(`${name}@@${ymd}`) || '';
+            const assignedCount = assignCountMap.get(`${name}@@${ymd}`) || 0;
+            const cls = [
+              assignedCount > 0 ? 'assigned-cell' : '',
+              (name === actorName && myReportedDates.has(ymd)) ? 'reported-cell' : '',
+            ].filter(Boolean).join(' ');
+            const avCls = av === 'o' ? 'avail-o' : av === 'd' ? 'avail-d' : av === 'x' ? 'avail-x' : '';
+            const isAssigned = assignedCount > 0;
+            const countBadge = assignedCount >= 2 ? `<span style="font-size:9px;font-weight:700;color:#fff;background:#dc2626;border-radius:3px;padding:0 3px;margin-left:2px;">${assignedCount}</span>` : '';
+            const assignLabel = isAssigned ? `<span style="font-size:9px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:3px;padding:0 3px;display:block;line-height:1.4;">★担当${countBadge}</span>` : '';
+            const tdDow = d.getDay();
+            const tdDowBg = !cls && tdDow === 0 ? '#fff0f0' : !cls && tdDow === 6 ? '#eff6ff' : '';
+            const tdStyle = tdDowBg ? ` style="background:${tdDowBg};"` : '';
+            return `<td class="${cls}"${tdStyle}><span class="${avCls}">${availSymbol(av)}</span>${assignLabel}</td>`;
+          }).join('');
+          return `<tr class="${name === actorName ? 'me-row' : ''}"><td style="text-align:left;padding-left:8px;position:sticky;left:0;background:${name === actorName ? '#eff6ff' : '#fff'};z-index:1;">${escH(name)}</td>${tds}</tr>`;
+        }).join('');
+        // 購入実績行
+        const resultTds = dates.map((d) => {
+          const ymd = toYmd(d);
+          const cnt = teamPurchaseCountByDate[ymd] || 0;
+          const dow = d.getDay();
+          const bg = dow === 0 ? '#fef2f2' : dow === 6 ? '#eff6ff' : '#f0fdf4';
+          const text = cnt > 0 ? `<span style="font-size:14px;font-weight:700;color:#166534;">${cnt}冊</span>` : `<span style="color:#d1d5db;font-size:12px;">―</span>`;
+          return `<td style="background:${bg};text-align:center;">${text}</td>`;
+        }).join('');
+        const resultRow = `<tr style="background:#dcfce7;border-top:2px solid #86efac;">
+          <td style="text-align:left;padding-left:8px;position:sticky;left:0;background:#dcfce7;z-index:1;font-weight:700;color:#166534;white-space:nowrap;">📦 購入</td>
+          ${resultTds}
+        </tr>`;
+        // 予約行
+        const reservTds = dates.map((d) => {
+          const ymd = toYmd(d);
+          const cnt = teamReservCountByDate[ymd] || 0;
+          const dow = d.getDay();
+          const bg = dow === 0 ? '#fef2f2' : dow === 6 ? '#eff6ff' : '#eff9ff';
+          const text = cnt > 0 ? `<span style="font-size:14px;font-weight:700;color:#1e40af;">${cnt}件</span>` : `<span style="color:#d1d5db;font-size:12px;">―</span>`;
+          return `<td style="background:${bg};text-align:center;">${text}</td>`;
+        }).join('');
+        const reservRow = `<tr style="background:#dbeafe;border-top:1px solid #93c5fd;">
+          <td style="text-align:left;padding-left:8px;position:sticky;left:0;background:#dbeafe;z-index:1;font-weight:700;color:#1e40af;white-space:nowrap;">📋 予約</td>
+          ${reservTds}
+        </tr>`;
+
+        root.innerHTML = `
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <table class="ts-table" style="min-width:max-content;">
+            <thead><tr><th style="text-align:left;padding-left:8px;min-width:80px;position:sticky;left:0;background:#f1f5f9;z-index:1;">メンバー</th>${headDates}</tr></thead>
+            <tbody>${rows || '<tr><td colspan="8">メンバーがいません</td></tr>'}${resultRow}${reservRow}</tbody>
+          </table>
+          </div>`;
+      } catch (e) {
+        console.error('loadAndRenderTeamSchedule:', e);
+        root.innerHTML = '<div class="muted">チーム予定の読み込みに失敗しました</div>';
+      }
+    }
+
+    async function refreshTodayBanner() {
+      const el = document.getElementById('todayBanner');
+      if (!el) return;
+      // 日付は同期的に即座に表示（APIより先に必ず見える）
+      const today = new Date();
+      const dow = ['日','月','火','水','木','金','土'][today.getDay()];
+      const dateLabel = `<span style="font-size:13px;font-weight:700;color:#f1f5f9;margin-right:6px;">${today.getMonth()+1}月${today.getDate()}日（${dow}）</span>`;
+      // イベント開始日からの経過日数バッジ（サーバーから取得、localStorageはキャッシュ）
+      const computeDayNumBadge = (eventStartVal) => {
+        if (!eventStartVal) return '';
+        const startDate = new Date(eventStartVal + 'T00:00:00');
+        const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const diffDays = Math.floor((todayDate - startDate) / 86400000);
+        const dayNum = diffDays + 1;
+        if (dayNum > 0) {
+          return `<span style="font-size:13px;font-weight:700;color:#fbbf24;margin-right:6px;">(${dayNum}日目)</span>`;
+        } else {
+          return `<span style="font-size:12px;color:#94a3b8;margin-right:6px;">(開始前)</span>`;
+        }
+      };
+      // まず localStorage キャッシュで即座に表示
+      let dayNumBadge = computeDayNumBadge(localStorage.getItem('leaderEventStartDate'));
+      el.innerHTML = dateLabel + dayNumBadge;
+
+      // チーム・氏名が無ければ日付だけ
+      if (!activeTeam || !actorName || actorName === '未設定') {
+        // チームが分かればサーバーから最新値だけ更新
+        if (activeTeam) {
+          try {
+            const tsData = await apiGetJson(`/api/team-settings?team=${encodeURIComponent(activeTeam)}`);
+            if (tsData && tsData.eventStartDate !== undefined) {
+              localStorage.setItem('leaderEventStartDate', tsData.eventStartDate);
+              dayNumBadge = computeDayNumBadge(tsData.eventStartDate);
+              el.innerHTML = dateLabel + dayNumBadge;
+            }
+          } catch (_) {}
+        }
+        return;
+      }
+
+      const todayYmd    = toYmd(today);
+      const tomorrow    = new Date(today); tomorrow.setDate(today.getDate() + 1);
+      const tomorrowYmd = toYmd(tomorrow);
+
+      try {
+        const [assignRes, reportedRes, tsData] = await Promise.all([
+          apiGetJson(`/api/assignments?team=${encodeURIComponent(activeTeam)}&from=${todayYmd}&to=${tomorrowYmd}`),
+          apiGetJson(`/api/reported-dates?team=${encodeURIComponent(activeTeam)}&member=${encodeURIComponent(actorName)}&from=${todayYmd}&to=${todayYmd}`),
+          apiGetJson(`/api/team-settings?team=${encodeURIComponent(activeTeam)}`).catch(() => null),
+        ]);
+        // サーバーから最新のイベント開始日を反映
+        if (tsData && tsData.eventStartDate !== undefined) {
+          localStorage.setItem('leaderEventStartDate', tsData.eventStartDate);
+          dayNumBadge = computeDayNumBadge(tsData.eventStartDate);
+        }
+        const assignSet   = new Set((assignRes   || []).map(a => `${a.member}@@${a.date}`));
+        const reportedSet = new Set((reportedRes || []).map(x => x.date).filter(Boolean));
+        const isAssignedToday    = assignSet.has(`${actorName}@@${todayYmd}`);
+        const isAssignedTomorrow = assignSet.has(`${actorName}@@${tomorrowYmd}`);
+        const isPurchasedToday   = reportedSet.has(todayYmd);
+
+        let todayBadge;
+        if (isPurchasedToday) {
+          todayBadge = `<span style="font-size:13px;font-weight:700;color:#16a34a;background:#dcfce7;border-radius:6px;padding:2px 8px;">✅ 達成</span>`;
+        } else if (isAssignedToday) {
+          todayBadge = `<span style="font-size:13px;font-weight:700;color:#fff;background:#ef4444;border-radius:6px;padding:2px 8px;">担当</span>`;
+        } else {
+          todayBadge = `<span style="font-size:12px;color:#9ca3af;">担当なし</span>`;
+        }
+        const tomorrowBadge = isAssignedTomorrow
+          ? `<span style="font-size:12px;font-weight:700;color:#d97706;background:#fef3c7;border-radius:6px;padding:2px 6px;">明日に担当</span>`
+          : `<span style="font-size:11px;color:#9ca3af;">明日の担当なし</span>`;
+        el.innerHTML = `${dateLabel}${dayNumBadge}${todayBadge}<span style="margin:0 3px;"></span>${tomorrowBadge}`;
+      } catch (e) {
+        console.error('refreshTodayBanner:', e);
+        // 日付は残す、担当情報のみエラー表示
+        el.innerHTML = dateLabel + dayNumBadge + `<span style="font-size:11px;color:#9ca3af;">担当確認に失敗</span>`;
+      }
+    }
+
+    async function toggleMyAssignments() {
+      const area = document.getElementById('myAssignmentsArea');
+      if (!area) return;
+      const nowHidden = area.style.display === 'none' || area.style.display === '';
+      if (!nowHidden) {
+        area.style.display = 'none';
+        return;
+      }
+      if (!activeTeam || !actorName) {
+        area.innerHTML = '<div class="muted">先にチームと氏名を設定してください</div>';
+        area.style.display = 'block';
+        return;
+      }
+      const start = getWeekStartMonday(new Date(), -1);
+      const end = getWeekStartMonday(new Date(), 8);
+      end.setDate(end.getDate() + 6);
+      try {
+        const list = await apiGetJson(`/api/assignments?team=${encodeURIComponent(activeTeam)}&from=${toYmd(start)}&to=${toYmd(end)}`);
+        const todayYmd = toYmd(new Date());
+        const DOW_JA_MY = ['日','月','火','水','木','金','土'];
+        const my = (list || []).filter((x) => x.member === actorName).map((x) => x.date).sort().filter((d) => d >= todayYmd);
+        if (my.length === 0) {
+          area.innerHTML = '<div class="muted">現在、担当日の指定はありません。</div>';
+        } else {
+          area.innerHTML = `<div style="font-size:14px;font-weight:700;margin-bottom:6px;">あなたの担当日</div>${my.map((d) => {
+            const dateObj = new Date(d + 'T00:00:00');
+            const dow = dateObj.getDay();
+            const dowStr = DOW_JA_MY[dow];
+            const color = dow === 0 ? '#ef4444' : dow === 6 ? '#3b82f6' : '#1f2937';
+            const border = dow === 0 ? '#fca5a5' : dow === 6 ? '#93c5fd' : '#e5e7eb';
+            return `<div style="padding:8px 10px;border:1px solid ${border};border-radius:8px;margin-bottom:6px;color:${color};font-weight:600;">${escH(d)}（${dowStr}）</div>`;
+          }).join('')}`;
+        }
+      } catch (e) {
+        area.innerHTML = '<div class="muted">担当日の取得に失敗しました</div>';
+      }
+      area.style.display = 'block';
+    }
+
+    async function loadAssignNotes() {
+      const area = document.getElementById('assignNoteArea');
+      if (!area) return;
+      if (!activeTeam || !actorName) { area.innerHTML = ''; return; }
+      const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const today = new Date();
+      const toDate = new Date(today); toDate.setDate(today.getDate() + 20);
+      try {
+        const notes = await apiGetJson(
+          `/api/assignment-notes?team=${encodeURIComponent(activeTeam)}&member=${encodeURIComponent(actorName)}&from=${fmtDate(today)}&to=${fmtDate(toDate)}`
+        ).catch(() => []);
+        if (!notes || notes.length === 0) { area.innerHTML = ''; return; }
+        const html = notes.map(n => {
+          const d = new Date(n.date + 'T00:00:00');
+          const dow = ['日','月','火','水','木','金','土'][d.getDay()];
+          const dcol = d.getDay() === 0 ? '#dc2626' : d.getDay() === 6 ? '#2563eb' : '#374151';
+          const lines = esc(n.text).split('\n').filter(l => l.trim());
+          const listHtml = lines.map(l => `<div style="padding:3px 0;border-bottom:1px solid #fef3c7;font-size:13px;">📖 ${l}</div>`).join('');
+          return `<div style="margin-bottom:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;">
+            <div style="font-weight:700;font-size:13px;color:${dcol};margin-bottom:6px;">${n.date.slice(5).replace('-','/')}(${dow}) の担当書店</div>
+            ${listHtml}
+          </div>`;
+        }).join('');
+        area.innerHTML = `<div style="margin-top:4px;"><div style="font-size:12px;color:#6b7280;margin-bottom:6px;font-weight:700;">📋 担当書店リスト</div>${html}</div>`;
+      } catch (_) {
+        area.innerHTML = '';
+      }
+    }
+
+    async function initScheduleTab() {
+      if (!scheduleViewEl) return;
+      if (!schedWeekStart) schedWeekStart = getWeekStartMonday(new Date(), schedWeekOffset);
+      renderSchedWeekLabel();
+      await Promise.all([
+        loadProfile(),
+        loadMyWeekSchedule(),
+        loadMyReportedDates(),
+      ]);
+      renderMyScheduleGrid();
+      renderWarnBanner();
+      await loadAndRenderTeamSchedule();
+      loadAssignNotes();
+      scheduleReady = true;
+    }
+
+    window.toggleProfileEdit = toggleProfileEdit;
+    window.saveProfile = saveProfile;
+    window.onZipInput = onZipInput;
+    window.onHasWorkChange = onHasWorkChange;
+    window.toggleSchedEditMode = toggleSchedEditMode;
+    window.schedWeekPrev = schedWeekPrev;
+    window.schedWeekNext = schedWeekNext;
+    window.schedGoToToday = schedGoToToday;
+    window.setSchedAvail = setSchedAvail;
+    window.setSchedDetail = setSchedDetail;
+    window.saveMySchedule = saveMySchedule;
+    window.toggleMyAssignments = toggleMyAssignments;
+    window.loadAndRenderTeamSchedule = loadAndRenderTeamSchedule;
+    window.teamSchedWeekPrev = () => { teamSchedWeekOffset--; loadAndRenderTeamSchedule(); };
+    window.teamSchedWeekNext = () => { teamSchedWeekOffset++; loadAndRenderTeamSchedule(); };
+    window.teamSchedGoToCurrentWeek = () => { teamSchedWeekOffset = 0; loadAndRenderTeamSchedule(); };
+
+    /**
+     * [SEC] Canvas 経由で画像を圧縮・再エンコードする
+     *  - 最大辺 1920px にリサイズ
+     *  - JPEG 品質 0.70 で再エンコード → 約 200〜600KB
+     *  - Canvas 経由で EXIF（GPS・機種情報）を完全除去
+     *  - 元ファイルサイズ上限 20MB（過大ファイルをブロック）
+     */
+    async function compressImage(file) {
+      const MAX_PX   = 1920;
+      const QUALITY  = 0.70;
+      const MAX_ORIG = 20 * 1024 * 1024; // 元ファイル上限 20MB
+
+      if (file.size > MAX_ORIG) {
+        throw new Error(`ファイルサイズが大きすぎます（上限20MB、選択: ${Math.round(file.size/1024/1024)}MB）`);
+      }
+      if (!file.type.startsWith('image/')) {
+        throw new Error('画像ファイルを選択してください');
+      }
+
+      const originalKB = Math.round(file.size / 1024);
+
+      // 1) Blob URL でロード（FileReader より高速・メモリ効率◎）
+      const blobUrl = URL.createObjectURL(file);
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload  = () => resolve(i);
+        i.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+        i.src = blobUrl;
+      });
+      URL.revokeObjectURL(blobUrl); // メモリ解放
+
+      // 2) リサイズ計算
+      let { naturalWidth: w, naturalHeight: h } = img;
+      if (w > MAX_PX || h > MAX_PX) {
+        if (w >= h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+        else        { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+      }
+
+      // 3) Canvas に描画して JPEG 再エンコード
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      // 白背景（PNG の透過部分を JPEG 化する際の保険）
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (b) => b ? resolve(b) : reject(new Error('圧縮に失敗しました')),
+          'image/jpeg',
+          QUALITY
+        );
+      });
+
+      const compressedKB = Math.round(blob.size / 1024);
+
+      // 4) Base64 変換
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload  = (ev) => {
+          const dataUrl = ev.target.result;
+          // data:image/jpeg;base64, の後ろだけ取り出す
+          const comma = dataUrl.indexOf(',');
+          resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+        };
+        r.onerror = () => reject(new Error('Base64変換に失敗しました'));
+        r.readAsDataURL(blob);
+      });
+
+      return { b64, originalKB, compressedKB };
+    }
+
+    function bindEvents() {
+      // タブ切替
+      if (tabFlowEl)     tabFlowEl.addEventListener('click', () => switchTab('flow'));
+      if (tabReportEl)   tabReportEl.addEventListener('click', () => switchTab('report'));
+      if (tabDashboardEl) tabDashboardEl.addEventListener('click', () => switchTab('dashboard'));
+      if (tabScheduleEl) tabScheduleEl.addEventListener('click', () => switchTab('schedule'));
+
+      // チーム切替
+      teamSelectEl.addEventListener('change', () => {
+        activeTeam = safeText(teamSelectEl.value);
+        teamDisplayEl.textContent = `現在：${activeTeam}`;
+        persistTeamData();
+        updateTeamGateVisibility();
+        applyTeamLock();
+        showToast(`チームを ${activeTeam} に切り替えました`);
+        startFlow();
+      });
+
+      if (gateStartBtnEl) {
+        gateStartBtnEl.addEventListener('click', () => {
+          const selected = safeText(gateTeamSelectEl.value);
+          if (!selected || !teams.includes(selected)) {
+            showToast('チームを選択してください');
+            return;
+          }
+          // メンバー選択か手入力か
+          let gateActor = '';
+          if (gateActorSelectEl) {
+            const v = safeText(gateActorSelectEl.value);
+            if (v === '__OTHER__') {
+              const customEl = document.getElementById('gateActorCustom');
+              gateActor = customEl ? safeText(customEl.value) : '';
+            } else {
+              gateActor = v;
+            }
+          }
+          if (!gateActor) {
+            showToast('氏名を選択または入力してください');
+            return;
+          }
+          actorName = gateActor;
+          actorNameEl.value = actorName;
+          activeTeam = selected;
+          teamSelectEl.value = selected;
+          teamDisplayEl.textContent = `現在：${activeTeam}`;
+          persistTeamData();
+          updateTeamGateVisibility();
+          showToast(`チーム: ${activeTeam}、氏名: ${actorName} で開始します`);
+          startFlow();
+          refreshTodayBanner();
+        });
+      }
+
+      // ゲート：チーム変更→メンバーリスト再読込
+      if (gateTeamSelectEl) {
+        gateTeamSelectEl.addEventListener('change', () => {
+          if (serverMode) loadGateMembers(safeText(gateTeamSelectEl.value));
+        });
+      }
+      // ゲート：「その他」選択→手入力欄表示切替
+      if (gateActorSelectEl) {
+        gateActorSelectEl.addEventListener('change', updateGateActorCustom);
+      }
+
+      // 7）コメント横の南京錠：氏名変更
+      async function populateActorChangeMemberSelect(team) {
+        const sel     = document.getElementById('actorChangeMemberSelect');
+        const inputEl = document.getElementById('actorChangeInput');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">読み込み中...</option>';
+        let names = [];
+        try {
+          const rows = await apiFetch(`${API.members}?team=${encodeURIComponent(team)}`, { method: 'GET' });
+          names = (Array.isArray(rows) ? rows : []).map(m => safeText(m.name)).filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja'));
+        } catch { names = []; }
+        sel.innerHTML = '';
+        names.forEach(n => {
+          const op = document.createElement('option');
+          op.value = n; op.textContent = n;
+          sel.appendChild(op);
+        });
+        const otherOp = document.createElement('option');
+        otherOp.value = '__OTHER__'; otherOp.textContent = 'その他（直接入力）';
+        sel.appendChild(otherOp);
+        // 現在の actorName を選択状態にする
+        const found = [...sel.options].some(o => o.value === actorName);
+        sel.value = found ? actorName : (names.length > 0 ? names[0] : '__OTHER__');
+        inputEl.style.display = sel.value === '__OTHER__' ? 'block' : 'none';
+        if (sel.value === '__OTHER__') inputEl.value = actorName;
+      }
+      // リセットボタン：氏名・チーム・フロー状態をクリアして再入力フロー開始
+      document.getElementById('actorResetBtn').addEventListener('click', () => {
+        if (!confirm('氏名・チームの設定をリセットして最初からやり直しますか？')) return;
+        try {
+          localStorage.removeItem(STORAGE_KEYS.actor);
+          localStorage.removeItem(STORAGE_KEYS.activeTeam);
+          localStorage.removeItem(STORAGE_KEYS.flowState);
+        } catch {}
+        location.reload();
+      });
+
+      document.getElementById('actorUnlockBtn').addEventListener('click', async () => {
+        document.getElementById('actorResetBtn').style.display = 'inline-block';
+        const panel  = document.getElementById('actorChangePanel');
+        const teamSel = document.getElementById('actorChangeTeamSelect');
+        // チーム選択肢を最新状態で作成
+        teamSel.innerHTML = '';
+        teams.forEach(t => {
+          const op = document.createElement('option');
+          op.value = t; op.textContent = t;
+          if (t === activeTeam) op.selected = true;
+          teamSel.appendChild(op);
+        });
+        panel.style.display = 'block';
+        await populateActorChangeMemberSelect(activeTeam);
+      });
+      document.getElementById('actorChangeTeamSelect').addEventListener('change', function() {
+        populateActorChangeMemberSelect(this.value);
+      });
+      document.getElementById('actorChangeMemberSelect').addEventListener('change', function() {
+        const inputEl = document.getElementById('actorChangeInput');
+        inputEl.style.display = this.value === '__OTHER__' ? 'block' : 'none';
+        if (this.value === '__OTHER__') inputEl.focus();
+      });
+      document.getElementById('actorChangeCancelBtn').addEventListener('click', () => {
+        document.getElementById('actorChangePanel').style.display = 'none';
+      });
+      document.getElementById('actorChangeConfirmBtn').addEventListener('click', () => {
+        const memberSel = document.getElementById('actorChangeMemberSelect');
+        const inputEl   = document.getElementById('actorChangeInput');
+        const newName   = memberSel.value === '__OTHER__'
+          ? safeText(inputEl.value)
+          : safeText(memberSel.value);
+        const newTeam = safeText(document.getElementById('actorChangeTeamSelect').value);
+        if (!newName) { showToast('氏名を入力または選択してください'); return; }
+        actorName = newName;
+        actorNameEl.value = actorName;
+        if (newTeam && teams.includes(newTeam)) {
+          activeTeam = newTeam;
+          teamSelectEl.value = newTeam;
+        }
+        persistTeamData();
+        applyTeamLock();
+        document.getElementById('actorChangePanel').style.display = 'none';
+        showToast('氏名・チームを変更しました');
+      });
+
+      actorNameEl.addEventListener('change', () => {
+        actorName = safeText(actorNameEl.value) || '未設定';
+        actorNameEl.value = actorName;
+        persistTeamData();
+        applyTeamLock();
+        showToast(`実行者を ${actorName} に設定しました`);
+      });
+
+      // チーム追加
+      if (addTeamBtnEl) addTeamBtnEl.addEventListener('click', async () => {
+        const name = safeText(newTeamNameEl.value);
+        if (!name) {
+          showToast('チーム名を入力してください');
+          return;
+        }
+        if (teams.includes(name)) {
+          showToast('同じチーム名がすでにあります');
+          return;
+        }
+        try {
+          if (serverMode) {
+            await apiFetch(API.teams, {
+              method: 'POST',
+              body: JSON.stringify({ name })
+            });
+            teams = (await apiFetch(API.teams, { method: 'GET' })).map(t => safeText(t.name));
+          } else {
+            teams.push(name);
+          }
+          activeTeam = name;
+          newTeamNameEl.value = '';
+          persistTeamData();
+          renderTeamSelectors();
+          renderTeamList();
+          renderDashboard();
+          showToast(`チーム「${name}」を追加しました`);
+        } catch {
+          showToast('チーム追加に失敗しました');
+        }
+      });
+
+      if (hasDashboard) {
+        // 集計フィルタ
+        filterTeamEl.addEventListener('change', renderDashboard);
+
+        selectAllReportsEl.addEventListener('change', () => {
+          const checked = !!selectAllReportsEl.checked;
+          const items = getFilteredReports();
+          if (checked) {
+            for (const item of items) selectedReportIds.add(item.id);
+          } else {
+            for (const item of items) selectedReportIds.delete(item.id);
+          }
+          renderReportTable(items);
+        });
+
+        // 出力・削除
+        exportCsvBtnEl.addEventListener('click', exportCsv);
+        exportTextBtnEl.addEventListener('click', exportText);
+        deleteSelectedBtnEl.addEventListener('click', deleteSelectedReports);
+        deleteByIdsBtnEl.addEventListener('click', deleteReportsByIdsInput);
+        undoDeleteBtnEl.addEventListener('click', undoLastDeletion);
+        refreshLogsBtnEl.addEventListener('click', renderDeletionLogs);
+        applyLogFilterBtnEl.addEventListener('click', renderAuditLogs);
+        exportLogCsvBtnEl.addEventListener('click', exportAuditLogsCsv);
+        rangeSummaryBtnEl.addEventListener('click', renderRangeSummary);
+        clearAllBtnEl.addEventListener('click', async () => {
+          if (!confirm('本当に報告データを全削除しますか？')) return;
+          try {
+            if (serverMode) {
+              const result = await apiFetch(API.reports, { method: 'DELETE' });
+              lastDeleteOpId = safeText(result?.opId || '');
+              reports = await apiFetch(API.reports, { method: 'GET' });
+            } else {
+              reports = [];
+              persistTeamData();
+            }
+            selectedReportIds.clear();
+            renderDashboard();
+            showToast('全データを削除しました');
+          } catch {
+            showToast('全削除に失敗しました');
+          }
+        });
+      }
+
+      // 写真選択・自動アップロード
+      receiptPhotoEl.addEventListener('change', async () => {
+        const file = receiptPhotoEl.files[0];
+        uploadedFileName = '';
+        receiptUploadStatusEl.className = 'upload-status';
+        receiptPreviewEl.style.display = 'none';
+        receiptPreviewEl.src = '';
+        if (!file) { receiptUploadStatusEl.textContent = ''; return; }
+
+        // プレビュー表示（元画像）
+        const previewReader = new FileReader();
+        previewReader.onload = (ev) => {
+          receiptPreviewEl.src = ev.target.result;
+          receiptPreviewEl.style.display = 'block';
+        };
+        previewReader.readAsDataURL(file);
+
+        if (serverMode) {
+          receiptUploadStatusEl.textContent = '圧縮・アップロード中... ⏳';
+          receiptUploadStatusEl.className = 'upload-status uploading';
+          try {
+            const { b64, originalKB, compressedKB } = await compressImage(file);
+            receiptUploadStatusEl.textContent =
+              `圧縮中... ${originalKB}KB → ${compressedKB}KB ⏳`;
+            const result = await apiFetch(API.uploads, {
+              method: 'POST',
+              body: JSON.stringify({ filename: file.name, dataBase64: b64 })
+            });
+            uploadedFileName = result.storedName;
+            receiptUploadStatusEl.textContent =
+              `✅ アップロード完了（${originalKB}KB → ${compressedKB}KB に圧縮）`;
+            receiptUploadStatusEl.className = 'upload-status uploaded';
+          } catch (err) {
+            const msg = (err && err.message) ? err.message : '';
+            receiptUploadStatusEl.textContent =
+              msg ? `❌ ${msg}` : '❌ アップロード失敗 — 再選択してください';
+            receiptUploadStatusEl.className = 'upload-status upload-error';
+          }
+        } else {
+          receiptUploadStatusEl.textContent = '📎 写真選択済み（オフラインモード：ファイル名のみ記録）';
+        }
+      });
+
+      // 写真モーダルを閉じる
+      document.getElementById('photoModal').addEventListener('click', () => {
+        document.getElementById('photoModal').style.display = 'none';
+      });
+
+      // 現在地から近くの本屋を探す
+      document.getElementById('nearbyBookstoreBtn').addEventListener('click', () => {
+        const msgEl = document.getElementById('mapsMsg');
+        const openMap = (url) => { window.location.href = url; };
+        if (!navigator.geolocation) {
+          openMap('https://www.google.com/maps/search/本屋');
+          return;
+        }
+        msgEl.textContent = '📍 現在地を取得中...';
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            openMap(`https://www.google.com/maps/search/本屋/@${lat},${lng},15z`);
+          },
+          () => {
+            msgEl.textContent = '位置情報の取得に失敗しました。許可を確認してください。';
+            openMap('https://www.google.com/maps/search/本屋');
+          },
+          { timeout: 8000 }
+        );
+      });
+
+      // 店舗名＋住所でMaps確認
+      document.getElementById('mapsCheckBtn').addEventListener('click', () => {
+        const name = storeNameEl.value.trim();
+        const addr = storeAddressEl.value.trim();
+        const msgEl = document.getElementById('mapsCheckMsg');
+        if (!name && !addr) { msgEl.textContent = '先に店舗名または住所を入力してください'; return; }
+        const q = encodeURIComponent([name, addr].filter(Boolean).join(' '));
+        msgEl.textContent = '';
+        window.location.href = `https://www.google.com/maps/search/?api=1&query=${q}`;
+      });
+
+      // 報告作成
+      // 確認ボタン：バリデーション→プレビュー表示（保存はしない）
+      let pendingRecord = null;
+      document.getElementById('previewBtn').addEventListener('click', () => {
+        const missing = validateForm();
+        if (missing.length > 0) {
+          alert(`未入力があります:\n- ${missing.join('\n- ')}`);
+          return;
+        }
+        // 写真未添付の場合は確認
+        const hasPhoto = serverMode ? !!uploadedFileName : !!(receiptPhotoEl.files && receiptPhotoEl.files[0]);
+        if (!hasPhoto) {
+          if (!confirm('レシート写真が添付されていません。\n写真なしで報告を作成してもよいですか？')) return;
+        }
+        pendingRecord = buildReportRecord();
+        const text = buildReportText(pendingRecord);
+        output.textContent = text;
+        outputCard.style.display = 'block';
+        outputCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      // 報告するボタン：保存して完了画面へ
+      document.getElementById('submitBtn').addEventListener('click', async () => {
+        if (!pendingRecord) return;
+        const _rec = pendingRecord;  // コピー用に退避
+        await saveReport(pendingRecord);
+        pendingRecord = null;
+        // フォームリセット
+        form.reset();
+        uploadedFileName = '';
+        receiptPreviewEl.style.display = 'none';
+        receiptPreviewEl.src = '';
+        receiptUploadStatusEl.textContent = '';
+        receiptUploadStatusEl.className = 'upload-status';
+        purchaseAtEl.value = toLocalDateTimeValue();
+        mapsMsgEl.textContent = '';
+        outputCard.style.display = 'none';
+        output.textContent = '';
+        updateResvFields();
+        form.style.display = 'none';
+        startFlow();
+        // Discord用コピーテキストをセット（購入日はスラッシュ区切り・時刻なし）
+        const _purchaseDateStr = (() => {
+          const raw = _rec.purchaseAt || '';
+          const dt = new Date(raw);
+          if (isNaN(dt.getTime())) return raw;
+          return `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`;
+        })();
+        const _copyText = `書店名：${_rec.storeName}\n住所：${_rec.storeAddress}\n購入日：${_purchaseDateStr}`;
+        document.getElementById('doneCopyText').textContent = _copyText;
+        // 完了カードを表示
+        const doneCard = document.getElementById('doneCard');
+        doneCard.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      document.getElementById('doneCopyBtn').addEventListener('click', async () => {
+        const text = document.getElementById('doneCopyText').textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('コピーしました！Discordに貼り付けてください');
+        } catch {
+          // フォールバック
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToast('コピーしました');
+        }
+      });
+
+      document.getElementById('doneCloseBtn').addEventListener('click', () => {
+        const doneCard = document.getElementById('doneCard');
+        doneCard.style.display = 'none';
+        form.style.display = '';
+        try { window.close(); } catch {}
+        switchTab('flow');
+      });
+
+      document.getElementById('doneRestartBtn').addEventListener('click', () => {
+        document.getElementById('doneCard').style.display = 'none';
+        form.style.display = '';
+        switchTab('flow');
+      });
+
+      // やりなおすボタン：プレビューを閉じてフォームに戻る
+      document.getElementById('redoBtn').addEventListener('click', () => {
+        pendingRecord = null;
+        outputCard.style.display = 'none';
+        output.textContent = '';
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      // コピー
+      document.getElementById('copyBtn').addEventListener('click', async () => {
+        const text = output.textContent;
+        if (!safeText(text)) return;
+        await navigator.clipboard.writeText(text);
+        showToast('コピーしました');
+      });
+
+      // リセット
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        form.reset();
+        uploadedFileName = '';
+        receiptPreviewEl.style.display = 'none';
+        receiptPreviewEl.src = '';
+        receiptUploadStatusEl.textContent = '';
+        receiptUploadStatusEl.className = 'upload-status';
+        purchaseAtEl.value = toLocalDateTimeValue();
+        mapsMsgEl.textContent = '';
+        outputCard.style.display = 'none';
+        output.textContent = '';
+        updateResvFields();
+        startFlow();
+        showToast('全リセットしました');
+      });
+    }
+
+    async function init() {
+      try {
+      purchaseAtEl.value = toLocalDateTimeValue();
+      if (hasDashboard) {
+        rangeEndDateEl.value = todayYmd();
+        const now = new Date();
+        const start = new Date(now);
+        start.setDate(now.getDate() - 6);
+        const z = (n) => String(n).padStart(2, '0');
+        rangeStartDateEl.value = `${start.getFullYear()}-${z(start.getMonth() + 1)}-${z(start.getDate())}`;
+        logStartDateEl.value = rangeStartDateEl.value;
+        logEndDateEl.value = rangeEndDateEl.value;
+      }
+      await loadFlowData();
+      await detectServerMode();
+      await loadTeamData();
+      renderTeamSelectors();
+      renderTeamList();
+      bindEvents();
+      if (!restoreFlowProgress()) startFlow();
+      switchTab('flow');
+      renderDashboard();
+      } catch (err) {
+        console.error('init error:', err);
+        // エラーがあってもフローだけは起動する
+        if (flowData && flowData.start) {
+          if (!restoreFlowProgress()) startFlow();
+        }
+      }
+      // try/catchの外で必ず実行（init失敗でも日付・担当は表示する）
+      refreshTodayBanner();
+    }
+
+    init();
+  </script>
+</body>
+</html>

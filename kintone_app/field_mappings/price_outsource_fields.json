@@ -1,0 +1,252 @@
+{
+  "レコード番号": {
+    "type": "RECORD_NUMBER",
+    "code": "レコード番号",
+    "label": "レコード番号",
+    "noLabel": false
+  },
+  "作業者": {
+    "type": "STATUS_ASSIGNEE",
+    "code": "作業者",
+    "label": "作業者",
+    "enabled": false
+  },
+  "更新者": {
+    "type": "MODIFIER",
+    "code": "更新者",
+    "label": "更新者",
+    "noLabel": false
+  },
+  "作成者": {
+    "type": "CREATOR",
+    "code": "作成者",
+    "label": "作成者",
+    "noLabel": false
+  },
+  "文字列__1行_": {
+    "type": "SINGLE_LINE_TEXT",
+    "code": "文字列__1行_",
+    "label": "project_id",
+    "noLabel": false,
+    "required": false,
+    "minLength": "",
+    "maxLength": "",
+    "expression": "",
+    "hideExpression": false,
+    "unique": false,
+    "defaultValue": ""
+  },
+  "ステータス": {
+    "type": "STATUS",
+    "code": "ステータス",
+    "label": "ステータス",
+    "enabled": false
+  },
+  "ラジオボタン": {
+    "type": "RADIO_BUTTON",
+    "code": "ラジオボタン",
+    "label": "role_id",
+    "noLabel": false,
+    "required": true,
+    "options": {
+      "R01": {
+        "label": "R01",
+        "index": "2"
+      },
+      "R03": {
+        "label": "R03",
+        "index": "1"
+      },
+      "R02": {
+        "label": "R02",
+        "index": "0"
+      }
+    },
+    "defaultValue": "R02",
+    "align": "HORIZONTAL"
+  },
+  "ドロップダウン": {
+    "type": "DROP_DOWN",
+    "code": "ドロップダウン",
+    "label": "price_id",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "PO009": {
+        "label": "PO009",
+        "index": "8"
+      },
+      "PO008": {
+        "label": "PO008",
+        "index": "7"
+      },
+      "PO007": {
+        "label": "PO007",
+        "index": "6"
+      },
+      "PO002": {
+        "label": "PO002",
+        "index": "1"
+      },
+      "PO001": {
+        "label": "PO001",
+        "index": "0"
+      },
+      "PO010": {
+        "label": "PO010",
+        "index": "9"
+      },
+      "PO006": {
+        "label": "PO006",
+        "index": "5"
+      },
+      "PO005": {
+        "label": "PO005",
+        "index": "4"
+      },
+      "PO004": {
+        "label": "PO004",
+        "index": "3"
+      },
+      "PO003": {
+        "label": "PO003",
+        "index": "2"
+      }
+    },
+    "defaultValue": ""
+  },
+  "ラジオボタン_0": {
+    "type": "RADIO_BUTTON",
+    "code": "ラジオボタン_0",
+    "label": "is_default",
+    "noLabel": false,
+    "required": true,
+    "options": {
+      "はい": {
+        "label": "はい",
+        "index": "0"
+      }
+    },
+    "defaultValue": "はい",
+    "align": "HORIZONTAL"
+  },
+  "文字列__1行__0": {
+    "type": "SINGLE_LINE_TEXT",
+    "code": "文字列__1行__0",
+    "label": "valid_until",
+    "noLabel": false,
+    "required": false,
+    "minLength": "",
+    "maxLength": "",
+    "expression": "",
+    "hideExpression": false,
+    "unique": false,
+    "defaultValue": ""
+  },
+  "文字列__1行__1": {
+    "type": "SINGLE_LINE_TEXT",
+    "code": "文字列__1行__1",
+    "label": "notes",
+    "noLabel": false,
+    "required": false,
+    "minLength": "",
+    "maxLength": "",
+    "expression": "",
+    "hideExpression": false,
+    "unique": false,
+    "defaultValue": ""
+  },
+  "更新日時": {
+    "type": "UPDATED_TIME",
+    "code": "更新日時",
+    "label": "更新日時",
+    "noLabel": false
+  },
+  "カテゴリー": {
+    "type": "CATEGORY",
+    "code": "カテゴリー",
+    "label": "カテゴリー",
+    "enabled": false
+  },
+  "ドロップダウン_0": {
+    "type": "DROP_DOWN",
+    "code": "ドロップダウン_0",
+    "label": "worker_id",
+    "noLabel": false,
+    "required": false,
+    "options": {
+      "W010": {
+        "label": "W010",
+        "index": "9"
+      },
+      "W001": {
+        "label": "W001",
+        "index": "0"
+      },
+      "W002": {
+        "label": "W002",
+        "index": "1"
+      },
+      "W003": {
+        "label": "W003",
+        "index": "2"
+      },
+      "W004": {
+        "label": "W004",
+        "index": "3"
+      },
+      "W005": {
+        "label": "W005",
+        "index": "4"
+      },
+      "W006": {
+        "label": "W006",
+        "index": "5"
+      },
+      "W007": {
+        "label": "W007",
+        "index": "6"
+      },
+      "W008": {
+        "label": "W008",
+        "index": "7"
+      },
+      "W009": {
+        "label": "W009",
+        "index": "8"
+      }
+    },
+    "defaultValue": ""
+  },
+  "数値": {
+    "type": "NUMBER",
+    "code": "数値",
+    "label": "unit_price",
+    "noLabel": false,
+    "required": false,
+    "minValue": "",
+    "maxValue": "",
+    "digit": false,
+    "unique": false,
+    "defaultValue": "",
+    "displayScale": "",
+    "unit": "",
+    "unitPosition": "BEFORE"
+  },
+  "作成日時": {
+    "type": "CREATED_TIME",
+    "code": "作成日時",
+    "label": "作成日時",
+    "noLabel": false
+  },
+  "日付": {
+    "type": "DATE",
+    "code": "日付",
+    "label": "valid_from",
+    "noLabel": false,
+    "required": false,
+    "unique": false,
+    "defaultValue": "",
+    "defaultNowValue": true
+  }
+}

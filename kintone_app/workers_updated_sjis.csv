@@ -1,0 +1,11 @@
+worker_id,name,email,phone,is_active,notes,is_site_manager,bank_code,branch_code,account_type,account_number,account_holder_kana
+W001,Aki Tanaka,aki.tanaka@example.com,090-1000-1001,有効,,はい,0005,123,普通,1000000,ﾀﾅｶ ｱｷ
+W002,Hiro Sato,hiro.sato@example.com,090-1000-1002,有効,,はい,0005,123,普通,1000001,ｻﾄｳ ﾋﾛ
+W003,Mina Suzuki,mina.suzuki@example.com,090-1000-1003,有効,,いいえ,0005,123,普通,1000002,ｽｽﾞｷ ﾐﾅ
+W004,Ken Yamamoto,ken.yamamoto@example.com,090-1000-1004,有効,,いいえ,0005,123,普通,1000003,ﾔﾏﾓﾄ ｹﾝ
+W005,Yui Kobayashi,yui.kobayashi@example.com,090-1000-1005,有効,,いいえ,0005,123,普通,1000004,ｺﾊﾞﾔｼ ﾕｲ
+W006,Sora Ito,sora.ito@example.com,090-1000-1006,有効,,いいえ,0005,123,普通,1000005,ｲﾄｳ ｿﾗ
+W007,Rina Nakamura,rina.nakamura@example.com,090-1000-1007,有効,,いいえ,0005,123,普通,1000006,ﾅｶﾑﾗ ﾘﾅ
+W008,Daichi Watanabe,daichi.watanabe@example.com,090-1000-1008,有効,,いいえ,0005,123,普通,1000007,ﾜﾀﾅﾍﾞ ﾀﾞｲﾁ
+W009,Nao Kato,nao.kato@example.com,090-1000-1009,有効,,いいえ,0005,123,普通,1000008,ｶﾄｳ ﾅｵ
+W010,Koki Fujita,koki.fujita@example.com,090-1000-1010,有効,,いいえ,0005,123,普通,1000009,ﾌｼﾞﾀ ｺｳｷ

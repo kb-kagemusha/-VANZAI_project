@@ -1,0 +1,92 @@
+{
+  "app_id": 147,
+  "app_name": "equipment",
+  "fields": [
+    {
+      "code": "作業者",
+      "type": "STATUS_ASSIGNEE",
+      "label": "作業者",
+      "required": false
+    },
+    {
+      "code": "ラジオボタン_2",
+      "type": "RADIO_BUTTON",
+      "label": "description",
+      "required": true
+    },
+    {
+      "code": "ステータス",
+      "type": "STATUS",
+      "label": "ステータス",
+      "required": false
+    },
+    {
+      "code": "ラジオボタン",
+      "type": "RADIO_BUTTON",
+      "label": "equipment_id",
+      "required": true
+    },
+    {
+      "code": "ラジオボタン_0",
+      "type": "RADIO_BUTTON",
+      "label": "name",
+      "required": true
+    },
+    {
+      "code": "ラジオボタン_1",
+      "type": "RADIO_BUTTON",
+      "label": "category",
+      "required": true
+    },
+    {
+      "code": "数値_0",
+      "type": "NUMBER",
+      "label": "available_stock",
+      "required": false
+    },
+    {
+      "code": "カテゴリー",
+      "type": "CATEGORY",
+      "label": "カテゴリー",
+      "required": false
+    },
+    {
+      "code": "数値",
+      "type": "NUMBER",
+      "label": "total_stock",
+      "required": false
+    }
+  ],
+  "system_fields": [
+    {
+      "code": "レコード番号",
+      "type": "RECORD_NUMBER",
+      "label": "レコード番号",
+      "required": false
+    },
+    {
+      "code": "更新者",
+      "type": "MODIFIER",
+      "label": "更新者",
+      "required": false
+    },
+    {
+      "code": "作成者",
+      "type": "CREATOR",
+      "label": "作成者",
+      "required": false
+    },
+    {
+      "code": "更新日時",
+      "type": "UPDATED_TIME",
+      "label": "更新日時",
+      "required": false
+    },
+    {
+      "code": "作成日時",
+      "type": "CREATED_TIME",
+      "label": "作成日時",
+      "required": false
+    }
+  ]
+}

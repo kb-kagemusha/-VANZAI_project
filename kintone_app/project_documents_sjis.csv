@@ -1,0 +1,4 @@
+document_id,project_id,title,document_type,file,uploaded_by,uploaded_at,is_public,notes
+PD001,P001,集合場所案内,notice,,ops,2026-01-05 10:00,はい,CSVでは添付不可
+PD002,P001,会場マップ,map,,ops,2026-01-05 10:10,はい,CSVでは添付不可
+PD003,P002,注意事項,manual,,ops,2026-01-08 09:00,いいえ,CSVでは添付不可

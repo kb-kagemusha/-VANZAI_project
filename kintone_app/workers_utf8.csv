@@ -1,0 +1,11 @@
+worker_id,name,email,phone,is_active,notes
+W001,Aki Tanaka,aki.tanaka@example.com,090-1000-1001,有効,
+W002,Hiro Sato,hiro.sato@example.com,090-1000-1002,有効,
+W003,Mina Suzuki,mina.suzuki@example.com,090-1000-1003,有効,
+W004,Ken Yamamoto,ken.yamamoto@example.com,090-1000-1004,有効,
+W005,Yui Kobayashi,yui.kobayashi@example.com,090-1000-1005,有効,
+W006,Sora Ito,sora.ito@example.com,090-1000-1006,有効,
+W007,Rina Nakamura,rina.nakamura@example.com,090-1000-1007,有効,
+W008,Daichi Watanabe,daichi.watanabe@example.com,090-1000-1008,有効,
+W009,Nao Kato,nao.kato@example.com,090-1000-1009,有効,
+W010,Koki Fujita,koki.fujita@example.com,090-1000-1010,有効,
