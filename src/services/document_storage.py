@@ -61,6 +61,10 @@ def build_payout_pdf_object_key(payout: Payout) -> str:
     return f"payouts/{payout.period_key}/payout_{payout.id}_v{payout.version}.pdf"
 
 
+_ALLOWED_RECEIPT_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
+
+
 def build_receipt_object_key(expense_id: str, expense_date: date, original_name: str | None) -> str:
-    suffix = Path(original_name or "receipt").suffix.lower() or ".bin"
+    raw_suffix = Path(original_name or "").suffix.lower()
+    suffix = raw_suffix if raw_suffix in _ALLOWED_RECEIPT_SUFFIXES else ".bin"
     return f"receipts/{expense_date.strftime('%Y%m')}/expense_{expense_id}{suffix}"

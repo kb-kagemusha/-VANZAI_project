@@ -102,9 +102,21 @@ app = FastAPI(
 )
 
 # CORS設定
+# 本番環境は CORS_ALLOW_ORIGINS 環境変数でカンマ区切りドメインを上書きすること
+_default_origins = [
+    "http://localhost:3000",  # admin-web
+    "http://localhost:3001",  # staff-mobile
+    "http://localhost:8501",  # Streamlit
+]
+_cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+_cors_origins = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else _default_origins
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8501"],  # Streamlit用
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
