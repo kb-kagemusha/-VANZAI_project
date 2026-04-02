@@ -46,7 +46,7 @@ export function ActualsPage() {
           <h2>{monthValue}</h2>
           <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
         </div>
-        <p>自分の実績だけを worker ロールで参照します。</p>
+        <p>自分のスタッフ権限で実績を参照します。</p>
       </section>
 
       <section className="panel-grid three-up">

@@ -63,13 +63,13 @@ export function TodayAssignmentsPage() {
   });
 
   if (assignmentsQuery.isLoading || actualsQuery.isLoading) {
-    return <div className="panel-card">本日のアサインを読み込み中...</div>;
+    return <div className="panel-card">本日の配置を読み込み中...</div>;
   }
 
   if (assignmentsQuery.isError || actualsQuery.isError) {
     return (
       <div className="panel-card">
-        <h2>本日のアサインを取得できませんでした</h2>
+        <h2>本日の配置を取得できませんでした</h2>
         <p>
           {assignmentsQuery.error instanceof ApiError
             ? assignmentsQuery.error.message
@@ -94,14 +94,14 @@ export function TodayAssignmentsPage() {
       <section className="hero-panel sunrise">
         <p className="panel-label">今日の動き</p>
         <h2>{formatDate(today)}</h2>
-        <p>{assignments.length > 0 ? `${assignments.length} 件のアサインがあります。` : "本日のアサインはありません。"}</p>
+        <p>{assignments.length > 0 ? `${assignments.length} 件の配置があります。` : "本日の配置はありません。"}</p>
       </section>
 
       <section className="panel-grid two-up">
         <article className="panel-card accent-orange">
           <p className="panel-label">出勤中</p>
           <strong>{checkedInCount} 件</strong>
-          <p>現場入り済みで、まだ退勤していないアサイン数です。</p>
+          <p>現場入り済みで、まだ退勤していない配置数です。</p>
         </article>
         <article className="panel-card accent-blue">
           <p className="panel-label">退勤済み</p>
@@ -114,7 +114,7 @@ export function TodayAssignmentsPage() {
 
       <section className="list-section">
         <div className="section-heading">
-          <h2>本日のアサイン</h2>
+          <h2>本日の配置</h2>
           <span>{assignments.length} 件</span>
         </div>
 
@@ -159,7 +159,7 @@ export function TodayAssignmentsPage() {
               </dl>
               <div className="button-row">
                 {attendanceByAssignment[assignment.id]?.end_time ? (
-                  <div className="note-banner">このアサインは退勤まで記録済みです。</div>
+                  <div className="note-banner">この配置は退勤まで記録済みです。</div>
                 ) : attendanceByAssignment[assignment.id]?.start_time ? (
                   <button
                     type="button"

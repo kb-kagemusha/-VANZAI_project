@@ -529,7 +529,7 @@ export function DashboardPage() {
       </section>
 
       <section className="summary-grid">
-        <SummaryCard label="差異アサイン" value={findCount("assignment_variance")} accent="#c8553d" />
+        <SummaryCard label="差異配置" value={findCount("assignment_variance")} accent="#c8553d" />
         <SummaryCard label="単価未設定" value={findCount("missing_price")} accent="#d98f2b" />
         <SummaryCard label="未発行請求" value={findCount("unissued_invoice")} accent="#2a6f97" />
         <SummaryCard label="未処理支払" value={findCount("unprocessed_payout")} accent="#4a7c59" />
@@ -598,7 +598,7 @@ export function DashboardPage() {
           rows={pendingAssignmentResponses}
           getRowKey={(row) => row.assignment_id}
           emptyTitle="未回答の予定確認はありません"
-          emptyDescription="対象月の pending assignment は現時点で検知されていません。"
+          emptyDescription="対象月の未回答配置は現時点で検知されていません。"
         />
       </section>
 

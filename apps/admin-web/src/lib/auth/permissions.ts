@@ -30,8 +30,8 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/operations/assignments",
-    label: "アサイン一覧",
-    description: "予定と確定アサインの参照",
+    label: "配置一覧",
+    description: "予定と確定配置の参照",
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {

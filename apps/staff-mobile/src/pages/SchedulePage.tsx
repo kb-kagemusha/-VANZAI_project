@@ -101,7 +101,7 @@ export function SchedulePage() {
           <h2>{monthValue}</h2>
           <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
         </div>
-        <p>対象月の自分のアサインを日付順に確認し、参加可否をそのまま返信します。</p>
+        <p>対象月の自分の配置を日付順に確認し、参加可否をそのまま返信します。</p>
       </section>
 
       {message ? <section className="panel-card note-banner action-banner">{message}</section> : null}

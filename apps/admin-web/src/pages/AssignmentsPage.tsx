@@ -180,14 +180,14 @@ export function AssignmentsPage() {
       ]);
     },
     onError: (error: unknown) => {
-      setFormError(error instanceof ApiError ? error.message : "アサイン作成に失敗しました");
+      setFormError(error instanceof ApiError ? error.message : "配置作成に失敗しました");
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!editingAssignment) {
-        throw new Error("対象アサインを選択してください");
+        throw new Error("対象配置を選択してください");
       }
       return updateAssignment(editingAssignment.id, {
         shift_slot_id: editShiftSlotId,
@@ -206,14 +206,14 @@ export function AssignmentsPage() {
       ]);
     },
     onError: (error: unknown) => {
-      setEditError(error instanceof ApiError ? error.message : "アサイン更新に失敗しました");
+      setEditError(error instanceof ApiError ? error.message : "配置更新に失敗しました");
     },
   });
 
   const statusMutation = useMutation({
     mutationFn: () => {
       if (!selectedAssignment) {
-        throw new Error("対象アサインを選択してください");
+        throw new Error("対象配置を選択してください");
       }
       return updateAssignmentStatus(selectedAssignment.id, {
         status: nextStatus,
@@ -232,7 +232,7 @@ export function AssignmentsPage() {
       ]);
     },
     onError: (error: unknown) => {
-      setActionError(error instanceof ApiError ? error.message : "アサイン状態更新に失敗しました");
+      setActionError(error instanceof ApiError ? error.message : "配置状態更新に失敗しました");
     },
   });
 
@@ -285,7 +285,7 @@ export function AssignmentsPage() {
       ]);
     },
     onError: (error: unknown) => {
-      setBulkError(error instanceof ApiError ? error.message : "アサイン一括状態更新に失敗しました");
+      setBulkError(error instanceof ApiError ? error.message : "配置一括状態更新に失敗しました");
     },
   });
 
@@ -320,7 +320,7 @@ export function AssignmentsPage() {
   });
 
   if (assignmentsQuery.isLoading) {
-    return <LoadingOverlay label="アサイン一覧を読み込み中..." />;
+    return <LoadingOverlay label="配置一覧を読み込み中..." />;
   }
 
   if (assignmentsQuery.error instanceof ApiError && assignmentsQuery.error.status === 403) {
@@ -328,7 +328,7 @@ export function AssignmentsPage() {
   }
 
   if (assignmentsQuery.isError || !assignmentsQuery.data) {
-    return <ErrorState title="アサイン一覧の取得に失敗しました" description="認証または API 疎通を確認してください。" />;
+    return <ErrorState title="配置一覧の取得に失敗しました" description="認証または API 疎通を確認してください。" />;
   }
 
   const currentRows = assignmentsQuery.data.items;
@@ -393,7 +393,7 @@ export function AssignmentsPage() {
     const remainingCount = selectedAssignmentIds.length - previewLabels.length;
     const suffix = remainingCount > 0 ? ` ほか${remainingCount}件` : "";
     const targetLabel = bulkNextStatus === "tentative" ? "仮確定" : bulkNextStatus === "confirmed" ? "確定" : "取消";
-    const previewText = previewLabels.length > 0 ? previewLabels.join("、") : "他ページで選択されたアサイン";
+    const previewText = previewLabels.length > 0 ? previewLabels.join("、") : "他ページで選択された配置";
     const confirmationMessage = `選択中 ${selectedAssignmentIds.length} 件を ${targetLabel} に更新します。対象: ${previewText}${suffix}`;
 
     if (!window.confirm(confirmationMessage)) {
@@ -405,10 +405,10 @@ export function AssignmentsPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader title="アサイン一覧" description="予定、役割、ロック単価を一覧で確認し、作成・編集・単件/一括の状態変更を行います。" />
+      <PageHeader title="配置一覧" description="予定、役割、ロック単価を一覧で確認し、作成・編集・単件/一括の状態変更を行います。" />
 
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
-        <strong>アサインを作成</strong>
+        <strong>配置を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
           <label>
             案件
@@ -470,7 +470,7 @@ export function AssignmentsPage() {
             onClick={() => createMutation.mutate()}
             disabled={!createShiftSlotId || !createWorkerId || !createRoleId || createMutation.isPending}
           >
-            {createMutation.isPending ? "作成中..." : "アサインを作成"}
+            {createMutation.isPending ? "作成中..." : "配置を作成"}
           </button>
         </div>
       </section>
@@ -556,7 +556,7 @@ export function AssignmentsPage() {
         {bulkNextStatus !== "canceled" ? (
           <label>
             復帰理由
-            <textarea value={bulkReopenReason} onChange={(event) => setBulkReopenReason(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} placeholder="取消中のアサインを含む場合は必須" />
+            <textarea value={bulkReopenReason} onChange={(event) => setBulkReopenReason(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} placeholder="取消中の配置を含む場合は必須" />
           </label>
         ) : null}
         {bulkError ? <p className="form-error">{bulkError}</p> : null}
@@ -567,7 +567,7 @@ export function AssignmentsPage() {
             onClick={submitBulkStatusUpdate}
             disabled={selectedAssignmentIds.length === 0 || bulkStatusMutation.isPending || (bulkNextStatus === "canceled" && !bulkCancelReason.trim())}
           >
-            {bulkStatusMutation.isPending ? "一括更新中..." : "選択中アサインを更新"}
+            {bulkStatusMutation.isPending ? "一括更新中..." : "選択中配置を更新"}
           </button>
         </div>
       </section>
@@ -662,7 +662,7 @@ export function AssignmentsPage() {
             header: (
               <input
                 type="checkbox"
-                aria-label="このページのアサインを全選択"
+                aria-label="このページの配置を全選択"
                 checked={allRowsSelected}
                 onChange={(event) => toggleCurrentPageSelection(event.target.checked)}
               />
@@ -727,8 +727,8 @@ export function AssignmentsPage() {
         ]}
         rows={assignmentsQuery.data.items}
         getRowKey={(row) => row.id}
-        emptyTitle="アサインはありません"
-        emptyDescription="条件に一致するアサインデータは見つかりませんでした。"
+        emptyTitle="配置はありません"
+        emptyDescription="条件に一致する配置データは見つかりませんでした。"
       />
 
       {editingAssignment ? (
@@ -779,7 +779,7 @@ export function AssignmentsPage() {
               onClick={() => updateMutation.mutate()}
               disabled={!editShiftSlotId || !editWorkerId || !editRoleId || updateMutation.isPending}
             >
-              {updateMutation.isPending ? "更新中..." : "アサインを更新"}
+              {updateMutation.isPending ? "更新中..." : "配置を更新"}
             </button>
             <button
               type="button"

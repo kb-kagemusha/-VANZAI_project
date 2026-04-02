@@ -111,7 +111,7 @@ export function ExpensesPage() {
           <h2>{monthValue}</h2>
           <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
         </div>
-        <p>自分のアサイン案件に対して、そのまま経費を申請します。</p>
+        <p>自分の配置案件に対して、そのまま経費を申請します。</p>
       </section>
 
       <section className="panel-card accent-sand">

@@ -250,7 +250,7 @@ export function AssignmentResponsesPage() {
           <span>このページで {selectedAssignmentIds.length} 件選択中</span>
         </div>
         <p style={{ margin: 0, color: "var(--color-text-subtle, #667085)" }}>
-          未回答 assignment を worker 単位で束ねて再送します。送信可否はサーバーの EMAIL_DRY_RUN 設定に従います。
+          未回答の配置をスタッフ単位で束ねて再送します。送信可否はサーバーの EMAIL_DRY_RUN 設定に従います。
         </p>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <button type="button" onClick={() => toggleAllRows(true)} disabled={currentRows.length === 0}>このページを全選択</button>
@@ -269,7 +269,7 @@ export function AssignmentResponsesPage() {
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <strong>直近催促履歴</strong>
-          <span>このページに表示中の assignment に紐づく直近 20 件</span>
+          <span>このページに表示中の配置に紐づく直近 20 件</span>
         </div>
         <DataTable
           columns={[
@@ -283,14 +283,14 @@ export function AssignmentResponsesPage() {
           rows={reminderHistoryQuery.data?.items ?? []}
           getRowKey={(row) => row.audit_log_id}
           emptyTitle="催促履歴はありません"
-          emptyDescription="このページの assignment に対する催促履歴はまだ記録されていません。"
+          emptyDescription="このページの配置に対する催促履歴はまだ記録されていません。"
         />
       </section>
 
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <strong>直近管理者通知履歴</strong>
-          <span>このページに表示中の assignment に紐づく直近 20 件</span>
+          <span>このページに表示中の配置に紐づく直近 20 件</span>
         </div>
         <DataTable
           columns={[
@@ -304,7 +304,7 @@ export function AssignmentResponsesPage() {
           rows={escalationHistoryQuery.data?.items ?? []}
           getRowKey={(row) => row.audit_log_id}
           emptyTitle="管理者通知履歴はありません"
-          emptyDescription="このページの assignment に対する管理者通知履歴はまだ記録されていません。"
+          emptyDescription="このページの配置に対する管理者通知履歴はまだ記録されていません。"
         />
       </section>
 
@@ -367,7 +367,7 @@ export function AssignmentResponsesPage() {
         rows={assignmentsQuery.data.items}
         getRowKey={(row) => row.id}
         emptyTitle="未回答の予定確認はありません"
-        emptyDescription="条件に一致する pending assignment はありません。"
+        emptyDescription="条件に一致する未回答配置はありません。"
       />
 
       <PaginationBar
