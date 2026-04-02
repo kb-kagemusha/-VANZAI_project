@@ -250,6 +250,51 @@ button {
   font-size: 0.95rem;
 }
 
+.worker-preferences-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 249, 238, 0.72);
+  border: 1px solid var(--line);
+}
+
+.worker-preferences-header,
+.worker-preferences-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.worker-preferences-header p,
+.worker-preferences-footer {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.worker-preferences-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+
+.worker-preference-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--line);
+}
+
+.worker-preference-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .upload-file-field input[type="file"] {
   min-width: 0;
   padding: 0.75rem;
@@ -389,6 +434,16 @@ button {
 .status-badge.positive {
   background: rgba(74, 124, 89, 0.14);
   color: #2f6541;
+}
+
+.status-badge.active {
+  background: rgba(30, 95, 168, 0.14);
+  color: #1a4f8a;
+}
+
+.status-badge.inactive {
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
 }
 
 .status-badge.attention {

@@ -6,6 +6,7 @@ import { AvailabilityPage } from "../pages/AvailabilityPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { LoginPage } from "../pages/LoginPage";
+import { PersonalSettingsPage } from "../pages/PersonalSettingsPage";
 import { SchedulePage } from "../pages/SchedulePage";
 import { TodayAssignmentsPage } from "../pages/TodayAssignmentsPage";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
@@ -24,6 +25,7 @@ export function App() {
             <Route path="/today" element={<TodayAssignmentsPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/availability" element={<AvailabilityPage />} />
+            <Route path="/settings" element={<PersonalSettingsPage />} />
             <Route path="/actuals" element={<ActualsPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
           </Route>

@@ -8,6 +8,7 @@ import type {
   PageResponse,
   TokenResponse,
   WorkerAvailabilityListItem,
+  WorkerAvailabilityPreference,
 } from "../../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -35,7 +36,7 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
     url.searchParams.set(key, String(value));
   });
 
-  return API_BASE_URL ? `${url.pathname}${url.search}` : `${path}${url.search}`;
+  return API_BASE_URL ? url.toString() : `${path}${url.search}`;
 }
 
 async function readResponse(response: Response): Promise<unknown> {
@@ -227,6 +228,21 @@ export function getWorkerAvailability(params: Record<string, string | number | b
 export function upsertWorkerAvailability(body: { availability_date: string; status: string; notes?: string }) {
   return apiFetch<WorkerAvailabilityListItem>("/api/worker-availability", {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getWorkerAvailabilityPreferences() {
+  return apiFetch<WorkerAvailabilityPreference>("/api/worker-availability/preferences");
+}
+
+export function upsertWorkerAvailabilityPreferences(body: {
+  weekly_default_statuses: Record<string, string>;
+  holiday_default_status?: string | null;
+  auto_apply_enabled: boolean;
+}) {
+  return apiFetch<WorkerAvailabilityPreference>("/api/worker-availability/preferences", {
+    method: "PUT",
     body: JSON.stringify(body),
   });
 }

@@ -535,7 +535,7 @@ export function DashboardPage() {
         <SummaryCard label="未処理支払" value={findCount("unprocessed_payout")} accent="#4a7c59" />
         <SummaryCard label="送信先未設定支払" value={findCount("missing_payout_recipient")} accent="#b42318" />
         <SummaryCard label="予定確認未回答" value={findCount("pending_assignment_response")} accent="#0f766e" />
-        <SummaryCard label="要エスカレ" value={findCount("escalated_assignment_response")} accent="#9f1239" />
+        <SummaryCard label="要対応" value={findCount("escalated_assignment_response")} accent="#9f1239" />
         <SummaryCard label="未締め案件" value={findCount("unclosed_projects")} accent="#6a4c93" />
       </section>
 
@@ -544,7 +544,7 @@ export function DashboardPage() {
           <div>
             <h3 className="section-title">予定確認監視</h3>
             <p style={{ margin: 0, color: "var(--color-muted)" }}>
-              未回答の予定確認を一覧化し、稼働日接近・依頼経過・メール未設定を要エスカレーションとして監視します。
+              未回答の予定確認を一覧化し、稼働日接近・依頼経過・メール未設定を要対応として監視します。
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -572,7 +572,7 @@ export function DashboardPage() {
         <div style={{ display: "grid", gap: "0.35rem", padding: "0.75rem", border: "1px solid var(--color-border, #d0d5dd)", borderRadius: "0.75rem" }}>
           <strong>監視サマリー</strong>
           <span>未回答: {pendingAssignmentResponses.length} 件</span>
-          <span>要エスカレーション: {escalatedAssignmentResponses.length} 件</span>
+          <span>要対応: {escalatedAssignmentResponses.length} 件</span>
           <span>継続監視: {pendingAssignmentResponses.length - escalatedAssignmentResponses.length} 件</span>
         </div>
         <DataTable
@@ -589,7 +589,7 @@ export function DashboardPage() {
               header: "対応水準",
               render: (row) => (
                 <span className={`status-badge ${row.escalation_level === "escalate" ? "attention" : "neutral"}`}>
-                  {row.escalation_level === "escalate" ? "要エスカレーション" : "監視中"}
+                  {row.escalation_level === "escalate" ? "要対応" : "監視中"}
                 </span>
               ),
             },

@@ -10,6 +10,7 @@
     "smoke:e2e": "playwright test e2e/phase5-smoke.spec.ts --reporter=line"
   },
   "dependencies": {
+    "@holiday-jp/holiday_jp": "^2.5.1",
     "@tanstack/react-query": "^5.90.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

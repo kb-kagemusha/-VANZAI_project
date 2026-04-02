@@ -126,6 +126,7 @@ class AuditAction(str, Enum):
     ATTENDANCE_CHECKED_IN = "attendance_checked_in"
     ATTENDANCE_CHECKED_OUT = "attendance_checked_out"
     AVAILABILITY_UPDATED = "availability_updated"
+    STAFF_AVAILABILITY_PREFERENCES_UPDATED = "staff_availability_preferences_updated"
     
     # アサイン関連
     ASSIGNMENT_CANCELED = "assignment_canceled"
@@ -284,8 +285,10 @@ class ExpenseStatus(str, Enum):
 
 class AvailabilityStatus(str, Enum):
     """稼働可否ステータス"""
-    AVAILABLE = "available"
+    AVAILABLE_ALL_DAY = "available_all_day"
+    AVAILABLE_AFTER_15 = "available_after_15"
     UNAVAILABLE = "unavailable"
+    CONSULT_REQUIRED = "consult_required"
     UNDECIDED = "undecided"
 
 

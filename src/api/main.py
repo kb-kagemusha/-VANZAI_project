@@ -34,6 +34,7 @@ from src.api.schemas import (
     DashboardResponse, UnprocessedItem, VarianceAlert, ClosingStatusItem,
     ActualListQuery, ActualListItem, ActualListResponse, AttendanceActionRequest, AttendanceRecordResponse,
     WorkerAvailabilityListQuery, WorkerAvailabilityListItem, WorkerAvailabilityListResponse, WorkerAvailabilityUpsertRequest,
+    WorkerAvailabilityPreferenceResponse, WorkerAvailabilityPreferenceUpsertRequest,
     AssignmentListQuery, AssignmentListItem, AssignmentListResponse, AssignmentReminderSendRequest, AssignmentReminderSendResponse, AssignmentReminderSendWorkerResult, AssignmentReminderHistoryRequest, AssignmentReminderHistoryItem, AssignmentReminderHistoryResponse, AssignmentEscalationSendRequest, AssignmentEscalationSendResponse, AssignmentEscalationRecipientResult, AssignmentEscalationHistoryRequest, AssignmentEscalationHistoryItem, AssignmentEscalationHistoryResponse, AssignmentCancellationHistoryQuery, AssignmentCancellationHistoryItem, AssignmentCancellationHistoryResponse, AssignmentSelectionSetListQuery, AssignmentSelectionSetItem, AssignmentSelectionSetListResponse, AssignmentSelectionSetCreateRequest, AssignmentCreateRequest, AssignmentUpdateRequest, AssignmentBulkStatusUpdateRequest, AssignmentStatusUpdateRequest, AssignmentWorkerResponseUpdateRequest, AssignmentBulkMutationResponse,
     ProjectListQuery, ProjectListItem, ProjectListResponse, ProjectCreateRequest, ProjectUpdateRequest, ProjectNotesUpdateRequest,
     ShiftSlotListQuery, ShiftSlotListItem, ShiftSlotListResponse, ShiftSlotCreateRequest, ShiftSlotUpdateRequest, ShiftSlotNotesUpdateRequest,
@@ -234,10 +235,20 @@ def _receipt_storage() -> ObjectStorage:
 
 
 def _validate_availability_status(value: str) -> str:
+    legacy_aliases = {
+        "available": AvailabilityStatus.AVAILABLE_ALL_DAY.value,
+    }
+    normalized = legacy_aliases.get(value, value)
     try:
-        return AvailabilityStatus(value).value
+        return AvailabilityStatus(normalized).value
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="status は available / unavailable / undecided のいずれかで指定してください") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "status は available_all_day / available_after_15 / unavailable / consult_required "
+                "/ undecided のいずれかで指定してください"
+            ),
+        ) from exc
 
 
 def _serialize_attendance_record(actual, assignment, worker_name: str, role_name: str, import_batch_file_name: str) -> AttendanceRecordResponse:
@@ -272,6 +283,25 @@ def _serialize_worker_availability_item(entry, worker_name: str) -> WorkerAvaila
         notes=entry.notes,
         updated_at=entry.updated_at,
     )
+
+
+def _serialize_worker_availability_preference(entry) -> WorkerAvailabilityPreferenceResponse:
+    return WorkerAvailabilityPreferenceResponse(
+        worker_id=entry.worker_id,
+        weekly_default_statuses=entry.weekly_default_statuses or {},
+        holiday_default_status=entry.holiday_default_status,
+        auto_apply_enabled=entry.auto_apply_enabled,
+        updated_at=entry.updated_at,
+    )
+
+
+def _validate_weekly_default_statuses(value: dict[str, str]) -> dict[str, str]:
+    validated: dict[str, str] = {}
+    for key, status_value in value.items():
+        if key not in {"0", "1", "2", "3", "4", "5", "6"}:
+          raise HTTPException(status_code=400, detail="weekly_default_statuses のキーは 0-6 の曜日文字列で指定してください")
+        validated[key] = _validate_availability_status(status_value)
+    return validated
 
 
 def _serialize_expense_list_item(expense, project_name: str, worker_name: str | None) -> ExpenseListItem:
@@ -1482,6 +1512,108 @@ async def upsert_worker_availability(
     db.refresh(entry)
 
     return _serialize_worker_availability_item(entry, worker.name)
+
+
+@app.get("/api/worker-availability/preferences", response_model=WorkerAvailabilityPreferenceResponse, tags=["Worker Availability"])
+async def get_worker_availability_preferences(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者の基本スケジュール設定を取得する"""
+    try:
+        check_permission(current_user, Permission.AVAILABILITY_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    if not current_user.worker_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
+
+    from src.models.master import WorkerAvailabilityPreference
+
+    entry = db.query(WorkerAvailabilityPreference).filter(WorkerAvailabilityPreference.worker_id == current_user.worker_id).first()
+    if entry is None:
+        return WorkerAvailabilityPreferenceResponse(worker_id=current_user.worker_id)
+
+    return _serialize_worker_availability_preference(entry)
+
+
+@app.get("/api/workers/{worker_id}/availability-preferences", response_model=WorkerAvailabilityPreferenceResponse, tags=["Master"])
+async def get_worker_availability_preferences_for_admin(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """管理画面向けに稼働者の基本スケジュール設定を取得する"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Worker, WorkerAvailabilityPreference
+
+    worker = db.get(Worker, worker_id)
+    if worker is None or worker.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    entry = db.query(WorkerAvailabilityPreference).filter(WorkerAvailabilityPreference.worker_id == worker_id).first()
+    if entry is None:
+        return WorkerAvailabilityPreferenceResponse(worker_id=worker_id)
+
+    return _serialize_worker_availability_preference(entry)
+
+
+@app.put("/api/worker-availability/preferences", response_model=WorkerAvailabilityPreferenceResponse, tags=["Worker Availability"])
+async def upsert_worker_availability_preferences(
+    request: WorkerAvailabilityPreferenceUpsertRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者の基本スケジュール設定を登録・更新する"""
+    try:
+        check_permission(current_user, Permission.AVAILABILITY_WRITE)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    if not current_user.worker_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
+
+    from src.models.master import WorkerAvailabilityPreference
+
+    weekly_default_statuses = _validate_weekly_default_statuses(request.weekly_default_statuses)
+    holiday_default_status = _validate_availability_status(request.holiday_default_status) if request.holiday_default_status else None
+
+    entry = db.query(WorkerAvailabilityPreference).filter(WorkerAvailabilityPreference.worker_id == current_user.worker_id).first()
+    if entry is None:
+        entry = WorkerAvailabilityPreference(
+            id=generate_ulid(),
+            worker_id=current_user.worker_id,
+            weekly_default_statuses=weekly_default_statuses,
+            holiday_default_status=holiday_default_status,
+            auto_apply_enabled=request.auto_apply_enabled,
+        )
+        db.add(entry)
+    else:
+        entry.weekly_default_statuses = weekly_default_statuses
+        entry.holiday_default_status = holiday_default_status
+        entry.auto_apply_enabled = request.auto_apply_enabled
+
+    AuditService(db).log(
+        AuditAction.STAFF_AVAILABILITY_PREFERENCES_UPDATED,
+        target_type="worker_availability_preferences",
+        target_id=entry.id,
+        actor=current_user.username,
+        actor_role=current_user.role,
+        after_value={
+            "worker_id": current_user.worker_id,
+            "weekly_default_statuses": weekly_default_statuses,
+            "holiday_default_status": holiday_default_status,
+            "auto_apply_enabled": request.auto_apply_enabled,
+        },
+    )
+    db.commit()
+    db.refresh(entry)
+
+    return _serialize_worker_availability_preference(entry)
 
 
 # ===========================
@@ -4874,6 +5006,44 @@ async def update_worker_master(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="稼働者更新に失敗しました")
+
+
+@app.delete("/api/workers/{worker_id}", status_code=204, tags=["Master"])
+async def delete_worker_master(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者削除（論理削除）"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        from src.models.master import Worker
+
+        worker = db.get(Worker, worker_id)
+        if not worker or worker.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+
+        from datetime import datetime
+
+        worker.deleted_at = datetime.utcnow()
+
+        AuditService(db).log(
+            "worker_deleted",
+            target_type="worker",
+            target_id=worker.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            before_value={"name": worker.name, "email": worker.email},
+        )
+        db.commit()
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="稼働者削除に失敗しました")
 
 
 @app.get("/api/suppliers", response_model=SupplierListResponse, tags=["Master"])

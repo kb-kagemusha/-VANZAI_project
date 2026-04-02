@@ -17,6 +17,7 @@ import { PayoutsPage } from "../pages/PayoutsPage";
 import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
+import { WorkersPage } from "../pages/WorkersPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -114,6 +115,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
                 <PriceManagementPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/workers"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <WorkersPage />
               </PermissionRoute>
             }
           />

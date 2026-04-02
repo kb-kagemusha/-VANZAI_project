@@ -176,8 +176,75 @@ button {
   color: var(--text-subtle);
 }
 
+.mobile-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.header-action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .mobile-header-meta button {
   padding: 0.5rem 0.8rem;
+}
+
+.mobile-status-band {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem;
+  border-radius: 26px;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at top right, rgba(242, 158, 76, 0.2), transparent 28%),
+    linear-gradient(145deg, rgba(255, 252, 246, 0.95), rgba(237, 244, 251, 0.86));
+  box-shadow: var(--shadow);
+}
+
+.mobile-status-band-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mobile-status-band-copy h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.mobile-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.mobile-status-card {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(24, 32, 41, 0.08);
+}
+
+.mobile-status-kicker {
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mobile-status-emphasis {
+  font-size: 1rem;
+}
+
+.mobile-status-meta {
+  font-size: 0.76rem;
+  color: var(--text-subtle);
 }
 
 .mobile-main,
@@ -334,6 +401,26 @@ button {
   color: var(--success);
 }
 
+.status-available_all_day {
+  background: rgba(207, 240, 223, 0.95);
+  color: var(--success);
+}
+
+.status-available_after_15 {
+  background: rgba(221, 235, 252, 0.95);
+  color: var(--accent-deep);
+}
+
+.status-unavailable {
+  background: rgba(248, 214, 220, 0.95);
+  color: var(--danger);
+}
+
+.status-consult_required {
+  background: rgba(248, 225, 174, 0.9);
+  color: #7a5215;
+}
+
 .status-accepted {
   background: rgba(207, 240, 223, 0.95);
   color: var(--success);
@@ -436,6 +523,189 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.calendar-weekdays {
+  margin-bottom: 0.55rem;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+}
+
+.calendar-spacer {
+  min-height: 5.9rem;
+}
+
+.calendar-day {
+  display: grid;
+  align-content: space-between;
+  gap: 0.55rem;
+  min-height: 5.9rem;
+  padding: 0.75rem 0.65rem;
+  text-align: left;
+  border-radius: 20px;
+  border: 1px solid rgba(24, 32, 41, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.calendar-day.status-available_all_day {
+  background: linear-gradient(180deg, rgba(226, 247, 236, 0.96), rgba(207, 240, 223, 0.9));
+  border-color: rgba(13, 122, 85, 0.18);
+  color: #0d6d4d;
+}
+
+.calendar-day.status-available_after_15 {
+  background: linear-gradient(180deg, rgba(235, 243, 255, 0.96), rgba(221, 235, 252, 0.92));
+  border-color: rgba(21, 74, 120, 0.18);
+  color: #154a78;
+}
+
+.calendar-day.status-unavailable {
+  background: linear-gradient(180deg, rgba(254, 236, 239, 0.97), rgba(248, 214, 220, 0.92));
+  border-color: rgba(157, 49, 65, 0.2);
+  color: #8d2032;
+}
+
+.calendar-day.status-consult_required {
+  background: linear-gradient(180deg, rgba(253, 244, 212, 0.98), rgba(248, 225, 174, 0.9));
+  border-color: rgba(122, 82, 21, 0.18);
+  color: #7a5215;
+}
+
+.calendar-day.status-blank {
+  background: rgba(255, 255, 255, 0.84);
+  color: #223040;
+}
+
+.calendar-day.selected {
+  border-color: rgba(21, 74, 120, 0.34);
+  box-shadow: inset 0 0 0 2px rgba(21, 74, 120, 0.12);
+}
+
+.calendar-day-top,
+.calendar-detail-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-day-body,
+.calendar-detail-card,
+.calendar-notes-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.calendar-day-number {
+  font-size: 1rem;
+}
+
+.calendar-day-status {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.calendar-day-weekday,
+.calendar-day-assignment,
+.calendar-day-note {
+  font-size: 0.72rem;
+  opacity: 0.88;
+}
+
+.calendar-day-auto-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(24, 32, 41, 0.12);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.auto-candidate-banner {
+  background: rgba(248, 225, 174, 0.36);
+  color: #7a5215;
+}
+
+.settings-stack,
+.settings-grid,
+.settings-preview-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(24, 32, 41, 0.08);
+}
+
+.settings-checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.settings-toggle-card {
+  justify-content: space-between;
+}
+
+.settings-helper-copy,
+.settings-preview-meta,
+.weekday-setting-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-subtle);
+}
+
+.weekday-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.weekday-setting-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(24, 32, 41, 0.08);
+}
+
+.weekday-setting-name {
+  font-weight: 700;
+}
+
+.settings-preview-body {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.settings-preview-item,
+.settings-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .text-link {
   color: var(--accent-deep);
   font-weight: 700;
@@ -454,6 +724,10 @@ button {
     display: grid;
   }
 
+  .mobile-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .two-up,
   .three-up,
   .four-up,
@@ -464,5 +738,49 @@ button {
   .response-meta,
   .response-actions {
     grid-template-columns: 1fr;
+  }
+
+  .settings-grid,
+  .weekday-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-weekdays,
+  .calendar-grid {
+    gap: 0.35rem;
+  }
+
+  .calendar-day,
+  .calendar-spacer {
+    min-height: 4.85rem;
+  }
+
+  .calendar-day {
+    padding: 0.55rem 0.45rem;
+    border-radius: 16px;
+  }
+
+  .calendar-day-number {
+    font-size: 0.92rem;
+  }
+
+  .calendar-day-status,
+  .calendar-day-weekday,
+  .calendar-day-assignment,
+  .calendar-day-note,
+  .calendar-day-auto-badge,
+  .calendar-weekdays span {
+    font-size: 0.65rem;
+  }
+
+  .calendar-detail-actions {
+    display: grid;
+  }
+
+  .mobile-header-actions,
+  .settings-actions,
+  .settings-preview-item {
+    display: grid;
+    justify-content: stretch;
   }
 }

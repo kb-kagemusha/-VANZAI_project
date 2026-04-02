@@ -38,9 +38,12 @@ export function formatStatus(value: string | null | undefined): string {
     pending: "申請中",
     approved: "承認済み",
     rejected: "却下",
-    available: "対応可",
+    available: "稼働OK（1日）",
+    available_all_day: "稼働OK（1日）",
+    available_after_15: "稼働OK（15時〜）",
     unavailable: "不可",
-    undecided: "未回答",
+    consult_required: "稼働はできなくはないので事前相談して",
+    undecided: "未登録",
   };
 
   return labels[value] || value;

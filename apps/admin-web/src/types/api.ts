@@ -605,6 +605,14 @@ export interface WorkerCreateRequest {
 
 export interface WorkerUpdateRequest extends WorkerCreateRequest {}
 
+export interface WorkerAvailabilityPreference {
+  worker_id: string;
+  weekly_default_statuses: Record<string, string>;
+  holiday_default_status: string | null;
+  auto_apply_enabled: boolean;
+  updated_at: string | null;
+}
+
 export interface SupplierListItem {
   id: string;
   name: string;

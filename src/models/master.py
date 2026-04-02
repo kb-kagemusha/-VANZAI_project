@@ -72,6 +72,23 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     )
 
 
+class WorkerAvailabilityPreference(Base, TimestampMixin):
+    """稼働者ごとの基本スケジュール設定"""
+    __tablename__ = "worker_availability_preferences"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    worker_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=False, unique=True
+    )
+    weekly_default_statuses: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    holiday_default_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    auto_apply_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    worker: Mapped["Worker"] = relationship()
+
+
 class Supplier(Base, TimestampMixin, SoftDeleteMixin):
     """
     下請け（紹介者）マスタ

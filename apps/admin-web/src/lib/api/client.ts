@@ -58,6 +58,7 @@ import type {
   SupplierCreateRequest,
   SupplierUpdateRequest,
   TokenResponse,
+  WorkerAvailabilityPreference,
   WorkerListItem,
   WorkerCreateRequest,
   WorkerUpdateRequest,
@@ -88,7 +89,7 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
     url.searchParams.set(key, String(value));
   });
 
-  return API_BASE_URL ? `${url.pathname}${url.search}` : `${path}${url.search}`;
+  return API_BASE_URL ? url.toString() : `${path}${url.search}`;
 }
 
 async function readResponse(response: Response): Promise<unknown> {
@@ -592,6 +593,14 @@ export function updateWorker(workerId: string, body: WorkerUpdateRequest) {
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+export function deleteWorker(workerId: string) {
+  return apiFetch<void>(`/api/workers/${workerId}`, { method: "DELETE" });
+}
+
+export function getWorkerAvailabilityPreferences(workerId: string) {
+  return apiFetch<WorkerAvailabilityPreference>(`/api/workers/${workerId}/availability-preferences`);
 }
 
 export function getSuppliers(params?: Record<string, string | number | boolean | undefined>) {

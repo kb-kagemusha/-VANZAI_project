@@ -632,6 +632,22 @@ class WorkerAvailabilityUpsertRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=2000)
 
 
+class WorkerAvailabilityPreferenceResponse(BaseModel):
+    """稼働者の基本スケジュール設定レスポンス"""
+    worker_id: str
+    weekly_default_statuses: dict[str, str] = Field(default_factory=dict)
+    holiday_default_status: Optional[str] = None
+    auto_apply_enabled: bool = True
+    updated_at: Optional[datetime] = None
+
+
+class WorkerAvailabilityPreferenceUpsertRequest(BaseModel):
+    """稼働者の基本スケジュール設定更新リクエスト"""
+    weekly_default_statuses: dict[str, str] = Field(default_factory=dict)
+    holiday_default_status: Optional[str] = Field(None, max_length=20)
+    auto_apply_enabled: bool = True
+
+
 # ===========================
 # Expenses List Schemas
 # ===========================

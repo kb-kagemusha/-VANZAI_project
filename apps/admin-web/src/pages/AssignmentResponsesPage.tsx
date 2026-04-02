@@ -16,7 +16,7 @@ const PAGE_SIZE = 20;
 
 function monitoringLabel(value: string | null): string {
   if (value === "escalate") {
-    return "要エスカレーション";
+    return "要対応";
   }
   if (value === "watch") {
     return "監視中";
@@ -131,7 +131,7 @@ export function AssignmentResponsesPage() {
       setActionError("");
       setSelectedRows({});
       setActionMessage(
-        `エスカレーション通知を実行しました: 対象${result.eligible_assignment_count}件 / recipient ${result.recipient_count} / sent ${result.sent_count} / failed ${result.failed_count}${result.dry_run ? " / dry-run" : ""}`,
+        `管理者通知を実行しました: 対象${result.eligible_assignment_count}件 / recipient ${result.recipient_count} / sent ${result.sent_count} / failed ${result.failed_count}${result.dry_run ? " / dry-run" : ""}`,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["assignment-response-reminder-history"] }),
@@ -141,7 +141,7 @@ export function AssignmentResponsesPage() {
     },
     onError: (error: unknown) => {
       setActionMessage("");
-      setActionError(error instanceof ApiError ? error.message : "エスカレーション通知の送信に失敗しました");
+      setActionError(error instanceof ApiError ? error.message : "管理者通知の送信に失敗しました");
     },
   });
 
@@ -195,11 +195,11 @@ export function AssignmentResponsesPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader title="予定確認監視" description="未回答の予定確認を month 単位で監視し、要エスカレーション対象を抽出します。" eyebrow="月次運用" />
+      <PageHeader title="予定確認監視" description="未回答の予定確認を month 単位で監視し、要対応対象を抽出します。" eyebrow="月次運用" />
 
       <section className="summary-grid">
         <SummaryCard label="未回答" value={pendingSummaryQuery.data?.total ?? 0} accent="#0f766e" />
-        <SummaryCard label="要エスカレ" value={escalatedSummaryQuery.data?.total ?? 0} accent="#9f1239" />
+        <SummaryCard label="要対応" value={escalatedSummaryQuery.data?.total ?? 0} accent="#9f1239" />
         <SummaryCard label="メール未設定" value={missingEmailSummaryQuery.data?.total ?? 0} accent="#b42318" />
       </section>
 
@@ -231,7 +231,7 @@ export function AssignmentResponsesPage() {
           <select value={monitoringParam} onChange={(event) => updateSearchParams({ monitoring: event.target.value || null, page: "0" })}>
             <option value="">すべて</option>
             <option value="watch">監視中</option>
-            <option value="escalate">要エスカレーション</option>
+            <option value="escalate">要対応</option>
           </select>
         </label>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -259,7 +259,7 @@ export function AssignmentResponsesPage() {
             {reminderMutation.isPending ? "送信中..." : "選択中へ催促送信"}
           </button>
           <button type="button" onClick={() => escalationMutation.mutate(selectedEscalatedAssignmentIds)} disabled={selectedEscalatedAssignmentIds.length === 0 || escalationMutation.isPending}>
-            {escalationMutation.isPending ? "通知中..." : "選択中の要エスカレを管理者へ通知"}
+            {escalationMutation.isPending ? "通知中..." : "選択中の要対応を管理者へ通知"}
           </button>
         </div>
         {actionMessage ? <p style={{ margin: 0 }}>{actionMessage}</p> : null}
@@ -289,7 +289,7 @@ export function AssignmentResponsesPage() {
 
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <strong>直近エスカレーション履歴</strong>
+          <strong>直近管理者通知履歴</strong>
           <span>このページに表示中の assignment に紐づく直近 20 件</span>
         </div>
         <DataTable
@@ -303,7 +303,7 @@ export function AssignmentResponsesPage() {
           ]}
           rows={escalationHistoryQuery.data?.items ?? []}
           getRowKey={(row) => row.audit_log_id}
-          emptyTitle="エスカレーション履歴はありません"
+          emptyTitle="管理者通知履歴はありません"
           emptyDescription="このページの assignment に対する管理者通知履歴はまだ記録されていません。"
         />
       </section>

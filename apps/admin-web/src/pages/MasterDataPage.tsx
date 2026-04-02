@@ -619,7 +619,7 @@ export function MasterDataPage() {
             { key: "email", header: "メール", render: (row) => row.email ?? "—" },
             { key: "phone", header: "電話", render: (row) => row.phone ?? "—" },
             { key: "supplier", header: "紹介会社", render: (row) => row.introducer_supplier_name ?? "—" },
-            { key: "status", header: "有効", render: (row) => (row.is_active ? "有効" : "無効") },
+            { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
             { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
           ]}
           rows={workersQuery.data?.items ?? []}
@@ -637,7 +637,7 @@ export function MasterDataPage() {
             { key: "phone", header: "電話", render: (row) => row.contact_phone ?? "—" },
             { key: "terms", header: "支払サイト(日)", render: (row) => String(row.payout_terms_days) },
             { key: "price", header: "日額単価", render: (row) => row.default_daily_price != null ? `¥${Number(row.default_daily_price).toLocaleString()}` : "—" },
-            { key: "status", header: "有効", render: (row) => (row.is_active ? "有効" : "無効") },
+            { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
             { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openSupplierEditor(row)}>編集</button> : "—" },
           ]}
           rows={suppliersQuery.data?.items ?? []}

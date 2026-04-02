@@ -37,7 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     to: "/operations/assignment-responses",
     label: "予定確認監視",
-    description: "未回答と要エスカレーションの監視",
+    description: "未回答と要対応の監視",
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
@@ -69,6 +69,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: "経費一覧",
     description: "経費申請と承認状況を参照",
     allowedRoles: ["admin", "ops", "accounting"],
+  },
+  {
+    to: "/masters/workers",
+    label: "稼働者一覧",
+    description: "稼働者（スタッフ）の一覧と編集",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
     to: "/masters/prices",

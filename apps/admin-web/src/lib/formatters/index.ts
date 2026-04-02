@@ -75,7 +75,9 @@ export function formatPeriodKey(value: string | null | undefined): string {
 
 const STATUS_LABELS: Record<string, string> = {
   active: "有効",
-  available: "対応可",
+  available: "稼働OK（1日）",
+  available_all_day: "稼働OK（1日）",
+  available_after_15: "稼働OK（15時〜）",
   inactive: "無効",
   invalid: "無効",
   sent: "送信済み",
@@ -96,8 +98,9 @@ const STATUS_LABELS: Record<string, string> = {
   soft_closed: "仮締め済み",
   hard_closed: "本締め済み",
   rejected: "却下",
-  unavailable: "不可",
-  undecided: "未回答",
+  unavailable: "稼働不可",
+  consult_required: "稼働はできなくはないので事前相談して",
+  undecided: "未登録",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -156,8 +159,8 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   assignment_worker_response_updated: "予定確認応答更新",
   assignment_response_reminder_sent: "予定確認催促送信",
   assignment_response_reminder_failed: "予定確認催促失敗",
-  assignment_response_escalation_sent: "予定確認エスカレーション送信",
-  assignment_response_escalation_failed: "予定確認エスカレーション失敗",
+  assignment_response_escalation_sent: "管理者通知送信",
+  assignment_response_escalation_failed: "管理者通知失敗",
   assignment_selection_set_saved: "選択セット保存",
   assignment_selection_set_deleted: "選択セット削除",
   price_rule_changed: "単価ルール変更",
@@ -199,8 +202,8 @@ export const AUDIT_ACTION_OPTION_GROUPS = [
       { value: "assignment_worker_response_updated", label: "予定確認応答更新" },
       { value: "assignment_response_reminder_sent", label: "予定確認催促送信" },
       { value: "assignment_response_reminder_failed", label: "予定確認催促失敗" },
-      { value: "assignment_response_escalation_sent", label: "予定確認エスカレーション送信" },
-      { value: "assignment_response_escalation_failed", label: "予定確認エスカレーション失敗" },
+      { value: "assignment_response_escalation_sent", label: "管理者通知送信" },
+      { value: "assignment_response_escalation_failed", label: "管理者通知失敗" },
       { value: "assignment_selection_set_saved", label: "選択セット保存" },
       { value: "assignment_selection_set_deleted", label: "選択セット削除" },
     ],

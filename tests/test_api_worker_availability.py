@@ -29,8 +29,8 @@ def test_worker_can_upsert_and_list_own_availability(api_client, db_session, wor
         "/api/worker-availability",
         json={
             "availability_date": "2026-04-10",
-            "status": "available",
-            "notes": "終日対応可",
+            "status": "available_all_day",
+            "notes": "終日で対応可能",
         },
         headers=_auth_header(user.username),
     )
@@ -38,7 +38,7 @@ def test_worker_can_upsert_and_list_own_availability(api_client, db_session, wor
     assert upsert_response.status_code == 200
     upsert_payload = upsert_response.json()
     assert upsert_payload["worker_id"] == worker.id
-    assert upsert_payload["status"] == "available"
+    assert upsert_payload["status"] == "available_all_day"
 
     list_response = api_client.get(
         "/api/worker-availability",
@@ -49,7 +49,7 @@ def test_worker_can_upsert_and_list_own_availability(api_client, db_session, wor
     assert list_response.status_code == 200
     list_payload = list_response.json()
     assert list_payload["total"] == 1
-    assert list_payload["items"][0]["notes"] == "終日対応可"
+    assert list_payload["items"][0]["notes"] == "終日で対応可能"
 
 
 def test_worker_availability_is_scoped_to_self(api_client, db_session, worker):
