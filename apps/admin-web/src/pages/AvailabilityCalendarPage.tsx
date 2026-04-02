@@ -22,7 +22,10 @@ function addDays(d: Date, n: number): Date {
 
 function buildDateRange(anchor: Date, mode: "month" | "week"): { from: Date; to: Date } {
   if (mode === "week") {
-    return { from: anchor, to: addDays(anchor, 6) };
+    // 月曜始まり: その週の月曜日を起点に7日間
+    const dow = anchor.getDay(); // 0=日, 1=月 ... 6=土
+    const monday = addDays(anchor, dow === 0 ? -6 : 1 - dow);
+    return { from: monday, to: addDays(monday, 6) };
   }
   // 月表示: anchorが属する月の1日〜末日
   const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -217,7 +220,7 @@ export function AvailabilityCalendarPage() {
   // ─── レンダリング ─────────────────────────────────────────
   return (
     <div className="page-container">
-      <PageHeader title="出勤可能日カレンダー" description="スタッフの出勤可能日とシフト担当を確認できます" />
+      <PageHeader title="出勤可能日カレンダー" description="スタッフのシフト可能日と担当を確認" />
 
       {/* ツールバー */}
       <div style={{ marginBottom: 12, padding: "8px 0" }}>
@@ -368,8 +371,10 @@ export function AvailabilityCalendarPage() {
                             : isSat
                               ? "#eff6ff"
                               : "#f9fafb",
+                        borderTop: isToday ? "2px solid #3b82f6" : undefined,
                         borderBottom: "1px solid #d1d5db",
-                        borderLeft: "1px solid #e5e7eb",
+                        borderLeft: isToday ? "2px solid #3b82f6" : "1px solid #e5e7eb",
+                        borderRight: isToday ? "2px solid #3b82f6" : undefined,
                         padding: "4px 2px",
                         fontSize: 11,
                         textAlign: "center",
@@ -408,6 +413,7 @@ export function AvailabilityCalendarPage() {
                   showQual={showQual}
                   todayStr={todayStr}
                   rowIndex={rowIndex}
+                  isLastRow={rowIndex === workers.length - 1}
                 />
               ))}
             </tbody>
@@ -566,12 +572,14 @@ function WorkerRow({
   showQual,
   todayStr,
   rowIndex,
+  isLastRow,
 }: {
   worker: CalendarWorkerRow;
   days: Date[];
   showQual: boolean;
   todayStr: string;
   rowIndex: number;
+  isLastRow: boolean;
 }) {
   const rowBg = rowIndex % 2 === 0 ? "#ffffff" : "#f9fafb";
   const qualStickyLeft = 130;
@@ -637,6 +645,7 @@ function WorkerRow({
             dayInfo={dayInfo}
             isToday={isToday}
             rowBg={rowBg}
+            isLastRow={isLastRow}
           />
         );
       })}
@@ -678,10 +687,12 @@ function DayCell({
   dayInfo,
   isToday,
   rowBg,
+  isLastRow,
 }: {
   dayInfo: CalendarDayInfo | undefined;
   isToday: boolean;
   rowBg: string;
+  isLastRow: boolean;
 }) {
   const assignments = dayInfo?.assignments ?? [];
   const avStatus = dayInfo?.availability_status ?? null;
@@ -695,8 +706,9 @@ function DayCell({
   return (
     <td
       style={{
-        borderLeft: `1px solid ${cellBorder}`,
-        borderBottom: `1px solid ${cellBorder}`,
+        borderLeft: isToday ? "2px solid #3b82f6" : `1px solid ${cellBorder}`,
+        borderRight: isToday ? "2px solid #3b82f6" : undefined,
+        borderBottom: isToday && isLastRow ? "2px solid #3b82f6" : `1px solid ${cellBorder}`,
         padding: "3px 3px",
         verticalAlign: "top",
         background: cellBg,

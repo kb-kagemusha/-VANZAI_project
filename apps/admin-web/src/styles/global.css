@@ -94,8 +94,9 @@ button {
 }
 
 .nav-link {
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
   padding: 1rem;
   border-radius: var(--radius-md);
   text-decoration: none;
