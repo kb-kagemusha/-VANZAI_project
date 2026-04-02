@@ -223,6 +223,22 @@ button {
   font-weight: 600;
 }
 
+/* 更新ボタン */
+.refresh-button {
+  padding: 0.5rem 0.7rem;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 50%;
+  min-width: 2.2rem;
+  color: var(--accent-deep, #154a78);
+  border-color: rgba(21, 74, 120, 0.22);
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .mobile-status-band {
   display: grid;
   gap: 0.9rem;

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { MobileStatusBand } from "./MobileStatusBand";
@@ -81,6 +82,15 @@ export function MobileShell() {
   const statusBandLoading = pendingAssignmentsQuery.isLoading || todayAssignmentsQuery.isLoading || todayActualsQuery.isLoading || todayAvailabilityQuery.isLoading || preferencesQuery.isLoading;
   const statusBandError = pendingAssignmentsQuery.isError || todayAssignmentsQuery.isError || todayActualsQuery.isError || todayAvailabilityQuery.isError || preferencesQuery.isError;
 
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await queryClient.invalidateQueries();
+    setRefreshing(false);
+  }
+
   return (
     <div className="mobile-shell">
       <header className="mobile-header">
@@ -92,6 +102,9 @@ export function MobileShell() {
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
           <div className="mobile-header-actions">
+            <button type="button" className="refresh-button" onClick={handleRefresh} disabled={refreshing} aria-label="データを更新">
+              {refreshing ? "…" : "↺"}
+            </button>
             <button type="button" onClick={logout}>ログアウト</button>
             <NavLink to="/settings" className="secondary-button header-action-link">
               個人設定
