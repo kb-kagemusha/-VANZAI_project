@@ -97,7 +97,6 @@ export function MobileShell() {
         <div>
           <p className="mobile-eyebrow">STAFF MOBILE</p>
           <h1>VANZAI Crew</h1>
-          <p className="mobile-copy">本日の動きと今月の実績を、現場でそのまま確認します。</p>
         </div>
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
