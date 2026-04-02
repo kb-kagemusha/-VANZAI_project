@@ -237,6 +237,30 @@ button {
   background: rgba(255, 255, 255, 0.88);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  flex: 1;
+  padding-right: 4.5rem;
+  min-width: 0;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted, #6b7280);
+  padding: 0.25rem 0.4rem;
+  box-shadow: none;
+}
+
 .upload-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
