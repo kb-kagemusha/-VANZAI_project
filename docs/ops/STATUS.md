@@ -2,6 +2,183 @@
 
 最終更新: 2026-04-02
 
+---
+
+## 🗺️ 全機能早見表（2026-04-02 時点）
+
+### バックエンド API（FastAPI / Python 3.12）
+
+| カテゴリ | エンドポイント | 概要 |
+|---|---|---|
+| 認証 | `POST /api/auth/token` | ログイン（JWT発行） |
+| 認証 | `GET /api/auth/me` | 自分のユーザー情報 |
+| ダッシュボード | `GET /api/dashboard` | 未処理件数・アラート・pending応答監視 |
+| 実績 | `GET /api/actuals` | 実績一覧（CSV import結果） |
+| アサイン | `GET/POST /api/assignments` | アサイン一覧・新規作成 |
+| アサイン | `PUT /api/assignments/{id}` | 編集（枠・スタッフ・役割・ロック単価） |
+| アサイン | `POST /api/assignments/{id}/status` | 状態変更（tentative/confirmed/canceled） |
+| アサイン | `POST /api/assignments/{id}/worker-response` | スタッフ予定返信（参加可/辞退） |
+| アサイン | `POST /api/assignments/reminders/send` | 予定確認メール手動再送 |
+| アサイン | `POST /api/assignments/reminders/escalate` | 要エスカレーション通知 |
+| アサイン | `POST /api/assignments/reminders/history` | 催促履歴取得 |
+| アサイン | `POST /api/assignments/reminders/escalations/history` | エスカレーション履歴取得 |
+| 選択セット | `GET/POST/DELETE /api/assignment-selection-sets` | 一括状態更新用の選択セット保存・共有 |
+| 打刻 | `POST /api/assignments/{id}/check-in` | 出勤打刻（スタッフ用） |
+| 打刻 | `POST /api/assignments/{id}/check-out` | 退勤打刻（スタッフ用） |
+| 稼働可否 | `GET/POST /api/worker-availability` | 日別稼働可否登録（スタッフ用） |
+| 稼働設定 | `GET/PUT /api/worker-availability/preferences` | 曜日デフォルト可否設定（スタッフ用） |
+| 経費 | `GET /api/expenses` | 経費一覧 |
+| 経費 | `POST /api/expenses` | 経費申請（multipart、領収書添付可） |
+| 経費 | `POST /api/expenses/{id}/approve` | 経費承認 |
+| 経費 | `POST /api/expenses/{id}/reject` | 経費却下 |
+| 経費 | `GET /api/expenses/{id}/receipt` | 領収書ダウンロード |
+| 案件 | `GET/POST /api/projects` | 案件一覧・新規作成 |
+| 案件 | `PUT /api/projects/{id}` | 案件更新 |
+| シフト枠 | `GET/POST /api/shift-slots` | シフト枠一覧・新規作成 |
+| シフト枠 | `PUT /api/shift-slots/{id}` | シフト枠更新 |
+| CSV取込 | `POST /api/csv-import` | CSV取込（洗い替えモード対応） |
+| 取込履歴 | `GET /api/import-batches` | 取込バッチ履歴一覧 |
+| 請求書 | `GET/POST /api/invoices` | 請求書一覧・生成 |
+| 請求書 | `POST /api/invoices/{id}/issue` | 請求書発行 |
+| 請求書 | `GET /api/invoices/{id}/pdf` | 請求書PDFダウンロード |
+| 支払明細 | `GET/POST /api/payouts` | 支払明細一覧・生成 |
+| 支払明細 | `POST /api/payouts/{id}/approve` | 支払確定 |
+| 支払明細 | `POST /api/payouts/{id}/mark-paid` | 支払済み更新 |
+| 支払明細 | `GET /api/payouts/{id}/pdf` | 支払明細PDFダウンロード |
+| 支払明細 | `POST /api/payouts/{id}/deliver` | 支払明細メール送信 |
+| 送信履歴 | `GET /api/payout-deliveries` | 送信履歴一覧 |
+| 締め | `POST /api/closings/soft` | 仮締め |
+| 締め | `POST /api/closings/hard` | 本締め（二者承認） |
+| 締め解除 | `POST /api/closings/{id}/release` | 締め解除（回数上限・ガードレール付き） |
+| マスタ | `GET/POST /api/workers` | 稼働者一覧・新規登録 |
+| マスタ | `PUT /api/workers/{id}` | 稼働者更新 |
+| マスタ | `GET/POST /api/clients` | 取引先一覧・新規登録 |
+| マスタ | `GET/POST /api/sites` | 現場一覧・新規登録 |
+| マスタ | `GET/POST /api/project-types` | 案件種別一覧・新規登録 |
+| マスタ | `GET/POST /api/roles` | 役割一覧・新規登録 |
+| マスタ | `GET/POST /api/suppliers` | 下請け一覧・新規登録 |
+| マスタ | `PUT /api/suppliers/{id}` | 下請け更新 |
+| 単価 | `GET/POST /api/price-rules` | 単価ルール一覧・登録 |
+| 単価 | `PUT /api/price-rules/{id}` | 単価ルール更新 |
+| 単価 | `GET/POST /api/price-sales` | 売上単価一覧・登録 |
+| 単価 | `PUT /api/price-sales/{id}` | 売上単価更新 |
+| 単価 | `GET/POST /api/price-outsource` | 外注単価一覧・登録 |
+| 単価 | `PUT /api/price-outsource/{id}` | 外注単価更新 |
+| 監査ログ | `GET /api/audit-logs` | 監査ログ一覧（全変更履歴） |
+| ヘルス | `GET /api/health` | サービス稼働状態確認 |
+
+### フロントエンド
+
+| アプリ | 画面 | 概要 |
+|---|---|---|
+| admin-web | ログイン | JWT認証ログイン |
+| admin-web | ダッシュボード | 未処理アラート・締め状況・pending応答監視 |
+| admin-web | 実績一覧 | CSV取込結果の実績参照 |
+| admin-web | アサイン一覧 | アサイン管理・状態変更・一括操作・選択セット保存 |
+| admin-web | 案件一覧 | 案件登録・編集 |
+| admin-web | シフト枠一覧 | シフト枠作成・編集 |
+| admin-web | 経費一覧 | 経費承認・却下・領収書確認 |
+| admin-web | 請求一覧 | 請求書生成・発行・PDFダウンロード |
+| admin-web | 支払一覧 | 支払明細生成・確定・送信・PDFダウンロード |
+| admin-web | CSV取込 | CSVアップロード・洗い替え・履歴・差戻し文面作成 |
+| admin-web | マスタ管理 | 稼働者・取引先・現場・役割・下請け・単価 登録・編集 |
+| admin-web | 予定確認監視 | pending返信の監視・手動再送・エスカレーション通知 |
+| admin-web | 稼働者管理 | 稼働者一覧・曜日デフォルト稼働可否設定表示 |
+| admin-web | 監査ログ | 全操作変更履歴の参照 |
+| staff-mobile | ログイン | JWT認証ログイン（worker専用） |
+| staff-mobile | 当日ページ | 今日のアサイン確認・出勤/退勤打刻 |
+| staff-mobile | 予定確認 | 月次予定一覧・参加可/辞退返信 |
+| staff-mobile | 稼働可否登録 | 日別稼働可否の事前入力（4択） |
+| staff-mobile | 個人設定 | 曜日デフォルト稼働可否の設定 |
+| staff-mobile | 経費申請 | 経費申請（領収書添付）・今月の申請一覧 |
+| staff-mobile | 実績確認 | 今月の実績一覧 |
+
+### データベース（PostgreSQL 16）
+
+| テーブル種別 | テーブル名 |
+|---|---|
+| マスタ | `workers`, `clients`, `sites`, `project_types`, `roles`, `suppliers` |
+| マスタ | `price_sales`, `price_outsource`, `price_rules`, `incentive_rules` |
+| 認証 | `users` |
+| トランザクション | `projects`, `shift_slots`, `assignments`, `actuals` |
+| トランザクション | `expenses`, `incentives` |
+| トランザクション | `import_batches` |
+| トランザクション | `invoices`, `invoice_lines` |
+| トランザクション | `payouts`, `payout_lines`, `payout_deliveries` |
+| トランザクション | `closings` |
+| トランザクション | `assignment_selection_sets` |
+| トランザクション | `worker_availability`, `worker_availability_preferences` |
+| 監査 | `audit_logs` |
+
+### 採用技術スタック
+
+| レイヤー | 採用技術 |
+|---|---|
+| Backend | FastAPI 0.115, Python 3.12, SQLAlchemy 2, Alembic |
+| Frontend | React 18, TypeScript, Vite 6.4, TanStack Query |
+| DB | PostgreSQL 16 |
+| Auth | JWT（python-jose）|
+| PDF | ReportLab（日本語フォント: ipaexg.ttf）|
+| Email | aiosmtplib + Jinja2テンプレート |
+| Storage | ローカル `storage/` ディレクトリ（Cloudflare R2 切替対応の抽象層あり）|
+| Infra | Xserver VPS（Ubuntu）, nginx, systemd |
+| CI/Test | pytest 302件、Playwright E2E smoke |
+| Kintone連携 | Kintone REST API（マスタ同期スクリプト群）|
+
+---
+
+## 🔑 本番環境アクセス情報
+
+| 項目 | 値 |
+|---|---|
+| VPS IP | `220.158.28.35` |
+| SSH | `ssh -i $HOME/.ssh/vanzai_vps vanzai@220.158.28.35` |
+| admin-web | `https://vanzai-portal.com` |
+| staff-mobile | `https://staff.vanzai-portal.com` |
+| API | `https://api.vanzai-portal.com` |
+| API ヘルス | `https://api.vanzai-portal.com/api/health` |
+| app dir（VPS） | `/var/www/vanzai` |
+| .env（VPS） | `/var/www/vanzai/.env` |
+| systemd unit | `vanzai-api.service`（`Restart=always`）|
+| APIプロセス管理 | `pkill -f 'uvicorn.*src.api.main:app'` → systemdが自動再起動 |
+
+---
+
+## 📋 デプロイ手順（更新時）
+
+```bash
+# 1. ローカルで変更をコミット・プッシュ
+git add -A && git commit -m "..."
+git push origin feature/2026-03-31-next-work
+
+# 2. VPS でデプロイスクリプト実行（git pull + pip + alembic + npm build）
+ssh -i $HOME/.ssh/vanzai_vps vanzai@220.158.28.35 \
+  "bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh"
+
+# 3. API プロセス再起動（systemd が Restart=always で自動再起動）
+ssh -i $HOME/.ssh/vanzai_vps vanzai@220.158.28.35 \
+  "pkill -f 'uvicorn.*src.api.main:app' || true"
+
+# 4. ヘルス確認
+curl https://api.vanzai-portal.com/api/health
+```
+
+---
+
+## 📅 デプロイ履歴
+
+| 日付 | 内容 | コミット |
+|---|---|---|
+| 2026-04-02 | worker availability preferences 実装・本番デプロイ | `cd2dde4` |
+| 2026-04-02 | CORS設定追加・両アプリ再ビルド・本番ログイン確認 | — |
+| 2026-04-01 | Phase5 staff-mobile 完成・admin-web 予定確認監視実装 | `5f8352f` |
+| 2026-03-31 | セキュリティ強化（JWT必須化・CORS修正） | `8607eb1` |
+| 2026-01-27 | Sprint 4 完了（126 tests passing） | — |
+| 2026-01-27 | Sprint 3 完了（権限管理・再計算・経費） | — |
+| 2026-01-27 | 本番VPS初期構築（nginx / systemd / PostgreSQL） | — |
+
+---
+
 ### 2026-04-02 本番デプロイ要約
 - 完了: Xserver VPS (220.158.28.35) に本番環境を構築し、nginx / systemd / PostgreSQL を設定
 - 完了: `vanzai-portal.com`、`www.vanzai-portal.com`、`api.vanzai-portal.com`、`staff.vanzai-portal.com` のHTTPS化
