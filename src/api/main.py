@@ -14,6 +14,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Res
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_, select
 from typing import List
@@ -657,12 +658,6 @@ async def login_for_access_token(
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
     """
     現在のユーザー情報取得
-    
-    Args:
-        current_user: JWT検証済みユーザー
-    
-    Returns:
-        ユーザー情報
     """
     return {
         "username": current_user.username,
@@ -672,29 +667,32 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     }
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("新しいパスワードは8文字以上にしてください")
+        return v
+
+
 @app.post("/api/auth/change-password", tags=["Authentication"])
 async def change_password(
-    payload: dict,
+    payload: "ChangePasswordRequest",
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
     パスワード変更（ログイン済みユーザーが自身のパスワードを変更）
     """
-    current_password = payload.get("current_password", "")
-    new_password = payload.get("new_password", "")
-
-    if not current_password or not new_password:
-        raise HTTPException(status_code=400, detail="current_password と new_password は必須です")
-
-    if len(new_password) < 8:
-        raise HTTPException(status_code=400, detail="新しいパスワードは8文字以上にしてください")
-
-    if not verify_password(current_password, current_user.hashed_password):
+    if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="現在のパスワードが正しくありません")
 
     db_user = db.query(User).filter(User.id == current_user.id).first()
-    db_user.hashed_password = get_password_hash(new_password)
+    db_user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
 
     return {"message": "パスワードを変更しました"}
