@@ -161,8 +161,9 @@ def main():
             """
             INSERT INTO projects
               (id, name, code, client_id, site_id, start_date, end_date, notes,
-               is_active, created_at, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s, true, NOW(), NOW())
+               is_active, rounding_unit_minutes, rounding_method, break_deduction_rule,
+               time_calc_mode, night_calc_mode, created_at, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s, true, 15, 'ceil', 'auto', 'system_first', 'store_minutes', NOW(), NOW())
             """,
             (
                 pid,
