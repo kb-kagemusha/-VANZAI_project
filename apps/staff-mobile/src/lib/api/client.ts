@@ -171,6 +171,13 @@ export function getCurrentUser(): Promise<AuthUser> {
   return apiFetch<AuthUser>("/api/auth/me");
 }
 
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export function getAssignments(params: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<AssignmentListItem>>("/api/assignments", undefined, params);
 }

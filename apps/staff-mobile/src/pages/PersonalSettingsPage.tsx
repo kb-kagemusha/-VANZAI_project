@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, getWorkerAvailabilityPreferences, upsertWorkerAvailabilityPreferences } from "../lib/api/client";
+import { ApiError, getWorkerAvailabilityPreferences, upsertWorkerAvailabilityPreferences, changePassword } from "../lib/api/client";
 import { addDays, currentDateInput, formatDate, formatStatus } from "../lib/formatters";
 import {
   availabilityStatusOptions,
@@ -21,6 +21,38 @@ export function PersonalSettingsPage() {
   const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<StaffAvailabilityPreferences>(getDefaultStaffAvailabilityPreferences);
   const [message, setMessage] = useState("");
+
+  // パスワード変更
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwSubmitting, setPwSubmitting] = useState(false);
+
+  async function handlePasswordChange(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    if (newPw !== confirmPw) {
+      setPwError("新しいパスワードと確認用パスワードが一致しません");
+      return;
+    }
+    setPwSubmitting(true);
+    try {
+      await changePassword(currentPw, newPw);
+      setPwSuccess(true);
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : "パスワード変更に失敗しました");
+    } finally {
+      setPwSubmitting(false);
+    }
+  }
 
   const preferencesQuery = useQuery({
     queryKey: ["staff-availability-preferences"],
@@ -237,6 +269,61 @@ export function PersonalSettingsPage() {
           {saveMutation.isPending ? "保存中..." : "設定を保存する"}
         </button>
       </div>
+
+      <section className="panel-card settings-stack">
+        <p className="panel-label">パスワード変更</p>
+        {pwSuccess ? (
+          <p style={{ color: "var(--success, #16a34a)", fontWeight: 600 }}>✓ パスワードを変更しました</p>
+        ) : (
+          <form onSubmit={handlePasswordChange} style={{ display: "grid", gap: "0.75rem" }}>
+            <label>
+              現在のパスワード
+              <div className="password-input-wrapper">
+                <input
+                  type={showCurrentPw ? "text" : "password"}
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+                <button type="button" className="password-toggle" onClick={() => setShowCurrentPw((v) => !v)} aria-label={showCurrentPw ? "隠す" : "表示する"}>
+                  {showCurrentPw ? "隠す" : "表示"}
+                </button>
+              </div>
+            </label>
+            <label>
+              新しいパスワード（8文字以上）
+              <div className="password-input-wrapper">
+                <input
+                  type={showNewPw ? "text" : "password"}
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+                <button type="button" className="password-toggle" onClick={() => setShowNewPw((v) => !v)} aria-label={showNewPw ? "隠す" : "表示する"}>
+                  {showNewPw ? "隠す" : "表示"}
+                </button>
+              </div>
+            </label>
+            <label>
+              新しいパスワード（確認）
+              <input
+                type="password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </label>
+            {pwError ? <p className="form-error">{pwError}</p> : null}
+            <button type="submit" className="primary-button" disabled={pwSubmitting}>
+              {pwSubmitting ? "変更中..." : "パスワードを変更"}
+            </button>
+          </form>
+        )}
+      </section>
     </div>
   );
 }
