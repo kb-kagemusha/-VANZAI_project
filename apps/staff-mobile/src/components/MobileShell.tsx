@@ -102,13 +102,13 @@ export function MobileShell() {
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
           <div className="mobile-header-actions">
+            <NavLink to="/settings" className="secondary-button header-action-link">
+              個人設定
+            </NavLink>
             <button type="button" className="refresh-button" onClick={handleRefresh} disabled={refreshing} aria-label="データを更新">
               {refreshing ? "…" : "↺"}
             </button>
             <button type="button" onClick={logout}>ログアウト</button>
-            <NavLink to="/settings" className="secondary-button header-action-link">
-              個人設定
-            </NavLink>
           </div>
         </div>
       </header>
