@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 
 import { SideNav } from "./SideNav";
 import { useAuth } from "../lib/auth/auth-context";
@@ -21,6 +21,9 @@ export function AppShell() {
               <span className="identity-name">{user?.username}</span>
               <span className="identity-role">{formatRole(user?.role)}</span>
             </div>
+            <Link to="/account/change-password" className="ghost-button" style={{ textDecoration: "none" }}>
+              パスワード変更
+            </Link>
             <button type="button" className="ghost-button" onClick={logout}>
               ログアウト
             </button>

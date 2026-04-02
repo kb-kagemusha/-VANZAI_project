@@ -229,6 +229,13 @@ export function getCurrentUser(): Promise<AuthUser> {
   return apiFetch<AuthUser>("/api/auth/me");
 }
 
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export function getDashboard(periodKey: string): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>("/api/dashboard", undefined, { period_key: periodKey });
 }

@@ -18,6 +18,7 @@ import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
+import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -142,6 +143,7 @@ export function App() {
               </PermissionRoute>
             }
           />
+          <Route path="/account/change-password" element={<ChangePasswordPage />} />
         </Route>
       </Route>
 

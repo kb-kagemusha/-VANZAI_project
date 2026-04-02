@@ -26,7 +26,9 @@ from src.api.jwt_auth import (
     create_access_token, 
     create_refresh_token,
     get_current_user,
-    get_current_active_user
+    get_current_active_user,
+    get_password_hash,
+    verify_password,
 )
 from src.api.schemas import (
     CSVImportRequest, CSVImportResponse,
@@ -668,6 +670,34 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
         "role": getattr(current_user.role, "value", current_user.role),
         "is_active": current_user.is_active
     }
+
+
+@app.post("/api/auth/change-password", tags=["Authentication"])
+async def change_password(
+    payload: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    パスワード変更（ログイン済みユーザーが自身のパスワードを変更）
+    """
+    current_password = payload.get("current_password", "")
+    new_password = payload.get("new_password", "")
+
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="current_password と new_password は必須です")
+
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="新しいパスワードは8文字以上にしてください")
+
+    if not verify_password(current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="現在のパスワードが正しくありません")
+
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+    db_user.hashed_password = get_password_hash(new_password)
+    db.commit()
+
+    return {"message": "パスワードを変更しました"}
 
 
 # ===========================
