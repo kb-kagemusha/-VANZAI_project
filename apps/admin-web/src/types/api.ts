@@ -598,6 +598,8 @@ export interface WorkerListItem {
   has_best: boolean | null;
   stores_training_done: boolean | null;
   pioneer_training_done: boolean | null;
+  p_shirt_count: number | null;
+  license_type: string | null;
 }
 
 export interface WorkerCreateRequest {
@@ -612,9 +614,20 @@ export interface WorkerCreateRequest {
   has_best: boolean | null;
   stores_training_done: boolean | null;
   pioneer_training_done: boolean | null;
+  p_shirt_count: number | null;
+  license_type: string | null;
 }
 
 export interface WorkerUpdateRequest extends WorkerCreateRequest {}
+
+export interface WorkerQualsUpdateRequest {
+  smoking_area_ok: boolean | null;
+  p_shirt_count: number | null;
+  has_best: boolean | null;
+  stores_training_done: boolean | null;
+  pioneer_training_done: boolean | null;
+  license_type: string | null;
+}
 
 export interface CalendarDayAssignment {
   id: string;
@@ -641,6 +654,8 @@ export interface CalendarWorkerRow {
   has_best: boolean | null;
   stores_training_done: boolean | null;
   pioneer_training_done: boolean | null;
+  p_shirt_count: number | null;
+  license_type: string | null;
   days: Record<string, CalendarDayInfo>;
 }
 

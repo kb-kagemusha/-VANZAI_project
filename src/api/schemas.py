@@ -680,6 +680,8 @@ class CalendarWorkerRow(BaseModel):
     has_best: Optional[bool] = None
     stores_training_done: Optional[bool] = None
     pioneer_training_done: Optional[bool] = None
+    p_shirt_count: Optional[int] = None
+    license_type: Optional[str] = None
     days: dict[str, CalendarDayInfo] = Field(default_factory=dict)
 
 
@@ -917,6 +919,8 @@ class WorkerListItem(BaseModel):
     has_best: Optional[bool] = None
     stores_training_done: Optional[bool] = None
     pioneer_training_done: Optional[bool] = None
+    p_shirt_count: Optional[int] = None
+    license_type: Optional[str] = None
 
 
 class WorkerListResponse(PageResponse[WorkerListItem]):
@@ -938,11 +942,23 @@ class WorkerCreateRequest(BaseModel):
     has_best: Optional[bool] = None
     stores_training_done: Optional[bool] = None
     pioneer_training_done: Optional[bool] = None
+    p_shirt_count: Optional[int] = None
+    license_type: Optional[str] = None
 
 
 class WorkerUpdateRequest(WorkerCreateRequest):
     """稼働者更新リクエスト"""
     pass
+
+
+class WorkerQualsUpdateRequest(BaseModel):
+    """稼働者資格のみ更新リクエスト（PATCH /api/workers/{id}/quals）"""
+    smoking_area_ok: Optional[bool] = None
+    p_shirt_count: Optional[int] = None
+    has_best: Optional[bool] = None
+    stores_training_done: Optional[bool] = None
+    pioneer_training_done: Optional[bool] = None
+    license_type: Optional[str] = None
 
 
 class SupplierListQuery(PaginationQuery, SortQuery):

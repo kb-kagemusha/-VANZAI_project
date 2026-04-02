@@ -62,6 +62,7 @@ import type {
   WorkerListItem,
   WorkerCreateRequest,
   WorkerUpdateRequest,
+  WorkerQualsUpdateRequest,
   AvailabilityCalendarResponse,
 } from "../../types/api";
 
@@ -606,6 +607,13 @@ export function createWorker(body: WorkerCreateRequest) {
 export function updateWorker(workerId: string, body: WorkerUpdateRequest) {
   return apiFetch<WorkerListItem>(`/api/workers/${workerId}`, {
     method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchWorkerQuals(workerId: string, body: WorkerQualsUpdateRequest) {
+  return apiFetch<WorkerListItem>(`/api/workers/${workerId}/quals`, {
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }

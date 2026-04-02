@@ -114,6 +114,8 @@ export function WorkersPage() {
         has_best: null,
         stores_training_done: null,
         pioneer_training_done: null,
+        p_shirt_count: null,
+        license_type: null,
       }),
     onSuccess: async () => {
       setFormError("");
@@ -148,6 +150,8 @@ export function WorkersPage() {
         has_best: selectedWorker.has_best ?? null,
         stores_training_done: selectedWorker.stores_training_done ?? null,
         pioneer_training_done: selectedWorker.pioneer_training_done ?? null,
+        p_shirt_count: selectedWorker.p_shirt_count ?? null,
+        license_type: selectedWorker.license_type ?? null,
       });
     },
     onSuccess: async () => {

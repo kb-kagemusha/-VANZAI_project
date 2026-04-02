@@ -46,7 +46,7 @@ from src.api.schemas import (
     PriceRuleListQuery, PriceRuleListItem, PriceRuleListResponse, PriceRuleCreateRequest, PriceRuleUpdateRequest,
     PriceSalesListQuery, PriceSalesListItem, PriceSalesListResponse, PriceSalesCreateRequest, PriceSalesUpdateRequest,
     PriceOutsourceListQuery, PriceOutsourceListItem, PriceOutsourceListResponse, PriceOutsourceCreateRequest, PriceOutsourceUpdateRequest,
-    WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest,
+    WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerQualsUpdateRequest,
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
     ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
     SiteListQuery, SiteListItem, SiteListResponse, SiteCreateRequest,
@@ -1794,6 +1794,8 @@ async def get_availability_calendar(
                 has_best=w.has_best,
                 stores_training_done=w.stores_training_done,
                 pioneer_training_done=w.pioneer_training_done,
+                p_shirt_count=w.p_shirt_count,
+                license_type=w.license_type,
                 days=days,
             )
         )
@@ -5050,6 +5052,8 @@ async def list_workers(
             has_best=w.has_best,
             stores_training_done=w.stores_training_done,
             pioneer_training_done=w.pioneer_training_done,
+            p_shirt_count=w.p_shirt_count,
+            license_type=w.license_type,
         )
         for w, supplier_name in rows
     ]
@@ -5087,6 +5091,8 @@ async def create_worker_master(
             has_best=request.has_best,
             stores_training_done=request.stores_training_done,
             pioneer_training_done=request.pioneer_training_done,
+            p_shirt_count=request.p_shirt_count,
+            license_type=request.license_type,
         )
         db.add(worker)
 
@@ -5120,6 +5126,8 @@ async def create_worker_master(
             has_best=worker.has_best,
             stores_training_done=worker.stores_training_done,
             pioneer_training_done=worker.pioneer_training_done,
+            p_shirt_count=worker.p_shirt_count,
+            license_type=worker.license_type,
         )
     except HTTPException:
         raise
@@ -5174,6 +5182,8 @@ async def update_worker_master(
         worker.has_best = request.has_best
         worker.stores_training_done = request.stores_training_done
         worker.pioneer_training_done = request.pioneer_training_done
+        worker.p_shirt_count = request.p_shirt_count
+        worker.license_type = request.license_type
 
         AuditService(db).log(
             "worker_updated",
@@ -5208,6 +5218,8 @@ async def update_worker_master(
             has_best=worker.has_best,
             stores_training_done=worker.stores_training_done,
             pioneer_training_done=worker.pioneer_training_done,
+            p_shirt_count=worker.p_shirt_count,
+            license_type=worker.license_type,
         )
     except HTTPException:
         raise
@@ -5216,6 +5228,79 @@ async def update_worker_master(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="稼働者更新に失敗しました")
+
+
+@app.patch("/api/workers/{worker_id}/quals", response_model=WorkerListItem, tags=["Master"])
+async def patch_worker_quals(
+    worker_id: str,
+    request: WorkerQualsUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者資格情報のみ更新"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+        from src.models.master import Worker
+        worker = db.get(Worker, worker_id)
+        if not worker or worker.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+
+        worker.smoking_area_ok = request.smoking_area_ok
+        worker.p_shirt_count = request.p_shirt_count
+        worker.has_best = request.has_best
+        worker.stores_training_done = request.stores_training_done
+        worker.pioneer_training_done = request.pioneer_training_done
+        worker.license_type = request.license_type
+
+        AuditService(db).log(
+            "worker_quals_updated",
+            target_type="worker",
+            target_id=worker.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            after_value={
+                "smoking_area_ok": worker.smoking_area_ok,
+                "p_shirt_count": worker.p_shirt_count,
+                "has_best": worker.has_best,
+                "stores_training_done": worker.stores_training_done,
+                "pioneer_training_done": worker.pioneer_training_done,
+                "license_type": worker.license_type,
+            },
+        )
+        db.commit()
+        db.refresh(worker)
+
+        supplier_name = None
+        if worker.introducer_supplier_id:
+            from src.models.master import Supplier
+            sup = db.get(Supplier, worker.introducer_supplier_id)
+            if sup:
+                supplier_name = sup.name
+
+        return WorkerListItem(
+            id=worker.id,
+            name=worker.name,
+            email=worker.email,
+            phone=worker.phone,
+            is_active=worker.is_active,
+            introducer_supplier_id=worker.introducer_supplier_id,
+            introducer_supplier_name=supplier_name,
+            notes=worker.notes,
+            smoking_area_ok=worker.smoking_area_ok,
+            has_p_shirt=worker.has_p_shirt,
+            has_best=worker.has_best,
+            stores_training_done=worker.stores_training_done,
+            pioneer_training_done=worker.pioneer_training_done,
+            p_shirt_count=worker.p_shirt_count,
+            license_type=worker.license_type,
+        )
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="稼働者資格更新に失敗しました")
 
 
 @app.delete("/api/workers/{worker_id}", status_code=204, tags=["Master"])

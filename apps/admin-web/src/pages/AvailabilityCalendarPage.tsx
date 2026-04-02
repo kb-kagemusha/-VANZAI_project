@@ -5,9 +5,9 @@ import { useState, useMemo } from "react";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
-import { getAvailabilityCalendar } from "../lib/api/client";
+import { getAvailabilityCalendar, patchWorkerQuals } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
-import type { CalendarDayInfo, CalendarWorkerRow } from "../types/api";
+import type { CalendarDayInfo, CalendarWorkerRow, WorkerQualsUpdateRequest } from "../types/api";
 
 // ─── 日付ヘルパー ───────────────────────────────────────────────
 function toDateStr(d: Date): string {
@@ -97,21 +97,33 @@ function AssignChip({ name, status }: { name: string; status: string }) {
 }
 
 // ─── 資格表示 ──────────────────────────────────────────────────
-const QUAL_DEFS: { key: keyof Pick<CalendarWorkerRow, "smoking_area_ok" | "has_p_shirt" | "has_best" | "stores_training_done" | "pioneer_training_done">; label: string }[] = [
+type QualDef = { key: string; label: string };
+const QUAL_DEFS: QualDef[] = [
   { key: "smoking_area_ok", label: "喫煙所" },
-  { key: "has_p_shirt", label: "Pシャツ" },
+  { key: "p_shirt_count", label: "Pシャツ" },
   { key: "has_best", label: "ベスト" },
+  { key: "license_type", label: "免許" },
   { key: "stores_training_done", label: "stores研修" },
   { key: "pioneer_training_done", label: "開拓研修" },
 ];
 
-function QualBadge({ value }: { value: boolean | null }) {
-  if (value === null || value === undefined) return <span style={{ color: "#9ca3af" }}>−</span>;
-  return (
-    <span style={{ color: value ? "#22c55e" : "#ef4444", fontWeight: 700 }}>
-      {value ? "◯" : "✗"}
-    </span>
-  );
+function WorkerQualBadge({ qKey, value }: { qKey: string; value: unknown }) {
+  if (qKey === "p_shirt_count") {
+    const n = value as number | null;
+    if (n === null || n === undefined) return <span style={{ color: "#9ca3af" }}>−</span>;
+    if (n === 0) return <span style={{ color: "#ef4444", fontWeight: 700 }}>✗</span>;
+    return <span style={{ color: "#22c55e", fontWeight: 700 }}>{n}枚</span>;
+  }
+  if (qKey === "license_type") {
+    const lt = value as string | null;
+    if (!lt || lt === "none") return <span style={{ color: "#ef4444", fontWeight: 700 }}>✗</span>;
+    if (lt === "hiace_ok") return <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 10 }}>ハイエース</span>;
+    if (lt === "at_only") return <span style={{ color: "#f59e0b", fontWeight: 700, fontSize: 10 }}>AT限定</span>;
+    return <span style={{ color: "#6b7280", fontSize: 10 }}>{lt}</span>;
+  }
+  const b = value as boolean | null;
+  if (b === null || b === undefined) return <span style={{ color: "#9ca3af" }}>−</span>;
+  return <span style={{ color: b ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{b ? "◯" : "✗"}</span>;
 }
 
 // ─── メインコンポーネント ─────────────────────────────────────
@@ -126,6 +138,9 @@ export function AvailabilityCalendarPage() {
   const [mode, setMode] = useState<"month" | "week">("month");
   const [anchorDate, setAnchorDate] = useState<Date>(today);
   const [showQual, setShowQual] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editQualsMap, setEditQualsMap] = useState<Record<string, WorkerQualsUpdateRequest>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -164,60 +179,99 @@ export function AvailabilityCalendarPage() {
 
   const workers = calendarQuery.data?.workers ?? [];
 
+  function openEditModal() {
+    const init: Record<string, WorkerQualsUpdateRequest> = {};
+    workers.forEach((w) => {
+      init[w.id] = {
+        smoking_area_ok: w.smoking_area_ok,
+        p_shirt_count: w.p_shirt_count,
+        has_best: w.has_best,
+        stores_training_done: w.stores_training_done,
+        pioneer_training_done: w.pioneer_training_done,
+        license_type: w.license_type,
+      };
+    });
+    setEditQualsMap(init);
+    setShowEditModal(true);
+  }
+
+  async function saveQuals() {
+    setIsSaving(true);
+    try {
+      await Promise.all(
+        workers.map((w) => {
+          const eq = editQualsMap[w.id];
+          if (!eq) return Promise.resolve();
+          return patchWorkerQuals(w.id, eq);
+        })
+      );
+      setShowEditModal(false);
+      calendarQuery.refetch();
+    } catch {
+      alert("保存に失敗しました");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   // ─── レンダリング ─────────────────────────────────────────
   return (
     <div className="page-container">
       <PageHeader title="出勤可能日カレンダー" description="スタッフの出勤可能日とシフト担当を確認できます" />
 
       {/* ツールバー */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-          marginBottom: 12,
-          padding: "8px 0",
-        }}
-      >
-        {/* 期間ナビ */}
-        <button className="btn btn-outline" onClick={prevPeriod}>
-          ＜
-        </button>
-        <button className="btn btn-outline" onClick={goToday} style={{ minWidth: 64 }}>
-          今日
-        </button>
-        <button className="btn btn-outline" onClick={nextPeriod}>
-          ＞
-        </button>
-        <span style={{ fontWeight: 600, minWidth: 140, textAlign: "center" }}>{periodLabel}</span>
+      <div style={{ marginBottom: 12, padding: "8px 0" }}>
+        {/* 行1: ナビ + 月/週 切り替え */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* 期間ナビ */}
+          <button className="btn btn-outline" onClick={prevPeriod}>
+            ＜
+          </button>
+          <button className="btn btn-outline" onClick={goToday} style={{ minWidth: 64 }}>
+            今日
+          </button>
+          <button className="btn btn-outline" onClick={nextPeriod}>
+            ＞
+          </button>
+          <span style={{ fontWeight: 600, minWidth: 140, textAlign: "center" }}>{periodLabel}</span>
 
-        {/* 月/週切り替え */}
-        <div style={{ display: "flex", gap: 0, marginLeft: 8 }}>
-          <button
-            className={`btn ${mode === "month" ? "btn-primary" : "btn-outline"}`}
-            style={{ borderRadius: "4px 0 0 4px" }}
-            onClick={() => setMode("month")}
-          >
-            月
-          </button>
-          <button
-            className={`btn ${mode === "week" ? "btn-primary" : "btn-outline"}`}
-            style={{ borderRadius: "0 4px 4px 0" }}
-            onClick={() => setMode("week")}
-          >
-            週
-          </button>
+          {/* 月/週切り替え */}
+          <div style={{ display: "flex", gap: 0, marginLeft: 8 }}>
+            <button
+              className={`btn ${mode === "month" ? "btn-primary" : "btn-outline"}`}
+              style={{ borderRadius: "4px 0 0 4px" }}
+              onClick={() => setMode("month")}
+            >
+              月
+            </button>
+            <button
+              className={`btn ${mode === "week" ? "btn-primary" : "btn-outline"}`}
+              style={{ borderRadius: "0 4px 4px 0" }}
+              onClick={() => setMode("week")}
+            >
+              週
+            </button>
+          </div>
         </div>
 
-        {/* 資格表示切り替え */}
-        <button
-          className="btn btn-outline"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setShowQual((v) => !v)}
-        >
-          資格情報 {showQual ? "▲ 折りたたむ" : "▼ 展開する"}
-        </button>
+        {/* 行2: 資格情報 折りたたみ + 編集 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+          <button
+            className="btn btn-outline"
+            style={{ fontSize: 13 }}
+            onClick={() => setShowQual((v) => !v)}
+          >
+            情報{showQual ? "◀ 折りたたむ" : "▶ 展開する"}
+          </button>
+          <button
+            className="btn btn-outline"
+            style={{ fontSize: 13 }}
+            onClick={openEditModal}
+            disabled={calendarQuery.isLoading || workers.length === 0}
+          >
+            ✏️ 資格を編集
+          </button>
+        </div>
       </div>
 
       {calendarQuery.isLoading && <LoadingOverlay />}
@@ -361,6 +415,131 @@ export function AvailabilityCalendarPage() {
         </div>
       )}
 
+      {/* 資格編集モーダル */}
+      {showEditModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 50,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+              width: "min(96vw, 860px)", maxHeight: "80vh",
+              display: "flex", flexDirection: "column",
+            }}
+          >
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>資格情報の編集</span>
+              <button
+                style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#6b7280" }}
+                onClick={() => setShowEditModal(false)}
+              >×</button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: "12px 0" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#f9fafb" }}>
+                    <th style={{ padding: "6px 12px", textAlign: "left", fontWeight: 600, borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>スタッフ</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>喫煙所</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Pシャツ</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>ベスト</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>免許</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>stores研修</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>開拓研修</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workers.map((w, i) => {
+                    const eq = editQualsMap[w.id] ?? {
+                      smoking_area_ok: null, p_shirt_count: null, has_best: null,
+                      stores_training_done: null, pioneer_training_done: null, license_type: null,
+                    };
+                    const rowBg = i % 2 === 0 ? "#fff" : "#f9fafb";
+                    function update<K extends keyof WorkerQualsUpdateRequest>(field: K, val: WorkerQualsUpdateRequest[K]) {
+                      setEditQualsMap((prev) => ({ ...prev, [w.id]: { ...prev[w.id], [field]: val } }));
+                    }
+                    const selStyle: React.CSSProperties = { fontSize: 12, padding: "2px 4px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff" };
+                    return (
+                      <tr key={w.id} style={{ background: rowBg }}>
+                        <td style={{ padding: "6px 12px", borderBottom: "1px solid #f3f4f6", whiteSpace: "nowrap", fontWeight: 500 }}>
+                          {w.name}
+                        </td>
+                        {/* 喫煙所 */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.smoking_area_ok === null ? "" : String(eq.smoking_area_ok)}
+                            onChange={(e) => update("smoking_area_ok", e.target.value === "" ? null : e.target.value === "true")}>
+                            <option value="">−</option>
+                            <option value="true">◯</option>
+                            <option value="false">✗</option>
+                          </select>
+                        </td>
+                        {/* Pシャツ */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.p_shirt_count === null ? "" : String(eq.p_shirt_count)}
+                            onChange={(e) => update("p_shirt_count", e.target.value === "" ? null : Number(e.target.value))}>
+                            <option value="">−</option>
+                            <option value="0">✗(なし)</option>
+                            <option value="1">1枚</option>
+                            <option value="2">2枚</option>
+                          </select>
+                        </td>
+                        {/* ベスト */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.has_best === null ? "" : String(eq.has_best)}
+                            onChange={(e) => update("has_best", e.target.value === "" ? null : e.target.value === "true")}>
+                            <option value="">−</option>
+                            <option value="true">◯</option>
+                            <option value="false">✗</option>
+                          </select>
+                        </td>
+                        {/* 免許 */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.license_type ?? ""}
+                            onChange={(e) => update("license_type", e.target.value || null)}>
+                            <option value="">−</option>
+                            <option value="hiace_ok">ハイエース可</option>
+                            <option value="at_only">AT限定</option>
+                            <option value="none">✗(なし)</option>
+                          </select>
+                        </td>
+                        {/* stores研修 */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.stores_training_done === null ? "" : String(eq.stores_training_done)}
+                            onChange={(e) => update("stores_training_done", e.target.value === "" ? null : e.target.value === "true")}>
+                            <option value="">−</option>
+                            <option value="true">◯</option>
+                            <option value="false">✗</option>
+                          </select>
+                        </td>
+                        {/* 開拓研修 */}
+                        <td style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+                          <select style={selStyle} value={eq.pioneer_training_done === null ? "" : String(eq.pioneer_training_done)}
+                            onChange={(e) => update("pioneer_training_done", e.target.value === "" ? null : e.target.value === "true")}>
+                            <option value="">−</option>
+                            <option value="true">◯</option>
+                            <option value="false">✗</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e7eb", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button className="btn btn-outline" onClick={() => setShowEditModal(false)} disabled={isSaving}>キャンセル</button>
+              <button className="btn btn-primary" onClick={saveQuals} disabled={isSaving}>
+                {isSaving ? "保存中..." : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 凡例 */}
       <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", fontSize: 11, color: "#6b7280" }}>
         <span>出勤可否:</span>
@@ -442,7 +621,7 @@ function WorkerRow({
               fontSize: 13,
             }}
           >
-            <QualBadge value={worker[q.key] as boolean | null} />
+            <WorkerQualBadge qKey={q.key} value={(worker as unknown as Record<string, unknown>)[q.key]} />
           </td>
         ))}
 
