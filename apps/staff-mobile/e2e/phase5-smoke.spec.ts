@@ -6,7 +6,7 @@ import type { Locator, Page } from "@playwright/test";
 declare const process: { env: Record<string, string | undefined>; platform: string };
 
 const username = process.env.STAFF_MOBILE_SMOKE_USERNAME || "staff_mobile_smoke";
-const password = process.env.STAFF_MOBILE_SMOKE_PASSWORD || "SmokeTest123!";
+const password = process.env.STAFF_MOBILE_SMOKE_PASSWORD || "vanzai2026";
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const pythonPath = fileURLToPath(
   new URL(process.platform === "win32" ? "../../../.venv/Scripts/python.exe" : "../../../.venv/bin/python", import.meta.url),

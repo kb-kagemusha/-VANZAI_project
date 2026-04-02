@@ -13,7 +13,7 @@ from src.models.master import User, Worker
 
 USERNAME = "staff_mobile_smoke"
 EMAIL = "staff_mobile_smoke@example.com"
-PASSWORD = "SmokeTest123!"
+PASSWORD = "vanzai2026"
 WORKER_NOTE = "browser-smoke-mobile-worker"
 WORKER_NAME = "モバイル確認スタッフ"
 WORKER_EMAIL = "smoke-mobile-worker@example.com"

@@ -10,6 +10,7 @@ export function LoginPage() {
   const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,7 +59,22 @@ export function LoginPage() {
           </label>
           <label>
             パスワード
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <div className="password-input-wrapper">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "パスワードを隠す" : "パスワードを表示"}
+              >
+                {showPassword ? "非表示" : "表示"}
+              </button>
+            </div>
           </label>
           {error ? <p className="form-error">{error}</p> : null}
           <button type="submit" className="primary-button" disabled={submitting}>

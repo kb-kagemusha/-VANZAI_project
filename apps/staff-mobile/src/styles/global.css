@@ -146,6 +146,31 @@ button {
   color: var(--danger);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  flex: 1;
+  padding-right: 4.5rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(24, 32, 41, 0.18);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--accent-deep, #154a78);
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .mobile-shell {
   width: min(100%, 42rem);
   margin: 0 auto;
