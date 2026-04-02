@@ -318,8 +318,9 @@ export function AvailabilityCalendarPage() {
                 <th
                   style={{
                     position: "sticky",
+                    top: 0,
                     left: 0,
-                    zIndex: 20,
+                    zIndex: 30,
                     background: "#f3f4f6",
                     borderRight: "2px solid #d1d5db",
                     borderBottom: "1px solid #d1d5db",
@@ -338,8 +339,9 @@ export function AvailabilityCalendarPage() {
                       key={q.key}
                       style={{
                         position: "sticky",
+                        top: 0,
                         left: 130 + i * 64,
-                        zIndex: 20,
+                        zIndex: 25,
                         background: "#f3f4f6",
                         borderRight: i === QUAL_DEFS.length - 1 ? "2px solid #d1d5db" : "1px solid #e5e7eb",
                         borderBottom: "1px solid #d1d5db",
@@ -364,6 +366,9 @@ export function AvailabilityCalendarPage() {
                     <th
                       key={ds}
                       style={{
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 15,
                         background: isToday
                           ? "#dbeafe"
                           : isSun
