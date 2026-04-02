@@ -15,7 +15,7 @@ USERNAME = "staff_mobile_smoke"
 EMAIL = "staff_mobile_smoke@example.com"
 PASSWORD = "SmokeTest123!"
 WORKER_NOTE = "browser-smoke-mobile-worker"
-WORKER_NAME = "Browser Smoke Mobile Worker"
+WORKER_NAME = "モバイル確認スタッフ"
 WORKER_EMAIL = "smoke-mobile-worker@example.com"
 
 
@@ -39,6 +39,8 @@ def main() -> None:
 
         user = session.query(User).filter(User.username == USERNAME).first()
         if user is None:
+            user = session.query(User).filter(User.email == EMAIL).first()
+        if user is None:
             user = User(
                 username=USERNAME,
                 email=EMAIL,
@@ -49,6 +51,7 @@ def main() -> None:
             )
             session.add(user)
         else:
+            user.username = USERNAME
             user.email = EMAIL
             user.hashed_password = get_password_hash(PASSWORD)
             user.role = UserRole.WORKER.value

@@ -1,8 +1,8 @@
 """GET /api/workers, /api/suppliers, /api/clients, /api/sites, /api/project-types, /api/roles のAPIテスト"""
 from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
 from src.models.base import generate_ulid
-from src.models.enums import UserRole
-from src.models.master import Client, ProjectType, Role, Site, Supplier, Worker
+from src.models.enums import AvailabilityStatus, UserRole
+from src.models.master import Client, ProjectType, Role, Site, Supplier, Worker, WorkerAvailabilityPreference
 
 
 def _auth_header(username: str) -> dict[str, str]:
@@ -166,6 +166,79 @@ def test_update_worker_succeeds_for_admin(api_client, db_session, worker):
     assert payload["name"] == "Updated Worker"
     assert payload["email"] == "updated-worker@example.com"
     assert payload["is_active"] is False
+
+
+def test_get_worker_availability_preferences_returns_saved_values(api_client, db_session, worker):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_worker_preferences",
+        email="ops_worker_preferences@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.add(
+        WorkerAvailabilityPreference(
+            id=generate_ulid(),
+            worker_id=worker.id,
+            weekly_default_statuses={"1": AvailabilityStatus.UNAVAILABLE.value, "6": AvailabilityStatus.CONSULT_REQUIRED.value},
+            holiday_default_status=AvailabilityStatus.UNAVAILABLE.value,
+            auto_apply_enabled=True,
+        )
+    )
+    db_session.commit()
+
+    response = api_client.get(
+        f"/api/workers/{worker.id}/availability-preferences",
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["worker_id"] == worker.id
+    assert payload["weekly_default_statuses"] == {"1": "unavailable", "6": "consult_required"}
+    assert payload["holiday_default_status"] == "unavailable"
+    assert payload["auto_apply_enabled"] is True
+
+
+def test_get_worker_availability_preferences_returns_defaults_when_not_saved(api_client, db_session, worker):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_worker_preferences_default",
+        email="ops_worker_preferences_default@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.get(
+        f"/api/workers/{worker.id}/availability-preferences",
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["worker_id"] == worker.id
+    assert payload["weekly_default_statuses"] == {}
+    assert payload["holiday_default_status"] is None
+    assert payload["auto_apply_enabled"] is True
+
+
+def test_get_worker_availability_preferences_blocked_for_worker_role(api_client, db_session, worker):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="worker_preferences_blocked",
+        email="worker_preferences_blocked@example.com",
+        password="secret123",
+        role=UserRole.WORKER.value,
+    )
+    db_session.commit()
+
+    response = api_client.get(
+        f"/api/workers/{worker.id}/availability-preferences",
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
 
 
 # ===========================

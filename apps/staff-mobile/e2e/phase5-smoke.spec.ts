@@ -34,6 +34,19 @@ function actualCard(page: Page, projectName: string): Locator {
   return page.locator("article.actual-card").filter({ hasText: projectName }).first();
 }
 
+function formatSlashDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function currentAvailabilityDate() {
+  const today = new Date();
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  return new Date(today.getFullYear(), today.getMonth(), Math.min(10, lastDay));
+}
+
 test.beforeAll(() => {
   runSetupScript(ensureBrowserSmokeDataScript);
   runSetupScript(ensureLocalWorkerScript);
@@ -42,11 +55,13 @@ test.beforeAll(() => {
 test("phase5 worker can execute today, schedule, availability, expense, and actual flows", async ({ page }) => {
   test.slow();
   const expenseAmount = "1234";
+  const availabilityDate = currentAvailabilityDate();
+  const availabilityDateLabel = formatSlashDate(availabilityDate);
 
   await login(page);
 
   await expect(page.getByText("今日の動き")).toBeVisible();
-  const todayCard = assignmentCard(page, "Smoke Mobile Today");
+  const todayCard = assignmentCard(page, "本日確認イベント");
   await expect(todayCard).toBeVisible();
   await todayCard.getByRole("button", { name: "出勤する" }).click();
   await expect(page.getByText("出勤を記録しました。")).toBeVisible();
@@ -56,37 +71,38 @@ test("phase5 worker can execute today, schedule, availability, expense, and actu
   await expect(todayCard).toContainText("このアサインは退勤まで記録済みです。");
 
   await expect(page.locator(".mobile-nav-badge")).toContainText("1");
-  await page.getByRole("link", { name: /予定/ }).click();
+  await page.getByRole("link", { name: /^予定(\s+\d+)?$/ }).click();
   await expect(page).toHaveURL(/\/schedule$/);
-  const pendingCard = assignmentCard(page, "Smoke Mobile Pending Response");
+  const pendingCard = assignmentCard(page, "確認待ちイベント");
   await expect(pendingCard).toBeVisible();
-  await pendingCard.getByLabel("連絡メモ").fill("browser smoke response note");
+  await pendingCard.getByLabel("連絡メモ").fill("確認用連絡メモ");
   await pendingCard.getByRole("button", { name: "参加可で返信" }).click();
   await expect(page.getByText("予定確認を更新しました。")).toBeVisible();
   await expect(pendingCard).toContainText("参加可");
   await expect(page.locator(".mobile-nav-badge")).toHaveCount(0);
 
-  await page.getByRole("link", { name: /可否/ }).click();
+  await page.getByRole("link", { name: "事前予定" }).click();
   await expect(page).toHaveURL(/\/availability$/);
-  const availabilityCard = page.locator("article.actual-card").filter({ hasText: "2026/04/10" }).first();
-  await expect(availabilityCard).toBeVisible();
-  await availabilityCard.locator("select").selectOption("available");
-  await availabilityCard.locator("textarea").fill("browser smoke availability note");
-  await availabilityCard.getByRole("button", { name: "保存する" }).click();
-  await expect(page.getByText("稼働可否を更新しました。")).toBeVisible();
-  await expect(availabilityCard).toContainText("対応可");
+  const availabilityDay = page.getByRole("button", { name: new RegExp(availabilityDateLabel) }).first();
+  await expect(availabilityDay).toBeVisible();
+  await availabilityDay.click();
+  await page.getByRole("button", { name: /補足を(入力|編集)/ }).click();
+  await page.getByLabel("補足").fill("確認用事前予定メモ");
+  await page.getByRole("button", { name: /候補と変更を保存|変更を保存/ }).click();
+  await expect(page.getByText("事前予定を更新しました。")).toBeVisible();
+  await expect(page.locator("article.actual-card").filter({ hasText: availabilityDateLabel })).toContainText("稼働OK（1日）");
 
-  await page.getByRole("link", { name: /経費/ }).click();
+  await page.getByRole("link", { name: "経費" }).click();
   await expect(page).toHaveURL(/\/expenses$/);
   await page.getByLabel("金額").fill(expenseAmount);
-  await page.getByLabel("内容").fill("browser smoke expense");
+  await page.getByLabel("内容").fill("確認用経費メモ");
   await page.getByRole("button", { name: "経費を申請する" }).click();
   await expect(page.getByText("経費を申請しました。")).toBeVisible();
   await expect(page.locator(".list-section")).toContainText("￥1,234");
 
-  await page.getByRole("link", { name: /実績/ }).click();
+  await page.getByRole("link", { name: "実績" }).click();
   await expect(page).toHaveURL(/\/actuals$/);
-  const actualRow = actualCard(page, "Browser Smoke Mobile Project");
+  const actualRow = actualCard(page, "スタッフ確認案件");
   await expect(actualRow).toBeVisible();
-  await expect(actualRow).toContainText("Browser Smoke Mobile Role");
+  await expect(actualRow).toContainText("モバイル担当");
 });

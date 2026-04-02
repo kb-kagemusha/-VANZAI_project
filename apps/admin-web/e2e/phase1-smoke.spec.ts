@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 
 declare const process: { env: Record<string, string | undefined>; platform: string };
 
-const username = process.env.ADMIN_WEB_SMOKE_USERNAME || "admin_web_smoke";
+const username = process.env.ADMIN_WEB_SMOKE_USERNAME || "確認管理者";
 const password = process.env.ADMIN_WEB_SMOKE_PASSWORD || "SmokeTest123!";
 const periodMonth = process.env.ADMIN_WEB_SMOKE_MONTH || "2026-01";
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -109,7 +109,7 @@ test("phase1 admin routes render with local data", async ({ page }) => {
       await expect(page.getByRole("button", { name: "支払明細生成" })).toBeDisabled();
       await expect(page.locator(".summary-card").filter({ hasText: "送信先未設定支払" })).toContainText(/送信先未設定支払\s*[1-9]\d*/);
       await expect(page.getByText("既定送信先未設定のみ")).toBeVisible();
-      const smokePayoutRow = page.locator("tbody tr").filter({ hasText: "Browser Smoke Missing Recipient Worker" }).first();
+      const smokePayoutRow = page.locator("tbody tr").filter({ hasText: "送信先未設定スタッフ" }).first();
       await expect(smokePayoutRow).toBeVisible();
       await smokePayoutRow.getByRole("button", { name: "履歴" }).click();
       await expect(page.getByText("送信候補")).toBeVisible();
@@ -149,13 +149,13 @@ test("phase1 admin routes render with local data", async ({ page }) => {
     }
   }
 
-  await page.goto("/audit-logs?period_key=202601&quick_filter=closing_release&actor=admin_web_smoke&page=1");
+  await page.goto("/audit-logs?period_key=202601&quick_filter=closing_release&actor=確認管理者&page=1");
   await expect(page.getByLabel("対象月")).toHaveValue("2026-01");
   await expect(page.getByLabel("対象種別")).toHaveValue("closing");
-  await expect(page.getByLabel("実行者")).toHaveValue("admin_web_smoke");
+  await expect(page.getByLabel("実行者")).toHaveValue("確認管理者");
   await expect(page.getByText("選択中: 締め解除のみ")).toBeVisible();
   await expect(page.getByRole("button", { name: "クイック: 締め解除のみ ×" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "実行者: admin_web_smoke ×" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "実行者: 確認管理者 ×" })).toBeVisible();
   await expect(page.getByRole("button", { name: "条件をクリア" })).toBeVisible();
 
   await page.goto("/audit-logs?period_key=202601");
@@ -209,31 +209,31 @@ test("phase1 admin can resend and escalate assignment responses", async ({ page 
   await page.goto("/operations/assignment-responses");
   await expect(page.getByRole("heading", { level: 2, name: "予定確認監視" })).toBeVisible();
   await setMonthIfPresent(page);
-  await page.getByLabel("稼働者").selectOption({ label: "Browser Smoke Response Worker" });
+  await page.getByLabel("稼働者").selectOption({ label: "予定確認スタッフ" });
 
   const smokeRow = page
     .locator("tbody tr")
-    .filter({ hasText: "Browser Smoke Payout Project" })
-    .filter({ hasText: "Browser Smoke Response Worker" })
-    .filter({ hasText: "Smoke Pending Response" })
+    .filter({ hasText: "請求支払確認案件" })
+    .filter({ hasText: "予定確認スタッフ" })
+    .filter({ hasText: "予定確認イベント" })
     .first();
   await expect(smokeRow).toBeVisible();
   await expect(page.getByText("直近催促履歴")).toBeVisible();
-  await expect(page.getByText("直近エスカレーション履歴")).toBeVisible();
+  await expect(page.getByText("直近管理者通知履歴")).toBeVisible();
 
   await smokeRow.getByRole("button", { name: "再送" }).click();
   await expect(page.getByText(/催促送信を実行しました: 対象1件 \/ sent 1 \/ failed 0/)).toBeVisible();
   await expect(page.locator("section.card").filter({ hasText: "直近催促履歴" })).toContainText("送信済み");
-  await expect(page.locator("section.card").filter({ hasText: "直近催促履歴" })).toContainText("Browser Smoke Response Worker / smoke-assignment-worker@example.com");
+  await expect(page.locator("section.card").filter({ hasText: "直近催促履歴" })).toContainText("予定確認スタッフ / smoke-assignment-worker@example.com");
 
   await smokeRow.getByRole("button", { name: "通知" }).click();
-  await expect(page.getByText(/エスカレーション通知を実行しました: 対象1件 \/ recipient \d+ \/ sent \d+ \/ failed 0/)).toBeVisible();
-  await expect(page.locator("section.card").filter({ hasText: "直近エスカレーション履歴" })).toContainText("送信済み");
+  await expect(page.getByText(/管理者通知を実行しました: 対象1件 \/ recipient \d+ \/ sent \d+ \/ failed 0/)).toBeVisible();
+  await expect(page.locator("section.card").filter({ hasText: "直近管理者通知履歴" })).toContainText("送信済み");
 });
 
 test("phase1 admin can manage assignment operations", async ({ page }) => {
   test.slow();
-  const selectionSetName = `Browser Smoke Selection ${Date.now()}`;
+  const selectionSetName = `確認用選択 ${Date.now()}`;
 
   await login(page);
 
@@ -241,14 +241,14 @@ test("phase1 admin can manage assignment operations", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 2, name: "アサイン一覧" })).toBeVisible();
   await setMonthIfPresent(page);
 
-  const rowCheckbox = page.getByLabel("Browser Smoke Ops Worker / Browser Smoke Payout Project を選択").first();
+  const rowCheckbox = page.getByLabel("運用確認スタッフ / 請求支払確認案件 を選択").first();
   const assignmentRow = rowCheckbox.locator("xpath=ancestor::tr[1]");
 
   await expect(assignmentRow).toBeVisible();
-  await expect(assignmentRow).toContainText("Smoke Ops Assignment");
+  await expect(assignmentRow).toContainText("運用確認イベント");
 
   await assignmentRow.getByRole("button", { name: "編集" }).click();
-  const editCard = page.locator("section.card").filter({ hasText: "編集: Browser Smoke Ops Worker / Browser Smoke Payout Project" }).first();
+  const editCard = page.locator("section.card").filter({ hasText: "編集: 運用確認スタッフ / 請求支払確認案件" }).first();
   await editCard.getByLabel("売上単価").fill("34567");
   await editCard.getByLabel("外注単価").fill("23456");
   await editCard.getByRole("button", { name: "アサインを更新" }).click();
@@ -256,20 +256,20 @@ test("phase1 admin can manage assignment operations", async ({ page }) => {
   await expect(assignmentRow).toContainText("23,456");
 
   await assignmentRow.getByRole("button", { name: "状態変更" }).click();
-  const statusCard = page.locator("section.card").filter({ hasText: "状態変更: Browser Smoke Ops Worker / Browser Smoke Payout Project" }).first();
+  const statusCard = page.locator("section.card").filter({ hasText: "状態変更: 運用確認スタッフ / 請求支払確認案件" }).first();
   await statusCard.getByLabel("変更先状態").selectOption("canceled");
-  await statusCard.getByLabel("取消理由").fill("browser smoke cancel reason");
+  await statusCard.getByLabel("取消理由").fill("確認用取消理由");
   await statusCard.getByRole("button", { name: "状態を更新" }).click();
   await expect(assignmentRow).toContainText("取消");
 
   const cancellationSection = page.locator("section.card").filter({ hasText: "取消履歴" }).first();
-  await expect(cancellationSection).toContainText("browser smoke cancel reason");
-  const cancellationRow = cancellationSection.locator("tbody tr").filter({ hasText: "Browser Smoke Ops Worker" }).first();
+  await expect(cancellationSection).toContainText("確認用取消理由");
+  const cancellationRow = cancellationSection.locator("tbody tr").filter({ hasText: "運用確認スタッフ" }).first();
   await cancellationRow.getByRole("button", { name: "再開" }).click();
 
-  const reopenCard = page.locator("section.card").filter({ hasText: "再開 / 状態変更: Browser Smoke Ops Worker / Browser Smoke Payout Project" }).first();
+  const reopenCard = page.locator("section.card").filter({ hasText: "再開 / 状態変更: 運用確認スタッフ / 請求支払確認案件" }).first();
   await reopenCard.getByLabel("変更先状態").selectOption("confirmed");
-  await reopenCard.getByLabel("復帰理由").fill("browser smoke reopen reason");
+  await reopenCard.getByLabel("復帰理由").fill("確認用復帰理由");
   await reopenCard.getByRole("button", { name: "再開する" }).click();
   await expect(assignmentRow).toContainText("確定");
 
@@ -290,7 +290,7 @@ test("phase1 admin can manage assignment operations", async ({ page }) => {
   await expect(assignmentRow).toContainText("仮確定");
 
   await assignmentRow.getByRole("button", { name: "状態変更" }).click();
-  const confirmCard = page.locator("section.card").filter({ hasText: "状態変更: Browser Smoke Ops Worker / Browser Smoke Payout Project" }).first();
+  const confirmCard = page.locator("section.card").filter({ hasText: "状態変更: 運用確認スタッフ / 請求支払確認案件" }).first();
   await confirmCard.getByLabel("変更先状態").selectOption("confirmed");
   await confirmCard.getByRole("button", { name: "状態を更新" }).click();
   await expect(assignmentRow).toContainText("確定");
@@ -303,12 +303,12 @@ test("phase1 admin can manage assignment operations", async ({ page }) => {
 test("phase1 admin can create and update master and price records", async ({ page }) => {
   test.slow();
   const uniqueSuffix = Date.now().toString();
-  const supplierName = `Browser Smoke Supplier ${uniqueSuffix}`;
+  const supplierName = `確認用取引先 ${uniqueSuffix}`;
   const supplierEmail = `supplier-${uniqueSuffix}@example.com`;
   const supplierPhone = `090-${uniqueSuffix.slice(-4)}-${uniqueSuffix.slice(-4)}`;
   const updatedSupplierPhone = `080-${uniqueSuffix.slice(-4)}-${uniqueSuffix.slice(-4)}`;
-  const ruleName = `Browser Smoke Rule ${uniqueSuffix}`;
-  const updatedRuleName = `${ruleName} Updated`;
+  const ruleName = `確認用単価ルール ${uniqueSuffix}`;
+  const updatedRuleName = `${ruleName} 更新版`;
   const salesPrice = String(21000 + Number(uniqueSuffix.slice(-3)));
   const updatedSalesPrice = String(Number(salesPrice) + 111);
   const outsourcePrice = String(12000 + Number(uniqueSuffix.slice(-3)));
@@ -403,16 +403,16 @@ test("phase1 admin can create and update master and price records", async ({ pag
 test("phase1 admin can create and update projects and shift slots", async ({ page }) => {
   test.slow();
   const uniqueSuffix = Date.now().toString();
-  const projectName = `Browser Smoke Project ${uniqueSuffix}`;
-  const updatedProjectName = `${projectName} Updated`;
+  const projectName = `確認用案件 ${uniqueSuffix}`;
+  const updatedProjectName = `${projectName} 更新版`;
   const projectCode = `BSP${uniqueSuffix.slice(-6)}`;
   const updatedProjectCode = `BSU${uniqueSuffix.slice(-6)}`;
-  const projectNote = `project-note-${uniqueSuffix}`;
-  const updatedProjectNote = `project-note-updated-${uniqueSuffix}`;
+  const projectNote = `確認用案件メモ-${uniqueSuffix}`;
+  const updatedProjectNote = `確認用案件更新メモ-${uniqueSuffix}`;
   const shiftLabel = `日勤-${uniqueSuffix.slice(-4)}`;
   const updatedShiftLabel = `遅番-${uniqueSuffix.slice(-4)}`;
-  const shiftNote = `shift-note-${uniqueSuffix}`;
-  const updatedShiftNote = `shift-note-updated-${uniqueSuffix}`;
+  const shiftNote = `確認用シフトメモ-${uniqueSuffix}`;
+  const updatedShiftNote = `確認用シフト更新メモ-${uniqueSuffix}`;
   const workDate = `${periodMonth}-15`;
   const updatedWorkDate = `${periodMonth}-16`;
 

@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=120), nullable=False),
         sa.Column('period_key', sa.String(length=6), nullable=False),
         sa.Column('created_by_user_id', sa.String(length=26), nullable=False),
-        sa.Column('is_shared', sa.Boolean(), nullable=False, server_default=sa.text('0')),
+        sa.Column('is_shared', sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column('assignment_ids', sa.JSON(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),

@@ -1,6 +1,7 @@
 """Create deterministic browser-smoke data for admin-web and staff-mobile smoke checks."""
 
-from datetime import date, datetime, time, timezone
+from calendar import monthrange
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 import sys
@@ -18,30 +19,48 @@ CLIENT_CODE = "SMOKE-CLIENT"
 PROJECT_CODE = "SMOKE-PAYOUT"
 WORKER_NOTE = "browser-smoke-missing-recipient"
 PAYOUT_NOTE = "browser-smoke-missing-recipient-payout"
-AUDIT_REASON = "browser smoke payout delivery summary"
+AUDIT_REASON = "確認用支払送信ログ"
 PERIOD_KEY = "202601"
 DELIVERY_RECIPIENT = "smoke-recipient@example.com"
 DELIVERY_NOTE = "スモーク確認送信"
 INTERNAL_NOTE = "監査ログ要約確認用"
+ADMIN_SMOKE_USERNAME = "確認管理者"
+CLIENT_NAME = "確認用クライアント"
+PAYOUT_PROJECT_NAME = "請求支払確認案件"
+MOBILE_PROJECT_NAME = "スタッフ確認案件"
+MISSING_RECIPIENT_WORKER_NAME = "送信先未設定スタッフ"
+RESPONSE_WORKER_NAME = "予定確認スタッフ"
+OPS_WORKER_NAME = "運用確認スタッフ"
+MOBILE_WORKER_NAME = "モバイル確認スタッフ"
+RESPONSE_ROLE_NAME = "予定確認担当"
+OPS_ROLE_NAME = "運用担当"
+MOBILE_ROLE_NAME = "モバイル担当"
 RESPONSE_WORKER_NOTE = "browser-smoke-assignment-response"
 RESPONSE_WORKER_EMAIL = "smoke-assignment-worker@example.com"
 RESPONSE_ROLE_CODE = "SMOKE-RESP-ROLE"
-RESPONSE_SHIFT_LABEL = "Smoke Pending Response"
-RESPONSE_SHIFT_NOTE = "browser-smoke-assignment-response-shift"
+RESPONSE_SHIFT_LABEL = "予定確認イベント"
+RESPONSE_SHIFT_NOTE = "確認用予定確認シフト"
 OPS_WORKER_NOTE = "browser-smoke-assignment-ops"
 OPS_WORKER_EMAIL = "smoke-assignment-ops@example.com"
 OPS_ROLE_CODE = "SMOKE-OPS-ROLE"
-OPS_SHIFT_LABEL = "Smoke Ops Assignment"
-OPS_SHIFT_NOTE = "browser-smoke-assignment-ops-shift"
+OPS_SHIFT_LABEL = "運用確認イベント"
+OPS_SHIFT_NOTE = "確認用運用シフト"
 MOBILE_PROJECT_CODE = "SMOKE-MOBILE"
 MOBILE_WORKER_NOTE = "browser-smoke-mobile-worker"
 MOBILE_WORKER_EMAIL = "smoke-mobile-worker@example.com"
 MOBILE_ROLE_CODE = "SMOKE-MOBILE-ROLE"
-MOBILE_TODAY_SHIFT_LABEL = "Smoke Mobile Today"
-MOBILE_PENDING_SHIFT_LABEL = "Smoke Mobile Pending Response"
-MOBILE_SHIFT_NOTE = "browser-smoke-mobile-shift"
-MOBILE_EXPENSE_NOTE = "browser-smoke-mobile-expense"
-MOBILE_AVAILABILITY_NOTE = "browser-smoke-mobile-availability"
+MOBILE_TODAY_SHIFT_LABEL = "本日確認イベント"
+MOBILE_PENDING_SHIFT_LABEL = "確認待ちイベント"
+MOBILE_SHIFT_NOTE = "確認用モバイルシフト"
+MOBILE_EXPENSE_NOTE = "確認用経費申請"
+MOBILE_AVAILABILITY_NOTE = "確認用事前予定"
+MOBILE_TODAY_DATE = date.today()
+MOBILE_PENDING_DATE = MOBILE_TODAY_DATE + timedelta(days=1)
+MOBILE_AVAILABILITY_DATE = date(
+    MOBILE_TODAY_DATE.year,
+    MOBILE_TODAY_DATE.month,
+    min(10, monthrange(MOBILE_TODAY_DATE.year, MOBILE_TODAY_DATE.month)[1]),
+)
 
 
 def ensure_client(session):
@@ -49,12 +68,15 @@ def ensure_client(session):
     if client is None:
         client = Client(
             id=generate_ulid(),
-            name="Browser Smoke Client",
+            name=CLIENT_NAME,
             code=CLIENT_CODE,
             contact_email="smoke-client@example.com",
         )
         session.add(client)
         session.flush()
+    else:
+        client.name = CLIENT_NAME
+        client.contact_email = "smoke-client@example.com"
     return client
 
 
@@ -63,7 +85,7 @@ def ensure_project(session, client_id: str):
     if project is None:
         project = Project(
             id=generate_ulid(),
-            name="Browser Smoke Payout Project",
+            name=PAYOUT_PROJECT_NAME,
             code=PROJECT_CODE,
             client_id=client_id,
             is_active=True,
@@ -71,6 +93,7 @@ def ensure_project(session, client_id: str):
         session.add(project)
         session.flush()
     else:
+        project.name = PAYOUT_PROJECT_NAME
         project.client_id = client_id
         project.is_active = True
     return project
@@ -81,7 +104,7 @@ def ensure_mobile_project(session, client_id: str):
     if project is None:
         project = Project(
             id=generate_ulid(),
-            name="Browser Smoke Mobile Project",
+            name=MOBILE_PROJECT_NAME,
             code=MOBILE_PROJECT_CODE,
             client_id=client_id,
             is_active=True,
@@ -89,7 +112,7 @@ def ensure_mobile_project(session, client_id: str):
         session.add(project)
         session.flush()
     else:
-        project.name = "Browser Smoke Mobile Project"
+        project.name = MOBILE_PROJECT_NAME
         project.client_id = client_id
         project.is_active = True
     return project
@@ -100,7 +123,7 @@ def ensure_worker(session):
     if worker is None:
         worker = Worker(
             id=generate_ulid(),
-            name="Browser Smoke Missing Recipient Worker",
+            name=MISSING_RECIPIENT_WORKER_NAME,
             email=None,
             notes=WORKER_NOTE,
             is_active=True,
@@ -108,7 +131,7 @@ def ensure_worker(session):
         session.add(worker)
         session.flush()
     else:
-        worker.name = "Browser Smoke Missing Recipient Worker"
+        worker.name = MISSING_RECIPIENT_WORKER_NAME
         worker.email = None
         worker.is_active = True
     return worker
@@ -119,7 +142,7 @@ def ensure_assignment_response_worker(session):
     if worker is None:
         worker = Worker(
             id=generate_ulid(),
-            name="Browser Smoke Response Worker",
+            name=RESPONSE_WORKER_NAME,
             email=RESPONSE_WORKER_EMAIL,
             notes=RESPONSE_WORKER_NOTE,
             is_active=True,
@@ -127,7 +150,7 @@ def ensure_assignment_response_worker(session):
         session.add(worker)
         session.flush()
     else:
-        worker.name = "Browser Smoke Response Worker"
+        worker.name = RESPONSE_WORKER_NAME
         worker.email = RESPONSE_WORKER_EMAIL
         worker.is_active = True
     return worker
@@ -138,7 +161,7 @@ def ensure_assignment_ops_worker(session):
     if worker is None:
         worker = Worker(
             id=generate_ulid(),
-            name="Browser Smoke Ops Worker",
+            name=OPS_WORKER_NAME,
             email=OPS_WORKER_EMAIL,
             notes=OPS_WORKER_NOTE,
             is_active=True,
@@ -146,7 +169,7 @@ def ensure_assignment_ops_worker(session):
         session.add(worker)
         session.flush()
     else:
-        worker.name = "Browser Smoke Ops Worker"
+        worker.name = OPS_WORKER_NAME
         worker.email = OPS_WORKER_EMAIL
         worker.is_active = True
     return worker
@@ -157,7 +180,7 @@ def ensure_mobile_worker(session):
     if worker is None:
         worker = Worker(
             id=generate_ulid(),
-            name="Browser Smoke Mobile Worker",
+            name=MOBILE_WORKER_NAME,
             email=MOBILE_WORKER_EMAIL,
             notes=MOBILE_WORKER_NOTE,
             is_active=True,
@@ -165,7 +188,7 @@ def ensure_mobile_worker(session):
         session.add(worker)
         session.flush()
     else:
-        worker.name = "Browser Smoke Mobile Worker"
+        worker.name = MOBILE_WORKER_NAME
         worker.email = MOBILE_WORKER_EMAIL
         worker.is_active = True
     return worker
@@ -176,13 +199,13 @@ def ensure_response_role(session):
     if role is None:
         role = Role(
             id=generate_ulid(),
-            name="Browser Smoke Response Role",
+            name=RESPONSE_ROLE_NAME,
             code=RESPONSE_ROLE_CODE,
         )
         session.add(role)
         session.flush()
     else:
-        role.name = "Browser Smoke Response Role"
+        role.name = RESPONSE_ROLE_NAME
     return role
 
 
@@ -191,13 +214,13 @@ def ensure_assignment_ops_role(session):
     if role is None:
         role = Role(
             id=generate_ulid(),
-            name="Browser Smoke Ops Role",
+            name=OPS_ROLE_NAME,
             code=OPS_ROLE_CODE,
         )
         session.add(role)
         session.flush()
     else:
-        role.name = "Browser Smoke Ops Role"
+        role.name = OPS_ROLE_NAME
     return role
 
 
@@ -206,13 +229,13 @@ def ensure_mobile_role(session):
     if role is None:
         role = Role(
             id=generate_ulid(),
-            name="Browser Smoke Mobile Role",
+            name=MOBILE_ROLE_NAME,
             code=MOBILE_ROLE_CODE,
         )
         session.add(role)
         session.flush()
     else:
-        role.name = "Browser Smoke Mobile Role"
+        role.name = MOBILE_ROLE_NAME
     return role
 
 
@@ -283,7 +306,7 @@ def ensure_mobile_today_slot(session, project_id: str):
         session.query(ShiftSlot)
         .filter(
             ShiftSlot.project_id == project_id,
-            ShiftSlot.work_date == date(2026, 4, 1),
+            ShiftSlot.work_date == MOBILE_TODAY_DATE,
             ShiftSlot.shift_label == MOBILE_TODAY_SHIFT_LABEL,
         )
         .first()
@@ -292,7 +315,7 @@ def ensure_mobile_today_slot(session, project_id: str):
         slot = ShiftSlot(
             id=generate_ulid(),
             project_id=project_id,
-            work_date=date(2026, 4, 1),
+            work_date=MOBILE_TODAY_DATE,
             start_time=time(9, 0),
             end_time=time(18, 0),
             shift_label=MOBILE_TODAY_SHIFT_LABEL,
@@ -314,7 +337,7 @@ def ensure_mobile_pending_slot(session, project_id: str):
         session.query(ShiftSlot)
         .filter(
             ShiftSlot.project_id == project_id,
-            ShiftSlot.work_date == date(2026, 4, 3),
+            ShiftSlot.work_date == MOBILE_PENDING_DATE,
             ShiftSlot.shift_label == MOBILE_PENDING_SHIFT_LABEL,
         )
         .first()
@@ -323,7 +346,7 @@ def ensure_mobile_pending_slot(session, project_id: str):
         slot = ShiftSlot(
             id=generate_ulid(),
             project_id=project_id,
-            work_date=date(2026, 4, 3),
+            work_date=MOBILE_PENDING_DATE,
             start_time=time(10, 0),
             end_time=time(19, 0),
             shift_label=MOBILE_PENDING_SHIFT_LABEL,
@@ -471,7 +494,7 @@ def ensure_mobile_availability(session, worker_id: str):
         session.query(WorkerAvailability)
         .filter(
             WorkerAvailability.worker_id == worker_id,
-            WorkerAvailability.availability_date == date(2026, 4, 10),
+            WorkerAvailability.availability_date == MOBILE_AVAILABILITY_DATE,
         )
         .first()
     )
@@ -479,7 +502,7 @@ def ensure_mobile_availability(session, worker_id: str):
         entry = WorkerAvailability(
             id=generate_ulid(),
             worker_id=worker_id,
-            availability_date=date(2026, 4, 10),
+            availability_date=MOBILE_AVAILABILITY_DATE,
             status=AvailabilityStatus.UNDECIDED.value,
             notes=MOBILE_AVAILABILITY_NOTE,
         )
@@ -498,7 +521,7 @@ def ensure_mobile_expense(session, project_id: str, worker_id: str):
             id=generate_ulid(),
             project_id=project_id,
             worker_id=worker_id,
-            expense_date=date(2026, 4, 1),
+            expense_date=MOBILE_TODAY_DATE,
             category="交通費",
             amount=Decimal("980.00"),
             description="スモーク用既存経費",
@@ -512,7 +535,7 @@ def ensure_mobile_expense(session, project_id: str, worker_id: str):
     else:
         expense.project_id = project_id
         expense.worker_id = worker_id
-        expense.expense_date = date(2026, 4, 1)
+        expense.expense_date = MOBILE_TODAY_DATE
         expense.category = "交通費"
         expense.amount = Decimal("980.00")
         expense.description = "スモーク用既存経費"
@@ -583,7 +606,7 @@ def ensure_audit_log(session, payout_id: str, project_id: str):
             action=AuditAction.PAYOUT_DELIVERY_SENT.value,
             target_type="payout",
             target_id=payout_id,
-            actor="admin_web_smoke",
+            actor=ADMIN_SMOKE_USERNAME,
             actor_role="admin",
             after_value=after_value,
             reason=AUDIT_REASON,
@@ -592,7 +615,7 @@ def ensure_audit_log(session, payout_id: str, project_id: str):
         )
         session.add(log)
     else:
-        log.actor = "admin_web_smoke"
+        log.actor = ADMIN_SMOKE_USERNAME
         log.actor_role = "admin"
         log.after_value = after_value
         log.reason = AUDIT_REASON
@@ -618,7 +641,7 @@ def ensure_payout_delivery(session, payout_id: str):
             recipient_email=DELIVERY_RECIPIENT,
             status="sent",
             provider="smtp",
-            delivered_by="admin_web_smoke",
+            delivered_by=ADMIN_SMOKE_USERNAME,
             delivery_note=DELIVERY_NOTE,
             internal_note=INTERNAL_NOTE,
             sent_at=datetime(2026, 1, 15, 9, 30, tzinfo=timezone.utc),
@@ -627,7 +650,7 @@ def ensure_payout_delivery(session, payout_id: str):
     else:
         delivery.status = "sent"
         delivery.provider = "smtp"
-        delivery.delivered_by = "admin_web_smoke"
+        delivery.delivered_by = ADMIN_SMOKE_USERNAME
         delivery.delivery_note = DELIVERY_NOTE
         delivery.internal_note = INTERNAL_NOTE
         delivery.sent_at = datetime(2026, 1, 15, 9, 30, tzinfo=timezone.utc)

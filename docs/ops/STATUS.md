@@ -1,6 +1,13 @@
 # 実装状況（STATUS）
 
-最終更新: 2026-04-01
+最終更新: 2026-04-02
+
+### 2026-04-02 本番デプロイ要約
+- 完了: Xserver VPS (220.158.28.35) に本番環境を構築し、nginx / systemd / PostgreSQL を設定
+- 完了: `vanzai-portal.com`、`www.vanzai-portal.com`、`api.vanzai-portal.com`、`staff.vanzai-portal.com` のHTTPS化
+- 完了: admin-web / staff-mobile の production build 配置、API の常駐化、`/api/health` で healthy 応答を確認
+- 完了: `pyproject.toml` に認証依存関係を追加し、`scripts/deploy/02_app_deploy.sh` を現在ブランチ追従へ修正
+- 注意: NordVPN 有効時は DNS 解決が不安定だったため、Windows 側 hosts に4ドメインを固定して回避した
 
 ---
 
@@ -44,7 +51,7 @@
 - 事前に `alembic upgrade head` でローカル DB を最新スキーマへ上げる
 - API は `c:/VANZAI_project/.venv/Scripts/python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000` で起動する
 - admin-web は `Set-Location apps/admin-web; npm run dev -- --host 127.0.0.1 --port 3000` で起動する
-- スモークは `Set-Location apps/admin-web; $env:ADMIN_WEB_SMOKE_USERNAME='admin_web_smoke'; $env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'; $env:ADMIN_WEB_SMOKE_MONTH='2026-01'; $env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'; npm run smoke:e2e` で実行する
+- スモークは `Set-Location apps/admin-web; $env:ADMIN_WEB_SMOKE_USERNAME='確認管理者'; $env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'; $env:ADMIN_WEB_SMOKE_MONTH='2026-01'; $env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'; npm run smoke:e2e` で実行する
 - `apps/admin-web/e2e/phase1-smoke.spec.ts` は実行前に `scripts/ensure_local_admin.py` と `scripts/ensure_browser_smoke_data.py` を呼び、最低限のログインユーザーと確認用データをローカル DB に投入する
 - 2026-04-01 時点で、支払送信先未設定サマリーと支払送信監査ログ要約を含むブラウザスモークは成功している
 
@@ -112,7 +119,8 @@
   - `apps/staff-mobile` に今日の打刻 UI と経費申請 / 今月の申請一覧を追加し、focused pytest 8件と staff-mobile build で検証済み
 - 完了: 予定確認、稼働可否、expense 承認導線
   - `worker_availability` テーブルと `GET/POST /api/worker-availability` を追加し、worker ロールに `availability_read` / `availability_write` を付与した
-  - `apps/staff-mobile` に月次予定確認画面、日別の稼働可否入力画面、経費一覧からの領収書参照導線を追加した
+  - `apps/staff-mobile` に月次予定確認画面、日別の事前予定入力画面、経費一覧からの領収書参照導線を追加した
+  - 2026-04-01 に事前予定の選択肢を `稼働OK（1日）` / `稼働OK（15時〜）` / `稼働不可` / `稼働はできなくはないので事前相談して` の4択へ更新し、旧 `available` は `available_all_day` に互換マッピング、旧 `undecided` は未登録表示で扱うようにした
   - `POST /api/expenses/{id}/approve`、`POST /api/expenses/{id}/reject`、`GET /api/expenses/{id}/receipt` を追加し、admin-web 経費一覧から承認 / 却下 / 領収書ダウンロードを実行できるようにした
   - 受領ファイル保存は `ObjectStorage` 抽象に寄せ、Cloudflare R2 切替時に object key 契約を維持できるよう整理した
   - focused pytest 13件、admin-web build、staff-mobile build で検証済み
