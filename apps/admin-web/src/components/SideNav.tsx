@@ -63,7 +63,7 @@ export function SideNav() {
               {Icon && (
                 <Icon
                   size={16}
-                  style={{ flexShrink: 0, opacity: 0.75, marginTop: 1 }}
+                  style={{ flexShrink: 0, opacity: 0.75, alignSelf: "center" }}
                   aria-hidden="true"
                 />
               )}
