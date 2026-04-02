@@ -853,10 +853,17 @@ button {
     display: grid;
   }
 
-  .mobile-header-actions,
   .settings-actions,
   .settings-preview-item {
     display: grid;
     justify-content: stretch;
+  }
+
+  .mobile-header-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+    justify-content: flex-end;
+    align-items: center;
   }
 }
