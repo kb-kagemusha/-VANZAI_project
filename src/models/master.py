@@ -64,6 +64,13 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
         String(26), ForeignKey("workers.id"), nullable=True
     )  # 非推奨（後方互換のため残す）
 
+    # スタッフ資格・保有物
+    smoking_area_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    has_p_shirt: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    has_best: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    stores_training_done: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    pioneer_training_done: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     # Relationships
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="worker")
     actuals: Mapped[list["Actual"]] = relationship(back_populates="worker")

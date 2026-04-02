@@ -62,6 +62,7 @@ import type {
   WorkerListItem,
   WorkerCreateRequest,
   WorkerUpdateRequest,
+  AvailabilityCalendarResponse,
 } from "../../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -608,6 +609,14 @@ export function deleteWorker(workerId: string) {
 
 export function getWorkerAvailabilityPreferences(workerId: string) {
   return apiFetch<WorkerAvailabilityPreference>(`/api/workers/${workerId}/availability-preferences`);
+}
+
+export function getAvailabilityCalendar(params: {
+  date_from: string;
+  date_to: string;
+  is_active?: boolean;
+}) {
+  return apiFetch<AvailabilityCalendarResponse>("/api/availability-calendar", undefined, params as Record<string, string | number | boolean | undefined>);
 }
 
 export function getSuppliers(params?: Record<string, string | number | boolean | undefined>) {

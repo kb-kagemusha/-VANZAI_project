@@ -17,6 +17,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: DASHBOARD_ROLES,
   },
   {
+    to: "/operations/availability-calendar",
+    label: "出勤可能日カレンダー",
+    description: "スタッフの出勤可能日とシフト担当を確認",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
     to: "/operations/csv-import",
     label: "CSV取込",
     description: "実績CSVの提出と洗い替え",

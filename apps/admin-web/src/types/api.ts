@@ -592,6 +592,11 @@ export interface WorkerListItem {
   introducer_supplier_id: string | null;
   introducer_supplier_name: string | null;
   notes: string | null;
+  smoking_area_ok: boolean | null;
+  has_p_shirt: boolean | null;
+  has_best: boolean | null;
+  stores_training_done: boolean | null;
+  pioneer_training_done: boolean | null;
 }
 
 export interface WorkerCreateRequest {
@@ -601,9 +606,48 @@ export interface WorkerCreateRequest {
   introducer_supplier_id: string | null;
   notes: string | null;
   is_active: boolean;
+  smoking_area_ok: boolean | null;
+  has_p_shirt: boolean | null;
+  has_best: boolean | null;
+  stores_training_done: boolean | null;
+  pioneer_training_done: boolean | null;
 }
 
 export interface WorkerUpdateRequest extends WorkerCreateRequest {}
+
+export interface CalendarDayAssignment {
+  id: string;
+  project_id: string;
+  project_name: string;
+  shift_slot_id: string;
+  shift_label: string | null;
+  status: string;
+  role_name: string;
+}
+
+export interface CalendarDayInfo {
+  availability_status: string | null;
+  availability_notes: string | null;
+  assignments: CalendarDayAssignment[];
+}
+
+export interface CalendarWorkerRow {
+  id: string;
+  name: string;
+  is_active: boolean;
+  smoking_area_ok: boolean | null;
+  has_p_shirt: boolean | null;
+  has_best: boolean | null;
+  stores_training_done: boolean | null;
+  pioneer_training_done: boolean | null;
+  days: Record<string, CalendarDayInfo>;
+}
+
+export interface AvailabilityCalendarResponse {
+  date_from: string;
+  date_to: string;
+  workers: CalendarWorkerRow[];
+}
 
 export interface WorkerAvailabilityPreference {
   worker_id: string;

@@ -317,6 +317,11 @@ export function MasterDataPage() {
             introducer_supplier_id: createSupplierId || null,
             notes: createNotes || null,
             is_active: createIsActive,
+            smoking_area_ok: null,
+            has_p_shirt: null,
+            has_best: null,
+            stores_training_done: null,
+            pioneer_training_done: null,
           },
         });
         break;
@@ -367,6 +372,11 @@ export function MasterDataPage() {
           introducer_supplier_id: editSupplierId || null,
           notes: editNotes || null,
           is_active: editIsActive,
+          smoking_area_ok: selectedWorker.smoking_area_ok ?? null,
+          has_p_shirt: selectedWorker.has_p_shirt ?? null,
+          has_best: selectedWorker.has_best ?? null,
+          stores_training_done: selectedWorker.stores_training_done ?? null,
+          pioneer_training_done: selectedWorker.pioneer_training_done ?? null,
         },
       });
       return;

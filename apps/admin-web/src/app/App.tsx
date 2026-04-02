@@ -7,6 +7,7 @@ import { ActualsPage } from "../pages/ActualsPage";
 import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
+import { AvailabilityCalendarPage } from "../pages/AvailabilityCalendarPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
@@ -44,6 +45,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "site_manager"]}>
                 <CsvImportPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/availability-calendar"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <AvailabilityCalendarPage />
               </PermissionRoute>
             }
           />

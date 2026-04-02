@@ -649,6 +649,48 @@ class WorkerAvailabilityPreferenceUpsertRequest(BaseModel):
 
 
 # ===========================
+# Availability Calendar Schemas
+# ===========================
+
+class CalendarDayAssignment(BaseModel):
+    """カレンダー1日内の配置情報"""
+    id: str
+    project_id: str
+    project_name: str
+    shift_slot_id: str
+    shift_label: Optional[str] = None
+    status: str
+    role_name: str
+
+
+class CalendarDayInfo(BaseModel):
+    """カレンダー1日分の情報"""
+    availability_status: Optional[str] = None
+    availability_notes: Optional[str] = None
+    assignments: list[CalendarDayAssignment] = Field(default_factory=list)
+
+
+class CalendarWorkerRow(BaseModel):
+    """カレンダービューの1稼働者行"""
+    id: str
+    name: str
+    is_active: bool
+    smoking_area_ok: Optional[bool] = None
+    has_p_shirt: Optional[bool] = None
+    has_best: Optional[bool] = None
+    stores_training_done: Optional[bool] = None
+    pioneer_training_done: Optional[bool] = None
+    days: dict[str, CalendarDayInfo] = Field(default_factory=dict)
+
+
+class AvailabilityCalendarResponse(BaseModel):
+    """出勤可能日カレンダーレスポンス"""
+    date_from: date
+    date_to: date
+    workers: list[CalendarWorkerRow]
+
+
+# ===========================
 # Expenses List Schemas
 # ===========================
 
@@ -869,6 +911,12 @@ class WorkerListItem(BaseModel):
     introducer_supplier_id: Optional[str] = None
     introducer_supplier_name: Optional[str] = None
     notes: Optional[str] = None
+    # スタッフ資格・保有物
+    smoking_area_ok: Optional[bool] = None
+    has_p_shirt: Optional[bool] = None
+    has_best: Optional[bool] = None
+    stores_training_done: Optional[bool] = None
+    pioneer_training_done: Optional[bool] = None
 
 
 class WorkerListResponse(PageResponse[WorkerListItem]):
@@ -884,6 +932,12 @@ class WorkerCreateRequest(BaseModel):
     introducer_supplier_id: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool = True
+    # スタッフ資格・保有物
+    smoking_area_ok: Optional[bool] = None
+    has_p_shirt: Optional[bool] = None
+    has_best: Optional[bool] = None
+    stores_training_done: Optional[bool] = None
+    pioneer_training_done: Optional[bool] = None
 
 
 class WorkerUpdateRequest(WorkerCreateRequest):

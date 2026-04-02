@@ -10,7 +10,7 @@ from pathlib import Path, PurePath
 import re
 from decimal import Decimal, InvalidOperation
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, status
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
@@ -38,6 +38,7 @@ from src.api.schemas import (
     ActualListQuery, ActualListItem, ActualListResponse, AttendanceActionRequest, AttendanceRecordResponse,
     WorkerAvailabilityListQuery, WorkerAvailabilityListItem, WorkerAvailabilityListResponse, WorkerAvailabilityUpsertRequest,
     WorkerAvailabilityPreferenceResponse, WorkerAvailabilityPreferenceUpsertRequest,
+    AvailabilityCalendarResponse, CalendarWorkerRow, CalendarDayInfo, CalendarDayAssignment,
     AssignmentListQuery, AssignmentListItem, AssignmentListResponse, AssignmentReminderSendRequest, AssignmentReminderSendResponse, AssignmentReminderSendWorkerResult, AssignmentReminderHistoryRequest, AssignmentReminderHistoryItem, AssignmentReminderHistoryResponse, AssignmentEscalationSendRequest, AssignmentEscalationSendResponse, AssignmentEscalationRecipientResult, AssignmentEscalationHistoryRequest, AssignmentEscalationHistoryItem, AssignmentEscalationHistoryResponse, AssignmentCancellationHistoryQuery, AssignmentCancellationHistoryItem, AssignmentCancellationHistoryResponse, AssignmentSelectionSetListQuery, AssignmentSelectionSetItem, AssignmentSelectionSetListResponse, AssignmentSelectionSetCreateRequest, AssignmentCreateRequest, AssignmentUpdateRequest, AssignmentBulkStatusUpdateRequest, AssignmentStatusUpdateRequest, AssignmentWorkerResponseUpdateRequest, AssignmentBulkMutationResponse,
     ProjectListQuery, ProjectListItem, ProjectListResponse, ProjectCreateRequest, ProjectUpdateRequest, ProjectNotesUpdateRequest,
     ShiftSlotListQuery, ShiftSlotListItem, ShiftSlotListResponse, ShiftSlotCreateRequest, ShiftSlotUpdateRequest, ShiftSlotNotesUpdateRequest,
@@ -1642,6 +1643,127 @@ async def upsert_worker_availability_preferences(
     db.refresh(entry)
 
     return _serialize_worker_availability_preference(entry)
+
+
+# ===========================
+# 出勤可能日カレンダーエンドポイント
+# ===========================
+
+@app.get("/api/availability-calendar", response_model=AvailabilityCalendarResponse, tags=["Worker Availability"])
+async def get_availability_calendar(
+    date_from: date = Query(..., description="表示開始日"),
+    date_to: date = Query(..., description="表示終了日"),
+    is_active: bool = Query(True, description="有効スタッフのみ"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """出勤可能日カレンダー（スタッフ×日付マトリクス）を返す"""
+    try:
+        check_permission(current_user, Permission.AVAILABILITY_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    if (date_to - date_from).days > 60:
+        raise HTTPException(status_code=400, detail="date range exceeds 60 days")
+
+    from datetime import timedelta
+    from src.models.master import Worker, Role
+    from src.models.transaction import Assignment, ShiftSlot, WorkerAvailability
+    from src.models.transaction import Project
+
+    # 稼働者一覧
+    workers_q = db.query(Worker).filter(Worker.deleted_at.is_(None))
+    if is_active:
+        workers_q = workers_q.filter(Worker.is_active == True)  # noqa: E712
+    workers = workers_q.order_by(Worker.name).all()
+
+    if not workers:
+        return AvailabilityCalendarResponse(date_from=date_from, date_to=date_to, workers=[])
+
+    worker_ids = [w.id for w in workers]
+
+    # 出勤可否レコード（まとめて取得）
+    avail_rows = (
+        db.query(WorkerAvailability)
+        .filter(
+            WorkerAvailability.worker_id.in_(worker_ids),
+            WorkerAvailability.availability_date >= date_from,
+            WorkerAvailability.availability_date <= date_to,
+        )
+        .all()
+    )
+    avail_map: dict[str, dict[str, WorkerAvailability]] = {}
+    for row in avail_rows:
+        avail_map.setdefault(row.worker_id, {})[row.availability_date.isoformat()] = row
+
+    # 配置一覧（まとめて取得）- project_id を ShiftSlot から取得
+    assign_rows = (
+        db.query(
+            Assignment,
+            Project.id.label("proj_id"),
+            Project.name.label("proj_name"),
+            ShiftSlot.work_date,
+            ShiftSlot.shift_label,
+            Role.name.label("role_name"),
+        )
+        .join(ShiftSlot, Assignment.shift_slot_id == ShiftSlot.id)
+        .join(Project, ShiftSlot.project_id == Project.id)
+        .join(Role, Assignment.role_id == Role.id)
+        .filter(
+            Assignment.worker_id.in_(worker_ids),
+            ShiftSlot.work_date >= date_from,
+            ShiftSlot.work_date <= date_to,
+            Assignment.status != "canceled",
+        )
+        .all()
+    )
+    assign_map: dict[str, dict[str, list[CalendarDayAssignment]]] = {}
+    for asgn, proj_id, proj_name, work_date, shift_label, role_name in assign_rows:
+        date_str = work_date.isoformat()
+        assign_map.setdefault(asgn.worker_id, {}).setdefault(date_str, []).append(
+            CalendarDayAssignment(
+                id=asgn.id,
+                project_id=proj_id,
+                project_name=proj_name,
+                shift_slot_id=asgn.shift_slot_id,
+                shift_label=shift_label,
+                status=asgn.status,
+                role_name=role_name,
+            )
+        )
+
+    # 組み立て
+    worker_rows = []
+    for w in workers:
+        days: dict[str, CalendarDayInfo] = {}
+        av = avail_map.get(w.id, {})
+        am = assign_map.get(w.id, {})
+        cur = date_from
+        while cur <= date_to:
+            ds = cur.isoformat()
+            av_rec = av.get(ds)
+            days[ds] = CalendarDayInfo(
+                availability_status=av_rec.status if av_rec else None,
+                availability_notes=av_rec.notes if av_rec else None,
+                assignments=am.get(ds, []),
+            )
+            cur += timedelta(days=1)
+
+        worker_rows.append(
+            CalendarWorkerRow(
+                id=w.id,
+                name=w.name,
+                is_active=w.is_active,
+                smoking_area_ok=w.smoking_area_ok,
+                has_p_shirt=w.has_p_shirt,
+                has_best=w.has_best,
+                stores_training_done=w.stores_training_done,
+                pioneer_training_done=w.pioneer_training_done,
+                days=days,
+            )
+        )
+
+    return AvailabilityCalendarResponse(date_from=date_from, date_to=date_to, workers=worker_rows)
 
 
 # ===========================
@@ -4888,6 +5010,11 @@ async def list_workers(
             introducer_supplier_id=w.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
             notes=w.notes,
+            smoking_area_ok=w.smoking_area_ok,
+            has_p_shirt=w.has_p_shirt,
+            has_best=w.has_best,
+            stores_training_done=w.stores_training_done,
+            pioneer_training_done=w.pioneer_training_done,
         )
         for w, supplier_name in rows
     ]
@@ -4920,6 +5047,11 @@ async def create_worker_master(
             introducer_supplier_id=request.introducer_supplier_id,
             notes=request.notes.strip() if request.notes else None,
             is_active=request.is_active,
+            smoking_area_ok=request.smoking_area_ok,
+            has_p_shirt=request.has_p_shirt,
+            has_best=request.has_best,
+            stores_training_done=request.stores_training_done,
+            pioneer_training_done=request.pioneer_training_done,
         )
         db.add(worker)
 
@@ -4948,6 +5080,11 @@ async def create_worker_master(
             introducer_supplier_id=worker.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
             notes=worker.notes,
+            smoking_area_ok=worker.smoking_area_ok,
+            has_p_shirt=worker.has_p_shirt,
+            has_best=worker.has_best,
+            stores_training_done=worker.stores_training_done,
+            pioneer_training_done=worker.pioneer_training_done,
         )
     except HTTPException:
         raise
@@ -4997,6 +5134,11 @@ async def update_worker_master(
         worker.introducer_supplier_id = request.introducer_supplier_id
         worker.notes = request.notes.strip() if request.notes else None
         worker.is_active = request.is_active
+        worker.smoking_area_ok = request.smoking_area_ok
+        worker.has_p_shirt = request.has_p_shirt
+        worker.has_best = request.has_best
+        worker.stores_training_done = request.stores_training_done
+        worker.pioneer_training_done = request.pioneer_training_done
 
         AuditService(db).log(
             "worker_updated",
@@ -5026,6 +5168,11 @@ async def update_worker_master(
             introducer_supplier_id=worker.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
             notes=worker.notes,
+            smoking_area_ok=worker.smoking_area_ok,
+            has_p_shirt=worker.has_p_shirt,
+            has_best=worker.has_best,
+            stores_training_done=worker.stores_training_done,
+            pioneer_training_done=worker.pioneer_training_done,
         )
     except HTTPException:
         raise
