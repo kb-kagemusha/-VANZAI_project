@@ -92,10 +92,10 @@ export function MobileShell() {
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
           <div className="mobile-header-actions">
+            <button type="button" onClick={logout}>ログアウト</button>
             <NavLink to="/settings" className="secondary-button header-action-link">
               個人設定
             </NavLink>
-            <button type="button" onClick={logout}>ログアウト</button>
           </div>
         </div>
       </header>

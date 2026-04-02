@@ -14,6 +14,7 @@ import {
   weekdayPreferenceOptions,
   type AvailabilityStatusValue,
   type StaffAvailabilityPreferences,
+  type WeekdayPreferenceKey,
 } from "../lib/settings/staffPreferences";
 
 export function PersonalSettingsPage() {
@@ -50,9 +51,40 @@ export function PersonalSettingsPage() {
     },
   });
 
-  function applyPreset(nextPreferences: StaffAvailabilityPreferences) {
-    setMessage("");
-    setPreferences(nextPreferences);
+  const PRESETS: Array<{
+    label: string;
+    value: StaffAvailabilityPreferences;
+  }> = [
+    {
+      label: "土日祝休み",
+      value: { weeklyDefaultStatuses: { "0": "unavailable", "6": "unavailable" }, holidayDefaultStatus: "unavailable", autoApplyEnabled: true },
+    },
+    {
+      label: "土日休み",
+      value: { weeklyDefaultStatuses: { "0": "unavailable", "6": "unavailable" }, holidayDefaultStatus: "", autoApplyEnabled: true },
+    },
+    {
+      label: "日曜休み",
+      value: { weeklyDefaultStatuses: { "0": "unavailable" }, holidayDefaultStatus: "", autoApplyEnabled: true },
+    },
+    {
+      label: "祝日休み",
+      value: { weeklyDefaultStatuses: {}, holidayDefaultStatus: "unavailable", autoApplyEnabled: true },
+    },
+    {
+      label: "設定なし",
+      value: getDefaultStaffAvailabilityPreferences(),
+    },
+  ];
+
+  function isPresetActive(preset: StaffAvailabilityPreferences): boolean {
+    const weekdayKeys: WeekdayPreferenceKey[] = ["0", "1", "2", "3", "4", "5", "6"];
+    for (const key of weekdayKeys) {
+      const a = preferences.weeklyDefaultStatuses[key] ?? "";
+      const b = preset.weeklyDefaultStatuses[key] ?? "";
+      if (a !== b) return false;
+    }
+    return preferences.holidayDefaultStatus === preset.holidayDefaultStatus;
   }
 
   function handleSave() {
@@ -82,36 +114,20 @@ export function PersonalSettingsPage() {
 
       <section className="panel-card accent-blue settings-stack">
         <p className="panel-label">プリセット</p>
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() =>
-              applyPreset({
-                weeklyDefaultStatuses: { "0": "unavailable", "6": "unavailable" },
-                holidayDefaultStatus: "unavailable",
-                autoApplyEnabled: true,
-              })
-            }
-          >
-            土日祝休み
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() =>
-              applyPreset({
-                weeklyDefaultStatuses: { "0": "unavailable", "6": "unavailable" },
-                holidayDefaultStatus: "",
-                autoApplyEnabled: true,
-              })
-            }
-          >
-            土日休み
-          </button>
-          <button type="button" className="secondary-button" onClick={() => applyPreset(getDefaultStaffAvailabilityPreferences())}>
-            設定なし
-          </button>
+        <div className="settings-preset-grid">
+          {PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className={`preset-button${isPresetActive(preset.value) ? " preset-button--active" : ""}`}
+              onClick={() => {
+                setMessage("");
+                setPreferences(preset.value);
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </section>
 

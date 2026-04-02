@@ -215,8 +215,12 @@ button {
   text-decoration: none;
 }
 
-.mobile-header-meta button {
+/* ログアウト・個人設定ボタンのサイズを統一 */
+.mobile-header-meta button,
+.mobile-header-meta .header-action-link {
   padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .mobile-status-band {
@@ -729,6 +733,36 @@ button {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
+}
+
+/* プリセットボタングリッド */
+.settings-preset-grid {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.preset-button {
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 2px solid rgba(21, 74, 120, 0.22);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--accent-deep, #154a78);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.preset-button:hover {
+  background: rgba(21, 74, 120, 0.08);
+  border-color: rgba(21, 74, 120, 0.45);
+}
+
+.preset-button--active {
+  background: var(--accent-deep, #154a78);
+  border-color: var(--accent-deep, #154a78);
+  color: #fff;
 }
 
 .text-link {
