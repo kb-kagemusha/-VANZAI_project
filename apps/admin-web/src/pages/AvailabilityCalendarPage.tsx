@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
@@ -145,7 +145,30 @@ export function AvailabilityCalendarPage() {
   const [editQualsMap, setEditQualsMap] = useState<Record<string, WorkerQualsUpdateRequest>>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  if (!user) return <Navigate to="/login" replace />;
+  // 上部スクロールバーと本体の左右スクロール同期
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const syncingRef = useRef(false);
+
+  const onTopScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (bodyRef.current && topBarRef.current) {
+      bodyRef.current.scrollLeft = topBarRef.current.scrollLeft;
+    }
+    syncingRef.current = false;
+  }, []);
+
+  const onBodyScroll = useCallback(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (topBarRef.current && bodyRef.current) {
+      topBarRef.current.scrollLeft = bodyRef.current.scrollLeft;
+    }
+    syncingRef.current = false;
+  }, []);
+
+  if (!user) return <Navigate to="/login" replace />
 
   const { from, to } = buildDateRange(anchorDate, mode);
   const days = eachDay(from, to);
@@ -284,13 +307,38 @@ export function AvailabilityCalendarPage() {
 
       {/* カレンダーグリッド */}
       {!calendarQuery.isLoading && !calendarQuery.isError && (
+        <>
+        {/* 上部スクロールバー */}
         <div
+          ref={topBarRef}
+          onScroll={onTopScroll}
+          style={{
+            overflowX: "auto",
+            overflowY: "hidden",
+            height: 12,
+            marginBottom: 2,
+            borderRadius: "4px 4px 0 0",
+          }}
+        >
+          <div
+            style={{
+              height: 1,
+              width:
+                130 +
+                (showQual ? 64 * 6 : 0) +
+                days.length * 72,
+            }}
+          />
+        </div>
+        <div
+          ref={bodyRef}
+          onScroll={onBodyScroll}
           style={{
             overflowX: "auto",
             overflowY: "auto",
-            maxHeight: "calc(100vh - 220px)",
+            maxHeight: "calc(100vh - 240px)",
             border: "1px solid #e5e7eb",
-            borderRadius: 8,
+            borderRadius: "0 0 8px 8px",
           }}
         >
           <table
@@ -424,6 +472,7 @@ export function AvailabilityCalendarPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* 資格編集モーダル */}
