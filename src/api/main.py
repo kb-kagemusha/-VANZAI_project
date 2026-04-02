@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_, select
-from typing import List
+from typing import List, Optional
 import base64
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -662,6 +662,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     """
     return {
         "username": current_user.username,
+        "display_name": current_user.display_name,
         "email": current_user.email,
         "role": getattr(current_user.role, "value", current_user.role),
         "is_active": current_user.is_active
@@ -697,6 +698,40 @@ async def change_password(
     db.commit()
 
     return {"message": "パスワードを変更しました"}
+
+
+class UpdateProfileRequest(BaseModel):
+    display_name: Optional[str] = None
+
+    @field_validator("display_name")
+    @classmethod
+    def display_name_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("表示名を空にすることはできません")
+        return v.strip() if v else v
+
+
+@app.put("/api/auth/profile", tags=["Authentication"])
+async def update_profile(
+    payload: UpdateProfileRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    プロフィール更新（表示名の変更）
+    """
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+    if payload.display_name is not None:
+        db_user.display_name = payload.display_name
+    db.commit()
+    db.refresh(db_user)
+    return {
+        "username": db_user.username,
+        "display_name": db_user.display_name,
+        "email": db_user.email,
+        "role": getattr(db_user.role, "value", db_user.role),
+        "is_active": db_user.is_active,
+    }
 
 
 # ===========================

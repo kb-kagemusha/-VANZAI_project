@@ -237,6 +237,13 @@ export function changePassword(currentPassword: string, newPassword: string): Pr
   });
 }
 
+export function updateProfile(data: { display_name: string }): Promise<AuthUser> {
+  return apiFetch<AuthUser>("/api/auth/profile", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export function getDashboard(periodKey: string): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>("/api/dashboard", undefined, { period_key: periodKey });
 }

@@ -27,6 +27,7 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         String(26), primary_key=True, default=generate_ulid
     )
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(

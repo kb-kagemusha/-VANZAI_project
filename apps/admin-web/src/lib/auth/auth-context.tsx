@@ -23,6 +23,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -90,6 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearStoredAccessToken();
       setUser(null);
       setStatus("unauthenticated");
+    },
+    async refreshUser() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
     },
   };
 

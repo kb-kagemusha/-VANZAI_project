@@ -2,6 +2,7 @@ export type UserRole = "admin" | "ops" | "accounting" | "site_manager" | "worker
 
 export interface AuthUser {
   username: string;
+  display_name: string | null;
   email: string;
   role: UserRole;
   is_active: boolean;

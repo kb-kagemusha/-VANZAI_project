@@ -465,6 +465,35 @@ function WorkerRow({
   );
 }
 
+// ─── 出勤ステータス別セル背景色（スマホと同配色） ────────────────
+const AVAIL_CELL_BG: Record<string, { bg: string; border: string; color: string }> = {
+  available_all_day: {
+    bg: "linear-gradient(180deg, rgba(226,247,236,0.96), rgba(207,240,223,0.9))",
+    border: "rgba(13,122,85,0.18)",
+    color: "#0d6d4d",
+  },
+  available: {
+    bg: "linear-gradient(180deg, rgba(226,247,236,0.96), rgba(207,240,223,0.9))",
+    border: "rgba(13,122,85,0.18)",
+    color: "#0d6d4d",
+  },
+  available_after_15: {
+    bg: "linear-gradient(180deg, rgba(235,243,255,0.96), rgba(221,235,252,0.92))",
+    border: "rgba(21,74,120,0.18)",
+    color: "#154a78",
+  },
+  unavailable: {
+    bg: "linear-gradient(180deg, rgba(254,236,239,0.97), rgba(248,214,220,0.92))",
+    border: "rgba(157,49,65,0.2)",
+    color: "#8d2032",
+  },
+  consult_required: {
+    bg: "linear-gradient(180deg, rgba(253,244,212,0.98), rgba(248,225,174,0.9))",
+    border: "rgba(122,82,21,0.18)",
+    color: "#7a5215",
+  },
+};
+
 // ─── 日付セルコンポーネント ──────────────────────────────────
 function DayCell({
   dayInfo,
@@ -478,14 +507,20 @@ function DayCell({
   const assignments = dayInfo?.assignments ?? [];
   const avStatus = dayInfo?.availability_status ?? null;
 
+  const statusStyle = avStatus ? AVAIL_CELL_BG[avStatus] : null;
+  const cellBg = isToday
+    ? "linear-gradient(180deg, #dbeafe, #eff6ff)"
+    : (statusStyle?.bg ?? rowBg);
+  const cellBorder = isToday ? "rgba(59,130,246,0.3)" : (statusStyle?.border ?? "#e5e7eb");
+
   return (
     <td
       style={{
-        borderLeft: "1px solid #e5e7eb",
-        borderBottom: "1px solid #e5e7eb",
+        borderLeft: `1px solid ${cellBorder}`,
+        borderBottom: `1px solid ${cellBorder}`,
         padding: "3px 3px",
         verticalAlign: "top",
-        background: isToday ? "#eff6ff" : rowBg,
+        background: cellBg,
         minHeight: 40,
       }}
     >
