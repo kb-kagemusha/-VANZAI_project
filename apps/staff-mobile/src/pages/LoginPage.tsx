@@ -70,7 +70,7 @@ export function LoginPage() {
                 type="button"
                 className="password-toggle"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "パスワードを隠す" : "パスワードの表示を切り替える"}
+                aria-label={showPassword ? "隠す" : "表示する"}
               >
                 {showPassword ? "非表示" : "表示"}
               </button>
