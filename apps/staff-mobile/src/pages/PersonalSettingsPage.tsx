@@ -19,11 +19,27 @@ import {
 import { usePushNotification } from "../lib/hooks/usePushNotification";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 
+interface PushRegistrationResultView {
+  permission: NotificationPermission;
+  registered: boolean;
+  message?: string;
+}
+
 export function PersonalSettingsPage() {
   const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<StaffAvailabilityPreferences>(getDefaultStaffAvailabilityPreferences);
   const [message, setMessage] = useState("");
-  const { permission, requestPermission } = usePushNotification();
+  const {
+    permission,
+    requestPermission,
+    lastMessage,
+    isRegistered,
+  } = usePushNotification() as unknown as {
+    permission: NotificationPermission;
+    requestPermission: () => Promise<PushRegistrationResultView>;
+    lastMessage: string | null;
+    isRegistered: boolean;
+  };
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
@@ -156,8 +172,26 @@ export function PersonalSettingsPage() {
           <p className="push-settings-title">プッシュ通知</p>
           {!('Notification' in window) || !('PushManager' in window) ? (
             <p className="push-settings-sub">このブラウザはプッシュ通知に対応していません。</p>
-          ) : permission === 'granted' ? (
+          ) : permission === 'granted' && isRegistered ? (
             <p className="push-settings-sub push-settings-enabled">✓ 通知は有効です。シフト確定・お知らせをリアルタイムで受け取れます。</p>
+          ) : permission === 'granted' ? (
+            <>
+              <p className="push-settings-sub">通知の許可は済んでいますが、端末のプッシュ購読登録が完了していません。</p>
+              <button
+                type="button"
+                className="push-settings-button"
+                onClick={async () => {
+                  const result = await requestPermission();
+                  if (result.registered) {
+                    setPushMessage('通知を有効にしました！');
+                  } else if (result.message) {
+                    setPushMessage(result.message);
+                  }
+                }}
+              >
+                もう一度登録する
+              </button>
+            </>
           ) : permission === 'denied' ? (
             <>
               <p className="push-settings-sub">通知がブラウザ側で拒否されています。サイト設定で「通知」を「許可」に変えたあと、このページを再読み込みしてください。</p>
@@ -174,10 +208,12 @@ export function PersonalSettingsPage() {
                 className="push-settings-button"
                 onClick={async () => {
                   const result = await requestPermission();
-                  if (result === 'denied') {
+                  if (result.permission === 'denied') {
                     setPushMessage('通知が拒否されました。ブラウザのサイト設定で「通知」を許可に変更してから再読み込みしてください。');
-                  } else if (result === 'granted') {
+                  } else if (result.permission === 'granted' && result.registered) {
                     setPushMessage('通知を有効にしました！');
+                  } else if (result.message) {
+                    setPushMessage(result.message);
                   }
                 }}
               >
@@ -185,7 +221,7 @@ export function PersonalSettingsPage() {
               </button>
             </>
           )}
-          {pushMessage ? <p className="push-settings-feedback">{pushMessage}</p> : null}
+          {pushMessage || lastMessage ? <p className="push-settings-feedback">{pushMessage || lastMessage}</p> : null}
         </div>
       </section>
 
