@@ -7,6 +7,7 @@ import { getActuals, getAssignments, getWorkerAvailability, getWorkerAvailabilit
 import { useAuth } from "../lib/auth/auth-context";
 import { currentDateInput } from "../lib/formatters";
 import { getAvailabilityTemplateDetail, normalizeStaffAvailabilityPreferences } from "../lib/settings/staffPreferences";
+import { usePushNotification } from "../lib/hooks/usePushNotification";
 
 const navItems = [
   { to: "/today", label: "今日" },
@@ -91,6 +92,19 @@ export function MobileShell() {
 
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const { permission, requestPermission } = usePushNotification();
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  const showOnboarding =
+    typeof Notification !== "undefined" &&
+    "PushManager" in window &&
+    permission === "default" &&
+    !onboardingDismissed;
+
+  async function handleAllowPush() {
+    await requestPermission();
+    setOnboardingDismissed(true);
+  }
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -147,6 +161,26 @@ export function MobileShell() {
           </NavLink>
         ))}
       </nav>
+
+      {showOnboarding ? (
+        <div className="push-onboarding-overlay" role="dialog" aria-modal="true" aria-label="プッシュ通知の設定">
+          <div className="push-onboarding-card">
+            <div className="push-onboarding-icon">🔔</div>
+            <h2 className="push-onboarding-title">通知を受け取りますか？</h2>
+            <p className="push-onboarding-body">
+              シフト確定・変更・お知らせをリアルタイムで受け取れます。
+            </p>
+            <div className="push-onboarding-actions">
+              <button type="button" className="primary-button" onClick={handleAllowPush}>
+                通知を許可する
+              </button>
+              <button type="button" className="secondary-button" onClick={() => setOnboardingDismissed(true)}>
+                後で
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

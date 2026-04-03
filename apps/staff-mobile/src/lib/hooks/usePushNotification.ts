@@ -49,13 +49,14 @@ export function usePushNotification() {
       doRegister().catch(console.error);
     }
   }, [permission]);
-  const requestPermission = async () => {
-    if (!("Notification" in window)) return;
+  const requestPermission = async (): Promise<NotificationPermission> => {
+    if (!("Notification" in window)) return "denied";
     const result = await Notification.requestPermission();
     setPermission(result);
     if (result === "granted") {
       await doRegister().catch(console.error);
     }
+    return result;
   };
   return { permission, requestPermission };
 }

@@ -16,11 +16,14 @@ import {
   type StaffAvailabilityPreferences,
   type WeekdayPreferenceKey,
 } from "../lib/settings/staffPreferences";
+import { usePushNotification } from "../lib/hooks/usePushNotification";
 
 export function PersonalSettingsPage() {
   const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<StaffAvailabilityPreferences>(getDefaultStaffAvailabilityPreferences);
   const [message, setMessage] = useState("");
+  const { permission, requestPermission } = usePushNotification();
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   // パスワード変更
   const [currentPw, setCurrentPw] = useState("");
@@ -269,6 +272,40 @@ export function PersonalSettingsPage() {
           {saveMutation.isPending ? "保存中..." : "設定を保存する"}
         </button>
       </div>
+
+      <section className="panel-card settings-stack">
+        <p className="panel-label">プッシュ通知</p>
+        {!("Notification" in window) || !("PushManager" in window) ? (
+          <p className="settings-helper-copy">このブラウザはプッシュ通知に対応していません。</p>
+        ) : permission === "granted" ? (
+          <p style={{ color: "var(--success, #16a34a)", fontWeight: 600 }}>✓ 通知は有効です</p>
+        ) : permission === "denied" ? (
+          <p className="settings-helper-copy">
+            通知が拒否されています。ブラウザのサイト設定から許可に変更してください。
+          </p>
+        ) : (
+          <>
+            <p className="settings-helper-copy">シフト確定・変更・お知らせをリアルタイムで受け取れます。</p>
+            <div className="button-row">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={async () => {
+                  const result = await requestPermission();
+                  if (result === "denied") {
+                    setPushMessage("通知が拒否されました。ブラウザの設定から変更してください。");
+                  } else if (result === "granted") {
+                    setPushMessage("通知を有効にしました！");
+                  }
+                }}
+              >
+                🔔 通知をONにする
+              </button>
+            </div>
+          </>
+        )}
+        {pushMessage ? <p style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>{pushMessage}</p> : null}
+      </section>
 
       <section className="panel-card settings-stack">
         <p className="panel-label">パスワード変更</p>
