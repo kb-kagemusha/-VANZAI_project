@@ -164,6 +164,10 @@ class AuditAction(str, Enum):
     EXPENSE_APPROVED = "expense_approved"
     EXPENSE_REJECTED = "expense_rejected"
 
+    # スタッフ通知関連
+    NOTICE_CREATED = "notice_created"
+    NOTICE_SENT = "notice_sent"
+    NOTICE_DELETED = "notice_deleted"
 
 
 class InvoiceStatus(str, Enum):
@@ -262,6 +266,10 @@ class Permission(str, Enum):
     # 監査ログ
     AUDIT_LOG_READ = "audit_log_read"
 
+    # スタッフ通知
+    NOTICE_READ = "notice_read"
+    NOTICE_WRITE = "notice_write"
+
 
 class ClosingStatus(str, Enum):
     """
@@ -290,6 +298,30 @@ class AvailabilityStatus(str, Enum):
     UNAVAILABLE = "unavailable"
     CONSULT_REQUIRED = "consult_required"
     UNDECIDED = "undecided"
+
+
+class NoticeType(str, Enum):
+    """
+    通知種別
+    shift_confirm: シフト確定通知
+    project_change: 案件変更通知
+    general: 一般通知
+    """
+    SHIFT_CONFIRM = "shift_confirm"
+    PROJECT_CHANGE = "project_change"
+    GENERAL = "general"
+
+
+class NoticeTargetType(str, Enum):
+    """
+    通知対象種別
+    all: 全稼働者
+    project: 指定案件の稼働者
+    worker: 個別稼働者指定
+    """
+    ALL = "all"
+    PROJECT = "project"
+    WORKER = "worker"
 
 
 class IncentiveStatus(str, Enum):

@@ -43,6 +43,8 @@ ROLE_PERMISSIONS = {
         Permission.INCENTIVE_READ,
         Permission.INCENTIVE_CALCULATE,
         Permission.AUDIT_LOG_READ,
+        Permission.NOTICE_READ,
+        Permission.NOTICE_WRITE,
     },
     UserRole.ACCOUNTING: {
         # 請求発行、支払承認、締め（Hard Close）承認
@@ -87,6 +89,7 @@ ROLE_PERMISSIONS = {
         Permission.AVAILABILITY_WRITE,
         Permission.EXPENSE_READ,     # 自分のみ
         Permission.EXPENSE_SUBMIT,   # 自分のみ
+        Permission.NOTICE_READ,      # 自分宛ての通知
     },
 }
 

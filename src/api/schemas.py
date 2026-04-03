@@ -1087,6 +1087,80 @@ class RoleListItem(BaseModel):
     """役割一覧の1行"""
     id: str
     name: str
+
+
+# ===========================
+# Staff Notice Schemas
+# ===========================
+
+class NoticeCreateRequest(BaseModel):
+    """スタッフ通知作成リクエスト"""
+    title: str = Field(..., min_length=1, max_length=200)
+    body: str = Field(..., min_length=1, max_length=4000)
+    notice_type: str = Field("general", description="shift_confirm | project_change | general")
+    priority: str = Field("normal", description="normal | urgent")
+    target_type: str = Field("all", description="all | project | worker")
+    target_project_id: Optional[str] = None
+    target_worker_ids: Optional[List[str]] = None
+    send_email: bool = Field(False, description="メール送信するか")
+
+
+class NoticeListQuery(PaginationQuery, SortQuery):
+    """通知一覧クエリ"""
+    notice_type: Optional[str] = None
+    target_type: Optional[str] = None
+
+
+class NoticeListItem(BaseModel):
+    """通知一覧の1行（管理者用）"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    notice_type: str
+    priority: str
+    target_type: str
+    target_project_id: Optional[str] = None
+    target_project_name: Optional[str] = None
+    target_worker_ids: Optional[List[str]] = None
+    send_email: bool
+    sent_at: Optional[datetime] = None
+    read_count: int = 0
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
+    created_at: datetime
+    deleted_at: Optional[datetime] = None
+
+
+class NoticeListResponse(BaseModel):
+    """通知一覧レスポンス"""
+    items: List[NoticeListItem]
+    total: int
+    offset: int
+    limit: int
+
+
+class WorkerNoticeItem(BaseModel):
+    """スタッフ向け通知の1行"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    body: str
+    notice_type: str
+    priority: str
+    target_project_id: Optional[str] = None
+    target_project_name: Optional[str] = None
+    is_read: bool = False
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class WorkerNoticeListResponse(BaseModel):
+    """スタッフ向け通知一覧レスポンス"""
+    items: List[WorkerNoticeItem]
+    unread_count: int
+    total: int
     code: Optional[str] = None
     description: Optional[str] = None
 

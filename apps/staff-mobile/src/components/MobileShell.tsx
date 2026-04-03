@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { MobileStatusBand } from "./MobileStatusBand";
-import { getActuals, getAssignments, getWorkerAvailability, getWorkerAvailabilityPreferences } from "../lib/api/client";
+import { getActuals, getAssignments, getWorkerAvailability, getWorkerAvailabilityPreferences, getWorkerNotices } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { currentDateInput } from "../lib/formatters";
 import { getAvailabilityTemplateDetail, normalizeStaffAvailabilityPreferences } from "../lib/settings/staffPreferences";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/availability", label: "事前予定" },
   { to: "/actuals", label: "実績" },
   { to: "/expenses", label: "経費" },
+  { to: "/notices", label: "通知" },
 ];
 
 export function MobileShell() {
@@ -72,8 +73,14 @@ export function MobileShell() {
     queryFn: () => getWorkerAvailabilityPreferences(),
     staleTime: 60_000,
   });
+  const noticesUnreadQuery = useQuery({
+    queryKey: ["worker-notices-unread"],
+    queryFn: () => getWorkerNotices({ unread_only: true, limit: 1 }),
+    staleTime: 60_000,
+  });
 
   const pendingCount = pendingAssignmentsQuery.data?.total ?? 0;
+  const unreadNoticeCount = noticesUnreadQuery.data?.unread_count ?? 0;
   const todayAssignments = todayAssignmentsQuery.data?.items ?? [];
   const todayActuals = todayActualsQuery.data?.items ?? [];
   const todayAvailability = todayAvailabilityQuery.data?.items?.[0] ?? null;
@@ -136,6 +143,7 @@ export function MobileShell() {
           >
             <span className="mobile-nav-label">{item.label}</span>
             {item.to === "/schedule" && pendingCount > 0 ? <span className="mobile-nav-badge">{pendingCount}</span> : null}
+            {item.to === "/notices" && unreadNoticeCount > 0 ? <span className="mobile-nav-badge">{unreadNoticeCount}</span> : null}
           </NavLink>
         ))}
       </nav>

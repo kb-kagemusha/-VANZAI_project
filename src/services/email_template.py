@@ -435,3 +435,58 @@ admin-web の予定確認監視画面から状況確認と追加対応をお願�
 """
 
         return EmailTemplate(subject=subject, body=body, to=admin_email)
+
+    def notice_to_worker(
+        self,
+        worker_name: str,
+        worker_email: str,
+        title: str,
+        body_text: str,
+        notice_type: str,
+        priority: str = "normal",
+        project_name: str | None = None,
+    ) -> EmailTemplate:
+        """
+        管理者→スタッフ通知メール
+
+        Args:
+            worker_name: 稼働者名
+            worker_email: 稼働者メールアドレス
+            title: 通知タイトル
+            body_text: 通知本文
+            notice_type: 通知種別 (shift_confirm/project_change/general)
+            priority: 優先度 (normal/urgent)
+            project_name: 対象案件名（あれば）
+
+        Returns:
+            EmailTemplate
+        """
+        _type_labels = {
+            "shift_confirm": "シフト確定",
+            "project_change": "案件変更",
+            "general": "お知らせ",
+        }
+        type_label = _type_labels.get(notice_type, "お知らせ")
+        urgent_prefix = "【緊急】" if priority == "urgent" else ""
+        subject = f"{urgent_prefix}【{type_label}】{title}"
+
+        project_line = f"- 対象案件: {project_name}\n" if project_name else ""
+
+        body = f"""{worker_name} 様
+
+{type_label}があります
+{project_line}
+---
+{body_text}
+---
+
+ご確認いただけますようお願いします
+
+{self.sender_signature}
+"""
+
+        return EmailTemplate(
+            subject=subject,
+            body=body,
+            to=worker_email,
+        )

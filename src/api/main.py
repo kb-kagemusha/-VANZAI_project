@@ -59,10 +59,12 @@ from src.api.schemas import (
     MonthlyBillingGenerateRequest, MonthlyBillingGenerateResponse,
     SoftCloseRequest, HardCloseRequest, SoftCloseReleaseRequest, HardCloseReleaseRequest, ClosingResponse,
     AuditLogSearchRequest, AuditLogResponse, AuditLogListResponse,
+    NoticeCreateRequest, NoticeListQuery, NoticeListItem, NoticeListResponse,
+    WorkerNoticeItem, WorkerNoticeListResponse,
     ErrorResponse
 )
 from src.models.base import generate_ulid
-from src.models.master import User
+from src.models.master import User, StaffNotice, StaffNoticeRead
 
 from src.services.csv_import import CsvImportService
 from src.services.dashboard import build_assignment_response_monitoring, get_dashboard_summary, get_project_closings_for_period
@@ -81,7 +83,7 @@ from src.services.auth import AuthorizationError, check_permission, can_access_p
 from src.services.price_resolver import resolve_outsource_price, resolve_sales_price
 from src.services.time_calc import calculate_time
 from src.exceptions import VANZAIException
-from src.models.enums import ActualStatus, AssignmentStatus, AssignmentWorkerResponseStatus, AuditAction, AvailabilityStatus, ExpenseStatus, ImportMode, ImportScopeType, Permission, UserRole, ClosingStatus
+from src.models.enums import ActualStatus, AssignmentStatus, AssignmentWorkerResponseStatus, AuditAction, AvailabilityStatus, ExpenseStatus, ImportMode, ImportScopeType, NoticeTargetType, NoticeType, Permission, UserRole, ClosingStatus
 
 
 CSV_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
@@ -6832,6 +6834,411 @@ async def search_audit_logs(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"監査ログ検索エラー: {str(e)}")
+
+
+# ===========================
+# Staff Notices API
+# ===========================
+
+def _resolve_notice_targets(db: Session, notice: StaffNotice) -> list:
+    """通知の対象稼働者リストを解決する（メール送信用）"""
+    from src.models.master import Worker
+    from src.models.transaction import Assignment
+
+    if notice.target_type == NoticeTargetType.ALL.value:
+        return db.query(Worker).filter(
+            Worker.deleted_at.is_(None),
+            Worker.is_active.is_(True),
+            Worker.email.isnot(None),
+        ).all()
+
+    if notice.target_type == NoticeTargetType.PROJECT.value and notice.target_project_id:
+        worker_ids = db.query(Assignment.worker_id).filter(
+            Assignment.project_id == notice.target_project_id,
+            Assignment.deleted_at.is_(None),
+        ).distinct().subquery()
+        return db.query(Worker).filter(
+            Worker.id.in_(worker_ids),
+            Worker.deleted_at.is_(None),
+            Worker.is_active.is_(True),
+            Worker.email.isnot(None),
+        ).all()
+
+    if notice.target_type == NoticeTargetType.WORKER.value and notice.target_worker_ids:
+        return db.query(Worker).filter(
+            Worker.id.in_(notice.target_worker_ids),
+            Worker.deleted_at.is_(None),
+            Worker.email.isnot(None),
+        ).all()
+
+    return []
+
+
+@app.post("/api/notices", response_model=NoticeListItem, tags=["Notices"])
+async def create_notice(
+    request: NoticeCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    スタッフ通知作成
+
+    - 管理者/OPSが通知を作成し、オプションでメール送信
+    - target_type=all: 全アクティブ稼働者
+    - target_type=project: 指定案件のアサイン済み稼働者
+    - target_type=worker: 個別指定
+    """
+    try:
+        check_permission(current_user, Permission.NOTICE_WRITE)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    # target_type 整合性チェック
+    if request.target_type == NoticeTargetType.PROJECT.value and not request.target_project_id:
+        raise HTTPException(status_code=422, detail="target_type=project のときは target_project_id が必要です")
+    if request.target_type == NoticeTargetType.WORKER.value and not request.target_worker_ids:
+        raise HTTPException(status_code=422, detail="target_type=worker のときは target_worker_ids が必要です")
+
+    now = datetime.now(timezone.utc)
+    notice = StaffNotice(
+        id=generate_ulid(),
+        title=request.title,
+        body=request.body,
+        notice_type=request.notice_type,
+        priority=request.priority,
+        target_type=request.target_type,
+        target_project_id=request.target_project_id,
+        target_worker_ids=request.target_worker_ids,
+        send_email=request.send_email,
+        sent_at=None,
+        created_by=current_user.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(notice)
+    db.flush()
+
+    # メール送信
+    sent_count = 0
+    if request.send_email:
+        from src.models.transaction import Project
+        project_name: str | None = None
+        if notice.target_project_id:
+            proj = db.get(Project, notice.target_project_id)
+            project_name = proj.name if proj else None
+
+        targets = _resolve_notice_targets(db, notice)
+        tpl_svc = EmailTemplateService()
+        sender = get_default_sender()
+        dry_run = os.getenv("EMAIL_DRY_RUN", "false").lower() == "true"
+
+        for worker in targets:
+            try:
+                tpl = tpl_svc.notice_to_worker(
+                    worker_name=worker.name,
+                    worker_email=worker.email,
+                    title=notice.title,
+                    body_text=notice.body,
+                    notice_type=notice.notice_type,
+                    priority=notice.priority,
+                    project_name=project_name,
+                )
+                if not dry_run:
+                    sender.send(tpl)
+                sent_count += 1
+            except Exception as exc:
+                # 個別送信失敗はログに留めてスキップ
+                AuditService(db).log(
+                    action=AuditAction.NOTICE_SENT,
+                    actor=current_user.username,
+                    actor_role=current_user.role,
+                    target_type="staff_notice",
+                    target_id=notice.id,
+                    extra_metadata={"error": str(exc), "worker_id": worker.id, "dry_run": dry_run},
+                )
+
+        notice.sent_at = now
+
+    db.commit()
+    db.refresh(notice)
+
+    AuditService(db).log(
+        action=AuditAction.NOTICE_CREATED,
+        actor=current_user.username,
+        actor_role=current_user.role,
+        target_type="staff_notice",
+        target_id=notice.id,
+        extra_metadata={
+            "title": notice.title,
+            "notice_type": notice.notice_type,
+            "target_type": notice.target_type,
+            "send_email": notice.send_email,
+            "sent_count": sent_count,
+        },
+    )
+
+    # resolve project name for response
+    from src.models.transaction import Project as Proj
+    proj_name: str | None = None
+    if notice.target_project_id:
+        p = db.get(Proj, notice.target_project_id)
+        proj_name = p.name if p else None
+
+    creator_name = current_user.display_name or current_user.username
+
+    return NoticeListItem(
+        id=notice.id,
+        title=notice.title,
+        notice_type=notice.notice_type,
+        priority=notice.priority,
+        target_type=notice.target_type,
+        target_project_id=notice.target_project_id,
+        target_project_name=proj_name,
+        target_worker_ids=notice.target_worker_ids,
+        send_email=notice.send_email,
+        sent_at=notice.sent_at,
+        read_count=0,
+        created_by=notice.created_by,
+        created_by_name=creator_name,
+        created_at=notice.created_at,
+        deleted_at=notice.deleted_at,
+    )
+
+
+@app.get("/api/notices", response_model=NoticeListResponse, tags=["Notices"])
+async def list_notices(
+    notice_type: Optional[str] = Query(None),
+    target_type: Optional[str] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """スタッフ通知一覧（管理者用）"""
+    try:
+        check_permission(current_user, Permission.NOTICE_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    q = db.query(StaffNotice).filter(StaffNotice.deleted_at.is_(None))
+    if notice_type:
+        q = q.filter(StaffNotice.notice_type == notice_type)
+    if target_type:
+        q = q.filter(StaffNotice.target_type == target_type)
+
+    total = q.count()
+    notices = q.order_by(StaffNotice.created_at.desc()).offset(offset).limit(limit).all()
+
+    from src.models.transaction import Project as Proj
+
+    items = []
+    for n in notices:
+        proj_name: str | None = None
+        if n.target_project_id:
+            p = db.get(Proj, n.target_project_id)
+            proj_name = p.name if p else None
+
+        read_count = db.query(StaffNoticeRead).filter(
+            StaffNoticeRead.notice_id == n.id
+        ).count()
+
+        creator_name: str | None = None
+        if n.created_by:
+            u = db.get(User, n.created_by)
+            creator_name = (u.display_name or u.username) if u else None
+
+        items.append(NoticeListItem(
+            id=n.id,
+            title=n.title,
+            notice_type=n.notice_type,
+            priority=n.priority,
+            target_type=n.target_type,
+            target_project_id=n.target_project_id,
+            target_project_name=proj_name,
+            target_worker_ids=n.target_worker_ids,
+            send_email=n.send_email,
+            sent_at=n.sent_at,
+            read_count=read_count,
+            created_by=n.created_by,
+            created_by_name=creator_name,
+            created_at=n.created_at,
+            deleted_at=n.deleted_at,
+        ))
+
+    return NoticeListResponse(items=items, total=total, offset=offset, limit=limit)
+
+
+@app.delete("/api/notices/{notice_id}", status_code=204, tags=["Notices"])
+async def delete_notice(
+    notice_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """スタッフ通知を論理削除（管理者用）"""
+    try:
+        check_permission(current_user, Permission.NOTICE_WRITE)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    notice = db.get(StaffNotice, notice_id)
+    if not notice or notice.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="通知が見つかりません")
+
+    notice.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    AuditService(db).log(
+        action=AuditAction.NOTICE_DELETED,
+        actor=current_user.username,
+        actor_role=current_user.role,
+        target_type="staff_notice",
+        target_id=notice_id,
+        extra_metadata={"title": notice.title},
+    )
+
+
+@app.get("/api/worker/notices", response_model=WorkerNoticeListResponse, tags=["Notices"])
+async def list_worker_notices(
+    unread_only: bool = Query(False),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    自分宛ての通知一覧（稼働者用）
+
+    - アサイン情報・worker_id に基づいて表示対象を絞り込む
+    """
+    try:
+        check_permission(current_user, Permission.NOTICE_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    # 稼働者レコードを特定
+    from src.models.master import Worker
+    worker = db.query(Worker).filter(
+        Worker.id == current_user.worker_id,
+        Worker.deleted_at.is_(None),
+    ).first() if current_user.worker_id else None
+
+    if not worker:
+        # worker_id が紐付いていない（管理者などが誤って呼んでも空返す）
+        return WorkerNoticeListResponse(items=[], unread_count=0, total=0)
+
+    from src.models.transaction import Assignment, ShiftSlot
+
+    # 自分がアサインされている案件ID一覧（ShiftSlot 経由で取得）
+    assigned_project_ids = [
+        r[0] for r in db.query(ShiftSlot.project_id)
+        .join(Assignment, Assignment.shift_slot_id == ShiftSlot.id)
+        .filter(
+            Assignment.worker_id == worker.id,
+            Assignment.deleted_at.is_(None),
+            ShiftSlot.deleted_at.is_(None),
+        ).distinct().all()
+    ]
+
+    # 対象通知の絞り込み（Python 側でフィルタ）
+    notices = db.query(StaffNotice).filter(
+        StaffNotice.deleted_at.is_(None),
+    ).order_by(StaffNotice.created_at.desc()).all()
+
+    # JSON contains は SQLite では使えないので Python 側でフィルタ
+    def _worker_targeted(n: StaffNotice) -> bool:
+        if n.target_type == NoticeTargetType.ALL.value:
+            return True
+        if n.target_type == NoticeTargetType.PROJECT.value:
+            return n.target_project_id in assigned_project_ids
+        if n.target_type == NoticeTargetType.WORKER.value:
+            return worker.id in (n.target_worker_ids or [])
+        return False
+
+    notices = [n for n in notices if _worker_targeted(n)]
+
+    # 既読状態を取得
+    notice_ids = [n.id for n in notices]
+    reads_map: dict[str, StaffNoticeRead] = {}
+    if notice_ids:
+        reads = db.query(StaffNoticeRead).filter(
+            StaffNoticeRead.worker_id == worker.id,
+            StaffNoticeRead.notice_id.in_(notice_ids),
+        ).all()
+        reads_map = {r.notice_id: r for r in reads}
+
+    # unread_only フィルタ
+    if unread_only:
+        notices = [n for n in notices if n.id not in reads_map]
+
+    total = len(notices)
+    unread_count = sum(1 for n in notices if n.id not in reads_map)
+    paged = notices[offset: offset + limit]
+
+    items = []
+    for n in paged:
+        r = reads_map.get(n.id)
+        proj_name: str | None = None
+        if n.target_project_id:
+            p = db.get(Proj, n.target_project_id)
+            proj_name = p.name if p else None
+
+        items.append(WorkerNoticeItem(
+            id=n.id,
+            title=n.title,
+            body=n.body,
+            notice_type=n.notice_type,
+            priority=n.priority,
+            target_project_id=n.target_project_id,
+            target_project_name=proj_name,
+            is_read=r is not None,
+            read_at=r.read_at if r else None,
+            created_at=n.created_at,
+        ))
+
+    return WorkerNoticeListResponse(items=items, unread_count=unread_count, total=total)
+
+
+@app.post("/api/worker/notices/{notice_id}/read", status_code=204, tags=["Notices"])
+async def mark_notice_read(
+    notice_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """通知を既読にする（稼働者用）"""
+    try:
+        check_permission(current_user, Permission.NOTICE_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Worker
+    worker = db.query(Worker).filter(
+        Worker.id == current_user.worker_id,
+        Worker.deleted_at.is_(None),
+    ).first() if current_user.worker_id else None
+
+    if not worker:
+        raise HTTPException(status_code=403, detail="稼働者アカウントが必要です")
+
+    notice = db.get(StaffNotice, notice_id)
+    if not notice or notice.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="通知が見つかりません")
+
+    existing = db.query(StaffNoticeRead).filter(
+        StaffNoticeRead.notice_id == notice_id,
+        StaffNoticeRead.worker_id == worker.id,
+    ).first()
+
+    if not existing:
+        now = datetime.now(timezone.utc)
+        db.add(StaffNoticeRead(
+            id=generate_ulid(),
+            notice_id=notice_id,
+            worker_id=worker.id,
+            read_at=now,
+            created_at=now,
+            updated_at=now,
+        ))
+        db.commit()
 
 
 if __name__ == "__main__":

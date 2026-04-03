@@ -20,6 +20,7 @@ import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
+import { NoticesPage } from "../pages/NoticesPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -153,6 +154,14 @@ export function App() {
             }
           />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
+          <Route
+            path="/operations/notices"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <NoticesPage />
+              </PermissionRoute>
+            }
+          />
         </Route>
       </Route>
 

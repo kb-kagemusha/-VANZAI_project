@@ -63,6 +63,9 @@ import type {
   WorkerCreateRequest,
   WorkerUpdateRequest,
   WorkerQualsUpdateRequest,
+  NoticeCreateRequest,
+  NoticeListItem,
+  NoticeListResponse,
   AvailabilityCalendarResponse,
 } from "../../types/api";
 
@@ -689,9 +692,33 @@ export function getRoles(params?: Record<string, string | number | boolean | und
   return apiFetch<PageResponse<RoleListItem>>("/api/roles", undefined, params);
 }
 
-export function createRole(body: RoleCreateRequest) {
+export function createRole(body: { name: string; code: string | null; description: string | null }) {
   return apiFetch<RoleListItem>("/api/roles", {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+// ===========================
+// Staff Notices
+// ===========================
+
+export function createNotice(body: NoticeCreateRequest) {
+  return apiFetch<NoticeListItem>("/api/notices", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listNotices(params?: {
+  notice_type?: string;
+  target_type?: string;
+  offset?: number;
+  limit?: number;
+}) {
+  return apiFetch<NoticeListResponse>(buildUrl("/api/notices", params));
+}
+
+export function deleteNotice(noticeId: string) {
+  return apiFetch<void>(`/api/notices/${noticeId}`, { method: "DELETE" });
 }

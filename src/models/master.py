@@ -6,11 +6,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, Boolean, ForeignKey, Numeric, Integer, Date, JSON
+from sqlalchemy import String, Text, Boolean, ForeignKey, Numeric, Integer, Date, JSON, DateTime as SADateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, TimestampMixin, SoftDeleteMixin, generate_ulid
-from src.models.enums import UserRole
+from src.models.enums import UserRole, NoticeType, NoticeTargetType
 
 if TYPE_CHECKING:
     from src.models.transaction import Project, Assignment, Actual
@@ -360,3 +360,71 @@ class PriceRule(Base, TimestampMixin, SoftDeleteMixin):
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StaffNotice(Base, TimestampMixin, SoftDeleteMixin):
+    """
+    管理者→スタッフ通知
+    - シフト確定通知・案件変更通知・一般通知を管理者が送信
+    - target_type=all: 全稼働者
+    - target_type=project: 特定案件アサイン済み稼働者
+    - target_type=worker: 個別稼働者指定（target_worker_ids JSON）
+    - send_email=True のとき個別メール送信
+    """
+    __tablename__ = "staff_notices"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    notice_type: Mapped[str] = mapped_column(
+        String(30), default=NoticeType.GENERAL.value, nullable=False
+    )
+    priority: Mapped[str] = mapped_column(
+        String(10), default="normal", nullable=False
+    )  # normal | urgent
+    target_type: Mapped[str] = mapped_column(
+        String(20), default=NoticeTargetType.ALL.value, nullable=False
+    )
+    target_project_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("projects.id"), nullable=True
+    )
+    # 個別指定の稼働者ID一覧（target_type=worker 時に使用）
+    target_worker_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    send_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        SADateTime(timezone=True), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("users.id"), nullable=True
+    )
+
+    # Relationships
+    reads: Mapped[list["StaffNoticeRead"]] = relationship(
+        back_populates="notice", cascade="all, delete-orphan"
+    )
+
+
+class StaffNoticeRead(Base, TimestampMixin):
+    """
+    スタッフ通知既読記録
+    - 稼働者が通知を閲覧した記録
+    """
+    __tablename__ = "staff_notice_reads"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    notice_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("staff_notices.id"), nullable=False
+    )
+    worker_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=False
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        SADateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    notice: Mapped["StaffNotice"] = relationship(back_populates="reads")

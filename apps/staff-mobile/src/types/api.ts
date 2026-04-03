@@ -132,3 +132,26 @@ export interface WorkerAvailabilityPreference {
   auto_apply_enabled: boolean;
   updated_at: string | null;
 }
+
+// Staff Notice
+export type NoticeType = "shift_confirm" | "project_change" | "general";
+export type NoticePriority = "normal" | "urgent";
+
+export interface WorkerNoticeItem {
+  id: string;
+  title: string;
+  body: string;
+  notice_type: NoticeType;
+  priority: NoticePriority;
+  target_project_id: string | null;
+  target_project_name: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface WorkerNoticeListResponse {
+  items: WorkerNoticeItem[];
+  unread_count: number;
+  total: number;
+}

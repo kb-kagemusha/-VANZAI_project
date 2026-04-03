@@ -23,6 +23,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
+    to: "/operations/notices",
+    label: "スタッフ通知",
+    description: "シフト確定・案件変更などをスタッフへ通知",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
     to: "/operations/csv-import",
     label: "CSV取込",
     description: "実績CSVの提出と洗い替え",
@@ -101,6 +107,7 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
 ];
+
 
 export function canAccess(role: UserRole | null | undefined, allowedRoles: UserRole[]): boolean {
   return role ? allowedRoles.includes(role) : false;

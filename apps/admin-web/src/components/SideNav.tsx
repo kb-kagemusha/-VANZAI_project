@@ -15,6 +15,7 @@ import {
   Tag,
   Database,
   ShieldCheck,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/masters/prices": Tag,
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
+  "/operations/notices": MessageSquare,
 };
 
 export function SideNav() {

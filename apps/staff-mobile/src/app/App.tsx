@@ -6,6 +6,7 @@ import { AvailabilityPage } from "../pages/AvailabilityPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { LoginPage } from "../pages/LoginPage";
+import { NoticesPage } from "../pages/NoticesPage";
 import { PersonalSettingsPage } from "../pages/PersonalSettingsPage";
 import { SchedulePage } from "../pages/SchedulePage";
 import { TodayAssignmentsPage } from "../pages/TodayAssignmentsPage";
@@ -28,6 +29,7 @@ export function App() {
             <Route path="/settings" element={<PersonalSettingsPage />} />
             <Route path="/actuals" element={<ActualsPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
+            <Route path="/notices" element={<NoticesPage />} />
           </Route>
         </Route>
       </Route>

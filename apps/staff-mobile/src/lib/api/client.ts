@@ -9,6 +9,8 @@ import type {
   TokenResponse,
   WorkerAvailabilityListItem,
   WorkerAvailabilityPreference,
+  WorkerNoticeItem,
+  WorkerNoticeListResponse,
 } from "../../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -252,4 +254,16 @@ export function upsertWorkerAvailabilityPreferences(body: {
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+// ===========================
+// Worker Notices
+// ===========================
+
+export function getWorkerNotices(params?: { unread_only?: boolean; offset?: number; limit?: number }) {
+  return apiFetch<WorkerNoticeListResponse>(buildUrl("/api/worker/notices", params));
+}
+
+export function markNoticeRead(noticeId: string) {
+  return apiFetch<void>(`/api/worker/notices/${noticeId}/read`, { method: "POST" });
 }

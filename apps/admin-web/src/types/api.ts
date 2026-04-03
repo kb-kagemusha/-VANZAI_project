@@ -750,3 +750,66 @@ export interface RoleCreateRequest {
   code: string | null;
   description: string | null;
 }
+
+// ===========================
+// Staff Notice
+// ===========================
+
+export type NoticeType = "shift_confirm" | "project_change" | "general";
+export type NoticePriority = "normal" | "urgent";
+export type NoticeTargetType = "all" | "project" | "worker";
+
+export interface NoticeCreateRequest {
+  title: string;
+  body: string;
+  notice_type: NoticeType;
+  priority: NoticePriority;
+  target_type: NoticeTargetType;
+  target_project_id?: string | null;
+  target_worker_ids?: string[] | null;
+  send_email: boolean;
+}
+
+export interface NoticeListItem {
+  id: string;
+  title: string;
+  notice_type: NoticeType;
+  priority: NoticePriority;
+  target_type: NoticeTargetType;
+  target_project_id: string | null;
+  target_project_name: string | null;
+  target_worker_ids: string[] | null;
+  send_email: boolean;
+  sent_at: string | null;
+  read_count: number;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface NoticeListResponse {
+  items: NoticeListItem[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface WorkerNoticeItem {
+  id: string;
+  title: string;
+  body: string;
+  notice_type: NoticeType;
+  priority: NoticePriority;
+  target_project_id: string | null;
+  target_project_name: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface WorkerNoticeListResponse {
+  items: WorkerNoticeItem[];
+  unread_count: number;
+  total: number;
+}
