@@ -716,7 +716,7 @@ export function listNotices(params?: {
   offset?: number;
   limit?: number;
 }) {
-  return apiFetch<NoticeListResponse>(buildUrl("/api/notices", params));
+  return apiFetch<NoticeListResponse>("/api/notices", undefined, params as Record<string, string | number | boolean | undefined>);
 }
 
 export function deleteNotice(noticeId: string) {
