@@ -26,6 +26,11 @@
 3. **ユーザーマニュアルから参照できるようリンク追加**
   - 更新ファイル: `docs/ops/USER_MANUAL.md`
 
+4. **プッシュ登録の前段確認を修正し、版番号を `0.6.4` に更新**
+  - `pushManager.permissionState()` を撤去
+  - `getSubscription()` / `subscribe()` にタイムアウトを付与
+  - 更新ファイル: `apps/staff-mobile/src/lib/hooks/usePushNotification.ts`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
 ---
 
 ### フロント版番号の semantic version 化と表示整理 ✅

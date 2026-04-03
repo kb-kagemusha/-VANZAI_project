@@ -12,9 +12,9 @@
   - `index.html`: `Cache-Control: no-cache, no-store, must-revalidate`
   - `sw.js`: `Cache-Control: no-cache, no-store, must-revalidate`
 - フロントの版番号表示を semantic version に統一
-  - 表示: `Ver.0.6.3`
+  - 表示: `Ver.0.6.4`
   - 更新検知: `buildId` ベースで `/version.json` を比較
-- スタッフ画面はヘッダー左上に `STAFF MOBILE Ver.0.6.3` を表示
+- スタッフ画面はヘッダー左上に `STAFF MOBILE Ver.0.6.4` を表示
 - 通知拒否時は個人設定ページにブラウザ別の解除手順を表示
 - プッシュ通知の設定・障害切り分け Runbook を追加
   - [PUSH_NOTIFICATION_RUNBOOK.md](./PUSH_NOTIFICATION_RUNBOOK.md)
