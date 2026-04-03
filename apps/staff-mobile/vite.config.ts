@@ -1,11 +1,16 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { versionCheckPlugin } from "../../tools/vite-plugin-version-check";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [react()],
+    plugins: [react(), versionCheckPlugin()],
+    build: {
+      // デプロイ後に旧アセットを保持するため emptyOutDir は deploy スクリプト側で管理
+      emptyOutDir: true,
+    },
     server: {
       port: 3001,
       proxy: {

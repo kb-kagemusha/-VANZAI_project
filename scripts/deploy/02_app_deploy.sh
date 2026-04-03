@@ -104,21 +104,52 @@ ${VENV_DIR}/bin/alembic upgrade head
 echo "  マイグレーション完了"
 
 # ----------------------------------------
-# 5. フロントエンドビルド
+# 5. フロントエンドビルド（旧アセット保持付き）
 # ----------------------------------------
 echo "[5/6] フロントエンドビルド..."
 
-# admin-web
-echo "  admin-web ビルド中..."
-cd ${APP_DIR}/apps/admin-web
-npm ci --silent
-VITE_API_BASE_URL=https://api.vanzai-portal.com npm run build
+# 旧 JS/CSS を RETAIN_DAYS 日間保持する関数
+# - ブラウザキャッシュに旧 index.html を持つユーザーが旧 JS を参照しても 404 にならない
+# - 保持期間後は自動削除
+RETAIN_DAYS=7
+ARCHIVE_ROOT="${APP_DIR}/.asset-archive"
 
-# staff-mobile
-echo "  staff-mobile ビルド中..."
-cd ${APP_DIR}/apps/staff-mobile
-npm ci --silent
-VITE_API_BASE_URL=https://api.vanzai-portal.com npm run build
+build_with_asset_retention() {
+    local APP_NAME=$1
+    local APP_PATH="${APP_DIR}/apps/${APP_NAME}"
+    local DIST_ASSETS="${APP_PATH}/dist/assets"
+    local ARCHIVE_DIR="${ARCHIVE_ROOT}/${APP_NAME}"
+
+    mkdir -p "${ARCHIVE_DIR}"
+
+    # ビルド前: 現 dist/assets の JS と CSS をアーカイブに待避（新規ファイルのみ追加）
+    if [ -d "${DIST_ASSETS}" ]; then
+        find "${DIST_ASSETS}" \( -name "*.js" -o -name "*.css" \) | while read -r f; do
+            cp -n "$f" "${ARCHIVE_DIR}/" 2>/dev/null || true
+        done
+    fi
+
+    # ビルド実行
+    echo "  ${APP_NAME} ビルド中..."
+    cd "${APP_PATH}"
+    npm ci --silent
+    VITE_API_BASE_URL=https://api.vanzai-portal.com npm run build
+
+    # ビルド後: アーカイブの旧ファイルを dist/assets に復元（新ファイルは上書きしない）
+    if [ -d "${ARCHIVE_DIR}" ]; then
+        find "${ARCHIVE_DIR}" \( -name "*.js" -o -name "*.css" \) | while read -r f; do
+            cp -n "$f" "${DIST_ASSETS}/" 2>/dev/null || true
+        done
+    fi
+
+    # RETAIN_DAYS 以上前のアーカイブエントリを削除
+    find "${ARCHIVE_DIR}" -type f -mtime "+${RETAIN_DAYS}" -delete 2>/dev/null || true
+
+    echo "  ${APP_NAME} ビルド完了 (旧アセット ${RETAIN_DAYS}日保持中)"
+}
+
+build_with_asset_retention "admin-web"
+build_with_asset_retention "staff-mobile"
 
 echo "  フロントエンドビルド完了"
 

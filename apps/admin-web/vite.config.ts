@@ -1,11 +1,15 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { versionCheckPlugin } from "../../tools/vite-plugin-version-check";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [react()],
+    plugins: [react(), versionCheckPlugin()],
+    build: {
+      emptyOutDir: true,
+    },
     server: {
       port: 3000,
       proxy: {

@@ -1,8 +1,97 @@
 # 実装状況（STATUS）
 
-最終更新: 2026-04-02
+最終更新: 2026-04-03
 
 ---
+
+## ブラウザキャッシュ問題 — 三段対応計画
+
+**現象：** デプロイ後もユーザーが旧 JS をブラウザキャッシュ（1年 immutable）から実行し、  
+新しい修正が当たらない。nginx が `index.html` に `Cache-Control` を付けていないため  
+heuristic caching が発動する。
+
+---
+
+### フェーズ1：今すぐの応急処置（コード変更不要・即実施可能）
+
+**ユーザーへの案内（Android Chrome）**
+
+> `https://staff.vanzai-portal.com/?v=20260403-01` をブラウザで開いてください。  
+> `?v=...` が付くと別キャッシュキーになり、古い `index.html` を踏まずに済みます。
+
+または Chrome で「シークレットモード」→ `https://staff.vanzai-portal.com`
+
+---
+
+### フェーズ2：次回以降のデプロイから（実装済み・次回 git push + デプロイで有効）
+
+**実装内容：**
+
+| ファイル | 変更内容 |
+|---|---|
+| [tools/vite-plugin-version-check.ts](../../tools/vite-plugin-version-check.ts) | 新規作成。ビルドハッシュを埋め込み、起動時に `/version.json` と突合する |
+| [apps/staff-mobile/vite.config.ts](../../apps/staff-mobile/vite.config.ts) | `versionCheckPlugin()` 追加 |
+| [apps/admin-web/vite.config.ts](../../apps/admin-web/vite.config.ts) | `versionCheckPlugin()` 追加 |
+| [scripts/deploy/02_app_deploy.sh](../../scripts/deploy/02_app_deploy.sh) | 旧 JS/CSS を 7日間保持する `build_with_asset_retention()` 関数 |
+
+**動作フロー：**
+
+```
+ビルド時
+  → dist/version.json  生成 ({"version":"1743xxx-a1b2c3d","buildTime":"..."})
+  → index.html に <script> インライン埋め込み
+       CURRENT = "1743xxx-a1b2c3d"
+       fetch("/version.json?_t=...", {cache:"no-store"})
+       → 不一致なら location.replace("/?_v=1743yyy-e4f5g6h")
+       → 別URL = ブラウザが新 index.html をサーバーから取得してキャッシュ
+
+ユーザー救済の時系列
+  初回デプロイ後: このプラグイン入り index.html をまだ持っていないユーザー → フェーズ1で案内
+  2回目以降:      version.json 不一致を自動検知 → 自動リダイレクト → 即時反映 ✅
+```
+
+**旧アセット保持（deploy スクリプト）：**
+
+- ビルド前に `dist/assets/*.{js,css}` を `/var/www/vanzai/.asset-archive/<app>/` に退避
+- ビルド後に退避ファイルを `dist/assets/` に復元（`cp -n`：新ファイル優先）
+- 7日超えたアーカイブは自動削除
+- 効果：古い `index.html` を持つユーザーが旧 JS を参照しても 404 にならない
+
+---
+
+### フェーズ3：root 取得後の本来解（nginx 最小変更・1回限り）
+
+```nginx
+# /etc/nginx/sites-available/vanzai の
+# admin-web / staff-mobile 両 server ブロック内に追加
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+```
+
+適用コマンド（root で1回実行）：
+
+```bash
+# 追加箇所の確認
+sudo grep -n "location = /index.html" /etc/nginx/sites-available/vanzai
+
+# まだなければ sedで挿入（全 server ブロックの "location / {" 直前に追加）
+sudo sed -i 's|^\(    location / {\)$|    location = /index.html {\n        add_header Cache-Control "no-cache";\n    }\n\n\1|' /etc/nginx/sites-available/vanzai
+
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+適用後の役割分担：
+
+| 対象 | Cache-Control | 意味 |
+|---|---|---|
+| `index.html` | `no-cache` | 毎回バリデーション（ETag一致なら 304、差分なければ転送なし） |
+| `*.js` `*.css`（ハッシュ付き） | `public, immutable` (1年) | 変更不要なら永久キャッシュ ✅ |
+
+---
+
+
 
 ## 🗺️ 全機能早見表（2026-04-02 時点）
 
@@ -146,22 +235,61 @@
 
 ## 📋 デプロイ手順（更新時）
 
-```bash
-# 1. ローカルで変更をコミット・プッシュ
-git add -A && git commit -m "..."
+### Windows（ローカル PC）で実行
+
+```powershell
+# 1. 変更をコミット・プッシュ
+cd c:/VANZAI_project
+git add -A
+git commit -m "feat: ..."
 git push origin feature/2026-03-31-next-work
+```
 
-# 2. VPS でデプロイスクリプト実行（git pull + pip + alembic + npm build）
-ssh -i $HOME/.ssh/vanzai_vps vanzai@220.158.28.35 \
-  "bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh"
+### VPS へ反映（Windows PowerShell から SSH で一括実行）
 
-# 3. API プロセス再起動（systemd が Restart=always で自動再起動）
-ssh -i $HOME/.ssh/vanzai_vps vanzai@220.158.28.35 \
+```powershell
+# 2. git pull + pip + Alembic migrate + npm build（02_app_deploy.sh が全部やる）
+ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
+  "cd /var/www/vanzai && git fetch origin && git checkout feature/2026-03-31-next-work && git pull origin feature/2026-03-31-next-work && bash scripts/deploy/02_app_deploy.sh"
+```
+
+> **注意**: フロントビルドは `02_app_deploy.sh` に含まれていないことがある。  
+> 含まれていない場合は以下を追加実行：
+> ```powershell
+> ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
+>   "cd /var/www/vanzai && VITE_API_BASE_URL=https://api.vanzai-portal.com npm --prefix apps/admin-web run build && VITE_API_BASE_URL=https://api.vanzai-portal.com npm --prefix apps/staff-mobile run build"
+> ```
+
+```powershell
+# 3. API プロセス再起動（旧プロセスを kill → systemd が Restart=always で自動再起動）
+ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
   "pkill -f 'uvicorn.*src.api.main:app' || true"
 
 # 4. ヘルス確認
 curl https://api.vanzai-portal.com/api/health
 ```
+
+### Alembic マイグレーションだけ手動で当てたい場合
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
+  "cd /var/www/vanzai && .venv/bin/python -m alembic upgrade head"
+```
+
+> **SQLite 固有の注意**:
+> - `ALTER TABLE ADD CONSTRAINT` は非対応。`UniqueConstraint` は `create_table` 内に書くこと
+> - マイグレーションが途中で失敗してテーブルが中途半端に作られた場合は `alembic stamp <revision>` でバージョンを合わせてから再実行
+
+### SSH 接続情報（テスト環境）
+
+| 項目 | 値 |
+|---|---|
+| 秘密鍵（Windows） | `%USERPROFILE%\.ssh\vanzai_vps` |
+| 接続コマンド | `ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35` |
+| VPS パスワード | `Mykey0304@kb333`（sudo 不可ユーザー。現状 systemd 操作は root 権限が必要） |
+| systemd 再起動 | vanzai ユーザーは sudo 不可のため `pkill` で旧プロセスを落とし systemd 自動再起動を利用する |
+
+> ⚠️ 本番運用時はパスワード認証を廃止し、公開鍵のみに切り替えること
 
 ---
 
@@ -169,6 +297,7 @@ curl https://api.vanzai-portal.com/api/health
 
 | 日付 | 内容 | コミット |
 |---|---|---|
+| 2026-04-03 | 管理者→スタッフ通知機能（StaffNotice）実装・本番デプロイ | `60b2e92` |
 | 2026-04-02 | worker availability preferences 実装・本番デプロイ | `cd2dde4` |
 | 2026-04-02 | CORS設定追加・両アプリ再ビルド・本番ログイン確認 | — |
 | 2026-04-01 | Phase5 staff-mobile 完成・admin-web 予定確認監視実装 | `5f8352f` |
