@@ -61,10 +61,11 @@ from src.api.schemas import (
     AuditLogSearchRequest, AuditLogResponse, AuditLogListResponse,
     NoticeCreateRequest, NoticeListQuery, NoticeListItem, NoticeListResponse,
     WorkerNoticeItem, WorkerNoticeListResponse, StaffNoticeRespondRequest,
+    PushSubscriptionRequest, VapidPublicKeyResponse,
     ErrorResponse
 )
 from src.models.base import generate_ulid
-from src.models.master import User, StaffNotice, StaffNoticeRead
+from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription
 
 from src.services.csv_import import CsvImportService
 from src.services.dashboard import build_assignment_response_monitoring, get_dashboard_summary, get_project_closings_for_period
@@ -6986,6 +6987,34 @@ async def create_notice(
 
     creator_name = current_user.display_name or current_user.username
 
+    # プッシュ通知を非同期で送信（失敗しても通知作成は成功扱い）
+    try:
+        from src.services.push_sender import send_push_to_workers
+        push_worker_ids: list[str] = []
+        if notice.target_type == NoticeTargetType.WORKER.value:
+            push_worker_ids = list(notice.target_worker_ids or [])
+        elif notice.target_type == NoticeTargetType.PROJECT.value:
+            from src.models.transaction import Assignment, ShiftSlot
+            push_worker_ids = [
+                r[0] for r in db.query(Assignment.worker_id)
+                .join(ShiftSlot, Assignment.shift_slot_id == ShiftSlot.id)
+                .filter(
+                    ShiftSlot.project_id == notice.target_project_id,
+                    Assignment.deleted_at.is_(None),
+                    ShiftSlot.deleted_at.is_(None),
+                ).distinct().all()
+            ]
+        # target_type=all のときは push_worker_ids=[] → 全サブスクリプションに送信
+        send_push_to_workers(
+            db,
+            push_worker_ids,
+            title=notice.title,
+            body=notice.body[:80] + ("..." if len(notice.body) > 80 else ""),
+            url="/notices",
+        )
+    except Exception as _push_exc:
+        logger.warning("push notification failed: %s", _push_exc)
+
     return NoticeListItem(
         id=notice.id,
         title=notice.title,
@@ -7312,6 +7341,76 @@ async def respond_to_notice(
         target_id=notice_id,
         extra_metadata={"response": body.response, "worker_id": worker.id},
     )
+
+
+@app.get("/api/worker/push/vapid-public-key", response_model=VapidPublicKeyResponse, tags=["Notices"])
+async def get_vapid_public_key(
+    current_user: User = Depends(get_current_active_user),
+):
+    """VAPID 公開鍵を返す（フロントが Push 登録時に使う）"""
+    return VapidPublicKeyResponse(public_key=os.environ.get("VAPID_PUBLIC_KEY", ""))
+
+
+@app.post("/api/worker/push/subscribe", status_code=204, tags=["Notices"])
+async def subscribe_push(
+    body: PushSubscriptionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Web Push サブスクリプションを登録する（稼働者用）
+
+    - 同じ endpoint + worker_id が既存なら更新（upsert）
+    """
+    try:
+        check_permission(current_user, Permission.NOTICE_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Worker
+    worker = db.query(Worker).filter(
+        Worker.id == current_user.worker_id,
+        Worker.deleted_at.is_(None),
+    ).first() if current_user.worker_id else None
+
+    worker_id = worker.id if worker else None
+    now = datetime.now(timezone.utc)
+
+    existing = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == body.endpoint,
+        PushSubscription.worker_id == worker_id,
+    ).first()
+
+    if existing:
+        existing.p256dh = body.p256dh
+        existing.auth = body.auth
+        existing.user_agent_hash = body.user_agent_hash
+        existing.updated_at = now
+    else:
+        db.add(PushSubscription(
+            id=generate_ulid(),
+            worker_id=worker_id,
+            endpoint=body.endpoint,
+            p256dh=body.p256dh,
+            auth=body.auth,
+            user_agent_hash=body.user_agent_hash,
+            created_at=now,
+            updated_at=now,
+        ))
+    db.commit()
+
+
+@app.delete("/api/worker/push/subscribe", status_code=204, tags=["Notices"])
+async def unsubscribe_push(
+    body: PushSubscriptionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Web Push サブスクリプションを削除する（通知拒否時に呼ばれる）"""
+    db.query(PushSubscription).filter(
+        PushSubscription.endpoint == body.endpoint,
+    ).delete(synchronize_session=False)
+    db.commit()
 
 
 if __name__ == "__main__":

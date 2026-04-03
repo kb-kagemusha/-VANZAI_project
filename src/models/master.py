@@ -433,3 +433,21 @@ class StaffNoticeRead(Base, TimestampMixin):
 
     # Relationships
     notice: Mapped["StaffNotice"] = relationship(back_populates="reads")
+
+
+class PushSubscription(Base, TimestampMixin):
+    """
+    Web Push サブスクリプション
+    - 稼働者がブラウザで通知許可したときに登録
+    - 1稼働者が複数端末を持てるよう worker_id + endpoint で一意
+    """
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    worker_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=True, index=True
+    )
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    user_agent_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

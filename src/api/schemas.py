@@ -1164,6 +1164,19 @@ class StaffNoticeRespondRequest(BaseModel):
     response: str  # "ok" | "ng"
 
 
+class PushSubscriptionRequest(BaseModel):
+    """Web Push サブスクリプション登録リクエスト"""
+    endpoint: str
+    p256dh: str
+    auth: str
+    user_agent_hash: Optional[str] = None
+
+
+class VapidPublicKeyResponse(BaseModel):
+    """VAPID 公開鍵レスポンス"""
+    public_key: str
+
+
 class WorkerNoticeListResponse(BaseModel):
     """スタッフ向け通知一覧レスポンス"""
     items: List[WorkerNoticeItem]

@@ -26,6 +26,7 @@ dependencies = [
     "chardet>=5.0.0",
     "pandas>=3.0.0",
     "apscheduler>=3.11.0",
+    "pywebpush>=2.0.0",
 ]
 
 [project.optional-dependencies]

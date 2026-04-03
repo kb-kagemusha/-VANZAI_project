@@ -3,7 +3,7 @@
  *
  * 管理者から送られたシフト確定・案件変更・一般お知らせを閲覧する。
  * - タップで詳細ドロワーを開く（自動既読はしない）
- * - 「了解しました」ボタンで既読 + unread_count 減少
+ * - 「読みました」ボタンで既読 + unread_count 減少
  * - shift_confirm / project_change では「OK、わかりました」「NGです」で返答可能
  */
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getWorkerNotices, markNoticeRead, respondToNotice } from "../lib/api/client";
 import { formatDateTime } from "../lib/formatters";
+import { usePushNotification } from "../lib/hooks/usePushNotification";
 import type { NoticeType, WorkerNoticeItem } from "../types/api";
 
 const NOTICE_TYPE_LABELS: Record<NoticeType, string> = {
@@ -54,6 +55,8 @@ export function NoticesPage() {
   const queryClient = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [selected, setSelected] = useState<WorkerNoticeItem | null>(null);
+  const { requestPermission, permission } = usePushNotification();
+  const [pushRequesting, setPushRequesting] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["worker-notices", unreadOnly],
@@ -139,6 +142,46 @@ export function NoticesPage() {
           未読のみ
         </label>
       </div>
+
+      {/* プッシュ通知許可バナー */}
+      {permission !== "granted" && typeof Notification !== "undefined" && (
+        <div
+          style={{
+            background: "#e3f2fd",
+            border: "1px solid #90caf9",
+            borderRadius: "8px",
+            padding: "0.75rem 1rem",
+            marginBottom: "1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "0.5rem",
+            fontSize: "0.875rem",
+          }}
+        >
+          <span>🔔 通知をプッシュで受け取る</span>
+          <button
+            disabled={pushRequesting || permission === "denied"}
+            onClick={async () => {
+              setPushRequesting(true);
+              await requestPermission();
+              setPushRequesting(false);
+            }}
+            style={{
+              padding: "0.4rem 0.9rem",
+              borderRadius: "8px",
+              border: "none",
+              background: permission === "denied" ? "#ccc" : "#1976d2",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: permission === "denied" ? "not-allowed" : "pointer",
+              fontSize: "0.85rem",
+            }}
+          >
+            {permission === "denied" ? "ブラウザで拒否済" : pushRequesting ? "処理中..." : "許可する"}
+          </button>
+        </div>
+      )}
 
       {isLoading && <p style={{ color: "#888", textAlign: "center" }}>読み込み中...</p>}
       {isError && <p style={{ color: "#d32f2f", textAlign: "center" }}>通知の取得に失敗しました。</p>}
@@ -330,7 +373,7 @@ export function NoticesPage() {
                   </button>
                 </>
               ) : (
-                // 一般通知 / 返答済み: 了解ボタン（未読なら既読にする）
+                // 一般通知 / 返答済み: 読みましたボタン（未読なら既読にする）
                 !selected.is_read && (
                   <button
                     disabled={isBusy}
@@ -346,7 +389,7 @@ export function NoticesPage() {
                       cursor: isBusy ? "not-allowed" : "pointer",
                     }}
                   >
-                    {isBusy ? "処理中..." : "了解しました"}
+                    {isBusy ? "処理中..." : "読みました"}
                   </button>
                 )
               )}

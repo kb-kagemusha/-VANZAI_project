@@ -275,3 +275,33 @@ export function respondToNotice(noticeId: string, response: "ok" | "ng") {
     body: JSON.stringify({ response }),
   });
 }
+
+// Push notifications
+export function getVapidPublicKey(): Promise<{ public_key: string }> {
+  return apiFetch<{ public_key: string }>("/api/worker/push/vapid-public-key");
+}
+
+export function registerPushSubscription(sub: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  user_agent_hash?: string;
+}): Promise<void> {
+  return apiFetch<void>("/api/worker/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub),
+  });
+}
+
+export function unregisterPushSubscription(sub: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}): Promise<void> {
+  return apiFetch<void>("/api/worker/push/subscribe", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub),
+  });
+}
