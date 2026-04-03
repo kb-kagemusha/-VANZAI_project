@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth/auth-context";
 import { currentDateInput } from "../lib/formatters";
 import { getAvailabilityTemplateDetail, normalizeStaffAvailabilityPreferences } from "../lib/settings/staffPreferences";
 import { usePushNotification } from "../lib/hooks/usePushNotification";
+import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 const navItems = [
   { to: "/today", label: "今日" },
@@ -93,6 +94,7 @@ export function MobileShell() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const { permission, requestPermission } = usePushNotification();
+  const { hasUpdate, refreshNow } = useAppVersion();
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   const showOnboarding =
@@ -143,6 +145,16 @@ export function MobileShell() {
         isLoading={statusBandLoading}
         hasError={statusBandError}
       />
+
+      {/* 新バージョン更新バナー */}
+      {hasUpdate ? (
+        <div className="update-banner">
+          <span>🔄 新しいバージョンが利用可能です</span>
+          <button type="button" className="update-banner-btn" onClick={refreshNow}>
+            今すぐ更新
+          </button>
+        </div>
+      ) : null}
 
       <main className="mobile-main">
         <Outlet />

@@ -17,17 +17,30 @@ interface AppVersionState {
   refreshNow: () => void;
 }
 
+async function fetchLatestVersion(): Promise<string | null> {
+  try {
+    const r = await fetch("/version.json?_t=" + Date.now(), { cache: "no-store" });
+    const d: { version?: string } = await r.json();
+    return d.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useAppVersion(): AppVersionState {
   const currentVersion = window.__APP_VERSION__ ?? "dev";
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/version.json?_t=" + Date.now(), { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { version?: string }) => {
-        if (d.version) setLatestVersion(d.version);
-      })
-      .catch(() => {/* ネットワーク不可時は無視 */});
+    // 初回チェック
+    fetchLatestVersion().then((v) => { if (v) setLatestVersion(v); });
+
+    // 5分ごとに再チェック（ブラウザをしばらく放置した後でも気づける）
+    const interval = setInterval(() => {
+      fetchLatestVersion().then((v) => { if (v) setLatestVersion(v); });
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const hasUpdate = latestVersion !== null && latestVersion !== currentVersion;
