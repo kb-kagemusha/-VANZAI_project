@@ -118,18 +118,18 @@ export function MobileShell() {
     <div className="mobile-shell">
       <header className="mobile-header">
         <div>
-          <p className="mobile-eyebrow">STAFF MOBILE</p>
+          <p className="mobile-eyebrow mobile-eyebrow-row">
+            <span>STAFF MOBILE</span>
+            <span className="mobile-inline-version">Ver.{currentVersion.split("-").pop()}</span>
+          </p>
           <h1>VANZAI Crew</h1>
         </div>
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
-          <div className="mobile-version-row">
-            <span className="mobile-version-badge">v{currentVersion.split("-").pop()}</span>
+          <div className="mobile-header-actions">
             <button type="button" className={`mobile-version-refresh${hasUpdate ? " is-update-available" : ""}`} onClick={refreshNow}>
               {hasUpdate ? "新しい版に更新" : "再読み込み"}
             </button>
-          </div>
-          <div className="mobile-header-actions">
             <NavLink to="/settings" className="secondary-button header-action-link">
               個人設定
             </NavLink>
@@ -151,16 +151,6 @@ export function MobileShell() {
         isLoading={statusBandLoading}
         hasError={statusBandError}
       />
-
-      {/* 新バージョン更新バナー */}
-      {hasUpdate ? (
-        <div className="update-banner">
-          <span>🔄 新しいバージョンが利用可能です</span>
-          <button type="button" className="update-banner-btn" onClick={refreshNow}>
-            今すぐ更新
-          </button>
-        </div>
-      ) : null}
 
       <main className="mobile-main">
         <Outlet />

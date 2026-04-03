@@ -201,19 +201,13 @@ button {
   color: var(--text-subtle);
 }
 
-.mobile-version-row {
+.mobile-eyebrow-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
-.mobile-version-badge {
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-  background: rgba(21, 74, 120, 0.08);
-  border: 1px solid rgba(21, 74, 120, 0.14);
+.mobile-inline-version {
   color: var(--accent-deep);
   font-size: 0.72rem;
   font-weight: 700;
@@ -964,6 +958,21 @@ button {
   color: var(--text-subtle);
 }
 
+.push-settings-help {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(21, 74, 120, 0.1);
+}
+
+.push-settings-help p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
 /* ===== プッシュ通知オンボーディングモーダル ===== */
 .push-onboarding-overlay {
   position: fixed;
@@ -1054,35 +1063,3 @@ button {
   color: #fff;
 }
 
-/* ----------------------------------------------------------------
- * Update Banner (全ページ共通・新バージョン検出時)
- * ---------------------------------------------------------------- */
-.update-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 1rem;
-  background: linear-gradient(90deg, #1e40af 0%, #2563eb 100%);
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.update-banner-btn {
-  padding: 0.28rem 0.85rem;
-  border-radius: 999px;
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
-  background: transparent;
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-
-.update-banner-btn:hover {
-  background: #fff;
-  color: #1e40af;
-}

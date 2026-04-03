@@ -159,7 +159,13 @@ export function PersonalSettingsPage() {
           ) : permission === 'granted' ? (
             <p className="push-settings-sub push-settings-enabled">✓ 通知は有効です。シフト確定・お知らせをリアルタイムで受け取れます。</p>
           ) : permission === 'denied' ? (
-            <p className="push-settings-sub">ブラウザに拒否されています。ブラウザの「サイトの設定」から通知を許可に変更してください。</p>
+            <>
+              <p className="push-settings-sub">通知がブラウザ側で拒否されています。サイト設定で「通知」を「許可」に変えたあと、このページを再読み込みしてください。</p>
+              <div className="push-settings-help">
+                <p>iPhone Safari: アドレスバーの aA → Webサイトの設定 → 通知 → 許可</p>
+                <p>Chrome / Edge: アドレスバー左の設定アイコン → サイトの設定 → 通知 → 許可</p>
+              </div>
+            </>
           ) : (
             <>
               <p className="push-settings-sub">シフト確定・変更・お知らせをリアルタイムで受け取れます。</p>
@@ -169,7 +175,7 @@ export function PersonalSettingsPage() {
                 onClick={async () => {
                   const result = await requestPermission();
                   if (result === 'denied') {
-                    setPushMessage('通知が拒否されました。ブラウザの設定から変更してください。');
+                    setPushMessage('通知が拒否されました。ブラウザのサイト設定で「通知」を許可に変更してから再読み込みしてください。');
                   } else if (result === 'granted') {
                     setPushMessage('通知を有効にしました！');
                   }
