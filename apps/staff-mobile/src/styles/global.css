@@ -201,6 +201,42 @@ button {
   color: var(--text-subtle);
 }
 
+.mobile-version-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mobile-version-badge {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(21, 74, 120, 0.08);
+  border: 1px solid rgba(21, 74, 120, 0.14);
+  color: var(--accent-deep);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-version-refresh {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 74, 120, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent-deep);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.mobile-version-refresh.is-update-available {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  border-color: transparent;
+  color: #fff;
+}
+
 .mobile-header-actions {
   display: flex;
   gap: 0.4rem;

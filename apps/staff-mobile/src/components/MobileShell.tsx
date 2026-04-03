@@ -94,7 +94,7 @@ export function MobileShell() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const { permission, requestPermission } = usePushNotification();
-  const { hasUpdate, refreshNow } = useAppVersion();
+  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   const showOnboarding =
@@ -123,6 +123,12 @@ export function MobileShell() {
         </div>
         <div className="mobile-header-meta">
           <span>{user?.username}</span>
+          <div className="mobile-version-row">
+            <span className="mobile-version-badge">v{currentVersion.split("-").pop()}</span>
+            <button type="button" className={`mobile-version-refresh${hasUpdate ? " is-update-available" : ""}`} onClick={refreshNow}>
+              {hasUpdate ? "新しい版に更新" : "再読み込み"}
+            </button>
+          </div>
           <div className="mobile-header-actions">
             <NavLink to="/settings" className="secondary-button header-action-link">
               個人設定
