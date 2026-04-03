@@ -22,12 +22,14 @@ import {
   ApiError,
   createNotice,
   deleteNotice,
+  getWorkers,
   listNotices,
 } from "../lib/api/client";
 import type {
   NoticeCreateRequest,
   NoticeTargetType,
   NoticeType,
+  WorkerListItem,
 } from "../types/api";
 import { formatDateTime } from "../lib/formatters";
 
@@ -62,9 +64,28 @@ export function NoticesPage() {
   const [filterType, setFilterType] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NoticeCreateRequest>(INITIAL_FORM);
-  const [workerIdsInput, setWorkerIdsInput] = useState("");
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [workerSearch, setWorkerSearch] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+
+  // 全稼働者（アクティブのみ）を50音順で取得
+  const { data: workersData } = useQuery({
+    queryKey: ["workers-for-notice"],
+    queryFn: () => getWorkers({ is_active: true, limit: 2000 }),
+    enabled: showForm && form.target_type === "worker",
+    staleTime: 60_000,
+  });
+
+  const sortedWorkers: WorkerListItem[] = (workersData?.items ?? [])
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+
+  const filteredWorkers = workerSearch.trim()
+    ? sortedWorkers.filter((w) =>
+        w.name.includes(workerSearch.trim())
+      )
+    : sortedWorkers;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["notices", filterType, offset],
@@ -83,7 +104,8 @@ export function NoticesPage() {
       setActionError("");
       setShowForm(false);
       setForm(INITIAL_FORM);
-      setWorkerIdsInput("");
+      setSelectedWorkerIds([]);
+      setWorkerSearch("");
       queryClient.invalidateQueries({ queryKey: ["notices"] });
     },
     onError: (err) => {
@@ -113,8 +135,8 @@ export function NoticesPage() {
     const req: NoticeCreateRequest = {
       ...form,
       target_worker_ids:
-        form.target_type === "worker" && workerIdsInput.trim()
-          ? workerIdsInput.split(/[\s,]+/).filter(Boolean)
+        form.target_type === "worker" && selectedWorkerIds.length > 0
+          ? selectedWorkerIds
           : null,
       target_project_id:
         form.target_type === "project" ? form.target_project_id : null,
@@ -161,7 +183,16 @@ export function NoticesPage() {
         </label>
         <button
           className="btn btn-primary"
-          onClick={() => { setShowForm((v) => !v); setActionError(""); setActionMessage(""); }}
+          onClick={() => {
+            if (showForm) {
+              setSelectedWorkerIds([]);
+              setWorkerSearch("");
+              setForm(INITIAL_FORM);
+            }
+            setShowForm((v) => !v);
+            setActionError("");
+            setActionMessage("");
+          }}
         >
           {showForm ? "キャンセル" : "＋ 通知を作成"}
         </button>
@@ -251,16 +282,90 @@ export function NoticesPage() {
           )}
 
           {form.target_type === "worker" && (
-            <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>稼働者ID（カンマ区切り）<span style={{ color: "red" }}>*</span></span>
-              <textarea
-                rows={2}
-                value={workerIdsInput}
-                onChange={(e) => setWorkerIdsInput(e.target.value)}
-                placeholder="01ABCD..., 01EFGH..., ..."
-                required={form.target_type === "worker"}
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+                <span style={{ fontWeight: 500 }}>
+                  稼働者を選択 <span style={{ color: "red" }}>*</span>
+                </span>
+                {selectedWorkerIds.length > 0 && (
+                  <span style={{ fontSize: "0.8em", color: "var(--color-primary, #1565c0)" }}>
+                    {selectedWorkerIds.length}名選択中
+                  </span>
+                )}
+                {selectedWorkerIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: "0.75em", padding: "0 0.4rem" }}
+                    onClick={() => setSelectedWorkerIds([])}
+                  >
+                    選択解除
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                placeholder="名前で絞り込み..."
+                value={workerSearch}
+                onChange={(e) => setWorkerSearch(e.target.value)}
+                style={{ width: "100%" }}
               />
-            </label>
+              <div
+                style={{
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  maxHeight: "240px",
+                  overflowY: "auto",
+                  padding: "0.25rem 0",
+                }}
+              >
+                {workersData === undefined && (
+                  <div style={{ padding: "0.75rem 1rem", color: "#888" }}>読み込み中...</div>
+                )}
+                {workersData !== undefined && filteredWorkers.length === 0 && (
+                  <div style={{ padding: "0.75rem 1rem", color: "#888" }}>
+                    {workerSearch ? "一致する稼働者はいません" : "稼働者がいません"}
+                  </div>
+                )}
+                {filteredWorkers.map((w) => {
+                  const checked = selectedWorkerIds.includes(w.id);
+                  return (
+                    <label
+                      key={w.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.6rem",
+                        padding: "0.45rem 0.75rem",
+                        cursor: "pointer",
+                        background: checked ? "var(--color-primary-subtle, #e3f2fd)" : undefined,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedWorkerIds((ids) =>
+                            checked
+                              ? ids.filter((id) => id !== w.id)
+                              : [...ids, w.id]
+                          )
+                        }
+                      />
+                      <span style={{ flex: 1 }}>{w.name}</span>
+                      {w.email && (
+                        <span style={{ fontSize: "0.78em", color: "#666" }}>{w.email}</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+              {form.target_type === "worker" && selectedWorkerIds.length === 0 && (
+                <span style={{ fontSize: "0.8em", color: "var(--color-error, #d32f2f)" }}>
+                  1名以上選択してください
+                </span>
+              )}
+            </div>
           )}
 
           <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", cursor: "pointer" }}>
@@ -273,13 +378,25 @@ export function NoticesPage() {
           </label>
 
           <div style={{ display: "flex", gap: "0.75rem" }}>
-            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={
+                createMutation.isPending ||
+                (form.target_type === "worker" && selectedWorkerIds.length === 0)
+              }
+            >
               {createMutation.isPending ? "送信中..." : "送信"}
             </button>
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => { setShowForm(false); setForm(INITIAL_FORM); setWorkerIdsInput(""); }}
+              onClick={() => {
+                setShowForm(false);
+                setForm(INITIAL_FORM);
+                setSelectedWorkerIds([]);
+                setWorkerSearch("");
+              }}
             >
               キャンセル
             </button>
