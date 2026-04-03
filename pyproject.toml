@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vanzai"
-version = "0.6.2"
+version = "0.6.3"
 description = "案件・シフト・実績・請求・支払 一元管理システム"
 readme = "README.md"
 requires-python = ">=3.11"

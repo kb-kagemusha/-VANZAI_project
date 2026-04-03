@@ -5,6 +5,80 @@
 
 ## 完了したタスク
 
+### プッシュ通知運用ログ整備と版番号ポリシー明文化 ✅
+**実施日:** 2026-04-03
+**コミット:** `c448339` / `4a96d9a` / `0.6.3` 更新
+
+#### 変更内容
+1. **プッシュ通知の運用 Runbook を追加**
+  - 設定手順
+  - サーバー側確認手順
+  - 2026-04-03 時点の切り分け結果
+  - 今回のミス
+  - 今後の確認順序
+  - 追加ファイル: `docs/ops/PUSH_NOTIFICATION_RUNBOOK.md`
+
+2. **軽微変更でも版番号を上げる方針を明文化**
+  - patch 更新を標準化
+  - `0.6.2` → `0.6.3`
+  - 更新ファイル: `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+3. **ユーザーマニュアルから参照できるようリンク追加**
+  - 更新ファイル: `docs/ops/USER_MANUAL.md`
+
+---
+
+### フロント版番号の semantic version 化と表示整理 ✅
+**実施日:** 2026-04-03
+**コミット:** `99ff5ab` / `906ef67` / `8e67ccf` / `7c253b3` / `a07e2f9`（branch: feature/2026-03-31-next-work）
+
+#### 変更内容
+1. **版番号の表示を semantic version に統一**（`99ff5ab`）
+  - 変更前: git ハッシュや timestamp をそのまま UI 表示
+  - 変更後: `Ver.0.6.2` 形式で表示
+  - 運用ルール: メジャー = 1桁目、マイナー = 2桁目、バグフィックス = 3桁目
+  - 更新ファイル: `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+2. **表示用バージョンと更新検知用 build id を分離**（`99ff5ab`）
+  - 画面表示は `0.6.2`
+  - 内部では `buildId` を持ち、`/version.json` の差分で更新検知
+  - 更新ファイル: `tools/vite-plugin-version-check.ts`, `apps/staff-mobile/src/lib/hooks/useAppVersion.ts`, `apps/admin-web/src/lib/hooks/useAppVersion.ts`
+
+3. **スタッフ画面ヘッダーの版表示を1行に整理**（`906ef67`, `8e67ccf`）
+  - `STAFF MOBILE` の横に `Ver.0.6.2` を表示
+  - 更新ボタンはヘッダー右側に統合
+  - 更新ファイル: `apps/staff-mobile/src/components/MobileShell.tsx`, `apps/staff-mobile/src/styles/global.css`
+
+4. **通知拒否時の案内を具体化**（`906ef67`）
+  - iPhone Safari / Chrome / Edge それぞれの設定導線を画面内に表示
+  - 更新ファイル: `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`
+
+5. **キャッシュ対策の本来解を nginx に適用**
+  - `index.html` と `sw.js` を `no-cache, no-store, must-revalidate` に変更
+  - 目的: デプロイ後に旧 HTML / SW が残り続ける問題を防止
+
+---
+
+### スタッフ通知画面 UX 改善 ✅
+**実施日:** 2026-04-03
+**コミット:** `e98a35b` / `d14ffce`（branch: feature/2026-03-31-next-work）
+
+#### 変更内容
+1. **通知の個別稼働者選択をチェックボックス UI に変更**（`e98a35b`）
+   - 変更前: 稼働者IDをカンマ区切りで手入力するテキストエリア
+   - 変更後: `/api/workers?is_active=true` から全アクティブ稼働者を取得し、50音順チェックボックスリストで選択
+   - 名前インクリメンタル絞り込み、選択人数表示、一括クリアボタン付き
+   - 1名も選択していない状態では送信ボタンを非活性化
+   - ファイル: `apps/admin-web/src/pages/NoticesPage.tsx`
+
+2. **通知画面の横幅制限**（`d14ffce`）
+   - 変更前: `page-container`（未定義クラス）→ 全幅表示で横長になり可読性が低い
+   - 変更後: `page-stack` + インライン `maxWidth: "1100px", margin: "0 auto"` に変更
+   - ワイド画面でも最大 1100px で中央寄せ表示
+   - ファイル: `apps/admin-web/src/pages/NoticesPage.tsx`
+
+---
+
 ### Task 54: フロント登録/人員調整/発行UIの業務要件反映（App313連携・紹介者登録強化・App163導線削除準備）✅
 **実施日:** 2026-02-18
 **目的:** 現場運用要件に合わせ、登録導線・人員調整・発行モーダルを実務仕様へ揃える（軽微な見た目調整は除外）
