@@ -261,7 +261,7 @@ export function upsertWorkerAvailabilityPreferences(body: {
 // ===========================
 
 export function getWorkerNotices(params?: { unread_only?: boolean; offset?: number; limit?: number }) {
-  return apiFetch<WorkerNoticeListResponse>(buildUrl("/api/worker/notices", params));
+  return apiFetch<WorkerNoticeListResponse>("/api/worker/notices", undefined, params as Record<string, string | number | boolean | undefined>);
 }
 
 export function markNoticeRead(noticeId: string) {
