@@ -181,6 +181,7 @@ export function PersonalSettingsPage() {
                 type="button"
                 className="push-settings-button"
                 onClick={async () => {
+                  setPushMessage('プッシュ通知の登録を確認しています...');
                   const result = await requestPermission();
                   if (result.registered) {
                     setPushMessage('通知を有効にしました！');
@@ -207,6 +208,7 @@ export function PersonalSettingsPage() {
                 type="button"
                 className="push-settings-button"
                 onClick={async () => {
+                  setPushMessage('プッシュ通知の登録を確認しています...');
                   const result = await requestPermission();
                   if (result.permission === 'denied') {
                     setPushMessage('通知が拒否されました。ブラウザのサイト設定で「通知」を許可に変更してから再読み込みしてください。');
