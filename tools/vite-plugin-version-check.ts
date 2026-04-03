@@ -42,10 +42,11 @@ export function versionCheckPlugin(): Plugin {
     transformIndexHtml() {
       // インラインスクリプト: ブラウザキャッシュが古い index.html を使い続ける問題を自動修復する
       // - CURRENT_VERSION は埋め込み済みのビルドバージョン
+      // - window.__APP_VERSION__ に公開し React コンポーネントからも参照可能にする
       // - /version.json は毎回サーバーからフェッチ（no-store）
       // - バージョン不一致 → ?_v=<new> 付きで location.replace → 別URLとしてキャッシュバイパス
       // - すでに ?_v= が付いており一致している → 再帰ループしない
-      const inlineScript = `(function(){var C="${buildVersion}";var p=new URLSearchParams(location.search);if(p.get("_v")===C)return;fetch("/version.json?_t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){if(d.version&&d.version!==C){location.replace(location.pathname+"?_v="+d.version+location.hash)}}).catch(function(){})})();`;
+      const inlineScript = `(function(){var C="${buildVersion}";window.__APP_VERSION__=C;var p=new URLSearchParams(location.search);if(p.get("_v")===C)return;fetch("/version.json?_t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){if(d.version&&d.version!==C){location.replace(location.pathname+"?_v="+d.version+location.hash)}}).catch(function(){})})();`;
 
       return [
         {

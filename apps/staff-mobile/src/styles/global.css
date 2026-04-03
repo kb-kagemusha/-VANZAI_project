@@ -975,3 +975,45 @@ button {
   gap: 0.65rem;
   margin-top: 0.5rem;
 }
+
+/* ----------------------------------------------------------------
+ * App Version Section
+ * ---------------------------------------------------------------- */
+.app-version-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-subtle, #9ca3af);
+}
+
+.app-version-label {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.app-version-latest {
+  color: var(--success, #16a34a);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.app-version-update-btn {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent-deep, #2563eb);
+  background: transparent;
+  color: var(--accent-deep, #2563eb);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.app-version-update-btn:hover {
+  background: var(--accent-deep, #2563eb);
+  color: #fff;
+}

@@ -5,6 +5,7 @@ import { SideNav } from "./SideNav";
 import { useAuth } from "../lib/auth/auth-context";
 import { formatRole } from "../lib/formatters";
 import { updateProfile, ApiError } from "../lib/api/client";
+import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 export function AppShell() {
   const { user, logout, refreshUser } = useAuth();
@@ -12,6 +13,7 @@ export function AppShell() {
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
 
   const displayedName = user?.display_name || user?.username;
 
@@ -49,6 +51,14 @@ export function AppShell() {
             <h1 className="topbar-title">案件・シフト・実績 一元管理</h1>
           </div>
           <div className="topbar-actions">
+            <div className="topbar-version">
+              <span className="topbar-version-label">v{currentVersion.split("-").pop()}</span>
+              {hasUpdate && (
+                <button type="button" className="topbar-version-update" onClick={refreshNow}>
+                  🔄 更新
+                </button>
+              )}
+            </div>
             <div className="identity-card">
               <span className="identity-name">{displayedName}</span>
               <span className="identity-role">{formatRole(user?.role)}</span>

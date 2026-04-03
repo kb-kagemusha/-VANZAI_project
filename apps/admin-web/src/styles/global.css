@@ -592,6 +592,48 @@ button {
   border-color: rgba(200, 85, 61, 0.25);
 }
 
+/* ----------------------------------------------------------------
+ * Topbar version badge
+ * ---------------------------------------------------------------- */
+.topbar-version {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.topbar-version-label {
+  font-size: 0.72rem;
+  color: var(--text-subtle, #9ca3af);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.04);
+}
+
+.topbar-version-update {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--primary, #2563eb);
+  background: transparent;
+  color: var(--primary, #2563eb);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.topbar-version-update:hover {
+  background: var(--primary, #2563eb);
+  color: #fff;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0); }
+}
+
 .loading-overlay {
   min-height: 220px;
   display: grid;

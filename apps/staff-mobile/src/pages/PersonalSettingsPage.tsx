@@ -17,12 +17,14 @@ import {
   type WeekdayPreferenceKey,
 } from "../lib/settings/staffPreferences";
 import { usePushNotification } from "../lib/hooks/usePushNotification";
+import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 export function PersonalSettingsPage() {
   const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<StaffAvailabilityPreferences>(getDefaultStaffAvailabilityPreferences);
   const [message, setMessage] = useState("");
   const { permission, requestPermission } = usePushNotification();
+  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   // パスワード変更
@@ -359,6 +361,18 @@ export function PersonalSettingsPage() {
               {pwSubmitting ? "変更中..." : "パスワードを変更"}
             </button>
           </form>
+        )}
+      </section>
+
+      {/* アプリバージョン */}
+      <section className="app-version-section">
+        <span className="app-version-label">バージョン: {currentVersion.split("-").pop()}</span>
+        {hasUpdate ? (
+          <button type="button" className="app-version-update-btn" onClick={refreshNow}>
+            🔄 新しいバージョンに更新
+          </button>
+        ) : (
+          <span className="app-version-latest">最新です</span>
         )}
       </section>
     </div>
