@@ -1,13 +1,15 @@
 /**
  * スタッフ向け通知一覧ページ
  *
- * 管理者から送られたシフト確定・案件変更・一般お知らせを閲覧し、
- * タップで既読にする
+ * 管理者から送られたシフト確定・案件変更・一般お知らせを閲覧する。
+ * - タップで詳細ドロワーを開く（自動既読はしない）
+ * - 「了解しました」ボタンで既読 + unread_count 減少
+ * - shift_confirm / project_change では「OK、わかりました」「NGです」で返答可能
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getWorkerNotices, markNoticeRead } from "../lib/api/client";
+import { getWorkerNotices, markNoticeRead, respondToNotice } from "../lib/api/client";
 import { formatDateTime } from "../lib/formatters";
 import type { NoticeType, WorkerNoticeItem } from "../types/api";
 
@@ -23,6 +25,31 @@ const NOTICE_TYPE_COLORS: Record<NoticeType, string> = {
   general: "#2e7d32",
 };
 
+/** 返答ボタンを表示する通知タイプ */
+const RESPONDABLE_TYPES: NoticeType[] = ["shift_confirm", "project_change"];
+
+function ResponseBadge({ response }: { response: "ok" | "ng" | null }) {
+  if (!response) return null;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "0.1em 0.55em",
+        borderRadius: "4px",
+        fontSize: "0.72em",
+        fontWeight: 700,
+        background: response === "ok" ? "#e8f5e9" : "#fce4ec",
+        color: response === "ok" ? "#2e7d32" : "#c62828",
+        border: `1px solid ${response === "ok" ? "#a5d6a7" : "#ef9a9a"}`,
+        marginLeft: "0.4em",
+        verticalAlign: "middle",
+      }}
+    >
+      {response === "ok" ? "✓ OK" : "✗ NG"}
+    </span>
+  );
+}
+
 export function NoticesPage() {
   const queryClient = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -34,20 +61,53 @@ export function NoticesPage() {
     staleTime: 30_000,
   });
 
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["worker-notices"] });
+    queryClient.invalidateQueries({ queryKey: ["worker-notices-unread"] });
+  }
+
   const readMutation = useMutation({
     mutationFn: (noticeId: string) => markNoticeRead(noticeId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["worker-notices"] });
-      queryClient.invalidateQueries({ queryKey: ["worker-notices-unread"] });
+      invalidate();
+      setSelected(null);
     },
   });
 
+  const respondMutation = useMutation({
+    mutationFn: ({ noticeId, response }: { noticeId: string; response: "ok" | "ng" }) =>
+      respondToNotice(noticeId, response),
+    onSuccess: () => {
+      invalidate();
+      setSelected(null);
+    },
+  });
+
+  const isBusy = readMutation.isPending || respondMutation.isPending;
+
   function handleOpen(item: WorkerNoticeItem) {
     setSelected(item);
-    if (!item.is_read) {
-      readMutation.mutate(item.id);
+    // 既読はボタン操作時に記録する（ここでは自動既読しない）
+  }
+
+  function handleAcknowledge() {
+    if (!selected) return;
+    if (selected.response) {
+      // すでに返答済みなら既読だけ更新して閉じる
+      if (!selected.is_read) readMutation.mutate(selected.id);
+      else setSelected(null);
+    } else {
+      readMutation.mutate(selected.id);
     }
   }
+
+  function handleRespond(response: "ok" | "ng") {
+    if (!selected) return;
+    respondMutation.mutate({ noticeId: selected.id, response });
+  }
+
+  const isRespondable =
+    selected !== null && RESPONDABLE_TYPES.includes(selected.notice_type as NoticeType);
 
   return (
     <div className="page-container">
@@ -113,6 +173,7 @@ export function NoticesPage() {
                     </span>
                   )}
                   <span style={{ fontWeight: item.is_read ? 400 : 700 }}>{item.title}</span>
+                  <ResponseBadge response={item.response} />
                 </div>
                 <span
                   style={{
@@ -154,11 +215,13 @@ export function NoticesPage() {
           <div
             style={{
               background: "#fff", borderRadius: "16px 16px 0 0", padding: "1.5rem",
-              width: "100%", maxHeight: "70vh", overflow: "auto",
+              width: "100%", maxHeight: "80vh", overflow: "auto",
+              display: "flex", flexDirection: "column", gap: "0.75rem",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            {/* ヘッダー行 */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span
                 style={{
                   background: NOTICE_TYPE_COLORS[selected.notice_type as NoticeType] ?? "#666",
@@ -178,26 +241,130 @@ export function NoticesPage() {
                 ×
               </button>
             </div>
+
             {selected.priority === "urgent" && (
-              <p style={{ color: "#d32f2f", fontWeight: 700, margin: "0 0 0.5rem" }}>【緊急】</p>
+              <p style={{ color: "#d32f2f", fontWeight: 700, margin: 0 }}>【緊急】</p>
             )}
-            <h3 style={{ margin: "0 0 0.5rem" }}>{selected.title}</h3>
+
+            <h3 style={{ margin: 0 }}>{selected.title}</h3>
+
             {selected.target_project_name && (
-              <p style={{ margin: "0 0 0.75rem", fontSize: "0.85em", color: "#555" }}>
+              <p style={{ margin: 0, fontSize: "0.85em", color: "#555" }}>
                 案件: {selected.target_project_name}
               </p>
             )}
+
+            {/* 本文 */}
             <pre
               style={{
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
                 fontSize: "0.9em", lineHeight: 1.7, margin: 0,
+                background: "#f8f8f8", borderRadius: "8px", padding: "0.75rem",
               }}
             >
               {selected.body}
             </pre>
-            <p style={{ marginTop: "1rem", fontSize: "0.75em", color: "#888" }}>
+
+            <p style={{ margin: 0, fontSize: "0.75em", color: "#888" }}>
               {formatDateTime(selected.created_at)}
             </p>
+
+            {/* 既返答済みバッジ */}
+            {selected.response && (
+              <div
+                style={{
+                  padding: "0.6rem 0.75rem",
+                  borderRadius: "8px",
+                  background: selected.response === "ok" ? "#e8f5e9" : "#fce4ec",
+                  color: selected.response === "ok" ? "#2e7d32" : "#c62828",
+                  fontWeight: 600,
+                  fontSize: "0.9em",
+                  textAlign: "center",
+                }}
+              >
+                {selected.response === "ok" ? "✓ OK と返答済みです" : "✗ NG と返答済みです"}
+                {selected.responded_at && (
+                  <span style={{ fontWeight: 400, fontSize: "0.85em", marginLeft: "0.5em" }}>
+                    （{formatDateTime(selected.responded_at)}）
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* アクションボタン群 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
+              {isRespondable && !selected.response ? (
+                // 返答型通知: OK / NG 両ボタン
+                <>
+                  <button
+                    disabled={isBusy}
+                    onClick={() => handleRespond("ok")}
+                    style={{
+                      padding: "0.85rem",
+                      borderRadius: "10px",
+                      border: "none",
+                      background: isBusy ? "#ccc" : "#2e7d32",
+                      color: "#fff",
+                      fontSize: "1rem",
+                      fontWeight: 700,
+                      cursor: isBusy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isBusy ? "送信中..." : "✓ OK、わかりました"}
+                  </button>
+                  <button
+                    disabled={isBusy}
+                    onClick={() => handleRespond("ng")}
+                    style={{
+                      padding: "0.85rem",
+                      borderRadius: "10px",
+                      border: "2px solid #c62828",
+                      background: "#fff",
+                      color: "#c62828",
+                      fontSize: "1rem",
+                      fontWeight: 700,
+                      cursor: isBusy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isBusy ? "送信中..." : "✗ NGです"}
+                  </button>
+                </>
+              ) : (
+                // 一般通知 / 返答済み: 了解ボタン（未読なら既読にする）
+                !selected.is_read && (
+                  <button
+                    disabled={isBusy}
+                    onClick={handleAcknowledge}
+                    style={{
+                      padding: "0.85rem",
+                      borderRadius: "10px",
+                      border: "none",
+                      background: isBusy ? "#ccc" : "#1976d2",
+                      color: "#fff",
+                      fontSize: "1rem",
+                      fontWeight: 700,
+                      cursor: isBusy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isBusy ? "処理中..." : "了解しました"}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => setSelected(null)}
+                style={{
+                  padding: "0.7rem",
+                  borderRadius: "10px",
+                  border: "1px solid #ccc",
+                  background: "#f5f5f5",
+                  color: "#555",
+                  fontSize: "0.9rem",
+                  cursor: "pointer",
+                }}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -267,3 +267,11 @@ export function getWorkerNotices(params?: { unread_only?: boolean; offset?: numb
 export function markNoticeRead(noticeId: string) {
   return apiFetch<void>(`/api/worker/notices/${noticeId}/read`, { method: "POST" });
 }
+
+export function respondToNotice(noticeId: string, response: "ok" | "ng") {
+  return apiFetch<void>(`/api/worker/notices/${noticeId}/respond`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ response }),
+  });
+}

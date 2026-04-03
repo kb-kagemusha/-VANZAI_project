@@ -147,6 +147,9 @@ export interface WorkerNoticeItem {
   target_project_name: string | null;
   is_read: boolean;
   read_at: string | null;
+  /** 返答状態: "ok" | "ng" | null(未回答) */
+  response: "ok" | "ng" | null;
+  responded_at: string | null;
   created_at: string;
 }
 

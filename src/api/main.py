@@ -60,7 +60,7 @@ from src.api.schemas import (
     SoftCloseRequest, HardCloseRequest, SoftCloseReleaseRequest, HardCloseReleaseRequest, ClosingResponse,
     AuditLogSearchRequest, AuditLogResponse, AuditLogListResponse,
     NoticeCreateRequest, NoticeListQuery, NoticeListItem, NoticeListResponse,
-    WorkerNoticeItem, WorkerNoticeListResponse,
+    WorkerNoticeItem, WorkerNoticeListResponse, StaffNoticeRespondRequest,
     ErrorResponse
 )
 from src.models.base import generate_ulid
@@ -7192,6 +7192,8 @@ async def list_worker_notices(
             target_project_name=proj_name,
             is_read=r is not None,
             read_at=r.read_at if r else None,
+            response=r.response if r else None,
+            responded_at=r.responded_at if r else None,
             created_at=n.created_at,
         ))
 
@@ -7239,6 +7241,77 @@ async def mark_notice_read(
             updated_at=now,
         ))
         db.commit()
+
+
+@app.post("/api/worker/notices/{notice_id}/respond", status_code=204, tags=["Notices"])
+async def respond_to_notice(
+    notice_id: str,
+    body: StaffNoticeRespondRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    通知に返答する（稼働者用）
+
+    - response: "ok" または "ng"
+    - 既読も同時に記録する（未読でも返答可能）
+    """
+    if body.response not in ("ok", "ng"):
+        raise HTTPException(status_code=422, detail="response は 'ok' または 'ng' を指定してください")
+
+    try:
+        check_permission(current_user, Permission.NOTICE_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import Worker
+    worker = db.query(Worker).filter(
+        Worker.id == current_user.worker_id,
+        Worker.deleted_at.is_(None),
+    ).first() if current_user.worker_id else None
+
+    if not worker:
+        raise HTTPException(status_code=403, detail="稼働者アカウントが必要です")
+
+    notice = db.get(StaffNotice, notice_id)
+    if not notice or notice.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="通知が見つかりません")
+
+    now = datetime.now(timezone.utc)
+    existing = db.query(StaffNoticeRead).filter(
+        StaffNoticeRead.notice_id == notice_id,
+        StaffNoticeRead.worker_id == worker.id,
+    ).first()
+
+    if existing:
+        existing.response = body.response
+        existing.responded_at = now
+        existing.updated_at = now
+        # 未読なら既読にもする
+        if existing.read_at is None:
+            existing.read_at = now
+    else:
+        db.add(StaffNoticeRead(
+            id=generate_ulid(),
+            notice_id=notice_id,
+            worker_id=worker.id,
+            read_at=now,
+            response=body.response,
+            responded_at=now,
+            created_at=now,
+            updated_at=now,
+        ))
+
+    db.commit()
+
+    AuditService(db).log(
+        action=AuditAction.NOTICE_RESPONDED,
+        actor=current_user.username,
+        actor_role=current_user.role,
+        target_type="staff_notice",
+        target_id=notice_id,
+        extra_metadata={"response": body.response, "worker_id": worker.id},
+    )
 
 
 if __name__ == "__main__":

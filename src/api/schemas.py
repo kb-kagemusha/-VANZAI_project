@@ -1153,7 +1153,15 @@ class WorkerNoticeItem(BaseModel):
     target_project_name: Optional[str] = None
     is_read: bool = False
     read_at: Optional[datetime] = None
+    # 返答状態: "ok" | "ng" | None(未回答)
+    response: Optional[str] = None
+    responded_at: Optional[datetime] = None
     created_at: datetime
+
+
+class StaffNoticeRespondRequest(BaseModel):
+    """スタッフ通知への返答リクエスト"""
+    response: str  # "ok" | "ng"
 
 
 class WorkerNoticeListResponse(BaseModel):

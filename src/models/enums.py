@@ -168,6 +168,7 @@ class AuditAction(str, Enum):
     NOTICE_CREATED = "notice_created"
     NOTICE_SENT = "notice_sent"
     NOTICE_DELETED = "notice_deleted"
+    NOTICE_RESPONDED = "notice_responded"
 
 
 class InvoiceStatus(str, Enum):

@@ -425,6 +425,11 @@ class StaffNoticeRead(Base, TimestampMixin):
     read_at: Mapped[datetime | None] = mapped_column(
         SADateTime(timezone=True), nullable=True
     )
+    # 稼働者の返答（ok / ng / None=未回答）
+    response: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(
+        SADateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     notice: Mapped["StaffNotice"] = relationship(back_populates="reads")
