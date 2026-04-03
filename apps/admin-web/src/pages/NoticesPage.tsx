@@ -73,7 +73,7 @@ export function NoticesPage() {
   // フォームが開いた時点でpre-fetch（target_type切り替え前に準備完了させる）
   const { data: workersData, isPending: workersPending, isError: workersError } = useQuery({
     queryKey: ["workers-for-notice"],
-    queryFn: () => getWorkers({ is_active: true, limit: 2000 }),
+    queryFn: () => getWorkers({ is_active: true, limit: 200 }),
     enabled: showForm,
     staleTime: 60_000,
   });
