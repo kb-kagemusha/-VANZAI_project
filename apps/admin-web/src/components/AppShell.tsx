@@ -46,19 +46,21 @@ export function AppShell() {
       <SideNav />
       <main className="app-main">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">VANZAI 管理画面</p>
+          <div className="topbar-heading">
+            <div className="topbar-kicker">
+              <p className="eyebrow">VANZAI 管理画面</p>
+              <div className="topbar-version">
+                <span className="topbar-version-label">Ver.{currentVersion}</span>
+                {hasUpdate && (
+                  <button type="button" className="topbar-version-update" onClick={refreshNow}>
+                    新しい版を反映
+                  </button>
+                )}
+              </div>
+            </div>
             <h1 className="topbar-title">案件・シフト・実績 一元管理</h1>
           </div>
           <div className="topbar-actions">
-            <div className="topbar-version">
-              <span className="topbar-version-label">Ver.{currentVersion}</span>
-              {hasUpdate && (
-                <button type="button" className="topbar-version-update" onClick={refreshNow}>
-                  🔄 更新
-                </button>
-              )}
-            </div>
             <div className="identity-card">
               <span className="identity-name">{displayedName}</span>
               <span className="identity-role">{formatRole(user?.role)}</span>
