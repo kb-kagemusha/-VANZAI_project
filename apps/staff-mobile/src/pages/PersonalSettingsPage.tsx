@@ -147,6 +147,40 @@ export function PersonalSettingsPage() {
         <p>毎月の事前予定入力を楽にするため、曜日ごとの基本パターンを設定します。カレンダーでは保存前の状態を 自動候補 として区別して表示します。</p>
       </section>
 
+      {/* プッシュ通知セクション */}
+      <section className="push-settings-card">
+        <div className="push-settings-icon">🔔</div>
+        <div className="push-settings-body">
+          <p className="push-settings-title">プッシュ通知</p>
+          {!('Notification' in window) || !('PushManager' in window) ? (
+            <p className="push-settings-sub">このブラウザはプッシュ通知に対応していません。</p>
+          ) : permission === 'granted' ? (
+            <p className="push-settings-sub push-settings-enabled">✓ 通知は有効です。シフト確定・お知らせをリアルタイムで受け取れます。</p>
+          ) : permission === 'denied' ? (
+            <p className="push-settings-sub">ブラウザに拒否されています。ブラウザの「サイトの設定」から通知を許可に変更してください。</p>
+          ) : (
+            <>
+              <p className="push-settings-sub">シフト確定・変更・お知らせをリアルタイムで受け取れます。</p>
+              <button
+                type="button"
+                className="push-settings-button"
+                onClick={async () => {
+                  const result = await requestPermission();
+                  if (result === 'denied') {
+                    setPushMessage('通知が拒否されました。ブラウザの設定から変更してください。');
+                  } else if (result === 'granted') {
+                    setPushMessage('通知を有効にしました！');
+                  }
+                }}
+              >
+                通知をONにする
+              </button>
+            </>
+          )}
+          {pushMessage ? <p className="push-settings-feedback">{pushMessage}</p> : null}
+        </div>
+      </section>
+
       <section className="panel-card accent-blue settings-stack">
         <p className="panel-label">プリセット</p>
         <div className="settings-preset-grid">
@@ -272,40 +306,6 @@ export function PersonalSettingsPage() {
           {saveMutation.isPending ? "保存中..." : "設定を保存する"}
         </button>
       </div>
-
-      <section className="panel-card settings-stack">
-        <p className="panel-label">プッシュ通知</p>
-        {!("Notification" in window) || !("PushManager" in window) ? (
-          <p className="settings-helper-copy">このブラウザはプッシュ通知に対応していません。</p>
-        ) : permission === "granted" ? (
-          <p style={{ color: "var(--success, #16a34a)", fontWeight: 600 }}>✓ 通知は有効です</p>
-        ) : permission === "denied" ? (
-          <p className="settings-helper-copy">
-            通知が拒否されています。ブラウザのサイト設定から許可に変更してください。
-          </p>
-        ) : (
-          <>
-            <p className="settings-helper-copy">シフト確定・変更・お知らせをリアルタイムで受け取れます。</p>
-            <div className="button-row">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={async () => {
-                  const result = await requestPermission();
-                  if (result === "denied") {
-                    setPushMessage("通知が拒否されました。ブラウザの設定から変更してください。");
-                  } else if (result === "granted") {
-                    setPushMessage("通知を有効にしました！");
-                  }
-                }}
-              >
-                🔔 通知をONにする
-              </button>
-            </div>
-          </>
-        )}
-        {pushMessage ? <p style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>{pushMessage}</p> : null}
-      </section>
 
       <section className="panel-card settings-stack">
         <p className="panel-label">パスワード変更</p>
