@@ -70,10 +70,11 @@ export function NoticesPage() {
   const [actionMessage, setActionMessage] = useState("");
 
   // 全稼働者（アクティブのみ）を50音順で取得
-  const { data: workersData } = useQuery({
+  // フォームが開いた時点でpre-fetch（target_type切り替え前に準備完了させる）
+  const { data: workersData, isPending: workersPending, isError: workersError } = useQuery({
     queryKey: ["workers-for-notice"],
     queryFn: () => getWorkers({ is_active: true, limit: 2000 }),
-    enabled: showForm && form.target_type === "worker",
+    enabled: showForm,
     staleTime: 60_000,
   });
 
@@ -319,10 +320,15 @@ export function NoticesPage() {
                   padding: "0.25rem 0",
                 }}
               >
-                {workersData === undefined && (
+                {workersPending && (
                   <div style={{ padding: "0.75rem 1rem", color: "#888" }}>読み込み中...</div>
                 )}
-                {workersData !== undefined && filteredWorkers.length === 0 && (
+                {workersError && (
+                  <div style={{ padding: "0.75rem 1rem", color: "var(--color-error, #d32f2f)" }}>
+                    稼働者の取得に失敗しました。ページを再読み込みしてください。
+                  </div>
+                )}
+                {!workersPending && !workersError && filteredWorkers.length === 0 && (
                   <div style={{ padding: "0.75rem 1rem", color: "#888" }}>
                     {workerSearch ? "一致する稼働者はいません" : "稼働者がいません"}
                   </div>
