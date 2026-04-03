@@ -232,7 +232,7 @@ export function NoticesPage() {
             />
           </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.4fr", gap: "1rem" }}>
             <label style={{ display: "grid", gap: "0.25rem" }}>
               <span>通知種別</span>
               <select
@@ -255,19 +255,19 @@ export function NoticesPage() {
                 <option value="urgent">緊急</option>
               </select>
             </label>
-          </div>
 
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>送信対象</span>
-            <select
-              value={form.target_type}
-              onChange={(e) => setForm((f) => ({ ...f, target_type: e.target.value as NoticeTargetType }))}
-            >
-              <option value="all">全稼働者</option>
-              <option value="project">指定案件のアサイン済み稼働者</option>
-              <option value="worker">個別稼働者指定</option>
-            </select>
-          </label>
+            <label style={{ display: "grid", gap: "0.25rem" }}>
+              <span>送信対象</span>
+              <select
+                value={form.target_type}
+                onChange={(e) => setForm((f) => ({ ...f, target_type: e.target.value as NoticeTargetType }))}
+              >
+                <option value="all">全稼働者</option>
+                <option value="project">指定案件のアサイン済み稼働者</option>
+                <option value="worker">個別稼働者指定</option>
+              </select>
+            </label>
+          </div>
 
           {form.target_type === "project" && (
             <label style={{ display: "grid", gap: "0.25rem" }}>
