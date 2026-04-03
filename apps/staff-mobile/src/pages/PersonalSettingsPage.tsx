@@ -372,7 +372,7 @@ export function PersonalSettingsPage() {
 
       {/* アプリバージョン */}
       <section className="app-version-section">
-        <span className="app-version-label">バージョン: {currentVersion.split("-").pop()}</span>
+        <span className="app-version-label">バージョン: Ver.{currentVersion}</span>
         {hasUpdate ? (
           <button type="button" className="app-version-update-btn" onClick={refreshNow}>
             🔄 新しいバージョンに更新

@@ -120,7 +120,7 @@ export function MobileShell() {
         <div>
           <p className="mobile-eyebrow mobile-eyebrow-row">
             <span>STAFF MOBILE</span>
-            <span className="mobile-inline-version">Ver.{currentVersion.split("-").pop()}</span>
+            <span className="mobile-inline-version">Ver.{currentVersion}</span>
           </p>
           <h1>VANZAI Crew</h1>
         </div>

@@ -3,52 +3,68 @@ import { useCallback, useEffect, useState } from "react";
 declare global {
   interface Window {
     __APP_VERSION__?: string;
+    __APP_BUILD_ID__?: string;
   }
 }
 
 interface AppVersionState {
-  /** ページ読み込み時のビルドバージョン（インラインスクリプトで埋め込まれた値） */
+  /** ページ読み込み時の表示用バージョン */
   currentVersion: string;
-  /** サーバーの最新バージョン（フェッチ後に確定） */
+  /** サーバーの最新表示バージョン（フェッチ後に確定） */
   latestVersion: string | null;
-  /** currentVersion と latestVersion が異なるとき true */
+  /** build id が異なるとき true */
   hasUpdate: boolean;
   /** 最新バージョンで強制リフレッシュ */
   refreshNow: () => void;
 }
 
-async function fetchLatestVersion(): Promise<string | null> {
+interface VersionPayload {
+  version?: string;
+  buildId?: string;
+}
+
+async function fetchLatestVersion(): Promise<VersionPayload | null> {
   try {
     const r = await fetch("/version.json?_t=" + Date.now(), { cache: "no-store" });
-    const d: { version?: string } = await r.json();
-    return d.version ?? null;
+    const d: VersionPayload = await r.json();
+    return d;
   } catch {
     return null;
   }
 }
 
 export function useAppVersion(): AppVersionState {
-  const currentVersion = window.__APP_VERSION__ ?? "dev";
+  const currentVersion = window.__APP_VERSION__ ?? "0.0.0";
+  const currentBuildId = window.__APP_BUILD_ID__ ?? currentVersion;
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [latestBuildId, setLatestBuildId] = useState<string | null>(null);
 
   useEffect(() => {
     // 初回チェック
-    fetchLatestVersion().then((v) => { if (v) setLatestVersion(v); });
+    fetchLatestVersion().then((payload) => {
+      if (!payload) return;
+      if (payload.version) setLatestVersion(payload.version);
+      if (payload.buildId || payload.version) setLatestBuildId(payload.buildId ?? payload.version ?? null);
+    });
 
     // 5分ごとに再チェック（ブラウザをしばらく放置した後でも気づける）
     const interval = setInterval(() => {
-      fetchLatestVersion().then((v) => { if (v) setLatestVersion(v); });
+      fetchLatestVersion().then((payload) => {
+        if (!payload) return;
+        if (payload.version) setLatestVersion(payload.version);
+        if (payload.buildId || payload.version) setLatestBuildId(payload.buildId ?? payload.version ?? null);
+      });
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const hasUpdate = latestVersion !== null && latestVersion !== currentVersion;
+  const hasUpdate = latestBuildId !== null && latestBuildId !== currentBuildId;
 
   const refreshNow = useCallback(() => {
-    const target = latestVersion ?? currentVersion;
+    const target = latestBuildId ?? currentBuildId;
     location.replace(location.pathname + "?_v=" + target + location.hash);
-  }, [latestVersion, currentVersion]);
+  }, [latestBuildId, currentBuildId]);
 
   return { currentVersion, latestVersion, hasUpdate, refreshNow };
 }

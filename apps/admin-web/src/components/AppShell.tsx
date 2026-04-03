@@ -52,7 +52,7 @@ export function AppShell() {
           </div>
           <div className="topbar-actions">
             <div className="topbar-version">
-              <span className="topbar-version-label">v{currentVersion.split("-").pop()}</span>
+              <span className="topbar-version-label">Ver.{currentVersion}</span>
               {hasUpdate && (
                 <button type="button" className="topbar-version-update" onClick={refreshNow}>
                   🔄 更新

@@ -16,6 +16,8 @@ import fs from "fs";
 import path from "path";
 
 export function versionCheckPlugin(): Plugin {
+  let appVersion: string;
+  let buildId: string;
   let buildVersion: string;
   let outDir: string;
 
@@ -27,26 +29,38 @@ export function versionCheckPlugin(): Plugin {
       outDir = path.resolve(config.root, config.build.outDir);
 
       try {
+        const packageJsonPath = path.join(config.root, "package.json");
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as { version?: string };
+        appVersion = packageJson.version || "0.0.0";
+      } catch {
+        appVersion = "0.0.0";
+      }
+
+      try {
         const gitHash = execSync("git rev-parse --short HEAD", {
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
         }).trim();
-        buildVersion = `${Date.now()}-${gitHash}`;
+        buildId = `${Date.now()}-${gitHash}`;
       } catch {
-        buildVersion = String(Date.now());
+        buildId = String(Date.now());
       }
+
+      buildVersion = `${appVersion} (${buildId})`;
 
       console.log(`[version-check] buildVersion = ${buildVersion}`);
     },
 
     transformIndexHtml() {
       // インラインスクリプト: ブラウザキャッシュが古い index.html を使い続ける問題を自動修復する
-      // - CURRENT_VERSION は埋め込み済みのビルドバージョン
+      // - CURRENT_VERSION は埋め込み済みの build id
+      // - APP_VERSION は画面表示用の semantic version
       // - window.__APP_VERSION__ に公開し React コンポーネントからも参照可能にする
+      // - window.__APP_BUILD_ID__ に build id を公開し更新検知に使う
       // - /version.json は毎回サーバーからフェッチ（no-store）
       // - バージョン不一致 → ?_v=<new> 付きで location.replace → 別URLとしてキャッシュバイパス
       // - すでに ?_v= が付いており一致している → 再帰ループしない
-      const inlineScript = `(function(){var C="${buildVersion}";window.__APP_VERSION__=C;var p=new URLSearchParams(location.search);if(p.get("_v")===C)return;fetch("/version.json?_t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){if(d.version&&d.version!==C){location.replace(location.pathname+"?_v="+d.version+location.hash)}}).catch(function(){})})();`;
+      const inlineScript = `(function(){var C="${buildId}";var V="${appVersion}";window.__APP_VERSION__=V;window.__APP_BUILD_ID__=C;var p=new URLSearchParams(location.search);if(p.get("_v")===C)return;fetch("/version.json?_t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){var N=d.buildId||d.version;if(N&&N!==C){location.replace(location.pathname+"?_v="+N+location.hash)}}).catch(function(){})})();`;
 
       return [
         {
@@ -59,7 +73,8 @@ export function versionCheckPlugin(): Plugin {
 
     closeBundle() {
       const versionData = {
-        version: buildVersion,
+        version: appVersion,
+        buildId,
         buildTime: new Date().toISOString(),
       };
       const outPath = path.join(outDir, "version.json");
