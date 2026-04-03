@@ -150,7 +150,7 @@ export function NoticesPage() {
   const currentPage = Math.floor(offset / PAGE_SIZE);
 
   return (
-    <div className="page-container">
+    <div className="page-stack" style={{ maxWidth: "1100px", margin: "0 auto" }}>
       <PageHeader
         title="スタッフ通知"
         description="シフト確定・案件変更などをスタッフへ通知します"
