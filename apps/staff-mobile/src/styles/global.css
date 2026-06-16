@@ -102,6 +102,35 @@ a {
   margin: 0;
 }
 
+.login-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+.login-version-label {
+  font-weight: 600;
+}
+
+.login-build-label {
+  margin: 0.2rem 0 0;
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+}
+
+.login-version-refresh {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
 .login-form {
   display: grid;
   gap: 0.85rem;

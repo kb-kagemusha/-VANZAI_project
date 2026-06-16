@@ -10,6 +10,8 @@ declare global {
 interface AppVersionState {
   /** ページ読み込み時の表示用バージョン */
   currentVersion: string;
+  /** ページ読み込み時の build id */
+  currentBuildId: string;
   /** サーバーの最新表示バージョン（フェッチ後に確定） */
   latestVersion: string | null;
   /** build id が異なるとき true */
@@ -66,5 +68,5 @@ export function useAppVersion(): AppVersionState {
     location.replace(location.pathname + "?_v=" + target + location.hash);
   }, [latestBuildId, currentBuildId]);
 
-  return { currentVersion, latestVersion, hasUpdate, refreshNow };
+  return { currentVersion, currentBuildId, latestVersion, hasUpdate, refreshNow };
 }

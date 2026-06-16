@@ -357,11 +357,29 @@ export function PriceManagementPage() {
     <div className="page-stack">
       <PageHeader title="単価一覧" description="売上単価、外注単価、単価ルールを参照し、admin は追加・更新できます。" />
       <section className="upload-card">
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="price-view-switcher">
           <strong>表示切替</strong>
-          <button type="button" onClick={() => { setPriceView("sales"); setPage(0); resetCurrentForm(); }} style={{ opacity: priceView === "sales" ? 1 : 0.7 }}>売上単価</button>
-          <button type="button" onClick={() => { setPriceView("outsource"); setPage(0); resetCurrentForm(); }} style={{ opacity: priceView === "outsource" ? 1 : 0.7 }}>外注単価</button>
-          <button type="button" onClick={() => { setPriceView("rules"); setPage(0); resetCurrentForm(); }} style={{ opacity: priceView === "rules" ? 1 : 0.7 }}>単価ルール</button>
+          <button
+            type="button"
+            className={`price-view-button${priceView === "sales" ? " active" : ""}`}
+            onClick={() => { setPriceView("sales"); setPage(0); resetCurrentForm(); }}
+          >
+            売上単価
+          </button>
+          <button
+            type="button"
+            className={`price-view-button${priceView === "outsource" ? " active" : ""}`}
+            onClick={() => { setPriceView("outsource"); setPage(0); resetCurrentForm(); }}
+          >
+            外注単価
+          </button>
+          <button
+            type="button"
+            className={`price-view-button${priceView === "rules" ? " active" : ""}`}
+            onClick={() => { setPriceView("rules"); setPage(0); resetCurrentForm(); }}
+          >
+            単価ルール
+          </button>
         </div>
       </section>
 
@@ -537,7 +555,7 @@ export function PriceManagementPage() {
             >
               {saveMutation.isPending ? "保存中..." : selectedSales || selectedOutsource || selectedRule ? "更新する" : "追加する"}
             </button>
-            <button type="button" onClick={resetCurrentForm}>入力をクリア</button>
+            <button type="button" className="price-reset-button" onClick={resetCurrentForm}>入力をクリア</button>
           </div>
         </section>
       ) : null}
@@ -610,7 +628,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "default", header: "適用", render: (row) => (row.is_default ? "既定" : "個別") },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openSalesEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openSalesEditor(row)}>編集</button> : "—" },
           ]}
           rows={salesQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -630,7 +648,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "default", header: "適用", render: (row) => (row.is_default ? "既定" : "個別") },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openOutsourceEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openOutsourceEditor(row)}>編集</button> : "—" },
           ]}
           rows={outsourceQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -649,7 +667,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "status", header: "状態", render: (row) => <StatusBadge value={row.is_active ? "active" : "inactive"} /> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openRuleEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openRuleEditor(row)}>編集</button> : "—" },
           ]}
           rows={rulesQuery.data?.items ?? []}
           getRowKey={(row) => row.id}

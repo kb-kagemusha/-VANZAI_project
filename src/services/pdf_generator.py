@@ -102,20 +102,39 @@ class PDFGenerator:
         story = []
 
         # タイトル
+        document_title = self._format_invoice_document_type(getattr(invoice, "document_type", "invoice"))
         if invoice.version > 1:
             title = Paragraph(
-                f"請 求 書（再発行版 {invoice.version}）", title_style
+                f"{document_title}（再発行版 {invoice.version}）", title_style
             )
         else:
-            title = Paragraph("請 求 書", title_style)
+            title = Paragraph(document_title, title_style)
         story.append(title)
         story.append(Spacer(1, 12 * mm))
+
+        addressee_lines = []
+        if getattr(invoice, "addressee_company_name", None):
+            addressee_lines.append(str(invoice.addressee_company_name))
+        if getattr(invoice, "addressee_name", None):
+            addressee_lines.append(f"{invoice.addressee_name} 様")
+        addressee_text = "<br/>".join(addressee_lines) if addressee_lines else (invoice.client.name if invoice.client else "-")
+        story.append(Paragraph(addressee_text, normal_style))
+        if getattr(invoice, "addressee_address", None):
+            story.append(Spacer(1, 2 * mm))
+            story.append(Paragraph(str(invoice.addressee_address).replace("\n", "<br/>"), normal_style))
+        story.append(Spacer(1, 6 * mm))
+
+        if getattr(invoice, "invoice_subject", None):
+            story.append(Paragraph(f"<b>件名:</b> {invoice.invoice_subject}", normal_style))
+            story.append(Spacer(1, 4 * mm))
 
         # ヘッダー情報
         header_data = [
             ["請求書番号", invoice.id],
             ["請求先", invoice.client.name if invoice.client else "-"],
             ["請求期間", f"{invoice.period_key}"],
+            ["帳票種別", document_title],
+            ["請求日", invoice.billing_date.strftime("%Y年%m月%d日") if invoice.billing_date else "-"],
             ["発行日", invoice.issued_at.strftime("%Y年%m月%d日") if invoice.issued_at else "-"],
             ["請求金額（税込）", f"¥{invoice.total_amount:,.0f}"],
         ]
@@ -335,5 +354,13 @@ class PDFGenerator:
             "work": "稼働",
             "expense": "経費",
             "incentive": "インセンティブ",
+            "office_fee": "固定事務局費",
         }
         return mapping.get(line_type, str(line_type))
+
+    def _format_invoice_document_type(self, document_type: str) -> str:
+        mapping = {
+            "invoice": "請 求 書",
+            "estimate": "見 積 書",
+        }
+        return mapping.get(document_type, "請 求 書")

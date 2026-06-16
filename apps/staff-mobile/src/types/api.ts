@@ -145,6 +145,8 @@ export interface WorkerNoticeItem {
   priority: NoticePriority;
   target_project_id: string | null;
   target_project_name: string | null;
+  /** push通知アクションボタン種別: "ok_ng" | "confirm" | null */
+  push_action_type: string | null;
   is_read: boolean;
   read_at: string | null;
   /** 返答状態: "ok" | "ng" | null(未回答) */

@@ -4,13 +4,15 @@ FastAPI メインアプリケーション
 案件・シフト・実績・請求・支払 一元管理システムのREST API
 """
 from contextlib import asynccontextmanager
+import hashlib
 import mimetypes
 import os
 from pathlib import Path, PurePath
 import re
+import secrets
 from decimal import Decimal, InvalidOperation
 
-from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Form, Response, status
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File, Form, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
@@ -50,7 +52,13 @@ from src.api.schemas import (
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
     ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
     SiteListQuery, SiteListItem, SiteListResponse, SiteCreateRequest,
-    ProjectTypeListQuery, ProjectTypeListItem, ProjectTypeListResponse, ProjectTypeCreateRequest,
+    ProjectTypeListQuery, ProjectTypeListItem, ProjectTypeListResponse, ProjectTypeCreateRequest, ProjectTypeTreeItem, ProjectTypeTreeResponse,
+    RegistrationRequestListQuery, RegistrationRequestListItem, RegistrationRequestListResponse, RegistrationRequestDetailResponse,
+    RegistrationDedupeCandidateItem, RegistrationLinkCreateRequest, RegistrationLinkResponse,
+    RegistrationRequestApproveRequest, RegistrationRequestRejectRequest, RegistrationRequestFileItem,
+    RegistrationFieldDifferenceItem, PublicRegistrationAccessResponse, PublicRegistrationFileUploadResponse, PublicRegistrationSubmitResponse,
+    PublicWorkerRegistrationSubmitRequest, PublicSupplierIndividualRegistrationSubmitRequest,
+    PublicSupplierCorporationRegistrationSubmitRequest, PublicIntroducerIdentityRegistrationSubmitRequest,
     RoleListQuery, RoleListItem, RoleListResponse, RoleCreateRequest,
     InvoiceListQuery, InvoiceListItem, InvoiceListResponse,
     InvoiceGenerateRequest, InvoiceResponse, InvoiceLineResponse,
@@ -62,10 +70,14 @@ from src.api.schemas import (
     NoticeCreateRequest, NoticeListQuery, NoticeListItem, NoticeListResponse,
     WorkerNoticeItem, WorkerNoticeListResponse, StaffNoticeRespondRequest,
     PushSubscriptionRequest, VapidPublicKeyResponse,
+    VanzaiStaffListQuery, VanzaiStaffItem, VanzaiStaffListResponse, VanzaiStaffCreateRequest, VanzaiStaffUpdateRequest,
+    ClientStaffListQuery, ClientStaffItem, ClientStaffListResponse, ClientStaffCreateRequest, ClientStaffUpdateRequest,
+    WorkerBankAccountItem, WorkerBankAccountListResponse, WorkerBankAccountCreateRequest, WorkerBankAccountUpdateRequest,
+    SupplierBankAccountItem, SupplierBankAccountListResponse, SupplierBankAccountCreateRequest, SupplierBankAccountUpdateRequest,
     ErrorResponse
 )
 from src.models.base import generate_ulid
-from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription
+from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription, RegistrationRequest, RegistrationRequestFile, VanzaiStaff, ClientStaff, WorkerBankAccount, SupplierBankAccount, Client
 
 from src.services.csv_import import CsvImportService
 from src.services.dashboard import build_assignment_response_monitoring, get_dashboard_summary, get_project_closings_for_period
@@ -76,7 +88,7 @@ from src.services import closing
 from src.services.audit import AuditService, AuditLogSearchFilter
 from src.services import aggregation
 from src.services.pdf_generator import PDFGenerator
-from src.services.document_storage import DocumentStorage, ObjectStorage, build_invoice_pdf_object_key, build_payout_pdf_object_key, build_receipt_object_key
+from src.services.document_storage import DocumentStorage, ObjectStorage, build_invoice_pdf_object_key, build_payout_pdf_object_key, build_receipt_object_key, build_registration_request_file_object_key
 from src.services.email_sender import get_default_sender
 from src.services.email_template import EmailAttachment, EmailTemplateService
 from src.services.scheduler import SchedulerService, initialize_default_jobs
@@ -89,7 +101,22 @@ from src.models.enums import ActualStatus, AssignmentStatus, AssignmentWorkerRes
 
 CSV_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
 RECEIPT_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+REGISTRATION_FILE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 PERIOD_KEY_PATTERN = re.compile(r"^\d{6}$")
+REGISTRATION_ALLOWED_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
+REGISTRATION_ALLOWED_DOCUMENT_TYPES = {
+    "driver_license",
+    "my_number_card",
+    "residence_card",
+    "passport",
+    "other",
+}
+REGISTRATION_ALLOWED_DOCUMENT_PARTS = {"front", "back", "single"}
 
 
 @asynccontextmanager
@@ -185,6 +212,17 @@ def _sanitize_receipt_file_name(file_name: str | None) -> str:
     return candidate
 
 
+def _sanitize_registration_file_name(file_name: str | None) -> str:
+    candidate = PurePath((file_name or "").replace("\\", "/")).name.strip()
+
+    if not candidate:
+        raise HTTPException(status_code=400, detail="ファイル名は必須です")
+    if len(candidate) > 255:
+        raise HTTPException(status_code=400, detail="ファイル名が長すぎます")
+
+    return candidate
+
+
 def _parse_optional_time(value: str | None) -> time | None:
     if not value:
         return None
@@ -241,6 +279,10 @@ def _receipt_storage() -> ObjectStorage:
     return ObjectStorage(root=Path(os.getenv("RECEIPT_STORAGE_ROOT", "storage/receipts")))
 
 
+def _registration_file_storage() -> ObjectStorage:
+    return ObjectStorage(root=Path(os.getenv("REGISTRATION_FILE_STORAGE_ROOT", "storage/registration_files")))
+
+
 def _validate_availability_status(value: str) -> str:
     legacy_aliases = {
         "available": AvailabilityStatus.AVAILABLE_ALL_DAY.value,
@@ -256,6 +298,946 @@ def _validate_availability_status(value: str) -> str:
                 "/ undecided のいずれかで指定してください"
             ),
         ) from exc
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _append_notes(*parts: str | None) -> str | None:
+    normalized_parts = [part.strip() for part in parts if part and part.strip()]
+    if not normalized_parts:
+        return None
+    return "\n\n".join(normalized_parts)
+
+
+def _first_non_empty(*values: str | None) -> str | None:
+    for value in values:
+        normalized = _normalize_optional_text(value)
+        if normalized:
+            return normalized
+    return None
+
+
+REGISTRATION_LINK_MAX_FAILED_ATTEMPTS = 5
+PUBLIC_FORM_TYPE_TO_REQUEST_TYPE = {
+    "worker": "worker",
+    "supplier-individual": "supplier_individual",
+    "supplier-corporation": "supplier_corporation",
+    "introducer-identity": "introducer_identity",
+}
+REQUEST_TYPE_TO_PUBLIC_FORM_TYPE = {value: key for key, value in PUBLIC_FORM_TYPE_TO_REQUEST_TYPE.items()}
+
+
+def _request_type_from_public_form_type(form_type: str) -> str:
+    request_type = PUBLIC_FORM_TYPE_TO_REQUEST_TYPE.get(form_type)
+    if not request_type:
+        raise HTTPException(status_code=404, detail="未対応の公開フォーム種別です")
+    return request_type
+
+
+def _public_form_type_from_request_type(request_type: str) -> str:
+    form_type = REQUEST_TYPE_TO_PUBLIC_FORM_TYPE.get(request_type)
+    if not form_type:
+        raise HTTPException(status_code=400, detail="未対応の request_type です")
+    return form_type
+
+
+def _hash_public_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _generate_registration_link_credentials(expires_in_days: int) -> tuple[str, str, datetime]:
+    token = secrets.token_urlsafe(24)
+    pin = f"{secrets.randbelow(1000000):06d}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+    return token, pin, expires_at
+
+
+def _build_registration_link_response(request_record: RegistrationRequest, token: str, pin: str) -> RegistrationLinkResponse:
+    form_type = _public_form_type_from_request_type(request_record.request_type)
+    return RegistrationLinkResponse(
+        request_id=request_record.id,
+        request_type=request_record.request_type,
+        status=request_record.status,
+        expires_at=request_record.expires_at or datetime.now(timezone.utc),
+        public_form_url=f"/public/registrations/{form_type}?token={token}",
+        public_token=token,
+        access_pin=pin,
+        failed_attempts=request_record.failed_attempts,
+        locked_at=request_record.locked_at,
+        notes=request_record.notes,
+    )
+
+
+def _issue_registration_link(
+    request_record: RegistrationRequest,
+    *,
+    request_type: str,
+    expires_in_days: int,
+    notes: str | None = None,
+) -> tuple[str, str]:
+    token, pin, expires_at = _generate_registration_link_credentials(expires_in_days)
+    request_record.request_type = request_type
+    request_record.status = "link_issued"
+    request_record.source_type = "public_form"
+    request_record.public_token_hash = _hash_public_token(token)
+    request_record.access_pin_hash = get_password_hash(pin)
+    request_record.expires_at = expires_at
+    request_record.failed_attempts = 0
+    request_record.locked_at = None
+    request_record.submitted_at = None
+    request_record.reviewed_at = None
+    request_record.reviewed_by = None
+    request_record.approved_target_type = None
+    request_record.approved_target_id = None
+    request_record.superseded_by_request_id = None
+    request_record.dedupe_key = None
+    request_record.submitted_ip = None
+    request_record.user_agent = None
+    request_record.notes = _append_notes(request_record.notes, notes)
+    return token, pin
+
+
+def _registration_detail_record(db: Session, request_record: RegistrationRequest):
+    from src.models.master import (
+        IntroducerIdentityRequestDetail,
+        SupplierCorporationRequestDetail,
+        SupplierIndividualRequestDetail,
+        WorkerRegistrationRequestDetail,
+    )
+
+    model_map = {
+        "worker": WorkerRegistrationRequestDetail,
+        "supplier_individual": SupplierIndividualRequestDetail,
+        "supplier_corporation": SupplierCorporationRequestDetail,
+        "introducer_identity": IntroducerIdentityRequestDetail,
+    }
+    model = model_map.get(request_record.request_type)
+    if model is None:
+        return None
+    return db.query(model).filter(model.request_id == request_record.id).first()
+
+
+def _registration_detail_data(db: Session, request_record: RegistrationRequest) -> dict | None:
+    detail = _registration_detail_record(db, request_record)
+    if detail is None:
+        return None
+
+    data: dict[str, object | None] = {}
+    for column in detail.__table__.columns:
+        if column.name in {"id", "request_id", "created_at", "updated_at"}:
+            continue
+        data[column.name] = getattr(detail, column.name)
+    return data
+
+
+def _registration_summary_name(db: Session, request_record: RegistrationRequest) -> str | None:
+    detail_data = _registration_detail_data(db, request_record) or {}
+    if request_record.request_type == "worker":
+        return _first_non_empty(
+            " ".join(
+                part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part
+            ),
+            detail_data.get("sole_proprietor_name"),
+        )
+    if request_record.request_type == "supplier_individual":
+        return _first_non_empty(detail_data.get("trade_name"), detail_data.get("name"))
+    if request_record.request_type == "supplier_corporation":
+        return _first_non_empty(detail_data.get("company_name"), detail_data.get("representative_name"))
+    if request_record.request_type == "introducer_identity":
+        return _first_non_empty(detail_data.get("subject_name"))
+    return None
+
+
+def _registration_file_item(file_record: RegistrationRequestFile) -> RegistrationRequestFileItem:
+    return RegistrationRequestFileItem(
+        id=file_record.id,
+        document_type=file_record.document_type,
+        document_part=file_record.document_part,
+        original_filename=file_record.original_filename,
+        mime_type=file_record.mime_type,
+        size_bytes=file_record.size_bytes,
+        scan_status=file_record.scan_status,
+        uploaded_at=file_record.uploaded_at,
+        delete_after=file_record.delete_after,
+        deleted_at=file_record.deleted_at,
+    )
+
+
+def _registration_list_item(db: Session, request_record: RegistrationRequest) -> RegistrationRequestListItem:
+    return RegistrationRequestListItem(
+        id=request_record.id,
+        request_type=request_record.request_type,
+        status=request_record.status,
+        source_type=request_record.source_type,
+        summary_name=_registration_summary_name(db, request_record),
+        submitted_at=request_record.submitted_at,
+        reviewed_at=request_record.reviewed_at,
+        reviewed_by=request_record.reviewed_by,
+        approved_target_type=request_record.approved_target_type,
+        approved_target_id=request_record.approved_target_id,
+        expires_at=request_record.expires_at,
+        failed_attempts=request_record.failed_attempts,
+        locked_at=request_record.locked_at,
+        dedupe_key=request_record.dedupe_key,
+        notes=request_record.notes,
+    )
+
+
+def _registration_detail_response(db: Session, request_record: RegistrationRequest) -> RegistrationRequestDetailResponse:
+    reviewer_name = request_record.reviewer.display_name if request_record.reviewer else None
+    if not reviewer_name and request_record.reviewer:
+        reviewer_name = request_record.reviewer.username
+
+    return RegistrationRequestDetailResponse(
+        id=request_record.id,
+        request_type=request_record.request_type,
+        status=request_record.status,
+        source_type=request_record.source_type,
+        summary_name=_registration_summary_name(db, request_record),
+        submitted_at=request_record.submitted_at,
+        reviewed_at=request_record.reviewed_at,
+        reviewed_by=request_record.reviewed_by,
+        reviewed_by_name=reviewer_name,
+        approved_target_type=request_record.approved_target_type,
+        approved_target_id=request_record.approved_target_id,
+        expires_at=request_record.expires_at,
+        failed_attempts=request_record.failed_attempts,
+        locked_at=request_record.locked_at,
+        dedupe_key=request_record.dedupe_key,
+        superseded_by_request_id=request_record.superseded_by_request_id,
+        submitted_ip=request_record.submitted_ip,
+        user_agent=request_record.user_agent,
+        notes=request_record.notes,
+        detail_data=_registration_detail_data(db, request_record),
+        dedupe_candidates=_build_registration_dedupe_candidates(db, request_record),
+        files=_registration_file_items(db, request_record.id),
+    )
+
+
+def _build_registration_dedupe_candidates(
+    db: Session,
+    request_record: RegistrationRequest,
+) -> list[RegistrationDedupeCandidateItem]:
+    from src.models.master import Supplier, Worker
+
+    detail_data = _registration_detail_data(db, request_record) or {}
+    candidates: dict[str, RegistrationDedupeCandidateItem] = {}
+
+    def build_field_differences(target_type: str, row) -> list[RegistrationFieldDifferenceItem]:
+        field_specs: list[tuple[str, str, str | None, str | None]] = []
+        if target_type == "worker":
+            request_name = _normalize_optional_text(
+                " ".join(part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part)
+            )
+            request_furigana = _normalize_optional_text(
+                " ".join(part for part in [detail_data.get("last_name_furigana"), detail_data.get("first_name_furigana")] if part)
+            )
+            field_specs = [
+                ("name", "氏名", request_name, _normalize_optional_text(row.name)),
+                ("furigana", "ふりがな", request_furigana, _normalize_optional_text(row.furigana)),
+                ("phone", "電話番号", _normalize_optional_text(detail_data.get("phone")), _normalize_optional_text(row.phone)),
+                ("email", "メール", _normalize_optional_text(detail_data.get("email")), _normalize_optional_text(row.email)),
+                (
+                    "sole_proprietor_name",
+                    "屋号",
+                    _normalize_optional_text(detail_data.get("sole_proprietor_name")),
+                    _normalize_optional_text(row.sole_proprietor_name),
+                ),
+                ("gender", "性別", _normalize_optional_text(detail_data.get("gender")), _normalize_optional_text(row.gender)),
+                (
+                    "invoice_registration_status",
+                    "インボイス登録状況",
+                    _normalize_optional_text(detail_data.get("invoice_registration_status")),
+                    _normalize_optional_text(row.invoice_registration_status),
+                ),
+                (
+                    "invoice_number",
+                    "インボイス番号",
+                    _normalize_optional_text(detail_data.get("invoice_registration_number")),
+                    _normalize_optional_text(row.invoice_number),
+                ),
+            ]
+        elif target_type == "supplier":
+            request_name = _first_non_empty(
+                detail_data.get("trade_name"),
+                detail_data.get("company_name"),
+                detail_data.get("name"),
+            )
+            field_specs = [
+                ("name", "名称", _normalize_optional_text(request_name), _normalize_optional_text(row.name)),
+                ("phone", "電話番号", _normalize_optional_text(detail_data.get("phone")), _normalize_optional_text(row.contact_phone)),
+                ("email", "メール", _normalize_optional_text(detail_data.get("email")), _normalize_optional_text(row.contact_email)),
+                (
+                    "supplier_type",
+                    "supplier_type",
+                    _normalize_optional_text(detail_data.get("supplier_type")),
+                    _normalize_optional_text(row.supplier_type),
+                ),
+                (
+                    "entity_type",
+                    "entity_type",
+                    "individual" if request_record.request_type == "supplier_individual" else "corporation" if request_record.request_type == "supplier_corporation" else None,
+                    _normalize_optional_text(row.entity_type),
+                ),
+            ]
+
+        differences: list[RegistrationFieldDifferenceItem] = []
+        for field_name, field_label, request_value, existing_value in field_specs:
+            if request_value is None and existing_value is None:
+                continue
+            differences.append(
+                RegistrationFieldDifferenceItem(
+                    field_name=field_name,
+                    field_label=field_label,
+                    request_value=request_value,
+                    existing_value=existing_value,
+                    is_match=(request_value or "") == (existing_value or ""),
+                )
+            )
+        return differences
+
+    def add_candidate(
+        *,
+        target_type: str,
+        target_id: str,
+        display_name: str,
+        match_reason: str,
+        phone: str | None,
+        email: str | None,
+        entity_type: str | None,
+        notes: str | None,
+        field_differences: list[RegistrationFieldDifferenceItem],
+    ) -> None:
+        existing = candidates.get(target_id)
+        if existing:
+            if match_reason not in existing.match_reasons:
+                existing.match_reasons.append(match_reason)
+            return
+        candidates[target_id] = RegistrationDedupeCandidateItem(
+            target_type=target_type,
+            target_id=target_id,
+            display_name=display_name,
+            match_reasons=[match_reason],
+            phone=phone,
+            email=email,
+            entity_type=entity_type,
+            notes=notes,
+            field_differences=field_differences,
+        )
+
+    if request_record.request_type == "worker":
+        phone = _normalize_optional_text(detail_data.get("phone"))
+        full_name = _normalize_optional_text(
+            " ".join(part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part)
+        )
+        furigana = _normalize_optional_text(
+            " ".join(part for part in [detail_data.get("last_name_furigana"), detail_data.get("first_name_furigana")] if part)
+        )
+        if phone:
+            for row in db.query(Worker).filter(Worker.deleted_at.is_(None), Worker.phone == phone).all():
+                add_candidate(
+                    target_type="worker",
+                    target_id=row.id,
+                    display_name=row.name,
+                    match_reason="電話番号一致",
+                    phone=row.phone,
+                    email=row.email,
+                    entity_type=None,
+                    notes=row.notes,
+                    field_differences=build_field_differences("worker", row),
+                )
+        if full_name and furigana:
+            for row in db.query(Worker).filter(
+                Worker.deleted_at.is_(None),
+                func.lower(Worker.name) == full_name.lower(),
+                func.lower(func.coalesce(Worker.furigana, "")) == furigana.lower(),
+            ).all():
+                add_candidate(
+                    target_type="worker",
+                    target_id=row.id,
+                    display_name=row.name,
+                    match_reason="氏名+ふりがな一致",
+                    phone=row.phone,
+                    email=row.email,
+                    entity_type=None,
+                    notes=row.notes,
+                    field_differences=build_field_differences("worker", row),
+                )
+
+    elif request_record.request_type in {"supplier_individual", "supplier_corporation"}:
+        phone = _normalize_optional_text(detail_data.get("phone"))
+        supplier_name = _first_non_empty(
+            detail_data.get("trade_name"),
+            detail_data.get("company_name"),
+            detail_data.get("name"),
+        )
+        if phone:
+            for row in db.query(Supplier).filter(Supplier.deleted_at.is_(None), Supplier.contact_phone == phone).all():
+                add_candidate(
+                    target_type="supplier",
+                    target_id=row.id,
+                    display_name=row.name,
+                    match_reason="電話番号一致",
+                    phone=row.contact_phone,
+                    email=row.contact_email,
+                    entity_type=row.entity_type,
+                    notes=row.notes,
+                    field_differences=build_field_differences("supplier", row),
+                )
+        if supplier_name:
+            for row in db.query(Supplier).filter(
+                Supplier.deleted_at.is_(None),
+                func.lower(Supplier.name) == supplier_name.lower(),
+            ).all():
+                add_candidate(
+                    target_type="supplier",
+                    target_id=row.id,
+                    display_name=row.name,
+                    match_reason="名称一致",
+                    phone=row.contact_phone,
+                    email=row.contact_email,
+                    entity_type=row.entity_type,
+                    notes=row.notes,
+                    field_differences=build_field_differences("supplier", row),
+                )
+
+    return sorted(candidates.values(), key=lambda item: (item.display_name.lower(), item.target_id))
+
+
+def _registration_file_items(db: Session, request_id: str) -> list[RegistrationRequestFileItem]:
+    files = (
+        db.query(RegistrationRequestFile)
+        .filter(
+            RegistrationRequestFile.request_id == request_id,
+            RegistrationRequestFile.deleted_at.is_(None),
+        )
+        .order_by(RegistrationRequestFile.uploaded_at.desc(), RegistrationRequestFile.id.desc())
+        .all()
+    )
+    return [_registration_file_item(file_record) for file_record in files]
+
+
+async def _store_registration_request_file(
+    *,
+    request_record: RegistrationRequest,
+    document_type: str,
+    document_part: str,
+    upload_file: UploadFile,
+    db: Session,
+) -> RegistrationRequestFile:
+    normalized_document_type = _normalize_optional_text(document_type)
+    normalized_document_part = _normalize_optional_text(document_part) or "single"
+    if normalized_document_type not in REGISTRATION_ALLOWED_DOCUMENT_TYPES:
+        raise HTTPException(status_code=400, detail="document_type が不正です")
+    if normalized_document_part not in REGISTRATION_ALLOWED_DOCUMENT_PARTS:
+        raise HTTPException(status_code=400, detail="document_part が不正です")
+
+    file_name = _sanitize_registration_file_name(upload_file.filename)
+    file_bytes = await upload_file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="アップロードファイルが空です")
+    if len(file_bytes) > REGISTRATION_FILE_UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="ファイルサイズが上限を超えています")
+    mime_type = (upload_file.content_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream").lower()
+    if mime_type not in REGISTRATION_ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="許可されていない MIME type です")
+
+    existing_files = (
+        db.query(RegistrationRequestFile)
+        .filter(
+            RegistrationRequestFile.request_id == request_record.id,
+            RegistrationRequestFile.document_type == normalized_document_type,
+            RegistrationRequestFile.document_part == normalized_document_part,
+            RegistrationRequestFile.deleted_at.is_(None),
+        )
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for existing in existing_files:
+        existing.deleted_at = now
+
+    file_record = RegistrationRequestFile(
+        id=generate_ulid(),
+        request_id=request_record.id,
+        document_type=normalized_document_type,
+        document_part=normalized_document_part,
+        original_filename=file_name,
+        storage_key="pending",
+        sha256=hashlib.sha256(file_bytes).hexdigest(),
+        mime_type=mime_type,
+        size_bytes=len(file_bytes),
+        scan_status="pending",
+        uploaded_at=now,
+        delete_after=None,
+    )
+    file_record.storage_key = build_registration_request_file_object_key(
+        request_record.id,
+        file_record.id,
+        now.date(),
+        file_name,
+    )
+    _registration_file_storage().save_bytes(file_record.storage_key, file_bytes)
+    db.add(file_record)
+    db.flush()
+    return file_record
+
+
+def _apply_registration_file_retention(request_record: RegistrationRequest) -> None:
+    if request_record.reviewed_at is None:
+        return
+    delete_after = request_record.reviewed_at + timedelta(days=180)
+    for file_record in request_record.files:
+        if file_record.deleted_at is None:
+            file_record.delete_after = delete_after
+
+
+def _compute_registration_dedupe_key(request_type: str, detail_data: dict[str, object | None]) -> str | None:
+    if request_type == "worker":
+        phone = _normalize_optional_text(detail_data.get("phone"))
+        if phone:
+            return f"worker:phone:{phone}"
+        full_name = _normalize_optional_text(
+            " ".join(part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part)
+        )
+        furigana = _normalize_optional_text(
+            " ".join(part for part in [detail_data.get("last_name_furigana"), detail_data.get("first_name_furigana")] if part)
+        )
+        if full_name and furigana:
+            return f"worker:name:{full_name}|furigana:{furigana}"
+        return full_name
+    if request_type in {"supplier_individual", "supplier_corporation"}:
+        supplier_name = _first_non_empty(
+            detail_data.get("trade_name"),
+            detail_data.get("company_name"),
+            detail_data.get("name"),
+        )
+        phone = _normalize_optional_text(detail_data.get("phone"))
+        if supplier_name and phone:
+            return f"supplier:name:{supplier_name}|phone:{phone}"
+        if supplier_name:
+            return f"supplier:name:{supplier_name}"
+        if phone:
+            return f"supplier:phone:{phone}"
+    return None
+
+
+def _upsert_registration_detail(db: Session, request_record: RegistrationRequest, payload_data: dict[str, object]) -> dict[str, object | None]:
+    from src.models.master import (
+        IntroducerIdentityRequestDetail,
+        SupplierCorporationRequestDetail,
+        SupplierIndividualRequestDetail,
+        WorkerRegistrationRequestDetail,
+    )
+
+    model_map = {
+        "worker": WorkerRegistrationRequestDetail,
+        "supplier_individual": SupplierIndividualRequestDetail,
+        "supplier_corporation": SupplierCorporationRequestDetail,
+        "introducer_identity": IntroducerIdentityRequestDetail,
+    }
+    model = model_map.get(request_record.request_type)
+    if model is None:
+        raise HTTPException(status_code=400, detail="未対応の request_type です")
+
+    detail = db.query(model).filter(model.request_id == request_record.id).first()
+    if detail is None:
+        detail = model(request_id=request_record.id)
+        db.add(detail)
+
+    sanitized: dict[str, object | None] = {}
+    for column in detail.__table__.columns:
+        if column.name in {"id", "request_id", "created_at", "updated_at"}:
+            continue
+        if column.name not in payload_data:
+            continue
+        value = payload_data[column.name]
+        if isinstance(value, str):
+            value = _normalize_optional_text(value)
+        setattr(detail, column.name, value)
+        sanitized[column.name] = value
+    return sanitized
+
+
+def _load_public_registration_request(db: Session, form_type: str, token: str) -> RegistrationRequest:
+    request_type = _request_type_from_public_form_type(form_type)
+    request_record = (
+        db.query(RegistrationRequest)
+        .filter(
+            RegistrationRequest.deleted_at.is_(None),
+            RegistrationRequest.request_type == request_type,
+            RegistrationRequest.source_type == "public_form",
+            RegistrationRequest.public_token_hash == _hash_public_token(token),
+        )
+        .first()
+    )
+    if request_record is None:
+        raise HTTPException(status_code=404, detail="公開登録リンクが見つかりません")
+    return request_record
+
+
+def _verify_public_registration_access(request_record: RegistrationRequest, pin: str) -> None:
+    now = datetime.now(timezone.utc)
+    if request_record.locked_at is not None:
+        raise HTTPException(status_code=423, detail="この公開リンクはロックされています")
+    if request_record.expires_at and request_record.expires_at < now:
+        raise HTTPException(status_code=410, detail="この公開リンクは期限切れです")
+    if request_record.status != "link_issued":
+        raise HTTPException(status_code=409, detail="この公開リンクは既に使用済みです")
+    if not request_record.access_pin_hash or not verify_password(pin, request_record.access_pin_hash):
+        request_record.failed_attempts += 1
+        if request_record.failed_attempts >= REGISTRATION_LINK_MAX_FAILED_ATTEMPTS:
+            request_record.locked_at = now
+            raise HTTPException(status_code=423, detail="PIN 失敗回数が上限に達したためリンクをロックしました")
+        raise HTTPException(status_code=401, detail="PIN が一致しません")
+    request_record.failed_attempts = 0
+    request_record.locked_at = None
+
+
+def _validate_registration_approval_resolution(
+    db: Session,
+    request_record: RegistrationRequest,
+    payload: RegistrationRequestApproveRequest,
+) -> None:
+    dedupe_candidates = _build_registration_dedupe_candidates(db, request_record)
+    if not dedupe_candidates:
+        return
+
+    if payload.dedupe_resolution == "merge_existing":
+        if not payload.approved_target_id:
+            raise HTTPException(status_code=400, detail="merge_existing には approved_target_id が必要です")
+        return
+    if payload.dedupe_resolution == "create_new":
+        if payload.approved_target_id:
+            raise HTTPException(status_code=400, detail="create_new では approved_target_id を指定できません")
+        return
+
+    raise HTTPException(
+        status_code=409,
+        detail="重複候補があります。create_new または merge_existing を指定してください",
+    )
+
+
+def _submit_public_registration(
+    db: Session,
+    *,
+    request_record: RegistrationRequest,
+    payload_data: dict[str, object],
+    submitted_ip: str | None,
+    user_agent: str | None,
+) -> PublicRegistrationSubmitResponse:
+    detail_data = _upsert_registration_detail(db, request_record, payload_data)
+    request_record.dedupe_key = _compute_registration_dedupe_key(request_record.request_type, detail_data)
+    request_record.status = "pending"
+    request_record.submitted_at = datetime.now(timezone.utc)
+    request_record.submitted_ip = submitted_ip
+    request_record.user_agent = user_agent
+    request_record.failed_attempts = 0
+    request_record.locked_at = None
+
+    return PublicRegistrationSubmitResponse(
+        request_id=request_record.id,
+        request_type=request_record.request_type,
+        status=request_record.status,
+        submitted_at=request_record.submitted_at,
+        dedupe_key=request_record.dedupe_key,
+    )
+
+
+def _assert_public_registration_access(db: Session, request_record: RegistrationRequest, pin: str) -> None:
+    before_failed_attempts = request_record.failed_attempts
+    before_locked_at = request_record.locked_at
+    try:
+        _verify_public_registration_access(request_record, pin)
+    except HTTPException:
+        if (
+            request_record.failed_attempts != before_failed_attempts
+            or request_record.locked_at != before_locked_at
+        ):
+            db.commit()
+        raise
+
+
+def _resolve_supplier_by_name(db: Session, supplier_name: str | None):
+    from src.models.master import Supplier
+
+    normalized_name = _normalize_optional_text(supplier_name)
+    if not normalized_name:
+        return None
+    return (
+        db.query(Supplier)
+        .filter(Supplier.deleted_at.is_(None), func.lower(Supplier.name) == normalized_name.lower())
+        .first()
+    )
+
+
+def _ensure_worker_bank_account(db: Session, worker_id: str, detail_data: dict | None) -> None:
+    from src.models.master import WorkerBankAccount
+
+    if not detail_data:
+        return
+
+    bank_name = _normalize_optional_text(detail_data.get("bank_name"))
+    branch_name = _normalize_optional_text(detail_data.get("bank_branch"))
+    account_type = _normalize_optional_text(detail_data.get("bank_account_type"))
+    account_number = _normalize_optional_text(detail_data.get("bank_account_number"))
+    account_holder = _normalize_optional_text(detail_data.get("bank_account_holder"))
+    if not all([bank_name, branch_name, account_type, account_number, account_holder]):
+        return
+
+    existing = (
+        db.query(WorkerBankAccount)
+        .filter(
+            WorkerBankAccount.deleted_at.is_(None),
+            WorkerBankAccount.worker_id == worker_id,
+            WorkerBankAccount.bank_name == bank_name,
+            WorkerBankAccount.branch_name == branch_name,
+            WorkerBankAccount.account_type == account_type,
+            WorkerBankAccount.account_number == account_number,
+            WorkerBankAccount.account_holder_kana == account_holder,
+        )
+        .first()
+    )
+    if existing:
+        return
+
+    has_primary = (
+        db.query(WorkerBankAccount)
+        .filter(
+            WorkerBankAccount.deleted_at.is_(None),
+            WorkerBankAccount.worker_id == worker_id,
+            WorkerBankAccount.is_primary.is_(True),
+        )
+        .first()
+        is not None
+    )
+    db.add(
+        WorkerBankAccount(
+            worker_id=worker_id,
+            bank_name=bank_name,
+            branch_name=branch_name,
+            branch_code=_normalize_optional_text(detail_data.get("bank_branch_number")),
+            account_type=account_type,
+            account_number=account_number,
+            account_holder_kana=account_holder,
+            transfer_destination_name=None,
+            effective_from=date.today(),
+            effective_until=None,
+            is_primary=not has_primary,
+        )
+    )
+
+
+def _ensure_supplier_bank_account(db: Session, supplier_id: str, detail_data: dict | None) -> None:
+    from src.models.master import SupplierBankAccount
+
+    if not detail_data:
+        return
+
+    bank_name = _normalize_optional_text(detail_data.get("bank_name"))
+    branch_name = _normalize_optional_text(detail_data.get("bank_branch"))
+    account_type = _normalize_optional_text(detail_data.get("bank_account_type"))
+    account_number = _normalize_optional_text(detail_data.get("bank_account_number"))
+    account_holder = _normalize_optional_text(detail_data.get("bank_account_holder_kana"))
+    if not all([bank_name, branch_name, account_type, account_number, account_holder]):
+        return
+
+    existing = (
+        db.query(SupplierBankAccount)
+        .filter(
+            SupplierBankAccount.deleted_at.is_(None),
+            SupplierBankAccount.supplier_id == supplier_id,
+            SupplierBankAccount.bank_name == bank_name,
+            SupplierBankAccount.branch_name == branch_name,
+            SupplierBankAccount.account_type == account_type,
+            SupplierBankAccount.account_number == account_number,
+            SupplierBankAccount.account_holder_kana == account_holder,
+        )
+        .first()
+    )
+    if existing:
+        return
+
+    has_primary = (
+        db.query(SupplierBankAccount)
+        .filter(
+            SupplierBankAccount.deleted_at.is_(None),
+            SupplierBankAccount.supplier_id == supplier_id,
+            SupplierBankAccount.is_primary.is_(True),
+        )
+        .first()
+        is not None
+    )
+    db.add(
+        SupplierBankAccount(
+            supplier_id=supplier_id,
+            bank_name=bank_name,
+            branch_name=branch_name,
+            branch_code=_normalize_optional_text(detail_data.get("bank_branch_number")),
+            account_type=account_type,
+            account_number=account_number,
+            account_holder_kana=account_holder,
+            transfer_destination_name=None,
+            effective_from=date.today(),
+            effective_until=None,
+            is_primary=not has_primary,
+        )
+    )
+
+
+def _approve_registration_request(
+    db: Session,
+    request_record: RegistrationRequest,
+    payload: RegistrationRequestApproveRequest,
+):
+    from src.models.master import Supplier, Worker
+
+    detail_data = _registration_detail_data(db, request_record) or {}
+    target_type: str | None = None
+    target_id: str | None = None
+
+    if request_record.request_type == "worker":
+        worker = db.get(Worker, payload.approved_target_id) if payload.approved_target_id else None
+        if payload.approved_target_id and worker is None:
+            raise HTTPException(status_code=404, detail="承認先の worker が見つかりません")
+        if worker is None:
+            worker_name = _first_non_empty(
+                " ".join(
+                    part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part
+                ),
+                detail_data.get("sole_proprietor_name"),
+            )
+            if not worker_name:
+                raise HTTPException(status_code=400, detail="worker 申請に氏名がありません")
+            worker = Worker(name=worker_name, is_active=True)
+            db.add(worker)
+            db.flush()
+
+        introducer_supplier = _resolve_supplier_by_name(db, detail_data.get("introducer_supplier_name_raw"))
+        worker.name = _first_non_empty(
+            " ".join(
+                part for part in [detail_data.get("last_name"), detail_data.get("first_name")] if part
+            ),
+            worker.name,
+        ) or worker.name
+        worker.furigana = _first_non_empty(
+            " ".join(
+                part for part in [detail_data.get("last_name_furigana"), detail_data.get("first_name_furigana")] if part
+            ),
+            worker.furigana,
+        )
+        worker.email = _first_non_empty(detail_data.get("email"), worker.email)
+        worker.phone = _first_non_empty(detail_data.get("phone"), worker.phone)
+        worker.sole_proprietor_name = _first_non_empty(detail_data.get("sole_proprietor_name"), worker.sole_proprietor_name)
+        worker.gender = _first_non_empty(detail_data.get("gender"), worker.gender)
+        worker.emergency_contact_name_kana = _first_non_empty(
+            detail_data.get("emergency_contact_name_kana"),
+            worker.emergency_contact_name_kana,
+        )
+        worker.emergency_contact_phone = _first_non_empty(
+            detail_data.get("emergency_contact_phone"),
+            worker.emergency_contact_phone,
+        )
+        worker.invoice_registration_status = _first_non_empty(
+            detail_data.get("invoice_registration_status"),
+            worker.invoice_registration_status,
+        )
+        worker.invoice_number = _first_non_empty(
+            detail_data.get("invoice_registration_number"),
+            worker.invoice_number,
+        )
+        worker.introducer_supplier_id = introducer_supplier.id if introducer_supplier else worker.introducer_supplier_id
+        worker.notes = _append_notes(worker.notes, detail_data.get("memo"), payload.notes)
+        _ensure_worker_bank_account(db, worker.id, detail_data)
+
+        target_type = "worker"
+        target_id = worker.id
+
+    elif request_record.request_type == "supplier_individual":
+        supplier = db.get(Supplier, payload.approved_target_id) if payload.approved_target_id else None
+        if payload.approved_target_id and supplier is None:
+            raise HTTPException(status_code=404, detail="承認先の supplier が見つかりません")
+        if supplier is None:
+            supplier_name = _first_non_empty(detail_data.get("trade_name"), detail_data.get("name"))
+            if not supplier_name:
+                raise HTTPException(status_code=400, detail="supplier 申請に名称がありません")
+            supplier = Supplier(name=supplier_name, payout_terms_days=70, is_active=True)
+            db.add(supplier)
+            db.flush()
+
+        supplier.name = _first_non_empty(detail_data.get("trade_name"), detail_data.get("name"), supplier.name) or supplier.name
+        supplier.contact_email = _first_non_empty(detail_data.get("email"), supplier.contact_email)
+        supplier.contact_phone = _first_non_empty(detail_data.get("phone"), supplier.contact_phone)
+        supplier.supplier_type = _first_non_empty(detail_data.get("supplier_type"), supplier.supplier_type)
+        supplier.entity_type = "individual"
+        supplier.notes = _append_notes(supplier.notes, detail_data.get("memo"), payload.notes)
+        _ensure_supplier_bank_account(db, supplier.id, detail_data)
+
+        target_type = "supplier"
+        target_id = supplier.id
+
+    elif request_record.request_type == "supplier_corporation":
+        supplier = db.get(Supplier, payload.approved_target_id) if payload.approved_target_id else None
+        if payload.approved_target_id and supplier is None:
+            raise HTTPException(status_code=404, detail="承認先の supplier が見つかりません")
+        if supplier is None:
+            supplier_name = _first_non_empty(detail_data.get("company_name"), detail_data.get("representative_name"))
+            if not supplier_name:
+                raise HTTPException(status_code=400, detail="supplier 申請に会社名がありません")
+            supplier = Supplier(name=supplier_name, payout_terms_days=70, is_active=True)
+            db.add(supplier)
+            db.flush()
+
+        supplier.name = _first_non_empty(detail_data.get("company_name"), supplier.name) or supplier.name
+        supplier.contact_email = _first_non_empty(detail_data.get("email"), supplier.contact_email)
+        supplier.contact_phone = _first_non_empty(detail_data.get("phone"), supplier.contact_phone)
+        supplier.supplier_type = _first_non_empty(detail_data.get("supplier_type"), supplier.supplier_type)
+        supplier.entity_type = "corporation"
+        supplier.notes = _append_notes(supplier.notes, detail_data.get("memo"), payload.notes)
+        _ensure_supplier_bank_account(db, supplier.id, detail_data)
+
+        target_type = "supplier"
+        target_id = supplier.id
+
+    elif request_record.request_type == "introducer_identity":
+        detail_record = _registration_detail_record(db, request_record)
+        if detail_record and detail_record.related_worker_request_id:
+            related_request = db.get(RegistrationRequest, detail_record.related_worker_request_id)
+        elif detail_record and detail_record.related_supplier_request_id:
+            related_request = db.get(RegistrationRequest, detail_record.related_supplier_request_id)
+        else:
+            related_request = None
+
+        if related_request and related_request.approved_target_type and related_request.approved_target_id:
+            target_type = related_request.approved_target_type
+            target_id = related_request.approved_target_id
+        else:
+            target_type = "registration_request" if related_request else None
+            target_id = related_request.id if related_request else payload.approved_target_id
+    else:
+        raise HTTPException(status_code=400, detail="未対応の request_type です")
+
+    request_record.status = "approved"
+    request_record.reviewed_at = datetime.now(timezone.utc)
+    request_record.approved_target_type = target_type
+    request_record.approved_target_id = target_id
+    request_record.notes = _append_notes(request_record.notes, payload.notes)
+    _apply_registration_file_retention(request_record)
+
+
+def _reject_registration_request(request_record: RegistrationRequest, payload: RegistrationRequestRejectRequest) -> None:
+    request_record.status = "rejected"
+    request_record.reviewed_at = datetime.now(timezone.utc)
+    request_record.notes = _append_notes(
+        request_record.notes,
+        f"却下理由: {payload.reason}",
+        payload.notes,
+    )
+    _apply_registration_file_retention(request_record)
 
 
 def _serialize_attendance_record(actual, assignment, worker_name: str, role_name: str, import_batch_file_name: str) -> AttendanceRecordResponse:
@@ -450,6 +1432,38 @@ def _load_invoice_pdf_bytes(invoice) -> bytes:
     if isinstance(pdf_bytes, str):
         return Path(pdf_bytes).read_bytes()
     return pdf_bytes
+
+
+def _serialize_invoice_line_response(line) -> InvoiceLineResponse:
+    return InvoiceLineResponse(
+        line_type=_status_to_str(line.line_type),
+        description=line.description,
+        quantity=line.quantity_snapshot,
+        unit_price=line.unit_price_snapshot,
+        amount=line.line_amount,
+    )
+
+
+def _serialize_invoice_response(invoice) -> InvoiceResponse:
+    return InvoiceResponse(
+        id=invoice.id,
+        invoice_number=invoice.id,
+        document_type=invoice.document_type,
+        client_name=invoice.client.name if invoice.client else "",
+        project_name=invoice.project.name if invoice.project else "",
+        period_key=invoice.period_key,
+        billing_date=invoice.billing_date,
+        subject=invoice.invoice_subject,
+        addressee_company_name=invoice.addressee_company_name,
+        addressee_name=invoice.addressee_name,
+        addressee_email=invoice.addressee_email,
+        addressee_address=invoice.addressee_address,
+        fixed_office_fee_amount=invoice.fixed_office_fee_amount,
+        total_amount=invoice.total_amount,
+        status=_status_to_str(invoice.status),
+        lines=[_serialize_invoice_line_response(line) for line in invoice.lines],
+        issued_at=invoice.issued_at,
+    )
 
 
 def _store_payout_pdf(payout) -> str:
@@ -3099,7 +4113,7 @@ async def list_projects(
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
-    from src.models.master import Client, ProjectType, Site
+    from src.models.master import Client, ProjectType, Site, VanzaiStaff
     from src.models.transaction import Project
 
     sort_map = {
@@ -3115,10 +4129,11 @@ async def list_projects(
     sort_expression = sort_column.asc() if query.sort_order == "asc" else sort_column.desc()
 
     stmt = (
-        db.query(Project, Client.name, Site.name, ProjectType.name)
+        db.query(Project, Client.name, Site.name, ProjectType.name, VanzaiStaff.name)
         .join(Client, Project.client_id == Client.id)
         .outerjoin(Site, Project.site_id == Site.id)
         .outerjoin(ProjectType, Project.project_type_id == ProjectType.id)
+        .outerjoin(VanzaiStaff, Project.vanzai_manager_id == VanzaiStaff.id)
     )
 
     if query.client_id:
@@ -3162,10 +4177,12 @@ async def list_projects(
             end_date=project.end_date,
             primary_manager_id=project.primary_manager_id,
             secondary_manager_id=project.secondary_manager_id,
+            vanzai_manager_id=project.vanzai_manager_id,
+            vanzai_manager_name=vanzai_staff_name or None,
             notes=project.notes,
             is_active=project.is_active,
         )
-        for project, client_name, site_name, project_type_name in rows
+        for project, client_name, site_name, project_type_name, vanzai_staff_name in rows
     ]
 
     return ProjectListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
@@ -3181,7 +4198,7 @@ async def create_project(
     try:
         check_permission(current_user, Permission.PROJECT_WRITE)
 
-        from src.models.master import Client, ProjectType, Site, Worker
+        from src.models.master import Client, ProjectType, Site, Worker, VanzaiStaff
         from src.models.transaction import Project
 
         client = db.get(Client, request.client_id)
@@ -3199,6 +4216,8 @@ async def create_project(
             project_type = db.get(ProjectType, request.project_type_id)
             if not project_type:
                 raise HTTPException(status_code=404, detail="Project type not found")
+        if request.vanzai_manager_id and not db.get(VanzaiStaff, request.vanzai_manager_id):
+            raise HTTPException(status_code=404, detail="Vanzai manager not found")
 
         if request.primary_manager_id and not db.get(Worker, request.primary_manager_id):
             raise HTTPException(status_code=404, detail="Primary manager not found")
@@ -3217,6 +4236,7 @@ async def create_project(
             project_type_id=request.project_type_id,
             primary_manager_id=request.primary_manager_id,
             secondary_manager_id=request.secondary_manager_id,
+            vanzai_manager_id=request.vanzai_manager_id,
             start_date=request.start_date,
             end_date=request.end_date,
             notes=request.notes,
@@ -3236,6 +4256,7 @@ async def create_project(
                 "client_id": project.client_id,
                 "site_id": project.site_id,
                 "project_type_id": project.project_type_id,
+                "vanzai_manager_id": project.vanzai_manager_id,
                 "start_date": project.start_date.isoformat() if project.start_date else None,
                 "end_date": project.end_date.isoformat() if project.end_date else None,
                 "is_active": project.is_active,
@@ -3258,6 +4279,8 @@ async def create_project(
             end_date=project.end_date,
             primary_manager_id=project.primary_manager_id,
             secondary_manager_id=project.secondary_manager_id,
+            vanzai_manager_id=project.vanzai_manager_id,
+            vanzai_manager_name=(db.get(VanzaiStaff, project.vanzai_manager_id).name if project.vanzai_manager_id else None),
             notes=project.notes,
             is_active=project.is_active,
         )
@@ -3281,7 +4304,7 @@ async def update_project(
     try:
         check_permission(current_user, Permission.PROJECT_WRITE)
 
-        from src.models.master import Client, ProjectType, Site, Worker
+        from src.models.master import Client, ProjectType, Site, Worker, VanzaiStaff
         from src.models.transaction import Project
 
         project = db.get(Project, project_id)
@@ -3303,6 +4326,8 @@ async def update_project(
             project_type = db.get(ProjectType, request.project_type_id)
             if not project_type:
                 raise HTTPException(status_code=404, detail="Project type not found")
+        if request.vanzai_manager_id and not db.get(VanzaiStaff, request.vanzai_manager_id):
+            raise HTTPException(status_code=404, detail="Vanzai manager not found")
 
         if request.primary_manager_id and not db.get(Worker, request.primary_manager_id):
             raise HTTPException(status_code=404, detail="Primary manager not found")
@@ -3323,6 +4348,7 @@ async def update_project(
             "project_type_id": project.project_type_id,
             "primary_manager_id": project.primary_manager_id,
             "secondary_manager_id": project.secondary_manager_id,
+            "vanzai_manager_id": project.vanzai_manager_id,
             "start_date": project.start_date.isoformat() if project.start_date else None,
             "end_date": project.end_date.isoformat() if project.end_date else None,
             "notes": project.notes,
@@ -3336,6 +4362,7 @@ async def update_project(
         project.project_type_id = request.project_type_id
         project.primary_manager_id = request.primary_manager_id
         project.secondary_manager_id = request.secondary_manager_id
+        project.vanzai_manager_id = request.vanzai_manager_id
         project.start_date = request.start_date
         project.end_date = request.end_date
         project.notes = request.notes
@@ -3356,6 +4383,7 @@ async def update_project(
                 "project_type_id": project.project_type_id,
                 "primary_manager_id": project.primary_manager_id,
                 "secondary_manager_id": project.secondary_manager_id,
+                "vanzai_manager_id": project.vanzai_manager_id,
                 "start_date": project.start_date.isoformat() if project.start_date else None,
                 "end_date": project.end_date.isoformat() if project.end_date else None,
                 "notes": project.notes,
@@ -3379,6 +4407,8 @@ async def update_project(
             end_date=project.end_date,
             primary_manager_id=project.primary_manager_id,
             secondary_manager_id=project.secondary_manager_id,
+            vanzai_manager_id=project.vanzai_manager_id,
+            vanzai_manager_name=(db.get(VanzaiStaff, project.vanzai_manager_id).name if project.vanzai_manager_id else None),
             notes=project.notes,
             is_active=project.is_active,
         )
@@ -4846,6 +5876,12 @@ async def list_invoices(
             project_id=invoice.project_id,
             project_name=project_name or "",
             period_key=invoice.period_key,
+            billing_date=invoice.billing_date,
+            document_type=invoice.document_type,
+            subject=invoice.invoice_subject,
+            addressee_company_name=invoice.addressee_company_name,
+            addressee_name=invoice.addressee_name,
+            fixed_office_fee_amount=invoice.fixed_office_fee_amount,
             version=invoice.version,
             status=invoice.status,
             total_amount=invoice.total_amount,
@@ -4880,8 +5916,10 @@ async def list_payouts(
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
-    from src.models.master import Supplier, Worker
+    from src.models.master import Supplier, Worker, VanzaiStaff
     from src.models.transaction import Payout, PayoutDelivery, Project
+
+    payee_name_expr = func.coalesce(Payout.payee_name_snapshot, Worker.name, Supplier.name, VanzaiStaff.name)
 
     latest_delivery_status_subquery = (
         select(PayoutDelivery.status)
@@ -4893,7 +5931,7 @@ async def list_payouts(
 
     sort_map = {
         "period_key": Payout.period_key,
-        "payee_name": Worker.name,
+        "payee_name": payee_name_expr,
         "status": Payout.status,
         "version": Payout.version,
         "total_amount": Payout.total_amount,
@@ -4905,9 +5943,10 @@ async def list_payouts(
     sort_expression = sort_column.asc() if query.sort_order == "asc" else sort_column.desc()
 
     stmt = (
-        db.query(Payout, Worker.name, Worker.email, Supplier.name, Supplier.contact_email, Project.name)
+        db.query(Payout, Worker.name, Worker.email, Supplier.name, Supplier.contact_email, VanzaiStaff.name, VanzaiStaff.email, Project.name)
         .outerjoin(Worker, Payout.worker_id == Worker.id)
         .outerjoin(Supplier, Payout.supplier_id == Supplier.id)
+        .outerjoin(VanzaiStaff, and_(Payout.recipient_type == "vanzai_staff", Payout.recipient_id == VanzaiStaff.id))
         .outerjoin(Project, Payout.project_id == Project.id)
     )
 
@@ -4917,6 +5956,10 @@ async def list_payouts(
         stmt = stmt.filter(Payout.worker_id == query.worker_id)
     if query.supplier_id:
         stmt = stmt.filter(Payout.supplier_id == query.supplier_id)
+    if query.recipient_type:
+        stmt = stmt.filter(Payout.recipient_type == query.recipient_type)
+    if query.recipient_id:
+        stmt = stmt.filter(Payout.recipient_id == query.recipient_id)
     if query.project_id:
         stmt = stmt.filter(Payout.project_id == query.project_id)
     if query.status:
@@ -4931,6 +5974,10 @@ async def list_payouts(
                 and_(
                     Payout.supplier_id.is_not(None),
                     or_(Supplier.contact_email.is_(None), func.trim(Supplier.contact_email) == ""),
+                ),
+                and_(
+                    Payout.recipient_type == "vanzai_staff",
+                    or_(VanzaiStaff.email.is_(None), func.trim(VanzaiStaff.email) == ""),
                 ),
                 and_(Payout.worker_id.is_(None), Payout.supplier_id.is_(None)),
             )
@@ -4961,10 +6008,17 @@ async def list_payouts(
             latest_deliveries_by_payout.setdefault(delivery.payout_id, delivery)
 
     items = []
-    for payout, worker_name, worker_email, supplier_name, supplier_email, project_name in rows:
-        payee_name = worker_name or supplier_name or ""
-        payee_type = "worker" if payout.worker_id else "supplier" if payout.supplier_id else "unknown"
-        default_recipient_email = worker_email or supplier_email
+    for payout, worker_name, worker_email, supplier_name, supplier_email, vanzai_staff_name, vanzai_staff_email, project_name in rows:
+        payee_name = payout.payee_name_snapshot or worker_name or supplier_name or vanzai_staff_name or ""
+        payee_type = payout.recipient_type or ("worker" if payout.worker_id else "supplier" if payout.supplier_id else "unknown")
+        if payee_type == "worker":
+            default_recipient_email = worker_email
+        elif payee_type == "supplier":
+            default_recipient_email = supplier_email
+        elif payee_type == "vanzai_staff":
+            default_recipient_email = vanzai_staff_email
+        else:
+            default_recipient_email = None
         latest_delivery = latest_deliveries_by_payout.get(payout.id)
         items.append(
             PayoutListItem(
@@ -4972,6 +6026,9 @@ async def list_payouts(
                 payout_number=payout.id,
                 payee_name=payee_name,
                 payee_type=payee_type,
+                recipient_type=payout.recipient_type,
+                recipient_id=payout.recipient_id,
+                payee_name_snapshot=payout.payee_name_snapshot,
                 project_id=payout.project_id,
                 project_name=project_name or "",
                 period_key=payout.period_key,
@@ -5017,6 +6074,7 @@ async def list_workers(
 
     sort_map = {
         "name": Worker.name,
+        "furigana": Worker.furigana,
         "email": Worker.email,
         "created_at": Worker.created_at,
     }
@@ -5035,7 +6093,12 @@ async def list_workers(
         stmt = stmt.filter(Worker.introducer_supplier_id == query.supplier_id)
     if query.search:
         pattern = f"%{query.search}%"
-        stmt = stmt.filter(Worker.name.ilike(pattern) | Worker.email.ilike(pattern))
+        stmt = stmt.filter(
+            Worker.name.ilike(pattern)
+            | Worker.furigana.ilike(pattern)
+            | Worker.email.ilike(pattern)
+            | Worker.phone.ilike(pattern)
+        )
 
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Worker.id.desc()).offset(query.offset).limit(query.limit).all()
@@ -5044,8 +6107,15 @@ async def list_workers(
         WorkerListItem(
             id=w.id,
             name=w.name,
+            furigana=w.furigana,
             email=w.email,
             phone=w.phone,
+            sole_proprietor_name=w.sole_proprietor_name,
+            emergency_contact_name_kana=w.emergency_contact_name_kana,
+            emergency_contact_phone=w.emergency_contact_phone,
+            gender=w.gender,
+            invoice_registration_status=w.invoice_registration_status,
+            invoice_number=w.invoice_number,
             is_active=w.is_active,
             introducer_supplier_id=w.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
@@ -5084,8 +6154,15 @@ async def create_worker_master(
 
         worker = Worker(
             name=request.name.strip(),
+            furigana=request.furigana.strip() if request.furigana else None,
             email=request.email.strip() if request.email else None,
             phone=request.phone.strip() if request.phone else None,
+            sole_proprietor_name=request.sole_proprietor_name.strip() if request.sole_proprietor_name else None,
+            emergency_contact_name_kana=request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None,
+            emergency_contact_phone=request.emergency_contact_phone.strip() if request.emergency_contact_phone else None,
+            gender=request.gender.strip() if request.gender else None,
+            invoice_registration_status=request.invoice_registration_status.strip() if request.invoice_registration_status else None,
+            invoice_number=request.invoice_number.strip() if request.invoice_number else None,
             introducer_supplier_id=request.introducer_supplier_id,
             notes=request.notes.strip() if request.notes else None,
             is_active=request.is_active,
@@ -5107,6 +6184,7 @@ async def create_worker_master(
             actor_role=current_user.role,
             after_value={
                 "name": worker.name,
+                "furigana": worker.furigana,
                 "email": worker.email,
                 "introducer_supplier_id": worker.introducer_supplier_id,
                 "is_active": worker.is_active,
@@ -5118,8 +6196,15 @@ async def create_worker_master(
         return WorkerListItem(
             id=worker.id,
             name=worker.name,
+            furigana=worker.furigana,
             email=worker.email,
             phone=worker.phone,
+            sole_proprietor_name=worker.sole_proprietor_name,
+            emergency_contact_name_kana=worker.emergency_contact_name_kana,
+            emergency_contact_phone=worker.emergency_contact_phone,
+            gender=worker.gender,
+            invoice_registration_status=worker.invoice_registration_status,
+            invoice_number=worker.invoice_number,
             is_active=worker.is_active,
             introducer_supplier_id=worker.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
@@ -5167,16 +6252,30 @@ async def update_worker_master(
 
         before_value = {
             "name": worker.name,
+            "furigana": worker.furigana,
             "email": worker.email,
             "phone": worker.phone,
+            "sole_proprietor_name": worker.sole_proprietor_name,
+            "emergency_contact_name_kana": worker.emergency_contact_name_kana,
+            "emergency_contact_phone": worker.emergency_contact_phone,
+            "gender": worker.gender,
+            "invoice_registration_status": worker.invoice_registration_status,
+            "invoice_number": worker.invoice_number,
             "introducer_supplier_id": worker.introducer_supplier_id,
             "notes": worker.notes,
             "is_active": worker.is_active,
         }
 
         worker.name = request.name.strip()
+        worker.furigana = request.furigana.strip() if request.furigana else None
         worker.email = request.email.strip() if request.email else None
         worker.phone = request.phone.strip() if request.phone else None
+        worker.sole_proprietor_name = request.sole_proprietor_name.strip() if request.sole_proprietor_name else None
+        worker.emergency_contact_name_kana = request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None
+        worker.emergency_contact_phone = request.emergency_contact_phone.strip() if request.emergency_contact_phone else None
+        worker.gender = request.gender.strip() if request.gender else None
+        worker.invoice_registration_status = request.invoice_registration_status.strip() if request.invoice_registration_status else None
+        worker.invoice_number = request.invoice_number.strip() if request.invoice_number else None
         worker.introducer_supplier_id = request.introducer_supplier_id
         worker.notes = request.notes.strip() if request.notes else None
         worker.is_active = request.is_active
@@ -5197,8 +6296,15 @@ async def update_worker_master(
             before_value=before_value,
             after_value={
                 "name": worker.name,
+                "furigana": worker.furigana,
                 "email": worker.email,
                 "phone": worker.phone,
+                "sole_proprietor_name": worker.sole_proprietor_name,
+                "emergency_contact_name_kana": worker.emergency_contact_name_kana,
+                "emergency_contact_phone": worker.emergency_contact_phone,
+                "gender": worker.gender,
+                "invoice_registration_status": worker.invoice_registration_status,
+                "invoice_number": worker.invoice_number,
                 "introducer_supplier_id": worker.introducer_supplier_id,
                 "notes": worker.notes,
                 "is_active": worker.is_active,
@@ -5210,8 +6316,15 @@ async def update_worker_master(
         return WorkerListItem(
             id=worker.id,
             name=worker.name,
+            furigana=worker.furigana,
             email=worker.email,
             phone=worker.phone,
+            sole_proprietor_name=worker.sole_proprietor_name,
+            emergency_contact_name_kana=worker.emergency_contact_name_kana,
+            emergency_contact_phone=worker.emergency_contact_phone,
+            gender=worker.gender,
+            invoice_registration_status=worker.invoice_registration_status,
+            invoice_number=worker.invoice_number,
             is_active=worker.is_active,
             introducer_supplier_id=worker.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
@@ -5283,8 +6396,15 @@ async def patch_worker_quals(
         return WorkerListItem(
             id=worker.id,
             name=worker.name,
+            furigana=worker.furigana,
             email=worker.email,
             phone=worker.phone,
+            sole_proprietor_name=worker.sole_proprietor_name,
+            emergency_contact_name_kana=worker.emergency_contact_name_kana,
+            emergency_contact_phone=worker.emergency_contact_phone,
+            gender=worker.gender,
+            invoice_registration_status=worker.invoice_registration_status,
+            invoice_number=worker.invoice_number,
             is_active=worker.is_active,
             introducer_supplier_id=worker.introducer_supplier_id,
             introducer_supplier_name=supplier_name,
@@ -5382,6 +6502,8 @@ async def list_suppliers(
             name=s.name,
             contact_email=s.contact_email,
             contact_phone=s.contact_phone,
+            supplier_type=s.supplier_type,
+            entity_type=s.entity_type,
             payout_terms_days=s.payout_terms_days,
             default_daily_price=s.default_daily_price,
             is_active=s.is_active,
@@ -5408,6 +6530,8 @@ async def create_supplier_master(
             name=request.name.strip(),
             contact_email=request.contact_email.strip() if request.contact_email else None,
             contact_phone=request.contact_phone.strip() if request.contact_phone else None,
+            supplier_type=request.supplier_type.strip() if request.supplier_type else None,
+            entity_type=request.entity_type.strip() if request.entity_type else None,
             payout_terms_days=request.payout_terms_days,
             default_daily_price=request.default_daily_price,
             is_active=request.is_active,
@@ -5424,6 +6548,8 @@ async def create_supplier_master(
             after_value={
                 "name": supplier.name,
                 "contact_email": supplier.contact_email,
+                "supplier_type": supplier.supplier_type,
+                "entity_type": supplier.entity_type,
                 "payout_terms_days": supplier.payout_terms_days,
                 "default_daily_price": str(supplier.default_daily_price) if supplier.default_daily_price is not None else None,
                 "is_active": supplier.is_active,
@@ -5437,6 +6563,8 @@ async def create_supplier_master(
             name=supplier.name,
             contact_email=supplier.contact_email,
             contact_phone=supplier.contact_phone,
+            supplier_type=supplier.supplier_type,
+            entity_type=supplier.entity_type,
             payout_terms_days=supplier.payout_terms_days,
             default_daily_price=supplier.default_daily_price,
             is_active=supplier.is_active,
@@ -5472,6 +6600,8 @@ async def update_supplier_master(
             "name": supplier.name,
             "contact_email": supplier.contact_email,
             "contact_phone": supplier.contact_phone,
+            "supplier_type": supplier.supplier_type,
+            "entity_type": supplier.entity_type,
             "payout_terms_days": supplier.payout_terms_days,
             "default_daily_price": str(supplier.default_daily_price) if supplier.default_daily_price is not None else None,
             "is_active": supplier.is_active,
@@ -5481,6 +6611,8 @@ async def update_supplier_master(
         supplier.name = request.name.strip()
         supplier.contact_email = request.contact_email.strip() if request.contact_email else None
         supplier.contact_phone = request.contact_phone.strip() if request.contact_phone else None
+        supplier.supplier_type = request.supplier_type.strip() if request.supplier_type else None
+        supplier.entity_type = request.entity_type.strip() if request.entity_type else None
         supplier.payout_terms_days = request.payout_terms_days
         supplier.default_daily_price = request.default_daily_price
         supplier.is_active = request.is_active
@@ -5497,6 +6629,8 @@ async def update_supplier_master(
                 "name": supplier.name,
                 "contact_email": supplier.contact_email,
                 "contact_phone": supplier.contact_phone,
+                "supplier_type": supplier.supplier_type,
+                "entity_type": supplier.entity_type,
                 "payout_terms_days": supplier.payout_terms_days,
                 "default_daily_price": str(supplier.default_daily_price) if supplier.default_daily_price is not None else None,
                 "is_active": supplier.is_active,
@@ -5511,6 +6645,8 @@ async def update_supplier_master(
             name=supplier.name,
             contact_email=supplier.contact_email,
             contact_phone=supplier.contact_phone,
+            supplier_type=supplier.supplier_type,
+            entity_type=supplier.entity_type,
             payout_terms_days=supplier.payout_terms_days,
             default_daily_price=supplier.default_daily_price,
             is_active=supplier.is_active,
@@ -5758,6 +6894,12 @@ async def list_project_types(
     if query.search:
         pattern = f"%{query.search}%"
         stmt = stmt.filter(ProjectType.name.ilike(pattern) | ProjectType.code.ilike(pattern))
+    if query.category_level:
+        stmt = stmt.filter(ProjectType.category_level == query.category_level)
+    if query.parent_id:
+        stmt = stmt.filter(ProjectType.parent_id == query.parent_id)
+    if query.selectable_only:
+        stmt = stmt.filter(ProjectType.category_level == "minor")
 
     total = stmt.count()
     rows = stmt.order_by(sort_expression, ProjectType.id.desc()).offset(query.offset).limit(query.limit).all()
@@ -5767,6 +6909,8 @@ async def list_project_types(
             id=pt.id,
             name=pt.name,
             code=pt.code,
+            category_level=pt.category_level,
+            parent_id=pt.parent_id,
             description=pt.description,
         )
         for pt in rows
@@ -5796,9 +6940,19 @@ async def create_project_type(
             if existing:
                 raise HTTPException(status_code=400, detail="同じコードの案件種別が既に存在します")
 
+        parent_id = request.parent_id
+        if request.category_level == "major":
+            parent_id = None
+        elif parent_id:
+            parent = db.get(ProjectType, parent_id)
+            if not parent or parent.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Parent project type not found")
+
         project_type = ProjectType(
             name=request.name.strip(),
             code=normalized_code,
+            category_level=request.category_level,
+            parent_id=parent_id,
             description=request.description.strip() if request.description else None,
         )
         db.add(project_type)
@@ -5812,6 +6966,8 @@ async def create_project_type(
             after_value={
                 "name": project_type.name,
                 "code": project_type.code,
+                "category_level": project_type.category_level,
+                "parent_id": project_type.parent_id,
                 "description": project_type.description,
             },
         )
@@ -5822,6 +6978,8 @@ async def create_project_type(
             id=project_type.id,
             name=project_type.name,
             code=project_type.code,
+            category_level=project_type.category_level,
+            parent_id=project_type.parent_id,
             description=project_type.description,
         )
     except HTTPException:
@@ -5831,6 +6989,636 @@ async def create_project_type(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="案件種別作成に失敗しました")
+
+
+@app.get("/api/project-types/tree", response_model=ProjectTypeTreeResponse, tags=["Master"])
+async def list_project_type_tree(
+    selectable_only: bool = Query(False),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """案件種別ツリー取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.models.master import ProjectType
+
+    rows = (
+        db.query(ProjectType)
+        .filter(ProjectType.deleted_at.is_(None))
+        .order_by(ProjectType.name.asc(), ProjectType.id.asc())
+        .all()
+    )
+
+    children_by_parent: dict[str | None, list[ProjectType]] = {}
+    for row in rows:
+        children_by_parent.setdefault(row.parent_id, []).append(row)
+
+    def build_node(row: ProjectType) -> ProjectTypeTreeItem | None:
+        child_nodes = [node for child in children_by_parent.get(row.id, []) if (node := build_node(child)) is not None]
+        selectable = row.category_level == "minor"
+        if selectable_only and not selectable and not child_nodes:
+            return None
+        return ProjectTypeTreeItem(
+            id=row.id,
+            name=row.name,
+            code=row.code,
+            category_level=row.category_level,
+            parent_id=row.parent_id,
+            description=row.description,
+            selectable=selectable,
+            children=child_nodes,
+        )
+
+    items = [node for root in children_by_parent.get(None, []) if (node := build_node(root)) is not None]
+    return ProjectTypeTreeResponse(items=items)
+
+
+@app.post("/api/registration-links", response_model=RegistrationLinkResponse, tags=["Registration Requests"])
+async def create_registration_link(
+    payload: RegistrationLinkCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """公開登録リンク作成"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        request_record = RegistrationRequest(
+            id=generate_ulid(),
+            request_type=payload.request_type,
+            status="draft",
+            source_type="public_form",
+        )
+        db.add(request_record)
+        token, pin = _issue_registration_link(
+            request_record,
+            request_type=payload.request_type,
+            expires_in_days=payload.expires_in_days,
+            notes=payload.notes,
+        )
+
+        AuditService(db).log(
+            "registration_link_created",
+            target_type="registration_request",
+            target_id=request_record.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            after_value={
+                "request_type": request_record.request_type,
+                "status": request_record.status,
+                "expires_at": request_record.expires_at.isoformat() if request_record.expires_at else None,
+            },
+        )
+        db.commit()
+        db.refresh(request_record)
+        return _build_registration_link_response(request_record, token, pin)
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録リンク作成に失敗しました")
+
+
+@app.post("/api/registration-links/{request_id}/reset-pin-lock", response_model=RegistrationRequestDetailResponse, tags=["Registration Requests"])
+async def reset_registration_link_pin_lock(
+    request_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """公開登録リンクの PIN ロック解除"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        request_record = db.get(RegistrationRequest, request_id)
+        if not request_record or request_record.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Registration request not found")
+        if request_record.source_type != "public_form":
+            raise HTTPException(status_code=400, detail="公開登録リンクではありません")
+
+        before_value = {
+            "failed_attempts": request_record.failed_attempts,
+            "locked_at": request_record.locked_at.isoformat() if request_record.locked_at else None,
+        }
+        request_record.failed_attempts = 0
+        request_record.locked_at = None
+
+        AuditService(db).log(
+            "registration_link_pin_lock_reset",
+            target_type="registration_request",
+            target_id=request_record.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            before_value=before_value,
+            after_value={"failed_attempts": 0, "locked_at": None},
+        )
+        db.commit()
+        db.refresh(request_record)
+        return _registration_detail_response(db, request_record)
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録リンクのロック解除に失敗しました")
+
+
+@app.post("/api/registration-links/{request_id}/reissue", response_model=RegistrationLinkResponse, tags=["Registration Requests"])
+async def reissue_registration_link(
+    request_id: str,
+    payload: RegistrationLinkCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """公開登録リンク再発行"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        request_record = db.get(RegistrationRequest, request_id)
+        if not request_record or request_record.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Registration request not found")
+        if request_record.source_type != "public_form":
+            raise HTTPException(status_code=400, detail="公開登録リンクではありません")
+        if request_record.request_type != payload.request_type:
+            raise HTTPException(status_code=400, detail="request_type は既存リンクと一致させてください")
+        if request_record.status != "link_issued":
+            raise HTTPException(status_code=409, detail="未送信リンクのみ再発行できます")
+
+        token, pin = _issue_registration_link(
+            request_record,
+            request_type=request_record.request_type,
+            expires_in_days=payload.expires_in_days,
+            notes=payload.notes,
+        )
+
+        AuditService(db).log(
+            "registration_link_reissued",
+            target_type="registration_request",
+            target_id=request_record.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            after_value={
+                "request_type": request_record.request_type,
+                "status": request_record.status,
+                "expires_at": request_record.expires_at.isoformat() if request_record.expires_at else None,
+            },
+        )
+        db.commit()
+        db.refresh(request_record)
+        return _build_registration_link_response(request_record, token, pin)
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録リンク再発行に失敗しました")
+
+
+@app.get("/public/registrations/{form_type}", response_model=PublicRegistrationAccessResponse, tags=["Public Registrations"])
+async def access_public_registration(
+    form_type: str,
+    token: str = Query(..., min_length=8),
+    pin: str = Query(..., min_length=4),
+    db: Session = Depends(get_db),
+):
+    """公開登録フォームアクセス"""
+    request_record = _load_public_registration_request(db, form_type, token)
+    _assert_public_registration_access(db, request_record, pin)
+    db.commit()
+    db.refresh(request_record)
+    return PublicRegistrationAccessResponse(
+        request_id=request_record.id,
+        request_type=request_record.request_type,
+        status=request_record.status,
+        expires_at=request_record.expires_at,
+        failed_attempts=request_record.failed_attempts,
+        detail_data=_registration_detail_data(db, request_record),
+        files=_registration_file_items(db, request_record.id),
+    )
+
+
+@app.post("/public/registrations/{form_type}/files", response_model=PublicRegistrationFileUploadResponse, tags=["Public Registrations"])
+async def upload_public_registration_file(
+    form_type: str,
+    token: str = Form(...),
+    pin: str = Form(...),
+    document_type: str = Form(...),
+    document_part: str = Form("single"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """公開登録フォームの添付ファイルアップロード"""
+    try:
+        request_record = _load_public_registration_request(db, form_type, token)
+        _assert_public_registration_access(db, request_record, pin)
+        file_record = await _store_registration_request_file(
+            request_record=request_record,
+            document_type=document_type,
+            document_part=document_part,
+            upload_file=file,
+            db=db,
+        )
+        AuditService(db).log(
+            "registration_request_file_uploaded",
+            target_type="registration_request_file",
+            target_id=file_record.id,
+            after_value={
+                "request_id": request_record.id,
+                "document_type": file_record.document_type,
+                "document_part": file_record.document_part,
+                "mime_type": file_record.mime_type,
+                "size_bytes": file_record.size_bytes,
+            },
+            extra_metadata={"request_type": request_record.request_type, "source_type": request_record.source_type},
+        )
+        db.commit()
+        db.refresh(file_record)
+        return PublicRegistrationFileUploadResponse(
+            file=_registration_file_item(file_record),
+            files=_registration_file_items(db, request_record.id),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="添付ファイルのアップロードに失敗しました")
+
+
+@app.post("/public/registrations/worker", response_model=PublicRegistrationSubmitResponse, tags=["Public Registrations"])
+async def submit_public_worker_registration(
+    payload: PublicWorkerRegistrationSubmitRequest,
+    raw_request: Request,
+    db: Session = Depends(get_db),
+):
+    """稼働者公開登録フォーム送信"""
+    try:
+        request_record = _load_public_registration_request(db, "worker", payload.token)
+        _assert_public_registration_access(db, request_record, payload.pin)
+        response = _submit_public_registration(
+            db,
+            request_record=request_record,
+            payload_data=payload.model_dump(exclude={"token", "pin"}),
+            submitted_ip=raw_request.client.host if raw_request.client else None,
+            user_agent=raw_request.headers.get("user-agent"),
+        )
+        AuditService(db).log(
+            "registration_request_submitted",
+            target_type="registration_request",
+            target_id=request_record.id,
+            after_value={"status": response.status, "dedupe_key": response.dedupe_key},
+            extra_metadata={"request_type": request_record.request_type, "source_type": request_record.source_type},
+        )
+        db.commit()
+        return response
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録フォーム送信に失敗しました")
+
+
+@app.post("/public/registrations/supplier-individual", response_model=PublicRegistrationSubmitResponse, tags=["Public Registrations"])
+async def submit_public_supplier_individual_registration(
+    payload: PublicSupplierIndividualRegistrationSubmitRequest,
+    raw_request: Request,
+    db: Session = Depends(get_db),
+):
+    """個人下請け公開登録フォーム送信"""
+    try:
+        request_record = _load_public_registration_request(db, "supplier-individual", payload.token)
+        _assert_public_registration_access(db, request_record, payload.pin)
+        response = _submit_public_registration(
+            db,
+            request_record=request_record,
+            payload_data=payload.model_dump(exclude={"token", "pin"}),
+            submitted_ip=raw_request.client.host if raw_request.client else None,
+            user_agent=raw_request.headers.get("user-agent"),
+        )
+        AuditService(db).log(
+            "registration_request_submitted",
+            target_type="registration_request",
+            target_id=request_record.id,
+            after_value={"status": response.status, "dedupe_key": response.dedupe_key},
+            extra_metadata={"request_type": request_record.request_type, "source_type": request_record.source_type},
+        )
+        db.commit()
+        return response
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録フォーム送信に失敗しました")
+
+
+@app.post("/public/registrations/supplier-corporation", response_model=PublicRegistrationSubmitResponse, tags=["Public Registrations"])
+async def submit_public_supplier_corporation_registration(
+    payload: PublicSupplierCorporationRegistrationSubmitRequest,
+    raw_request: Request,
+    db: Session = Depends(get_db),
+):
+    """法人下請け公開登録フォーム送信"""
+    try:
+        request_record = _load_public_registration_request(db, "supplier-corporation", payload.token)
+        _assert_public_registration_access(db, request_record, payload.pin)
+        response = _submit_public_registration(
+            db,
+            request_record=request_record,
+            payload_data=payload.model_dump(exclude={"token", "pin"}),
+            submitted_ip=raw_request.client.host if raw_request.client else None,
+            user_agent=raw_request.headers.get("user-agent"),
+        )
+        AuditService(db).log(
+            "registration_request_submitted",
+            target_type="registration_request",
+            target_id=request_record.id,
+            after_value={"status": response.status, "dedupe_key": response.dedupe_key},
+            extra_metadata={"request_type": request_record.request_type, "source_type": request_record.source_type},
+        )
+        db.commit()
+        return response
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録フォーム送信に失敗しました")
+
+
+@app.post("/public/registrations/introducer-identity", response_model=PublicRegistrationSubmitResponse, tags=["Public Registrations"])
+async def submit_public_introducer_identity_registration(
+    payload: PublicIntroducerIdentityRegistrationSubmitRequest,
+    raw_request: Request,
+    db: Session = Depends(get_db),
+):
+    """紹介者本人確認公開フォーム送信"""
+    try:
+        request_record = _load_public_registration_request(db, "introducer-identity", payload.token)
+        _assert_public_registration_access(db, request_record, payload.pin)
+        response = _submit_public_registration(
+            db,
+            request_record=request_record,
+            payload_data=payload.model_dump(exclude={"token", "pin"}),
+            submitted_ip=raw_request.client.host if raw_request.client else None,
+            user_agent=raw_request.headers.get("user-agent"),
+        )
+        AuditService(db).log(
+            "registration_request_submitted",
+            target_type="registration_request",
+            target_id=request_record.id,
+            after_value={"status": response.status, "dedupe_key": response.dedupe_key},
+            extra_metadata={"request_type": request_record.request_type, "source_type": request_record.source_type},
+        )
+        db.commit()
+        return response
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="公開登録フォーム送信に失敗しました")
+
+
+@app.get("/api/registration-requests", response_model=RegistrationRequestListResponse, tags=["Registration Requests"])
+async def list_registration_requests(
+    query: RegistrationRequestListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """登録申請一覧取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    sort_map = {
+        "submitted_at": RegistrationRequest.submitted_at,
+        "reviewed_at": RegistrationRequest.reviewed_at,
+        "created_at": RegistrationRequest.created_at,
+        "status": RegistrationRequest.status,
+        "request_type": RegistrationRequest.request_type,
+    }
+    default_sort = RegistrationRequest.created_at
+    sort_col = sort_map.get(query.sort_by or "", default_sort) if query.sort_by else default_sort
+    sort_expression = sort_col.desc() if query.sort_order == "desc" else sort_col.asc()
+
+    stmt = db.query(RegistrationRequest).filter(RegistrationRequest.deleted_at.is_(None))
+    if query.request_type:
+        stmt = stmt.filter(RegistrationRequest.request_type == query.request_type)
+    if query.status:
+        stmt = stmt.filter(RegistrationRequest.status == query.status)
+    if query.source_type:
+        stmt = stmt.filter(RegistrationRequest.source_type == query.source_type)
+    if query.search:
+        pattern = f"%{query.search}%"
+        stmt = stmt.filter(
+            or_(
+                RegistrationRequest.dedupe_key.ilike(pattern),
+                RegistrationRequest.notes.ilike(pattern),
+                RegistrationRequest.request_type.ilike(pattern),
+            )
+        )
+
+    total = stmt.count()
+    rows = stmt.order_by(sort_expression, RegistrationRequest.id.desc()).offset(query.offset).limit(query.limit).all()
+    items = [_registration_list_item(db, row) for row in rows]
+    return RegistrationRequestListResponse(items=items, total=total, offset=query.offset, limit=query.limit)
+
+
+@app.get("/api/registration-requests/{request_id}", response_model=RegistrationRequestDetailResponse, tags=["Registration Requests"])
+async def get_registration_request(
+    request_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """登録申請詳細取得"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    request_record = db.get(RegistrationRequest, request_id)
+    if not request_record or request_record.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Registration request not found")
+
+    return _registration_detail_response(db, request_record)
+
+
+@app.post("/api/registration-requests/{request_id}/approve", response_model=RegistrationRequestDetailResponse, tags=["Registration Requests"])
+async def approve_registration_request(
+    request_id: str,
+    payload: RegistrationRequestApproveRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """登録申請承認"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        request_record = db.get(RegistrationRequest, request_id)
+        if not request_record or request_record.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Registration request not found")
+        if request_record.superseded_by_request_id:
+            raise HTTPException(status_code=409, detail="この申請は後続申請により superseded 済みです")
+        if request_record.status == "approved":
+            raise HTTPException(status_code=409, detail="この申請は既に承認済みです")
+        if request_record.status == "rejected":
+            raise HTTPException(status_code=409, detail="この申請は既に却下済みです")
+
+        before_value = {
+            "status": request_record.status,
+            "approved_target_type": request_record.approved_target_type,
+            "approved_target_id": request_record.approved_target_id,
+            "notes": request_record.notes,
+        }
+
+        _validate_registration_approval_resolution(db, request_record, payload)
+        _approve_registration_request(db, request_record, payload)
+        request_record.reviewed_by = current_user.id
+
+        AuditService(db).log(
+            "registration_request_approved",
+            target_type="registration_request",
+            target_id=request_record.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            before_value=before_value,
+            after_value={
+                "status": request_record.status,
+                "approved_target_type": request_record.approved_target_type,
+                "approved_target_id": request_record.approved_target_id,
+                "reviewed_by": request_record.reviewed_by,
+                "reviewed_at": request_record.reviewed_at.isoformat() if request_record.reviewed_at else None,
+            },
+            extra_metadata={
+                "request_type": request_record.request_type,
+                "source_type": request_record.source_type,
+            },
+        )
+        db.commit()
+        db.refresh(request_record)
+        return _registration_detail_response(db, request_record)
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="登録申請承認に失敗しました")
+
+
+@app.post("/api/registration-requests/{request_id}/reject", response_model=RegistrationRequestDetailResponse, tags=["Registration Requests"])
+async def reject_registration_request(
+    request_id: str,
+    payload: RegistrationRequestRejectRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """登録申請却下"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+
+        request_record = db.get(RegistrationRequest, request_id)
+        if not request_record or request_record.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Registration request not found")
+        if request_record.status == "approved":
+            raise HTTPException(status_code=409, detail="承認済み申請は却下できません")
+        if request_record.status == "rejected":
+            raise HTTPException(status_code=409, detail="この申請は既に却下済みです")
+
+        before_value = {
+            "status": request_record.status,
+            "notes": request_record.notes,
+        }
+
+        _reject_registration_request(request_record, payload)
+        request_record.reviewed_by = current_user.id
+
+        AuditService(db).log(
+            "registration_request_rejected",
+            target_type="registration_request",
+            target_id=request_record.id,
+            actor=current_user.username,
+            actor_role=current_user.role,
+            before_value=before_value,
+            after_value={
+                "status": request_record.status,
+                "reviewed_by": request_record.reviewed_by,
+                "reviewed_at": request_record.reviewed_at.isoformat() if request_record.reviewed_at else None,
+                "notes": request_record.notes,
+            },
+            reason=payload.reason,
+            extra_metadata={
+                "request_type": request_record.request_type,
+                "source_type": request_record.source_type,
+            },
+        )
+        db.commit()
+        db.refresh(request_record)
+        return _registration_detail_response(db, request_record)
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="登録申請却下に失敗しました")
+
+
+@app.get("/api/registration-requests/{request_id}/files/{file_id}", response_class=FileResponse, tags=["Registration Requests"])
+async def download_registration_request_file(
+    request_id: str,
+    file_id: str,
+    reason: str = Query(..., min_length=1, max_length=500),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """登録申請添付ファイルをダウンロードする"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    request_record = db.get(RegistrationRequest, request_id)
+    if not request_record or request_record.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Registration request not found")
+
+    file_record = db.get(RegistrationRequestFile, file_id)
+    if not file_record or file_record.request_id != request_id:
+        raise HTTPException(status_code=404, detail="Registration request file not found")
+    if file_record.deleted_at is not None:
+        raise HTTPException(status_code=410, detail="Registration request file already deleted")
+
+    storage = _registration_file_storage()
+    if not storage.exists(file_record.storage_key):
+        raise HTTPException(status_code=404, detail="Stored file not found")
+
+    AuditService(db).log(
+        "registration_request_file_downloaded",
+        target_type="registration_request_file",
+        target_id=file_record.id,
+        actor=current_user.username,
+        actor_role=current_user.role,
+        reason=reason.strip(),
+        after_value={
+            "request_id": request_id,
+            "document_type": file_record.document_type,
+            "document_part": file_record.document_part,
+            "original_filename": file_record.original_filename,
+        },
+    )
+    db.commit()
+
+    file_path = storage.resolve_path(file_record.storage_key)
+    media_type, _ = mimetypes.guess_type(file_record.original_filename)
+    return FileResponse(
+        path=file_path,
+        filename=file_record.original_filename,
+        media_type=media_type or file_record.mime_type or "application/octet-stream",
+    )
 
 
 @app.get("/api/roles", response_model=RoleListResponse, tags=["Master"])
@@ -5935,6 +7723,417 @@ async def create_role_master(
 
 
 # ===========================
+# VANZAI担当者エンドポイント
+# ===========================
+
+@app.get("/api/vanzai-staff", response_model=VanzaiStaffListResponse, tags=["Master"])
+async def list_vanzai_staff(
+    query: VanzaiStaffListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """VANZAI担当者一覧"""
+    check_permission(current_user, Permission.MASTER_READ)
+    q = (
+        db.query(VanzaiStaff, Worker.name.label("linked_worker_name"))
+        .outerjoin(Worker, VanzaiStaff.linked_worker_id == Worker.id)
+        .filter(VanzaiStaff.deleted_at.is_(None))
+    )
+    if query.search:
+        like = f"%{query.search}%"
+        q = q.filter(VanzaiStaff.name.ilike(like) | VanzaiStaff.email.ilike(like))
+    if query.is_active is not None:
+        q = q.filter(VanzaiStaff.is_active == query.is_active)
+    total = q.count()
+    items = q.order_by(VanzaiStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    return VanzaiStaffListResponse(
+        items=[VanzaiStaffItem(
+            id=staff.id,
+            name=staff.name,
+            role=staff.role,
+            linked_worker_id=staff.linked_worker_id,
+            linked_worker_name=linked_worker_name,
+            playing_manager_fee_type=staff.playing_manager_fee_type,
+            playing_manager_fixed_fee=staff.playing_manager_fixed_fee,
+            phone=staff.phone,
+            email=staff.email,
+            is_active=staff.is_active,
+            notes=staff.notes,
+        ) for staff, linked_worker_name in items],
+        total=total, page=query.page, limit=query.limit,
+    )
+
+
+@app.post("/api/vanzai-staff", response_model=VanzaiStaffItem, status_code=201, tags=["Master"])
+async def create_vanzai_staff(
+    body: VanzaiStaffCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """VANZAI担当者作成"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    linked_worker = None
+    if body.linked_worker_id:
+        linked_worker = db.get(Worker, body.linked_worker_id)
+        if not linked_worker or linked_worker.deleted_at is not None:
+            raise HTTPException(status_code=400, detail="対応する稼働者が見つかりません")
+    staff = VanzaiStaff(
+        id=generate_ulid(), name=body.name, role=body.role, linked_worker_id=body.linked_worker_id,
+        playing_manager_fee_type=body.playing_manager_fee_type,
+        playing_manager_fixed_fee=body.playing_manager_fixed_fee,
+        phone=body.phone, email=body.email, is_active=body.is_active, notes=body.notes,
+    )
+    db.add(staff)
+    db.commit()
+    db.refresh(staff)
+    return VanzaiStaffItem(
+        id=staff.id, name=staff.name, role=staff.role, linked_worker_id=staff.linked_worker_id,
+        linked_worker_name=linked_worker.name if linked_worker else None,
+        playing_manager_fee_type=staff.playing_manager_fee_type,
+        playing_manager_fixed_fee=staff.playing_manager_fixed_fee,
+        phone=staff.phone,
+        email=staff.email, is_active=staff.is_active, notes=staff.notes,
+    )
+
+
+@app.put("/api/vanzai-staff/{staff_id}", response_model=VanzaiStaffItem, tags=["Master"])
+async def update_vanzai_staff(
+    staff_id: str,
+    body: VanzaiStaffUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """VANZAI担当者更新"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    staff = db.query(VanzaiStaff).filter(VanzaiStaff.id == staff_id, VanzaiStaff.deleted_at.is_(None)).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="VANZAI担当者が見つかりません")
+    linked_worker = None
+    if body.linked_worker_id:
+        linked_worker = db.get(Worker, body.linked_worker_id)
+        if not linked_worker or linked_worker.deleted_at is not None:
+            raise HTTPException(status_code=400, detail="対応する稼働者が見つかりません")
+    staff.name = body.name
+    staff.role = body.role
+    staff.linked_worker_id = body.linked_worker_id
+    staff.playing_manager_fee_type = body.playing_manager_fee_type
+    staff.playing_manager_fixed_fee = body.playing_manager_fixed_fee
+    staff.phone = body.phone
+    staff.email = body.email
+    staff.is_active = body.is_active
+    staff.notes = body.notes
+    db.commit()
+    db.refresh(staff)
+    return VanzaiStaffItem(
+        id=staff.id, name=staff.name, role=staff.role, linked_worker_id=staff.linked_worker_id,
+        linked_worker_name=linked_worker.name if linked_worker else None,
+        playing_manager_fee_type=staff.playing_manager_fee_type,
+        playing_manager_fixed_fee=staff.playing_manager_fixed_fee,
+        phone=staff.phone,
+        email=staff.email, is_active=staff.is_active, notes=staff.notes,
+    )
+
+
+# ===========================
+# クライアント担当者エンドポイント
+# ===========================
+
+@app.get("/api/clients/{client_id}/staff", response_model=ClientStaffListResponse, tags=["Master"])
+async def list_client_staff(
+    client_id: str,
+    query: ClientStaffListQuery = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """クライアント担当者一覧"""
+    check_permission(current_user, Permission.MASTER_READ)
+    q = db.query(ClientStaff).filter(
+        ClientStaff.client_id == client_id,
+        ClientStaff.deleted_at.is_(None),
+    )
+    if query.is_active is not None:
+        q = q.filter(ClientStaff.is_active == query.is_active)
+    total = q.count()
+    items = q.order_by(ClientStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    return ClientStaffListResponse(
+        items=[ClientStaffItem(
+            id=r.id, client_id=r.client_id, name=r.name, role=r.role,
+            phone=r.phone, email=r.email, is_active=r.is_active, notes=r.notes,
+        ) for r in items],
+        total=total, page=query.page, limit=query.limit,
+    )
+
+
+@app.post("/api/clients/{client_id}/staff", response_model=ClientStaffItem, status_code=201, tags=["Master"])
+async def create_client_staff(
+    client_id: str,
+    body: ClientStaffCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """クライアント担当者作成"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    from src.models.master import Client
+    client = db.query(Client).filter(Client.id == client_id, Client.deleted_at.is_(None)).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="クライアントが見つかりません")
+    staff = ClientStaff(
+        id=generate_ulid(), client_id=client_id, name=body.name, role=body.role,
+        phone=body.phone, email=body.email, is_active=body.is_active, notes=body.notes,
+    )
+    db.add(staff)
+    db.commit()
+    db.refresh(staff)
+    return ClientStaffItem(
+        id=staff.id, client_id=staff.client_id, name=staff.name, role=staff.role,
+        phone=staff.phone, email=staff.email, is_active=staff.is_active, notes=staff.notes,
+    )
+
+
+@app.put("/api/clients/{client_id}/staff/{staff_member_id}", response_model=ClientStaffItem, tags=["Master"])
+async def update_client_staff(
+    client_id: str,
+    staff_member_id: str,
+    body: ClientStaffUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """クライアント担当者更新"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    staff = db.query(ClientStaff).filter(
+        ClientStaff.id == staff_member_id,
+        ClientStaff.client_id == client_id,
+        ClientStaff.deleted_at.is_(None),
+    ).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="クライアント担当者が見つかりません")
+    staff.name = body.name
+    staff.role = body.role
+    staff.phone = body.phone
+    staff.email = body.email
+    staff.is_active = body.is_active
+    staff.notes = body.notes
+    db.commit()
+    db.refresh(staff)
+    return ClientStaffItem(
+        id=staff.id, client_id=staff.client_id, name=staff.name, role=staff.role,
+        phone=staff.phone, email=staff.email, is_active=staff.is_active, notes=staff.notes,
+    )
+
+
+# ===========================
+# 稼働者口座エンドポイント
+# ===========================
+
+@app.get("/api/workers/{worker_id}/bank-accounts", response_model=WorkerBankAccountListResponse, tags=["Master"])
+async def list_worker_bank_accounts(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者の振込先口座一覧"""
+    check_permission(current_user, Permission.MASTER_READ)
+    items = db.query(WorkerBankAccount).filter(
+        WorkerBankAccount.worker_id == worker_id,
+        WorkerBankAccount.deleted_at.is_(None),
+    ).order_by(WorkerBankAccount.effective_from.desc()).all()
+    return WorkerBankAccountListResponse(
+        items=[WorkerBankAccountItem(
+            id=r.id, worker_id=r.worker_id, bank_name=r.bank_name,
+            branch_name=r.branch_name, branch_code=r.branch_code,
+            account_type=r.account_type, account_number=r.account_number,
+            account_holder_kana=r.account_holder_kana,
+            transfer_destination_name=r.transfer_destination_name,
+            effective_from=r.effective_from, effective_until=r.effective_until,
+            is_primary=r.is_primary,
+        ) for r in items],
+        total=len(items),
+    )
+
+
+@app.post("/api/workers/{worker_id}/bank-accounts", response_model=WorkerBankAccountItem, status_code=201, tags=["Master"])
+async def create_worker_bank_account(
+    worker_id: str,
+    body: WorkerBankAccountCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者の振込先口座登録"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    from src.models.master import Worker
+    worker = db.query(Worker).filter(Worker.id == worker_id, Worker.deleted_at.is_(None)).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="稼働者が見つかりません")
+    account = WorkerBankAccount(
+        id=generate_ulid(), worker_id=worker_id, bank_name=body.bank_name,
+        branch_name=body.branch_name, branch_code=body.branch_code,
+        account_type=body.account_type, account_number=body.account_number,
+        account_holder_kana=body.account_holder_kana,
+        transfer_destination_name=body.transfer_destination_name,
+        effective_from=body.effective_from, effective_until=body.effective_until,
+        is_primary=body.is_primary,
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return WorkerBankAccountItem(
+        id=account.id, worker_id=account.worker_id, bank_name=account.bank_name,
+        branch_name=account.branch_name, branch_code=account.branch_code,
+        account_type=account.account_type, account_number=account.account_number,
+        account_holder_kana=account.account_holder_kana,
+        transfer_destination_name=account.transfer_destination_name,
+        effective_from=account.effective_from, effective_until=account.effective_until,
+        is_primary=account.is_primary,
+    )
+
+
+@app.put("/api/workers/{worker_id}/bank-accounts/{account_id}", response_model=WorkerBankAccountItem, tags=["Master"])
+async def update_worker_bank_account(
+    worker_id: str,
+    account_id: str,
+    body: WorkerBankAccountUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """稼働者の振込先口座更新"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    account = db.query(WorkerBankAccount).filter(
+        WorkerBankAccount.id == account_id,
+        WorkerBankAccount.worker_id == worker_id,
+        WorkerBankAccount.deleted_at.is_(None),
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="口座情報が見つかりません")
+    account.bank_name = body.bank_name
+    account.branch_name = body.branch_name
+    account.branch_code = body.branch_code
+    account.account_type = body.account_type
+    account.account_number = body.account_number
+    account.account_holder_kana = body.account_holder_kana
+    account.transfer_destination_name = body.transfer_destination_name
+    account.effective_from = body.effective_from
+    account.effective_until = body.effective_until
+    account.is_primary = body.is_primary
+    db.commit()
+    db.refresh(account)
+    return WorkerBankAccountItem(
+        id=account.id, worker_id=account.worker_id, bank_name=account.bank_name,
+        branch_name=account.branch_name, branch_code=account.branch_code,
+        account_type=account.account_type, account_number=account.account_number,
+        account_holder_kana=account.account_holder_kana,
+        transfer_destination_name=account.transfer_destination_name,
+        effective_from=account.effective_from, effective_until=account.effective_until,
+        is_primary=account.is_primary,
+    )
+
+
+# ===========================
+# 下請け口座エンドポイント
+# ===========================
+
+@app.get("/api/suppliers/{supplier_id}/bank-accounts", response_model=SupplierBankAccountListResponse, tags=["Master"])
+async def list_supplier_bank_accounts(
+    supplier_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """下請けの振込先口座一覧"""
+    check_permission(current_user, Permission.MASTER_READ)
+    items = db.query(SupplierBankAccount).filter(
+        SupplierBankAccount.supplier_id == supplier_id,
+        SupplierBankAccount.deleted_at.is_(None),
+    ).order_by(SupplierBankAccount.effective_from.desc()).all()
+    return SupplierBankAccountListResponse(
+        items=[SupplierBankAccountItem(
+            id=r.id, supplier_id=r.supplier_id, bank_name=r.bank_name,
+            branch_name=r.branch_name, branch_code=r.branch_code,
+            account_type=r.account_type, account_number=r.account_number,
+            account_holder_kana=r.account_holder_kana,
+            transfer_destination_name=r.transfer_destination_name,
+            effective_from=r.effective_from, effective_until=r.effective_until,
+            is_primary=r.is_primary,
+        ) for r in items],
+        total=len(items),
+    )
+
+
+@app.post("/api/suppliers/{supplier_id}/bank-accounts", response_model=SupplierBankAccountItem, status_code=201, tags=["Master"])
+async def create_supplier_bank_account(
+    supplier_id: str,
+    body: SupplierBankAccountCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """下請けの振込先口座登録"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    from src.models.master import Supplier
+    supplier = db.query(Supplier).filter(Supplier.id == supplier_id, Supplier.deleted_at.is_(None)).first()
+    if not supplier:
+        raise HTTPException(status_code=404, detail="下請けが見つかりません")
+    account = SupplierBankAccount(
+        id=generate_ulid(), supplier_id=supplier_id, bank_name=body.bank_name,
+        branch_name=body.branch_name, branch_code=body.branch_code,
+        account_type=body.account_type, account_number=body.account_number,
+        account_holder_kana=body.account_holder_kana,
+        transfer_destination_name=body.transfer_destination_name,
+        effective_from=body.effective_from, effective_until=body.effective_until,
+        is_primary=body.is_primary,
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return SupplierBankAccountItem(
+        id=account.id, supplier_id=account.supplier_id, bank_name=account.bank_name,
+        branch_name=account.branch_name, branch_code=account.branch_code,
+        account_type=account.account_type, account_number=account.account_number,
+        account_holder_kana=account.account_holder_kana,
+        transfer_destination_name=account.transfer_destination_name,
+        effective_from=account.effective_from, effective_until=account.effective_until,
+        is_primary=account.is_primary,
+    )
+
+
+@app.put("/api/suppliers/{supplier_id}/bank-accounts/{account_id}", response_model=SupplierBankAccountItem, tags=["Master"])
+async def update_supplier_bank_account(
+    supplier_id: str,
+    account_id: str,
+    body: SupplierBankAccountUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """下請けの振込先口座更新"""
+    check_permission(current_user, Permission.MASTER_WRITE)
+    account = db.query(SupplierBankAccount).filter(
+        SupplierBankAccount.id == account_id,
+        SupplierBankAccount.supplier_id == supplier_id,
+        SupplierBankAccount.deleted_at.is_(None),
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="口座情報が見つかりません")
+    account.bank_name = body.bank_name
+    account.branch_name = body.branch_name
+    account.branch_code = body.branch_code
+    account.account_type = body.account_type
+    account.account_number = body.account_number
+    account.account_holder_kana = body.account_holder_kana
+    account.transfer_destination_name = body.transfer_destination_name
+    account.effective_from = body.effective_from
+    account.effective_until = body.effective_until
+    account.is_primary = body.is_primary
+    db.commit()
+    db.refresh(account)
+    return SupplierBankAccountItem(
+        id=account.id, supplier_id=account.supplier_id, bank_name=account.bank_name,
+        branch_name=account.branch_name, branch_code=account.branch_code,
+        account_type=account.account_type, account_number=account.account_number,
+        account_holder_kana=account.account_holder_kana,
+        transfer_destination_name=account.transfer_destination_name,
+        effective_from=account.effective_from, effective_until=account.effective_until,
+        is_primary=account.is_primary,
+    )
+
+
+# ===========================
 # 請求書エンドポイント
 # ===========================
 
@@ -5955,6 +8154,20 @@ async def generate_invoice(
         project = db.query(Project).filter(Project.id == request.project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
+
+        client = db.get(Client, project.client_id)
+        if not client or client.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Client not found")
+
+        client_staff = None
+        if request.client_staff_id:
+            client_staff = db.get(ClientStaff, request.client_staff_id)
+            if not client_staff or client_staff.deleted_at is not None or client_staff.client_id != client.id:
+                raise HTTPException(status_code=404, detail="Client staff not found")
+
+        year = int(request.period_key[:4])
+        month = int(request.period_key[4:6])
+        subject = (request.subject or "").strip() or f"{year}年{month}月分_{project.name}"
         
         check_permission(current_user, Permission.INVOICE_GENERATE)
         invoice = invoice_service.generate_invoice(
@@ -5962,34 +8175,20 @@ async def generate_invoice(
             client_id=project.client_id,
             project_id=request.project_id,
             period_key=request.period_key,
-            billing_date=date.today(),
-            user_id=current_user.username
+            billing_date=request.billing_date or date.today(),
+            user_id=current_user.username,
+            document_type=request.document_type,
+            subject=subject,
+            addressee_company_name=client.name,
+            addressee_name=(client_staff.name if client_staff else client.contact_name),
+            addressee_email=(client_staff.email if client_staff and client_staff.email else client.billing_email or client.contact_email),
+            addressee_address=client.address,
+            fixed_office_fee_amount=request.fixed_office_fee_amount,
         )
         db.commit()
-        
-        # 明細行を取得
-        lines = [
-            InvoiceLineResponse(
-                line_type=_status_to_str(line.line_type),
-                description=line.description,
-                quantity=line.quantity_snapshot,
-                unit_price=line.unit_price_snapshot,
-                amount=line.line_amount,
-            )
-            for line in invoice.lines
-        ]
-        
-        return InvoiceResponse(
-            id=invoice.id,
-            invoice_number=invoice.id,
-            client_name=invoice.client.name if invoice.client else "",
-            project_name=invoice.project.name if invoice.project else "",
-            period_key=invoice.period_key,
-            total_amount=invoice.total_amount,
-            status=_status_to_str(invoice.status),
-            lines=lines,
-            issued_at=invoice.issued_at
-        )
+        db.refresh(invoice)
+
+        return _serialize_invoice_response(invoice)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -6020,29 +8219,8 @@ async def issue_invoice(
         )
         _store_invoice_pdf(invoice)
         db.commit()
-        
-        lines = [
-            InvoiceLineResponse(
-                line_type=_status_to_str(line.line_type),
-                description=line.description,
-                quantity=line.quantity_snapshot,
-                unit_price=line.unit_price_snapshot,
-                amount=line.line_amount,
-            )
-            for line in invoice.lines
-        ]
-        
-        return InvoiceResponse(
-            id=invoice.id,
-            invoice_number=invoice.id,
-            client_name=invoice.client.name if invoice.client else "",
-            project_name=invoice.project.name if invoice.project else "",
-            period_key=invoice.period_key,
-            total_amount=invoice.total_amount,
-            status=_status_to_str(invoice.status),
-            lines=lines,
-            issued_at=invoice.issued_at
-        )
+
+        return _serialize_invoice_response(invoice)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -6107,14 +8285,57 @@ async def generate_payout(
     """
     try:
         check_permission(current_user, Permission.PAYOUT_GENERATE)
-        payout = payout_service.generate_payout(
-            session=db,
-            worker_id=request.worker_id,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            payment_date=date.today(),
-            user_id=current_user.username,
-        )
+        recipient_type = request.recipient_type or ("worker" if request.worker_id else None)
+        recipient_id = request.recipient_id or request.worker_id
+        if not recipient_type or not recipient_id:
+            raise HTTPException(status_code=400, detail="recipient_type と recipient_id、または worker_id を指定してください")
+        if recipient_type == "worker":
+            from src.models.master import Worker
+
+            linked_vanzai_staff = db.query(VanzaiStaff).filter(
+                VanzaiStaff.linked_worker_id == recipient_id,
+                VanzaiStaff.role == "全体統括責任者",
+                VanzaiStaff.deleted_at.is_(None),
+            ).first()
+            if linked_vanzai_staff:
+                raise HTTPException(
+                    status_code=400,
+                    detail="この稼働者は全体統括責任者の本人稼働分として VANZAI担当者支払に集約してください",
+                )
+            if not db.get(Worker, recipient_id):
+                raise HTTPException(status_code=404, detail="稼働者が見つかりません")
+            payout = payout_service.generate_payout(
+                session=db,
+                worker_id=recipient_id,
+                project_id=request.project_id,
+                period_key=request.period_key,
+                payment_date=date.today(),
+                user_id=current_user.username,
+            )
+        elif recipient_type == "supplier":
+            payout = payout_service.generate_supplier_payout(
+                session=db,
+                supplier_id=recipient_id,
+                period_key=request.period_key,
+                payment_date=date.today(),
+                user_id=current_user.username,
+            )
+        elif recipient_type == "vanzai_staff":
+            payout = payout_service.generate_vanzai_staff_payout(
+                session=db,
+                vanzai_staff_id=recipient_id,
+                period_key=request.period_key,
+                payment_date=date.today(),
+                user_id=current_user.username,
+                support_fee_amount=request.support_fee_amount,
+            )
+        else:
+            raise HTTPException(status_code=400, detail="現時点の支払明細生成 API は worker / supplier / vanzai_staff recipient のみ対応しています")
+
+        payout.recipient_type = payout.recipient_type or recipient_type
+        payout.recipient_id = payout.recipient_id or recipient_id
+        vanzai_staff = db.get(VanzaiStaff, payout.recipient_id) if payout.recipient_type == "vanzai_staff" and payout.recipient_id else None
+        payout.payee_name_snapshot = payout.payee_name_snapshot or (payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else None)))
         db.commit()
         
         lines = [
@@ -6131,7 +8352,10 @@ async def generate_payout(
         return PayoutResponse(
             id=payout.id,
             payout_number=payout.id,
-            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else ""),
+            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else "")),
+            payee_name=payout.payee_name_snapshot or (payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else ""))),
+            recipient_type=payout.recipient_type,
+            recipient_id=payout.recipient_id,
             project_name=payout.project.name if payout.project else "",
             period_key=payout.period_key,
             total_amount=payout.total_amount,
@@ -6181,11 +8405,15 @@ async def confirm_payout(
             )
             for line in payout.lines
         ]
+        vanzai_staff = db.get(VanzaiStaff, payout.recipient_id) if payout.recipient_type == "vanzai_staff" and payout.recipient_id else None
         
         return PayoutResponse(
             id=payout.id,
             payout_number=payout.id,
-            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else ""),
+            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else "")),
+            payee_name=payout.payee_name_snapshot or (payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else ""))),
+            recipient_type=payout.recipient_type,
+            recipient_id=payout.recipient_id,
             project_name=payout.project.name if payout.project else "",
             period_key=payout.period_key,
             total_amount=payout.total_amount,
@@ -6246,6 +8474,7 @@ async def deliver_payout(
     try:
         check_permission(current_user, Permission.PAYOUT_APPROVE)
 
+        from src.models.master import VanzaiStaff
         from src.models.transaction import Payout, PayoutDelivery
 
         payout = db.get(Payout, payout_id)
@@ -6258,7 +8487,14 @@ async def deliver_payout(
         delivery_note = (request.delivery_note or "").strip() or None
         internal_note = (request.internal_note or "").strip() or None
         if not recipient_email:
-            recipient_email = (payout.worker.email if payout.worker else (payout.supplier.contact_email if payout.supplier else None)) or ""
+            vanzai_staff = db.get(VanzaiStaff, payout.recipient_id) if payout.recipient_type == "vanzai_staff" and payout.recipient_id else None
+            recipient_email = (
+                payout.worker.email if payout.worker else (
+                    payout.supplier.contact_email if payout.supplier else (
+                        vanzai_staff.email if vanzai_staff else None
+                    )
+                )
+            ) or ""
         if not recipient_email:
             raise HTTPException(status_code=400, detail="送信先メールアドレスが設定されていません")
 
@@ -6268,7 +8504,7 @@ async def deliver_payout(
 
         provider = os.getenv("EMAIL_PROVIDER", "gmail")
         dry_run = os.getenv("EMAIL_DRY_RUN", "true").lower() == "true"
-        payee_name = payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else payout.id)
+        payee_name = payout.payee_name_snapshot or (payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else payout.id)))
         template = EmailTemplateService().payout_statement_delivery(
             payee_name=payee_name,
             payee_email=recipient_email,
@@ -6359,11 +8595,15 @@ async def mark_payout_paid(
             )
             for line in payout.lines
         ]
+        vanzai_staff = db.get(VanzaiStaff, payout.recipient_id) if payout.recipient_type == "vanzai_staff" and payout.recipient_id else None
 
         return PayoutResponse(
             id=payout.id,
             payout_number=payout.id,
-            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else ""),
+            worker_name=payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else "")),
+            payee_name=payout.payee_name_snapshot or (payout.worker.name if payout.worker else (payout.supplier.name if payout.supplier else (vanzai_staff.name if vanzai_staff else ""))),
+            recipient_type=payout.recipient_type,
+            recipient_id=payout.recipient_id,
             project_name=payout.project.name if payout.project else "",
             period_key=payout.period_key,
             total_amount=payout.total_amount,
@@ -6911,6 +9151,7 @@ async def create_notice(
         target_project_id=request.target_project_id,
         target_worker_ids=request.target_worker_ids,
         send_email=request.send_email,
+        push_action_type=request.push_action_type or None,
         sent_at=None,
         created_by=current_user.id,
         created_at=now,
@@ -7011,6 +9252,8 @@ async def create_notice(
             title=notice.title,
             body=notice.body[:80] + ("..." if len(notice.body) > 80 else ""),
             url="/notices",
+            notice_id=notice.id,
+            push_action_type=notice.push_action_type,
         )
     except Exception as _push_exc:
         logger.warning("push notification failed: %s", _push_exc)
@@ -7025,6 +9268,7 @@ async def create_notice(
         target_project_name=proj_name,
         target_worker_ids=notice.target_worker_ids,
         send_email=notice.send_email,
+        push_action_type=notice.push_action_type,
         sent_at=notice.sent_at,
         read_count=0,
         created_by=notice.created_by,
@@ -7086,6 +9330,7 @@ async def list_notices(
             target_project_name=proj_name,
             target_worker_ids=n.target_worker_ids,
             send_email=n.send_email,
+            push_action_type=n.push_action_type,
             sent_at=n.sent_at,
             read_count=read_count,
             created_by=n.created_by,
@@ -7219,6 +9464,7 @@ async def list_worker_notices(
             priority=n.priority,
             target_project_id=n.target_project_id,
             target_project_name=proj_name,
+            push_action_type=n.push_action_type,
             is_read=r is not None,
             read_at=r.read_at if r else None,
             response=r.response if r else None,
@@ -7411,6 +9657,11 @@ async def unsubscribe_push(
         PushSubscription.endpoint == body.endpoint,
     ).delete(synchronize_session=False)
     db.commit()
+
+
+from src.api.ocr_routes import router as ocr_router
+
+app.include_router(ocr_router)
 
 
 if __name__ == "__main__":

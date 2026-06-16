@@ -36,6 +36,18 @@ export function formatCurrency(value: string | number | null | undefined): strin
   }).format(Number(value));
 }
 
+export function formatMaskedAccountNumber(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+
+  if (value.length <= 4) {
+    return "*".repeat(value.length);
+  }
+
+  return `${"*".repeat(value.length - 4)}${value.slice(-4)}`;
+}
+
 export function toMonthInput(periodKey: string): string {
   return `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}`;
 }
@@ -84,6 +96,7 @@ const STATUS_LABELS: Record<string, string> = {
   tentative: "仮確定",
   confirmed: "確定",
   pending: "保留",
+  link_issued: "リンク発行済み",
   canceled: "取消",
   preparing: "準備中",
   issued: "発行済み",
@@ -114,6 +127,7 @@ const ROLE_LABELS: Record<string, string> = {
 const PAYEE_TYPE_LABELS: Record<string, string> = {
   worker: "稼働者",
   supplier: "取引先",
+  vanzai_staff: "VANZAI担当者",
 };
 
 const IMPORT_MODE_LABELS: Record<string, string> = {
@@ -185,6 +199,14 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   expense_submitted: "経費申請",
   expense_approved: "経費承認",
   expense_rejected: "経費却下",
+  registration_link_created: "公開リンク作成",
+  registration_link_reissued: "公開リンク再発行",
+  registration_link_pin_lock_reset: "公開リンクロック解除",
+  registration_request_submitted: "登録申請送信",
+  registration_request_file_uploaded: "登録申請ファイルアップロード",
+  registration_request_file_downloaded: "登録申請ファイルダウンロード",
+  registration_request_approved: "登録申請承認",
+  registration_request_rejected: "登録申請却下",
 };
 
 export const AUDIT_ACTION_OPTION_GROUPS = [

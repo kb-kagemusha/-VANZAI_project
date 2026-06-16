@@ -60,6 +60,9 @@ fi
 ${VENV_DIR}/bin/pip install --upgrade pip -q
 ${VENV_DIR}/bin/pip install psycopg2-binary -q
 ${VENV_DIR}/bin/pip install -e ".[dev]" -q
+${VENV_DIR}/bin/pip install -e ".[ocr]" -q
+${VENV_DIR}/bin/pip uninstall -y opencv-contrib-python opencv-python 2>/dev/null || true
+${VENV_DIR}/bin/pip install opencv-python-headless -q
 echo "  Python パッケージインストール完了"
 
 # ----------------------------------------
@@ -100,6 +103,9 @@ set +a
 # ----------------------------------------
 echo "[4/6] DBマイグレーション..."
 cd ${APP_DIR}
+set -a
+source "${APP_DIR}/.env"
+set +a
 ${VENV_DIR}/bin/alembic upgrade head
 echo "  マイグレーション完了"
 

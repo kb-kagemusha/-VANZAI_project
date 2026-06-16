@@ -3,9 +3,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth/auth-context";
 import { ApiError } from "../lib/api/client";
+import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 export function LoginPage() {
   const { login, status } = useAuth();
+  const { currentVersion, currentBuildId, hasUpdate, refreshNow } = useAppVersion();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState("");
@@ -52,6 +54,15 @@ export function LoginPage() {
         <p className="login-copy">
           まずは当日のアサイン確認と月次実績確認から、worker ロール向けの導線を切り出します。
         </p>
+        <div className="login-version-row">
+          <span className="login-version-label">Ver.{currentVersion}</span>
+          {hasUpdate ? (
+            <button type="button" className="login-version-refresh" onClick={refreshNow}>
+              最新版を反映
+            </button>
+          ) : null}
+        </div>
+        <p className="login-build-label">Build {currentBuildId}</p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
             ユーザー名

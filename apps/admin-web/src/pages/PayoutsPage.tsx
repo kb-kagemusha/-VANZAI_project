@@ -10,7 +10,7 @@ import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { StatusBadge } from "../components/StatusBadge";
 import { SummaryCard } from "../components/SummaryCard";
-import { ApiError, confirmPayout, deliverPayout, downloadPayoutPdf, generatePayout, getAssignments, getPayoutDeliveries, getPayouts, getProjects, markPayoutPaid } from "../lib/api/client";
+import { ApiError, confirmPayout, deliverPayout, downloadPayoutPdf, generatePayout, getAssignments, getPayoutDeliveries, getPayouts, getProjects, getSuppliers, getVanzaiStaff, markPayoutPaid } from "../lib/api/client";
 import { currentMonthInput, formatCurrency, formatDateTime, formatPayeeType, formatStatus, toPeriodKey } from "../lib/formatters";
 import type { PayoutListItem } from "../types/api";
 
@@ -18,6 +18,7 @@ const PAGE_SIZE = 20;
 
 export function PayoutsPage() {
   const [monthValue, setMonthValue] = useState(currentMonthInput());
+  const [recipientType, setRecipientType] = useState("");
   const [status, setStatus] = useState("");
   const [deliveryState, setDeliveryState] = useState("");
   const [missingDefaultRecipientOnly, setMissingDefaultRecipientOnly] = useState(false);
@@ -25,7 +26,9 @@ export function PayoutsPage() {
   const [sortOrder, setSortOrder] = useState("desc");
   const [page, setPage] = useState(0);
   const [genProjectId, setGenProjectId] = useState("");
-  const [genWorkerId, setGenWorkerId] = useState("");
+  const [genRecipientType, setGenRecipientType] = useState<"worker" | "supplier" | "vanzai_staff">("worker");
+  const [genRecipientId, setGenRecipientId] = useState("");
+  const [genSupportFeeAmount, setGenSupportFeeAmount] = useState("");
   const [genError, setGenError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -37,10 +40,11 @@ export function PayoutsPage() {
   const queryClient = useQueryClient();
 
   const payoutsQuery = useQuery({
-    queryKey: ["payouts", periodKey, status, deliveryState, missingDefaultRecipientOnly, sortBy, sortOrder, page],
+    queryKey: ["payouts", periodKey, recipientType, status, deliveryState, missingDefaultRecipientOnly, sortBy, sortOrder, page],
     queryFn: () =>
       getPayouts({
         period_key: periodKey,
+        recipient_type: recipientType || undefined,
         status: status || undefined,
         delivery_state: deliveryState || undefined,
         missing_default_recipient_only: missingDefaultRecipientOnly || undefined,
@@ -80,13 +84,37 @@ export function PayoutsPage() {
   });
 
   const assignmentsQuery = useQuery({
-    queryKey: ["assignments-gen", genProjectId],
+    queryKey: ["assignments-gen", genProjectId, genRecipientType],
     queryFn: () => getAssignments({ project_id: genProjectId, limit: 200 }),
-    enabled: !!genProjectId,
+    enabled: !!genProjectId && genRecipientType === "worker",
   });
 
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers-payout-options"],
+    queryFn: () => getSuppliers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
+    enabled: genRecipientType === "supplier",
+  });
+
+  const vanzaiStaffQuery = useQuery({
+    queryKey: ["vanzai-staff-payout-options"],
+    queryFn: () => getVanzaiStaff({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
+    enabled: genRecipientType === "vanzai_staff",
+  });
+
+  const generationRecipientTypeSupported = genRecipientType === "worker" || genRecipientType === "supplier" || genRecipientType === "vanzai_staff";
+  const generationRequiresProject = genRecipientType === "worker";
+  const selectedVanzaiStaff = (vanzaiStaffQuery.data?.items ?? []).find((staff) => staff.id === genRecipientId) ?? null;
+  const isPlayingManagerSelection = selectedVanzaiStaff?.role === "プレイングマネージャー";
+
   const generateMutation = useMutation({
-    mutationFn: () => generatePayout(genProjectId, genWorkerId, periodKey),
+    mutationFn: () =>
+      generatePayout({
+        projectId: genProjectId,
+        recipientType: genRecipientType,
+        recipientId: genRecipientId,
+        supportFeeAmount: isPlayingManagerSelection ? genSupportFeeAmount : undefined,
+        periodKey,
+      }),
     onSuccess: () => {
       setGenError("");
       void queryClient.invalidateQueries({ queryKey: ["payouts"] });
@@ -158,6 +186,11 @@ export function PayoutsPage() {
   const workerOptions = Array.from(
     new Map((assignmentsQuery.data?.items ?? []).map((a) => [a.worker_id, a.worker_name])).entries(),
   );
+  const supplierOptions = (suppliersQuery.data?.items ?? []).map((supplier) => [supplier.id, supplier.name] as const);
+  const vanzaiStaffOptions = (vanzaiStaffQuery.data?.items ?? []).map((staff) => [staff.id, `${staff.name}${staff.role ? ` (${staff.role})` : ""}`] as const);
+  const generationRecipientOptions = genRecipientType === "supplier" ? supplierOptions : genRecipientType === "vanzai_staff" ? vanzaiStaffOptions : workerOptions;
+
+  const displayRecipientType = (row: PayoutListItem) => row.recipient_type || row.payee_type;
 
   const toggleDeliveryHistory = (row: PayoutListItem) => {
     setSelectedDeliveryPayout((current) => {
@@ -181,10 +214,12 @@ export function PayoutsPage() {
   };
 
   const defaultRecipientLabel = selectedDeliveryPayout
-    ? selectedDeliveryPayout.payee_type === "worker"
+    ? displayRecipientType(selectedDeliveryPayout) === "worker"
       ? "稼働者メール"
-      : selectedDeliveryPayout.payee_type === "supplier"
+      : displayRecipientType(selectedDeliveryPayout) === "supplier"
         ? "取引先メール"
+        : displayRecipientType(selectedDeliveryPayout) === "vanzai_staff"
+          ? "VANZAI担当者メール"
         : "既定メール"
     : "既定メール";
 
@@ -230,32 +265,56 @@ export function PayoutsPage() {
         <strong style={{ width: "100%" }}>支払明細を生成</strong>
         <label>
           案件
-          <select value={genProjectId} onChange={(e) => { setGenProjectId(e.target.value); setGenWorkerId(""); }}>
-            <option value="">案件を選択</option>
+          <select value={genProjectId} onChange={(e) => { setGenProjectId(e.target.value); setGenRecipientId(""); }}>
+            <option value="">{generationRequiresProject ? "案件を選択" : "案件指定なし"}</option>
             {(projectsQuery.data?.items ?? []).map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </label>
         <label>
-          稼働者
-          <select value={genWorkerId} onChange={(e) => setGenWorkerId(e.target.value)} disabled={!genProjectId}>
-            <option value="">稼働者を選択</option>
-            {workerOptions.map(([id, name]) => (
+          受取人種別
+          <select value={genRecipientType} onChange={(e) => { setGenRecipientType(e.target.value as "worker" | "supplier" | "vanzai_staff"); setGenRecipientId(""); setGenSupportFeeAmount(""); setGenError(""); }}>
+            <option value="worker">稼働者</option>
+            <option value="supplier">取引先</option>
+            <option value="vanzai_staff">VANZAI担当者</option>
+          </select>
+        </label>
+        <label>
+          受取人
+          <select value={genRecipientId} onChange={(e) => { setGenRecipientId(e.target.value); setGenSupportFeeAmount(""); }} disabled={(!genProjectId && generationRequiresProject) || !generationRecipientTypeSupported}>
+            <option value="">
+              {generationRecipientTypeSupported
+                ? genRecipientType === "supplier"
+                  ? "取引先を選択"
+                  : genRecipientType === "vanzai_staff"
+                    ? "VANZAI担当者を選択"
+                  : "稼働者を選択"
+                : `${formatPayeeType(genRecipientType)}生成は準備中`}
+            </option>
+            {generationRecipientOptions.map(([id, name]) => (
               <option key={id} value={id}>{name}</option>
             ))}
           </select>
         </label>
+        {isPlayingManagerSelection ? (
+          <label>
+            運営協力費
+            <input value={genSupportFeeAmount} onChange={(e) => setGenSupportFeeAmount(e.target.value)} placeholder="月次手入力" />
+          </label>
+        ) : null}
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(e) => { setMonthValue(e.target.value); setPage(0); }} />
         </label>
         <button
           onClick={() => generateMutation.mutate()}
-          disabled={!genProjectId || !genWorkerId || generateMutation.isPending}
+          disabled={(!genProjectId && generationRequiresProject) || !genRecipientId || !generationRecipientTypeSupported || generateMutation.isPending}
         >
           {generateMutation.isPending ? "生成中..." : "支払明細生成"}
         </button>
+        {genRecipientType === "supplier" ? <span style={{ color: "#475467", fontSize: "0.875rem" }}>取引先支払は対象月の紹介者配下実績を人工単位で集計します。案件選択は不要です。</span> : null}
+        {genRecipientType === "vanzai_staff" ? <span style={{ color: "#475467", fontSize: "0.875rem" }}>全体統括責任者は drv社売上8% と linked worker の本人稼働分、事務は固定43200円と月内日数×2160円、プレイングマネージャーは個人設定された方式と月次の運営協力費で集計します。</span> : null}
         {genError && <span style={{ color: "var(--color-danger, red)", fontSize: "0.875rem" }}>{genError}</span>}
         {generateMutation.isSuccess && <span style={{ color: "green", fontSize: "0.875rem" }}>生成しました</span>}
       </section>
@@ -276,6 +335,15 @@ export function PayoutsPage() {
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(event) => { setMonthValue(event.target.value); setPage(0); }} />
+        </label>
+        <label>
+          受取人種別
+          <select value={recipientType} onChange={(event) => { setRecipientType(event.target.value); setPage(0); }}>
+            <option value="">すべて</option>
+            <option value="worker">稼働者</option>
+            <option value="supplier">取引先</option>
+            <option value="vanzai_staff">VANZAI担当者</option>
+          </select>
         </label>
         <label>
           ステータス
@@ -328,7 +396,7 @@ export function PayoutsPage() {
         columns={[
           { key: "number", header: "支払番号", render: (row) => row.payout_number },
           { key: "payee", header: "支払先", render: (row) => row.payee_name },
-          { key: "type", header: "種別", render: (row) => formatPayeeType(row.payee_type) },
+          { key: "type", header: "受取人種別", render: (row) => formatPayeeType(displayRecipientType(row)) },
           { key: "project", header: "案件", render: (row) => row.project_name || "-" },
           { key: "period", header: "対象月", render: (row) => row.period_key },
           { key: "version", header: "版", render: (row) => row.version },

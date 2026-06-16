@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, Boolean, ForeignKey, Numeric, Integer, Date, JSON, DateTime as SADateTime
+from sqlalchemy import BigInteger, String, Text, Boolean, ForeignKey, Numeric, Integer, Date, JSON, DateTime as SADateTime, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, TimestampMixin, SoftDeleteMixin, generate_ulid
@@ -39,6 +39,16 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     worker_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("workers.id"), nullable=True
     )
+    vanzai_staff_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("vanzai_staff.id"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "worker_id IS NULL OR vanzai_staff_id IS NULL",
+            name="ck_users_worker_or_vanzai_staff",
+        ),
+    )
 
 
 class Worker(Base, TimestampMixin, SoftDeleteMixin):
@@ -52,8 +62,15 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
         String(26), primary_key=True, default=generate_ulid
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    furigana: Mapped[str | None] = mapped_column(String(200), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sole_proprietor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    invoice_registration_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    invoice_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
@@ -99,6 +116,35 @@ class WorkerAvailabilityPreference(Base, TimestampMixin):
     worker: Mapped["Worker"] = relationship()
 
 
+class WorkerBankAccount(Base, TimestampMixin, SoftDeleteMixin):
+    """稼働者の振込先口座履歴"""
+    __tablename__ = "worker_bank_accounts"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    worker_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=False
+    )
+    bank_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_holder_kana: Mapped[str] = mapped_column(String(200), nullable=False)
+    transfer_destination_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    worker: Mapped["Worker"] = relationship()
+
+    __table_args__ = (
+        Index("ix_worker_bank_accounts_worker_id", "worker_id"),
+        Index("ix_worker_bank_accounts_worker_primary", "worker_id", "is_primary"),
+    )
+
+
 class Supplier(Base, TimestampMixin, SoftDeleteMixin):
     """
     下請け（紹介者）マスタ
@@ -115,6 +161,8 @@ class Supplier(Base, TimestampMixin, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    supplier_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     
     # 支払条件
     payout_terms_days: Mapped[int] = mapped_column(
@@ -136,6 +184,35 @@ class Supplier(Base, TimestampMixin, SoftDeleteMixin):
     )
 
 
+class SupplierBankAccount(Base, TimestampMixin, SoftDeleteMixin):
+    """supplier の振込先口座履歴"""
+    __tablename__ = "supplier_bank_accounts"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    supplier_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("suppliers.id"), nullable=False
+    )
+    bank_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_holder_kana: Mapped[str] = mapped_column(String(200), nullable=False)
+    transfer_destination_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    supplier: Mapped["Supplier"] = relationship()
+
+    __table_args__ = (
+        Index("ix_supplier_bank_accounts_supplier_id", "supplier_id"),
+        Index("ix_supplier_bank_accounts_supplier_primary", "supplier_id", "is_primary"),
+    )
+
+
 class Client(Base, TimestampMixin, SoftDeleteMixin):
     """
     クライアント（請求先）マスタ
@@ -151,10 +228,302 @@ class Client(Base, TimestampMixin, SoftDeleteMixin):
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     projects: Mapped[list["Project"]] = relationship(back_populates="client")
+    client_staff_members: Mapped[list["ClientStaff"]] = relationship(back_populates="client")
+
+
+class ClientStaff(Base, TimestampMixin, SoftDeleteMixin):
+    """クライアント担当者"""
+    __tablename__ = "client_staff"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    client_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("clients.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    client: Mapped["Client"] = relationship(back_populates="client_staff_members")
+
+    __table_args__ = (
+        Index("ix_client_staff_client_id", "client_id"),
+        Index("ix_client_staff_is_active", "is_active"),
+    )
+
+
+class VanzaiStaff(Base, TimestampMixin, SoftDeleteMixin):
+    """VANZAI 側の担当者マスタ"""
+    __tablename__ = "vanzai_staff"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    linked_worker_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("workers.id"), nullable=True
+    )
+    playing_manager_fee_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    playing_manager_fixed_fee: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    linked_worker: Mapped["Worker"] = relationship(foreign_keys=[linked_worker_id])
+
+    __table_args__ = (
+        Index("ix_vanzai_staff_is_active", "is_active"),
+        Index("ix_vanzai_staff_email", "email"),
+        Index("ix_vanzai_staff_linked_worker_id", "linked_worker_id"),
+    )
+
+
+class RegistrationRequest(Base, TimestampMixin, SoftDeleteMixin):
+    """登録申請ヘッダ"""
+    __tablename__ = "registration_requests"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    public_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    access_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(SADateTime(timezone=True), nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_at: Mapped[datetime | None] = mapped_column(SADateTime(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(SADateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(SADateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("users.id"), nullable=True
+    )
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    dedupe_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_target_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    approved_target_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    superseded_by_request_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=True
+    )
+    submitted_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    reviewer: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by])
+    superseded_by_request: Mapped["RegistrationRequest | None"] = relationship(
+        remote_side=[id],
+        back_populates="superseded_requests",
+    )
+    superseded_requests: Mapped[list["RegistrationRequest"]] = relationship(
+        back_populates="superseded_by_request"
+    )
+    worker_detail: Mapped["WorkerRegistrationRequestDetail | None"] = relationship(
+        back_populates="request",
+        uselist=False,
+    )
+    supplier_individual_detail: Mapped["SupplierIndividualRequestDetail | None"] = relationship(
+        back_populates="request",
+        uselist=False,
+    )
+    supplier_corporation_detail: Mapped["SupplierCorporationRequestDetail | None"] = relationship(
+        back_populates="request",
+        uselist=False,
+    )
+    introducer_identity_detail: Mapped["IntroducerIdentityRequestDetail | None"] = relationship(
+        back_populates="request",
+        uselist=False,
+        foreign_keys="IntroducerIdentityRequestDetail.request_id",
+    )
+    files: Mapped[list["RegistrationRequestFile"]] = relationship(back_populates="request")
+
+    __table_args__ = (
+        Index("ix_registration_requests_status", "status"),
+        Index("ix_registration_requests_request_type", "request_type"),
+        Index("ix_registration_requests_source_type", "source_type"),
+        Index("ix_registration_requests_expires_at", "expires_at"),
+        Index("uq_registration_requests_public_token_hash", "public_token_hash", unique=True),
+    )
+
+
+class WorkerRegistrationRequestDetail(Base, TimestampMixin):
+    """稼働者登録申請の生データ"""
+    __tablename__ = "worker_registration_request_details"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=False, unique=True
+    )
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name_furigana: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    first_name_furigana: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sole_proprietor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    route_group: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    introducer_supplier_name_raw: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    zipcode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    prefecture: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch_number: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    bank_account_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_holder: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    invoice_registration_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    invoice_registration_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    request: Mapped["RegistrationRequest"] = relationship(back_populates="worker_detail")
+
+
+class SupplierIndividualRequestDetail(Base, TimestampMixin):
+    """個人下請け登録申請の生データ"""
+    __tablename__ = "supplier_individual_request_details"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=False, unique=True
+    )
+    supplier_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    name_furigana: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    trade_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    zipcode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    prefecture: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch_number: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    bank_account_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_holder_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    invoice_registration_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    invoice_registration_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    request: Mapped["RegistrationRequest"] = relationship(back_populates="supplier_individual_detail")
+
+
+class SupplierCorporationRequestDetail(Base, TimestampMixin):
+    """法人下請け登録申請の生データ"""
+    __tablename__ = "supplier_corporation_request_details"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=False, unique=True
+    )
+    supplier_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    company_name_furigana: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    representative_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    representative_name_furigana: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    zipcode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    prefecture: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bank_branch_number: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    bank_account_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_holder_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    invoice_registration_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    invoice_registration_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    request: Mapped["RegistrationRequest"] = relationship(back_populates="supplier_corporation_detail")
+
+
+class IntroducerIdentityRequestDetail(Base, TimestampMixin):
+    """紹介者本人確認申請の生データ"""
+    __tablename__ = "introducer_identity_request_details"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=False, unique=True
+    )
+    related_worker_request_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=True
+    )
+    related_supplier_request_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=True
+    )
+    subject_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    subject_name_furigana: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    submission_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    request: Mapped["RegistrationRequest"] = relationship(
+        back_populates="introducer_identity_detail",
+        foreign_keys=[request_id],
+    )
+    related_worker_request: Mapped["RegistrationRequest | None"] = relationship(
+        foreign_keys=[related_worker_request_id]
+    )
+    related_supplier_request: Mapped["RegistrationRequest | None"] = relationship(
+        foreign_keys=[related_supplier_request_id]
+    )
+
+
+class RegistrationRequestFile(Base, TimestampMixin, SoftDeleteMixin):
+    """登録申請添付ファイル"""
+    __tablename__ = "registration_request_files"
+
+    id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=generate_ulid
+    )
+    request_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("registration_requests.id"), nullable=False
+    )
+    document_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    document_part: Mapped[str] = mapped_column(String(20), default="single", nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    scan_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(SADateTime(timezone=True), nullable=False)
+    delete_after: Mapped[datetime | None] = mapped_column(SADateTime(timezone=True), nullable=True)
+
+    request: Mapped["RegistrationRequest"] = relationship(back_populates="files")
+
+    __table_args__ = (
+        Index("ix_registration_request_files_request_id", "request_id"),
+        Index("ix_registration_request_files_document_type", "document_type"),
+        Index("ix_registration_request_files_delete_after", "delete_after"),
+    )
 
 
 class Site(Base, TimestampMixin, SoftDeleteMixin):
@@ -188,10 +557,14 @@ class ProjectType(Base, TimestampMixin, SoftDeleteMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     code: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    category_level: Mapped[str] = mapped_column(String(20), default="minor", nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("project_types.id"), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     projects: Mapped[list["Project"]] = relationship(back_populates="project_type")
+    parent: Mapped["ProjectType | None"] = relationship(remote_side=[id], back_populates="children")
+    children: Mapped[list["ProjectType"]] = relationship(back_populates="parent")
 
 
 class Role(Base, TimestampMixin, SoftDeleteMixin):
@@ -399,6 +772,8 @@ class StaffNotice(Base, TimestampMixin, SoftDeleteMixin):
     created_by: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("users.id"), nullable=True
     )
+    # プッシュ通知アクションボタン種別: null | "ok_ng" | "confirm"
+    push_action_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Relationships
     reads: Mapped[list["StaffNoticeRead"]] = relationship(

@@ -1,6 +1,84 @@
 # 実装状況（STATUS）
 
-最終更新: 2026-04-03
+最終更新: 2026-04-09
+
+---
+
+## 2026-04-09 本番反映ログ
+
+### 反映済み
+
+- admin-web 0.8.0 を VPS へ反映済み
+- staff-mobile 0.8.0 を VPS へ反映済み
+- backend の請求書発行メタデータ対応コードを VPS へ反映済み
+- Alembic を `20260409a001 (head)` まで適用済み
+  - `20260409a001_add_invoice_issue_metadata.py`
+- API プロセスを最新コードで再起動済み
+  - 稼働 PID 確認: `189670`
+
+### 公開確認済み
+
+- 公開 API `https://api.vanzai-portal.com/api/health` は `healthy` を確認済み
+- admin-web `https://vanzai-portal.com/version.json` は `0.8.0` を返却
+- staff-mobile `https://staff.vanzai-portal.com/version.json` は `0.8.0` を返却
+
+### 追加された請求機能
+
+- 請求書生成時に以下を保持できるようになった
+  - `document_type`
+  - `client_staff_id` 由来の宛先スナップショット
+  - `subject`
+  - `fixed_office_fee_amount`
+- 請求 PDF に帳票種別、宛先、件名、請求日を表示
+- admin-web の請求生成フォームで帳票種別、担当者、件名、固定事務局費を入力可能
+
+### 現時点の未確認事項
+
+- 本番データでの請求生成から PDF 表示までの業務スモークは未実施
+- 見積書モード (`document_type=estimate`) の実データ確認は未実施
+
+---
+
+## 2026-04-08 本番反映ログ
+
+### 反映済み
+
+- admin-web 0.7.8 を VPS へ反映済み
+- backend のプレイングマネージャー支払対応コードを VPS へ反映済み
+- Alembic を `20260408g001 (head)` まで適用済み
+  - `20260408f001_add_vanzai_staff_linked_worker.py`
+  - `20260408g001_add_playing_manager_fee_config.py`
+- 公開 API `https://api.vanzai-portal.com/api/health` は `healthy` を確認済み
+
+### 本番データ反映済み
+
+- `vanzai_staff` にプレイングマネージャー 3 名を初期登録済み
+  - 武田良平
+  - 望月学
+  - 坂井
+- 3 名とも初期値は以下で登録
+  - `role = プレイングマネージャー`
+  - `playing_manager_fee_type = subordinate_man_days`
+  - `playing_manager_fixed_fee = NULL`
+  - `linked_worker_id = NULL`
+
+### Decision 確定
+
+- [docs/decisions/DECISION_LOG.md](../decisions/DECISION_LOG.md#L797) に DEC-025 を追加済み
+- 方針:
+  - プレイングマネージャー本人が自分の管理案件で稼働した valid actual も、現場管理報酬の人工に含める
+
+### 現時点の未解決事項
+
+- 本番 `projects.vanzai_manager_id` は未設定のため、PM 管理報酬の対象案件はまだ紐付いていない
+- 本番 `vanzai_staff.linked_worker_id` も未設定のため、本人実作業分の明細集約はまだ動かない
+- 個人別の固定額設定は根拠資料未確定のため未投入
+
+### 次の運用作業
+
+- project ごとの担当 PM を確定し、`projects.vanzai_manager_id` を更新する
+- PM 本人の worker 対応表を確定し、`vanzai_staff.linked_worker_id` を更新する
+- 固定額対象者がいる場合のみ、個人別に `playing_manager_fee_type = fixed_amount` と固定額を設定する
 
 ---
 
@@ -12,12 +90,15 @@
   - `index.html`: `Cache-Control: no-cache, no-store, must-revalidate`
   - `sw.js`: `Cache-Control: no-cache, no-store, must-revalidate`
 - フロントの版番号表示を semantic version に統一
-  - 表示: `Ver.0.6.4`
+  - 表示: `Ver.0.7.1`
   - 更新検知: `buildId` ベースで `/version.json` を比較
-- スタッフ画面はヘッダー左上に `STAFF MOBILE Ver.0.6.4` を表示
+- スタッフ画面はヘッダー左上に `STAFF MOBILE Ver.0.7.1` を表示
 - 通知拒否時は個人設定ページにブラウザ別の解除手順を表示
 - プッシュ通知の設定・障害切り分け Runbook を追加
   - [PUSH_NOTIFICATION_RUNBOOK.md](./PUSH_NOTIFICATION_RUNBOOK.md)
+- プッシュ通知は工程ごとの進捗表示とタイムアウトを追加し、固まる箇所を画面上で判別できるようにした
+- 個人設定画面の固定待機文言を撤去し、工程別の進捗表示がそのまま見えるようにした
+- 通知許可ダイアログ待ちと `default` 戻り値も画面に表示し、タップ後に無反応に見えないようにした
 
 **現象：** デプロイ後もユーザーが旧 JS をブラウザキャッシュ（1年 immutable）から実行し、  
 新しい修正が当たらない。nginx が `index.html` に `Cache-Control` を付けていないため  
@@ -370,7 +451,7 @@ ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
 - 事前に `alembic upgrade head` でローカル DB を最新スキーマへ上げる
 - API は `c:/VANZAI_project/.venv/Scripts/python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000` で起動する
 - admin-web は `Set-Location apps/admin-web; npm run dev -- --host 127.0.0.1 --port 3000` で起動する
-- スモークは `Set-Location apps/admin-web; $env:ADMIN_WEB_SMOKE_USERNAME='確認管理者'; $env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'; $env:ADMIN_WEB_SMOKE_MONTH='2026-01'; $env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'; npm run smoke:e2e` で実行する
+- スモークは `Set-Location apps/admin-web; $env:ADMIN_WEB_SMOKE_USERNAME='admin_web_smoke'; $env:ADMIN_WEB_SMOKE_PASSWORD='SmokeTest123!'; $env:ADMIN_WEB_SMOKE_MONTH='2026-01'; $env:ADMIN_WEB_BASE_URL='http://127.0.0.1:3000'; npm run smoke:e2e` で実行する
 - `apps/admin-web/e2e/phase1-smoke.spec.ts` は実行前に `scripts/ensure_local_admin.py` と `scripts/ensure_browser_smoke_data.py` を呼び、最低限のログインユーザーと確認用データをローカル DB に投入する
 - 2026-04-01 時点で、支払送信先未設定サマリーと支払送信監査ログ要約を含むブラウザスモークは成功している
 

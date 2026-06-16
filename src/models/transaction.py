@@ -43,7 +43,7 @@ from src.models.enums import (
 )
 
 if TYPE_CHECKING:
-    from src.models.master import Worker, Client, Site, ProjectType, Role
+    from src.models.master import Worker, Client, Site, ProjectType, Role, VanzaiStaff
 
 
 class Project(Base, TimestampMixin, SoftDeleteMixin):
@@ -76,6 +76,9 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
     )
     secondary_manager_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("workers.id"), nullable=True
+    )
+    vanzai_manager_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("vanzai_staff.id"), nullable=True
     )
     
     # 期間
@@ -112,12 +115,14 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
     client: Mapped["Client"] = relationship(back_populates="projects")
     site: Mapped["Site"] = relationship(back_populates="projects")
     project_type: Mapped["ProjectType"] = relationship(back_populates="projects")
+    vanzai_manager: Mapped["VanzaiStaff"] = relationship(foreign_keys=[vanzai_manager_id])
     shift_slots: Mapped[list["ShiftSlot"]] = relationship(back_populates="project")
     actuals: Mapped[list["Actual"]] = relationship(back_populates="project")
 
     __table_args__ = (
         Index("ix_projects_client_id", "client_id"),
         Index("ix_projects_is_active", "is_active"),
+        Index("ix_projects_vanzai_manager_id", "vanzai_manager_id"),
     )
 
 
@@ -480,6 +485,15 @@ class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     # 期間
     period_key: Mapped[str] = mapped_column(String(6), nullable=False)  # YYYYMM
     billing_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # 帳票スナップショット
+    document_type: Mapped[str] = mapped_column(String(20), default="invoice", nullable=False)
+    invoice_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    addressee_company_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    addressee_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    addressee_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    addressee_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fixed_office_fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
     
     # ステータス
     status: Mapped[str] = mapped_column(
@@ -544,7 +558,7 @@ class InvoiceLine(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     line_type: Mapped[str] = mapped_column(
         String(20), default="actual", nullable=False
-    )  # actual/expense/incentive
+    )  # actual/expense/incentive/office_fee
     
     # 実績参照
     actual_id: Mapped[str | None] = mapped_column(
@@ -606,6 +620,11 @@ class Payout(Base, TimestampMixin, SoftDeleteMixin):
     supplier_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("suppliers.id"), nullable=True
     )
+    recipient_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recipient_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    payee_name_snapshot: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    bank_account_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tax_treatment_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     project_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("projects.id"), nullable=True
     )
@@ -656,6 +675,7 @@ class Payout(Base, TimestampMixin, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_payouts_worker_period", "worker_id", "period_key"),
         Index("ix_payouts_supplier_period", "supplier_id", "period_key"),
+        Index("ix_payouts_recipient_period", "recipient_type", "recipient_id", "period_key"),
         Index("ix_payouts_project_period", "project_id", "period_key"),
         Index("ix_payouts_status", "status"),
     )

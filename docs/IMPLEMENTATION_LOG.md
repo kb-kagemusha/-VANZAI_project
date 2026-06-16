@@ -5,6 +5,194 @@
 
 ## 完了したタスク
 
+### 0.8.0 請求書発行メタデータ対応の本番反映 ✅
+**実施日:** 2026-04-09
+
+#### 変更内容
+1. **請求書発行の invoice metadata 対応を本番反映**
+  - backend に請求書の帳票種別、件名、宛先スナップショット、固定事務局費対応を反映
+  - admin-web の請求生成フォームを Kintone 参照の入力項目へ拡張
+  - staff-mobile も版番号整合のため `0.8.0` build を反映
+
+2. **本番 migration を適用**
+  - `20260409a001_add_invoice_issue_metadata.py` を適用
+  - 本番 DB の revision が `20260409a001 (head)` であることを確認
+
+3. **本番 API を再起動**
+  - 旧 uvicorn を停止し、最新コードで起動し直した
+  - 再起動後の稼働 PID は `189670`
+
+4. **本番検証**
+  - 公開 API health が `healthy` を返すことを確認
+  - admin-web の `version.json` が `0.8.0` を返すことを確認
+  - staff-mobile の `version.json` が `0.8.0` を返すことを確認
+
+### 0.7.8 本番反映と PM 初期マスタ登録 ✅
+**実施日:** 2026-04-08
+
+#### 変更内容
+1. **VPS へ 0.7.8 を反映**
+  - admin-web 0.7.8 build を本番へ反映
+  - backend のプレイングマネージャー支払対応コードを本番へ反映
+
+2. **本番 migration を適用**
+  - `20260408f001_add_vanzai_staff_linked_worker.py` を適用
+  - `20260408g001_add_playing_manager_fee_config.py` を適用
+  - 本番 DB の revision が `20260408g001 (head)` であることを確認
+
+3. **本番 PM マスタを初期登録**
+  - `vanzai_staff` に 武田良平 / 望月学 / 坂井 を追加
+  - 初期値は全員 `subordinate_man_days`、固定額は未設定で統一
+  - 固定額の根拠資料が未確定だったため、誤投入を避けて NULL のままにした
+
+4. **本人稼働の扱いを decision 化**
+  - [docs/decisions/DECISION_LOG.md](./decisions/DECISION_LOG.md#L797) に DEC-025 を追加
+  - プレイングマネージャー本人が管理案件で稼働した valid actual も、管理報酬の人工へ含める方針を確定
+
+5. **本番検証**
+  - 公開 API health が `healthy` を返すことを確認
+  - `vanzai_staff` に PM 3 名が存在することを確認
+  - admin-web の `version.json` が 0.7.8 を返すことを確認
+
+### プレイングマネージャー支払の個別設定対応 ✅
+**実施日:** 2026-04-08
+
+#### 変更内容
+1. **VANZAI担当者マスタにプレイングマネージャー設定を追加**
+  - `playing_manager_fee_type` を追加し、`配下人工×1,000円` と `固定額` を個人別に切り替えられるようにした
+  - `playing_manager_fixed_fee` を追加し、固定額方式の月額を保持できるようにした
+
+2. **プレイングマネージャー支払生成を追加**
+  - `recipient_type=vanzai_staff` で role=`プレイングマネージャー` の支払生成に対応
+  - 人工連動時は valid actual を `(worker_id, work_date, project_id)` のユニーク数で数え、`配下人工×1,000円` を生成
+  - 固定額方式は個人設定額をそのまま明細化
+  - 運営協力費は月次の手入力額を別行で加算
+
+3. **admin-web で設定・生成可能にした**
+  - マスタ一覧の VANZAI担当者編集で計算方式と固定額を設定可能にした
+  - 支払一覧の生成フォームで、プレイングマネージャー選択時のみ運営協力費を入力できるようにした
+
+### VANZAI担当者支払の初回生成と linked worker 紐付け追加 ✅
+**実施日:** 2026-04-08
+
+#### 変更内容
+1. **VANZAI担当者マスタに linked worker を追加**
+  - `vanzai_staff.linked_worker_id` を追加し、本人稼働分を worker 実績へ明示的に紐付けできるようにした
+  - admin-web のマスタ一覧で役職と対応稼働者を設定可能にした
+
+2. **VANZAI担当者支払生成を追加**
+  - `/api/payouts/generate` で `recipient_type=vanzai_staff` を受け付けるようにした
+  - `全体統括責任者` は drv社請求の税抜売上 8% と linked worker の本人稼働分を1件の支払へ集約
+  - `事務` は 固定43,200円 と 月内暦日 × 2,160円 を支払明細へ生成
+
+3. **二重計上ガードを追加**
+  - linked worker が `全体統括責任者` に紐付く場合、通常の worker 支払生成を拒否し、VANZAI担当者支払へ集約するようにした
+
+4. **生成UIを開放**
+  - `PayoutsPage` で VANZAI担当者を選択して支払生成できるようにした
+  - 画面上に role ごとの集計ルールを明示した
+
+### 追加マスタUIの接続拡張と口座編集導線追加 ✅
+**実施日:** 2026-04-08
+
+#### 変更内容
+1. **下請けマスタに振込先口座一覧と登録導線を追加**
+  - `MasterDataPage` の下請け編集カードから `supplier_bank_accounts` を参照・登録できるようにした
+  - 口座履歴モデルを UI から直接確認できるようにした
+
+2. **クライアント担当者の更新導線を追加**
+  - クライアント担当者一覧に編集ボタンを追加
+  - 既存担当者の氏名・メール・電話を更新できるようにした
+
+3. **既存口座の編集導線を追加**
+  - `WorkersPage` で既存 worker 口座を選択して更新できるようにした
+  - `MasterDataPage` の下請け編集カードでも既存 supplier 口座を選択して更新できるようにした
+
+4. **検証**
+  - `apps/admin-web` の production build を通過
+  - 最新 build を本番配備し、公開版の build 反映を確認
+
+### 管理画面ヘッダーに登録画面URL確認モーダルを追加 ✅
+**実施日:** 2026-04-08
+
+#### 変更内容
+1. **AppShell 右上操作に「登録画面のURL確認」ボタンを追加**
+  - admin / ops / accounting ロール向けに表示
+  - クリックで登録画面URL一覧モーダルを開く
+
+2. **登録画面URL一覧モーダルを追加**
+  - 稼働者登録
+  - 個人下請け登録
+  - 法人下請け登録
+  - 紹介者本人確認
+  を絶対URLで表示し、各行にコピーと新規タブオープンを付与
+
+3. **公開リンク発行ページへの導線を追加**
+  - 固定URLは画面確認用であり、実運用は token/PIN 付き公開リンク発行が必要である旨をモーダル内に明記
+  - `/operations/registration-requests` へのショートカットを追加
+
+### 口座マスキング表示と有効終了日編集を追加 ✅
+**実施日:** 2026-04-09
+
+#### 変更内容
+1. **振込先口座の一覧表示をマスキング化**
+  - `WorkersPage` と `MasterDataPage` の口座一覧で口座番号の生値表示を廃止
+  - 下4桁のみ確認できる共通フォーマッタに統一
+
+2. **口座履歴に有効終了日を追加**
+  - worker / supplier 口座の新規登録フォームに `有効終了日` を追加
+  - 既存口座の編集フォームでも `有効終了日` を更新できるようにした
+  - 一覧テーブルに `有効終了` 列を追加し、履歴の終了日を確認可能にした
+
+3. **日付整合性のバリデーションを追加**
+  - `有効終了日 < 有効開始日` の入力を UI 側で拒否するようにした
+
+### 登録リンク発行フォームの見切れを修正 ✅
+**実施日:** 2026-04-09
+
+#### 変更内容
+1. **公開登録リンク発行カードのコンテナを調整**
+  - `RegistrationRequestsPage` の発行フォームを余白付きコンテナへ変更
+  - 左端の文字がカード境界に食われる表示崩れを解消
+
+2. **フォーム要素の縮小対応を追加**
+  - select / input を `width: 100%` + `minWidth: 0` で上書き
+  - 狭い表示幅でもラベルと入力欄が自然に折り返されるようにした
+
+### 支払一覧の recipient_type 移行着手と登録申請ボタン改善 ✅
+**実施日:** 2026-04-09
+
+#### 変更内容
+1. **PayoutsPage を recipient_type ベースへ整理**
+  - 一覧フィルタに `受取人種別` を追加
+  - 一覧表示と送信先ラベル判定を `recipient_type` 優先で表示するように変更
+  - 支払明細生成リクエストは `recipient_type` / `recipient_id` を送る形へ更新
+
+2. **未対応受取人種別の誤操作を防止**
+  - 生成 UI に `取引先` と `VANZAI担当者` の受取人種別を先行表示
+  - 現行 backend が worker 生成のみ対応であることを明示し、ボタンをガード
+
+3. **登録申請ページの主要ボタンをスタイル統一**
+  - `リンク発行`、`承認`、`却下`、`PINロック解除`、`リンク再発行` を共通ボタンスタイルへ変更
+  - 発行カードにも装飾を入れ、操作部が埋もれない見た目へ調整
+
+### supplier支払生成対応と Dashboard ボタン統一 ✅
+**実施日:** 2026-04-09
+
+#### 変更内容
+1. **支払生成 API を supplier recipient まで拡張**
+  - `/api/payouts/generate` で `recipient_type=supplier` を受け付けるように変更
+  - 既存 `generate_supplier_payout` を API から呼び出し、recipient 情報と payee snapshot を保存
+
+2. **PayoutsPage の生成 UI を supplier 対応**
+  - 受取人種別が `supplier` の場合は取引先一覧を選択可能にした
+  - supplier 支払は案件指定不要である旨を画面に明示
+  - `vanzai_staff` は生成ロジック未定義のため、引き続き UI ガードを維持
+
+3. **DashboardPage の素のボタンとリンクをスタイル統一**
+  - 月次一括生成、締め処理、行選択、監査ログ導線、締め状況表の操作ボタンを `btn` 系スタイルへ統一
+  - 特に `未締めを選択`、`仮締め済みを選択`、`本締め済みを選択`、`解除候補を選択`、`承認者未入力の必須行を選択`、`理由未入力の解除候補を選択` をチップ風に調整
+
 ### プッシュ通知運用ログ整備と版番号ポリシー明文化 ✅
 **実施日:** 2026-04-03
 **コミット:** `c448339` / `4a96d9a` / `0.6.3` 更新
@@ -30,6 +218,101 @@
   - `pushManager.permissionState()` を撤去
   - `getSubscription()` / `subscribe()` にタイムアウトを付与
   - 更新ファイル: `apps/staff-mobile/src/lib/hooks/usePushNotification.ts`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+5. **プッシュ登録の工程表示を追加し、版番号を `0.6.5` に更新**
+  - `serviceWorker.register`, `serviceWorker.ready`, `getVapidPublicKey`, `getSubscription`, `subscribe`, `registerPushSubscription` にタイムアウトを付与
+  - 個人設定画面で現在の工程が見えるよう `progressMessage` を表示
+  - 更新ファイル: `apps/staff-mobile/src/lib/hooks/usePushNotification.ts`, `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+6. **進捗表示を隠していた固定文言を撤去し、版番号を `0.6.6` に更新**
+  - 個人設定画面で `プッシュ通知の登録を確認しています...` を先に入れていたため、工程別メッセージが見えない状態だった
+  - 画面側の固定待機文言をやめ、フックの `progressMessage` をそのまま表示するよう修正
+  - 更新ファイル: `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+7. **通知許可ダイアログ待ちと `default` 戻り値を可視化し、版番号を `0.6.7` に更新**
+  - タップ直後に `ブラウザに通知許可を要求しています...` を表示
+  - `Notification.requestPermission()` が `default` / `denied` を返した場合も画面に理由を表示
+  - 表示優先順を `progressMessage > pushMessage > lastMessage` に修正
+  - 更新ファイル: `apps/staff-mobile/src/lib/hooks/usePushNotification.ts`, `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `pyproject.toml`
+
+8. **診断表示を追加し、版番号を `0.6.8` に更新**
+  - 個人設定画面に `[ver.0.6.8 perm=??? reg=???]` の診断行を追加
+  - `isRegistered=true` 状態でも「強制的に再登録する」ボタンを表示
+  - **ユーザー報告: `perm=granted reg=undefined`**
+    → これにより根本原因が判明: `usePushNotification.ts` のディスク上の実体が旧版（2227バイト）のままだった
+    → `apply_patch` / VS Code ファイルツールが VS Code キャッシュを返しており、実際のディスクファイルは更新されていなかった
+    → 旧版フックは `requestPermission()` が `Promise<NotificationPermission>` (文字列) を返し、画面側では `result.registered` を参照するため `TypeError` → サイレントクラッシュ
+  - 更新ファイル: `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`
+
+9. **フック完全再実装・型キャスト除去・VAPID 鍵設定、版番号を `0.6.9` に更新**（2026-04-04）
+  - **失敗の本質**: フックファイルがずっと旧版（2227バイト）だった
+    - `apply_patch` と VS Code の `replace_string_in_file` ツールは成功を返したが、実際のディスクファイルは更新されなかった
+    - VPS と ローカル両方で `wc -c` / `grep -c isRegistered` で確認してはじめて判明
+    - 解決策: PowerShell `[System.IO.File]::WriteAllText()` でヒアストリングごと書き込む
+  - **フック再実装の内容**:
+    - `PushRegistrationResult { permission, registered, message? }` インターフェースを export
+    - `requestPermission()` が `Promise<PushRegistrationResult>` を返すよう変更（旧版は `Promise<NotificationPermission>` を返していた）
+    - `isRegistered`, `lastMessage`, `progressMessage` を `useState` で管理し return に含める
+    - `doRegister(force = false)` を内部関数化し、`force=true` 時は既存購読を `unsubscribe()` してから再購読
+    - 全非同期操作に `timeoutAfter()` ラッパーを適用（Service Worker 登録: 5秒、subscribe: 6秒、サーバー登録: 5秒 等）
+    - iOS 非スタンドアロン検出（`getPlatformHint()`）: Safari から直接開いた場合にホーム画面追加を促すメッセージを返す
+    - `arrayBufferToBase64Url()` を追加: `getKey("p256dh")` / `getKey("auth")` の `ArrayBuffer` を直接変換し、`toJSON().keys` のフォールバックも保持
+  - **画面側の型キャスト除去**:
+    - `as unknown as { isRegistered: boolean; ... }` キャストを削除
+    - ローカル `PushRegistrationResultView` インターフェースも削除（フックの export 型を使う）
+  - **VAPID 鍵未設定の発覚と対処**:
+    - ユーザーが「VAPID 公開鍵を取得できませんでした。」と報告
+    - 調査: ローカル `.env`、VPS `.env` いずれにも `VAPID_PUBLIC_KEY` が存在しなかった
+    - 原因: `.env.example` に VAPID 項目が定義されていたが、実際の `.env` に転記されていなかった
+    - 対処: VPS 上で `py_vapid` + `cryptography` を使って鍵ペアを生成し `.env` に追記
+      - `VAPID_PUBLIC_KEY=BMkz_vX...（87文字）`
+      - `VAPID_PRIVATE_KEY=MIGHAgE...（PKCS8 DER を base64url）`
+      - `VAPID_SUBJECT=mailto:admin@vanzai-portal.com`
+    - systemd サービスが `EnvironmentFile=/var/www/vanzai/.env` を参照しているが `sudo` 不可のため、`.env` を `source` してから `nohup uvicorn` で再起動（回避策）
+    - 実行中の uvicorn プロセスの `/proc/$PID/environ` で 3 変数すべて確認済み
+  - **DBマイグレーション未適用の発覚と対処**:
+    - `check_db.py` の出力に `push_subscriptions` テーブルが存在しなかった
+    - `alembic heads` → `e5f6a7b8c9d0 (head)`、`alembic current` → `d4e5f6a7b8c9` → 1リビジョン遅れていた
+    - `alembic upgrade head` で `push_subscriptions` テーブルを作成
+  - 更新ファイル: `apps/staff-mobile/src/lib/hooks/usePushNotification.ts`, `apps/staff-mobile/src/pages/PersonalSettingsPage.tsx`, `apps/staff-mobile/package.json`, `apps/admin-web/package.json`, `.env`
+
+10. **プッシュ通知アクションボタン機能追加（v0.6.10）**（2026-04-04）
+  - **背景**: `perm=granted reg=OK` が確認できた（v0.6.9 の全修正が効き、登録・受信に成功）
+  - **要件**: 管理側が通知送信時にアクションボタン種別を選択し、スタッフはプッシュ通知を受け取った際にボタンをタップして即座に返答できる
+  - **設計**:
+    - `push_action_type = "ok_ng"` → 通知に「✓ OKです、了承します」「✗ NGです」ボタンを表示
+    - `push_action_type = "confirm"` → 通知に「✓ 確認しました」ボタンを表示（ok として記録）
+    - `push_action_type = null / "none"` → ボタンなし（タップで画面遷移のみ）
+  - **実装の流れ**（タップ → 返答まで）:
+    1. 管理画面で通知作成時に `push_action_type` を選択
+    2. API が `StaffNotice.push_action_type` に保存（DBマイグレ: `f1a2b3c4d5e6`）
+    3. `push_sender.py` がプッシュペイロードに `push_action_type` + `notice_id` を同梱
+    4. SW (`sw.js`) がペイロードを受け取り `buildActions()` でボタン配列を生成、`showNotification()` に渡す
+    5. スタッフがボタンをタップ → SW の `notificationclick` ハンドラが `action` (ok/ng) と `notice_id` をURLパラメータに乗せて `/notices?action=ok&nid=xxx` へ遷移
+    6. `staff-mobile/NoticesPage.tsx` が `useEffect` でURL paramを読み、`respondToNotice(nid, action)` を呼ぶ → `StaffNoticeRead.response` に保存
+  - **変更ファイル一覧**:
+    - `alembic/versions/f1a2b3c4d5e6_add_push_action_type.py`（新規）
+    - `src/models/master.py` — `StaffNotice.push_action_type` 列追加
+    - `src/api/schemas.py` — `NoticeCreateRequest` / `NoticeListItem` / `WorkerNoticeItem` に `push_action_type` 追加
+    - `src/api/main.py` — 通知作成・取得で `push_action_type` を扱う
+    - `src/services/push_sender.py` — `notice_id` + `push_action_type` をペイロードに追加
+    - `apps/staff-mobile/public/sw.js` — `buildActions()` 関数追加、`notificationclick` をURL param対応に改修
+    - `apps/admin-web/src/types/api.ts` — `NoticeCreateRequest` / `NoticeListItem` に `push_action_type` 追加
+    - `apps/admin-web/src/pages/NoticesPage.tsx` — フォームにアクションボタン種別セレクター追加
+    - `apps/staff-mobile/src/types/api.ts` — `WorkerNoticeItem` に `push_action_type` 追加
+    - `apps/staff-mobile/src/pages/NoticesPage.tsx` — `isRespondableNotice()` / `okLabel()` 追加、`useEffect` でURL param自動返答
+  - **注意点**:
+    - SW のアクションボタン表示はブラウザ依存（Chrome/Edge Desktop では表示される、iOS Safari では通知アクションは非対応 = 通知タップで画面遷移のみ）
+    - `requireInteraction: true` をアクションあり通知に設定（ユーザーが操作するまで消えない）
+
+### プッシュ通知デバッグのまとめ（教訓）
+| # | 失敗 | 根本原因 | 対処 |
+|---|------|----------|------|
+| 1 | ボタンを押しても何も起きない | `requestPermission()` が文字列を返し `result.registered` で `TypeError` → サイレントクラッシュ | フックの戻り型を `PushRegistrationResult` オブジェクトに変更 |
+| 2 | `apply_patch` / VS Code ファイルツールが成功を返すのにディスクが更新されない | VS Code 言語サーバーキャッシュとディスクの乖離 | PowerShell `[System.IO.File]::WriteAllText()` で強制上書き |
+| 3 | 「VAPID 公開鍵を取得できませんでした。」 | `.env` に `VAPID_PUBLIC_KEY` が未設定、API が空文字を返していた | VPS の `.env` に鍵ペアを追記し uvicorn を再起動 |
+| 4 | `push_subscriptions` テーブルなし | `alembic upgrade head` が未実行だった | `alembic upgrade head` で CREATE TABLE |
+| 5 | VPS 再起動後に API が停止するリスク | uvicorn を `nohup` で起動したため systemd 管理外 | `sudo systemctl restart vanzai` 権限の取得が恒久解 |
 
 ---
 

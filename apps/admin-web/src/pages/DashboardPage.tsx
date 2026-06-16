@@ -410,7 +410,7 @@ export function DashboardPage() {
             <h3 className="section-title">月次一括生成</h3>
             <p style={{ margin: 0, color: "var(--color-muted)" }}>対象月の請求書と支払明細をまとめて生成します。</p>
           </div>
-          <button onClick={() => monthlyBillingMutation.mutate()} disabled={monthlyBillingMutation.isPending}>
+          <button className="btn btn-primary dashboard-action-button" onClick={() => monthlyBillingMutation.mutate()} disabled={monthlyBillingMutation.isPending}>
             {monthlyBillingMutation.isPending ? "実行中..." : "月次一括生成"}
           </button>
         </div>
@@ -424,10 +424,10 @@ export function DashboardPage() {
           <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{monthlyBillingMutation.error.message}</p>
         ) : null}
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
             請求ログを見る
           </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
             支払ログを見る
           </Link>
         </div>
@@ -458,50 +458,50 @@ export function DashboardPage() {
           </label>
         </div>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_all" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_all" })}` }}>
             締め関連ログ
           </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_execute" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_execute" })}` }}>
             締め実行ログ
           </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_release" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_release" })}` }}>
             締め解除ログ
           </Link>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button onClick={() => softCloseMutation.mutate({ projectId, reason: selectedReason })} disabled={!projectId || softCloseMutation.isPending}>
+        <div className="dashboard-action-row">
+          <button className="btn btn-primary dashboard-action-button" onClick={() => softCloseMutation.mutate({ projectId, reason: selectedReason })} disabled={!projectId || softCloseMutation.isPending}>
             {softCloseMutation.isPending ? "仮締め中..." : "仮締め"}
           </button>
-          <button onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedApprover || hardCloseMutation.isPending}>
+          <button className="btn btn-primary dashboard-action-button" onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedApprover || hardCloseMutation.isPending}>
             {hardCloseMutation.isPending ? "本締め中..." : "本締め"}
           </button>
-          <button onClick={copySelectedInputsToRows} disabled={allCopyAffectedRows.length === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={copySelectedInputsToRows} disabled={allCopyAffectedRows.length === 0}>
             一覧へ入力コピー
           </button>
-          <button onClick={copySelectedInputsToCheckedRows} disabled={selectedClosingRowCount === 0 || selectedCopyAffectedRows.length === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={copySelectedInputsToCheckedRows} disabled={selectedClosingRowCount === 0 || selectedCopyAffectedRows.length === 0}>
             選択行へ入力コピー
           </button>
-          <button onClick={clearClosingRowSelection} disabled={selectedClosingRowCount === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={clearClosingRowSelection} disabled={selectedClosingRowCount === 0}>
             選択解除
           </button>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button onClick={() => selectClosingRowsByStatus("open")} disabled={closingRows.length === 0}>
+        <div className="dashboard-action-row">
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("open")} disabled={closingRows.length === 0}>
             未締めを選択
           </button>
-          <button onClick={() => selectClosingRowsByStatus("soft_closed")} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("soft_closed")} disabled={closingRows.length === 0}>
             仮締め済みを選択
           </button>
-          <button onClick={() => selectClosingRowsByStatus("hard_closed")} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("hard_closed")} disabled={closingRows.length === 0}>
             本締め済みを選択
           </button>
-          <button onClick={selectReleaseTargetRows} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={selectReleaseTargetRows} disabled={closingRows.length === 0}>
             解除候補を選択
           </button>
-          <button onClick={selectApproverRequiredRowsWithoutApprover} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={selectApproverRequiredRowsWithoutApprover} disabled={closingRows.length === 0}>
             承認者未入力の必須行を選択
           </button>
-          <button onClick={selectReasonRequiredRowsWithoutReason} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={selectReasonRequiredRowsWithoutReason} disabled={closingRows.length === 0}>
             理由未入力の解除候補を選択
           </button>
         </div>
@@ -548,10 +548,11 @@ export function DashboardPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Link to={`/operations/assignment-responses?month=${monthValue}`}>
+            <Link className="btn btn-ghost dashboard-chip-link" to={`/operations/assignment-responses?month=${monthValue}`}>
               監視一覧を開く
             </Link>
             <Link
+              className="btn btn-ghost dashboard-chip-link"
               to={{
                 pathname: "/audit-logs",
                 search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_sent" })}`,
@@ -560,6 +561,7 @@ export function DashboardPage() {
               催促送信ログ
             </Link>
             <Link
+              className="btn btn-ghost dashboard-chip-link"
               to={{
                 pathname: "/audit-logs",
                 search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_failed" })}`,
@@ -682,19 +684,20 @@ export function DashboardPage() {
                 header: "操作",
                 render: (row) => (
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_all" })}` }}>
+                    <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_all" })}` }}>
                       監査ログ
                     </Link>
-                    <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_execute" })}` }}>
+                    <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_execute" })}` }}>
                       実行ログ
                     </Link>
                     {(row.status === "soft_closed" || row.status === "hard_closed") ? (
-                      <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_release" })}` }}>
+                      <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_release" })}` }}>
                         解除ログ
                       </Link>
                     ) : null}
                     {row.status === "open" ? (
                       <button
+                        className="btn btn-primary btn-sm"
                         onClick={() => {
                           setProjectId(row.project_id);
                           softCloseMutation.mutate({ projectId: row.project_id, reason: getRowDraft(row.project_id).reason });
@@ -707,6 +710,7 @@ export function DashboardPage() {
                     {row.status === "soft_closed" ? (
                       <>
                         <button
+                          className="btn btn-primary btn-sm"
                           onClick={() => {
                             setProjectId(row.project_id);
                             hardCloseMutation.mutate({
@@ -720,6 +724,7 @@ export function DashboardPage() {
                           本締め
                         </button>
                         <button
+                          className="btn btn-danger btn-sm"
                           onClick={() => releaseSoftCloseMutation.mutate({
                             projectId: row.project_id,
                             approver: getRowDraft(row.project_id).approver,
@@ -733,6 +738,7 @@ export function DashboardPage() {
                     ) : null}
                     {row.status === "hard_closed" ? (
                       <button
+                        className="btn btn-danger btn-sm"
                         onClick={() => releaseHardCloseMutation.mutate({
                           projectId: row.project_id,
                           approver: getRowDraft(row.project_id).approver,

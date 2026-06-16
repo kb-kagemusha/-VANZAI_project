@@ -13,7 +13,20 @@ import type {
   WorkerNoticeListResponse,
 } from "../../types/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+function resolveApiBaseUrl(): string {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+
+  const { protocol, hostname } = window.location;
+  if (hostname === "vanzai-portal.com" || hostname === "www.vanzai-portal.com" || hostname === "staff.vanzai-portal.com") {
+    return `${protocol}//api.vanzai-portal.com`;
+  }
+
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "vanzai.staff.access_token";
 
 export class ApiError extends Error {
@@ -42,9 +55,14 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 }
 
 async function readResponse(response: Response): Promise<unknown> {
+  // 204/205 はボディなし
+  if (response.status === 204 || response.status === 205) {
+    return null;
+  }
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    return response.json();
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
   }
 
   const text = await response.text();

@@ -9,11 +9,22 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { StatusBadge } from "../components/StatusBadge";
-import { ApiError, createProject, getClients, getProjectTypes, getProjects, getSites, getWorkers, updateProject } from "../lib/api/client";
+import { ApiError, createProject, getClients, getProjectTypeTree, getProjects, getSites, getWorkers, updateProject } from "../lib/api/client";
 import { formatDate } from "../lib/formatters";
-import type { ProjectListItem } from "../types/api";
+import type { ProjectListItem, ProjectTypeTreeItem } from "../types/api";
 
 const PAGE_SIZE = 20;
+
+function flattenSelectableProjectTypes(nodes: ProjectTypeTreeItem[], depth = 0): Array<{ id: string; label: string }> {
+  const rows: Array<{ id: string; label: string }> = [];
+  for (const node of nodes) {
+    if (node.selectable) {
+      rows.push({ id: node.id, label: `${"  ".repeat(depth)}${node.name}` });
+    }
+    rows.push(...flattenSelectableProjectTypes(node.children, depth + 1));
+  }
+  return rows;
+}
 
 export function ProjectsPage() {
   const [search, setSearch] = useState("");
@@ -74,8 +85,10 @@ export function ProjectsPage() {
 
   const projectTypesQuery = useQuery({
     queryKey: ["project-types-project-form"],
-    queryFn: () => getProjectTypes({ limit: 200, sort_by: "name", sort_order: "asc" }),
+    queryFn: () => getProjectTypeTree({ selectable_only: true }),
   });
+
+  const projectTypeOptions = flattenSelectableProjectTypes(projectTypesQuery.data?.items ?? []);
 
   const workersQuery = useQuery({
     queryKey: ["workers-project-form"],
@@ -92,6 +105,7 @@ export function ProjectsPage() {
         project_type_id: createProjectTypeId || null,
         primary_manager_id: createPrimaryManagerId || null,
         secondary_manager_id: createSecondaryManagerId || null,
+        vanzai_manager_id: null,
         start_date: createStartDate || null,
         end_date: createEndDate || null,
         notes: createNotes || null,
@@ -125,6 +139,7 @@ export function ProjectsPage() {
         project_type_id: editProjectTypeId || null,
         primary_manager_id: editPrimaryManagerId || null,
         secondary_manager_id: editSecondaryManagerId || null,
+        vanzai_manager_id: editingProject.vanzai_manager_id ?? null,
         start_date: editStartDate || null,
         end_date: editEndDate || null,
         notes: editNotes || null,
@@ -226,8 +241,8 @@ export function ProjectsPage() {
             案件種別
             <select value={createProjectTypeId} onChange={(event) => setCreateProjectTypeId(event.target.value)}>
               <option value="">未設定</option>
-              {(projectTypesQuery.data?.items ?? []).map((row) => (
-                <option key={row.id} value={row.id}>{row.name}</option>
+              {projectTypeOptions.map((row) => (
+                <option key={row.id} value={row.id}>{row.label}</option>
               ))}
             </select>
           </label>
@@ -323,8 +338,8 @@ export function ProjectsPage() {
               案件種別
               <select value={editProjectTypeId} onChange={(event) => setEditProjectTypeId(event.target.value)}>
                 <option value="">未設定</option>
-                {(projectTypesQuery.data?.items ?? []).map((row) => (
-                  <option key={row.id} value={row.id}>{row.name}</option>
+                {projectTypeOptions.map((row) => (
+                  <option key={row.id} value={row.id}>{row.label}</option>
                 ))}
               </select>
             </label>

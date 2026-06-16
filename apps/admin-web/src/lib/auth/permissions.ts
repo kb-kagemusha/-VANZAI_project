@@ -29,10 +29,22 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops"],
   },
   {
+    to: "/operations/registration-requests",
+    label: "登録申請",
+    description: "公開リンク発行と申請承認を管理",
+    allowedRoles: ["admin", "ops", "accounting"],
+  },
+  {
     to: "/operations/csv-import",
     label: "CSV取込",
     description: "実績CSVの提出と洗い替え",
     allowedRoles: ["admin", "ops", "site_manager"],
+  },
+  {
+    to: "/operations/ocr-receipt",
+    label: "OCR・レシート解析",
+    description: "Paygateスクショと精算レシートのOCR解析",
+    allowedRoles: ["admin", "ops", "accounting"],
   },
   {
     to: "/operations/actuals",

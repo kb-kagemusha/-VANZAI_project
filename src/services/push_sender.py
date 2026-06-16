@@ -57,10 +57,16 @@ def send_push_to_workers(
     title: str,
     body: str,
     url: str = "/notices",
+    notice_id: str | None = None,
+    push_action_type: str | None = None,
 ) -> None:
     """
     指定 worker_id 一覧に push 通知を送る。
     worker_ids が空の場合は全サブスクリプションに送る（target_type=all）。
+    push_action_type:
+      - None / "none": アクションボタンなし
+      - "ok_ng": 「OKです、了承します」「NGです」ボタン
+      - "confirm": 「確認しました」ボタン
     """
     if not VAPID_PRIVATE_KEY:
         logger.debug("VAPID_PRIVATE_KEY not set, skip push")
@@ -76,7 +82,11 @@ def send_push_to_workers(
     if not subs:
         return
 
-    payload = {"title": title, "body": body, "url": url}
+    payload: dict = {"title": title, "body": body, "url": url}
+    if notice_id:
+        payload["notice_id"] = notice_id
+    if push_action_type and push_action_type != "none":
+        payload["push_action_type"] = push_action_type
     to_delete = []
 
     for sub in subs:

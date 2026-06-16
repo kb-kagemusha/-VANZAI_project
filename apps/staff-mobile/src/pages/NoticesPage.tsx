@@ -4,9 +4,11 @@
  * 管理者から送られたシフト確定・案件変更・一般お知らせを閲覧する。
  * - タップで詳細ドロワーを開く（自動既読はしない）
  * - 「読みました」ボタンで既読 + unread_count 減少
- * - shift_confirm / project_change では「OK、わかりました」「NGです」で返答可能
+ * - push_action_type が ok_ng / confirm の通知では OK/NG などで返答可能
+ * - プッシュ通知のアクションボタンをタップすると
+ *   /notices?action=ok&nid=<notice_id> で起動 → 自動返答
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getWorkerNotices, markNoticeRead, respondToNotice } from "../lib/api/client";
@@ -26,8 +28,20 @@ const NOTICE_TYPE_COLORS: Record<NoticeType, string> = {
   general: "#2e7d32",
 };
 
-/** 返答ボタンを表示する通知タイプ */
+/** 返答ボタンを表示する通知タイプ（後方互換：notice_type ベース） */
 const RESPONDABLE_TYPES: NoticeType[] = ["shift_confirm", "project_change"];
+
+/** 通知が返答可能か（push_action_type OR 従来の notice_type ベース） */
+function isRespondableNotice(item: WorkerNoticeItem): boolean {
+  if (item.push_action_type === "ok_ng" || item.push_action_type === "confirm") return true;
+  return RESPONDABLE_TYPES.includes(item.notice_type as NoticeType);
+}
+
+/** push_action_type に応じた OK ボタンラベル */
+function okLabel(item: WorkerNoticeItem): string {
+  if (item.push_action_type === "confirm") return "✓ 確認しました";
+  return "✓ OK、わかりました";
+}
 
 function ResponseBadge({ response }: { response: "ok" | "ng" | null }) {
   if (!response) return null;
@@ -83,6 +97,30 @@ export function NoticesPage() {
     },
   });
 
+  /**
+   * プッシュ通知アクションボタンからの遷移を処理する。
+   * Service Worker が /notices?action=ok&nid=<id> に遷移させた後、
+   * このページがマウントされたときに URL params を読んで自動返答する。
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const nid = params.get("nid");
+    if (action && nid && (action === "ok" || action === "ng")) {
+      // URL params を消してから API 呼び出し（二重実行防止）
+      const url = new URL(window.location.href);
+      url.searchParams.delete("action");
+      url.searchParams.delete("nid");
+      window.history.replaceState({}, "", url.toString());
+      respondToNotice(nid, action).then(() => {
+        invalidate();
+      }).catch(() => {
+        // エラーは無視（ユーザーは通常どおりページを使える）
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isBusy = readMutation.isPending || respondMutation.isPending;
 
   function handleOpen(item: WorkerNoticeItem) {
@@ -106,8 +144,7 @@ export function NoticesPage() {
     respondMutation.mutate({ noticeId: selected.id, response });
   }
 
-  const isRespondable =
-    selected !== null && RESPONDABLE_TYPES.includes(selected.notice_type as NoticeType);
+  const isRespondable = selected !== null && isRespondableNotice(selected);
 
   return (
     <div className="page-container">
@@ -294,7 +331,7 @@ export function NoticesPage() {
             {/* アクションボタン群 */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
               {isRespondable && !selected.response ? (
-                // 返答型通知: OK / NG 両ボタン
+                // 返答型通知: OK / NG 両ボタン（または確認ボタン）
                 <>
                   <button
                     disabled={isBusy}
@@ -310,24 +347,26 @@ export function NoticesPage() {
                       cursor: isBusy ? "not-allowed" : "pointer",
                     }}
                   >
-                    {isBusy ? "送信中..." : "✓ OK、わかりました"}
+                    {isBusy ? "送信中..." : okLabel(selected)}
                   </button>
-                  <button
-                    disabled={isBusy}
-                    onClick={() => handleRespond("ng")}
-                    style={{
-                      padding: "0.85rem",
-                      borderRadius: "10px",
-                      border: "2px solid #c62828",
-                      background: "#fff",
-                      color: "#c62828",
-                      fontSize: "1rem",
-                      fontWeight: 700,
-                      cursor: isBusy ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isBusy ? "送信中..." : "✗ NGです"}
-                  </button>
+                  {selected.push_action_type !== "confirm" && (
+                    <button
+                      disabled={isBusy}
+                      onClick={() => handleRespond("ng")}
+                      style={{
+                        padding: "0.85rem",
+                        borderRadius: "10px",
+                        border: "2px solid #c62828",
+                        background: "#fff",
+                        color: "#c62828",
+                        fontSize: "1rem",
+                        fontWeight: 700,
+                        cursor: isBusy ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {isBusy ? "送信中..." : "✗ NGです"}
+                    </button>
+                  )}
                 </>
               ) : (
                 // 一般通知 / 返答済み: 読みましたボタン（未読なら既読にする）

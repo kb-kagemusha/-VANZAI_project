@@ -9,15 +9,17 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, func
 from sqlalchemy.orm import Session
 
 from src.models.enums import ActualStatus, PayoutStatus, AuditAction, ExpenseStatus, IncentiveStatus
 from src.models.transaction import (
     Actual,
     Assignment,
+    Invoice,
     Payout,
     PayoutLine,
+    Project,
     ShiftSlot,
 )
 from src.services.audit import log
@@ -428,6 +430,44 @@ def _delete_preparing_payouts(
         session.delete(pyt)
 
 
+def _delete_preparing_payouts_by_recipient(
+    session: Session,
+    recipient_type: str,
+    recipient_id: str,
+    period_key: str,
+) -> None:
+    payouts = session.execute(
+        select(Payout).where(
+            Payout.recipient_type == recipient_type,
+            Payout.recipient_id == recipient_id,
+            Payout.period_key == period_key,
+            Payout.status == PayoutStatus.PREPARING,
+        )
+    ).scalars().all()
+    for payout in payouts:
+        session.delete(payout)
+
+
+def _count_vanzai_manager_man_days(
+    session: Session,
+    vanzai_staff_id: str,
+    period_key: str,
+) -> int:
+    man_day_rows = (
+        session.query(Actual.worker_id, Actual.work_date, Actual.project_id)
+        .join(Project, Actual.project_id == Project.id)
+        .filter(
+            Actual.status == ActualStatus.ACTIVE,
+            Actual.period_key == period_key,
+            Project.vanzai_manager_id == vanzai_staff_id,
+            Project.deleted_at == None,
+        )
+        .distinct()
+        .all()
+    )
+    return len(man_day_rows)
+
+
 def _fetch_actuals_for_payout(
     session: Session,
     worker_id: str,
@@ -619,4 +659,239 @@ def generate_supplier_payout(
         },
     )
     
+    return payout
+
+
+def generate_vanzai_staff_payout(
+    session: Session,
+    vanzai_staff_id: str,
+    period_key: str,
+    payment_date: date,
+    user_id: str,
+    support_fee_amount: Decimal | None = None,
+) -> Payout:
+    from src.models.master import Client, VanzaiStaff
+    from src.models.enums import InvoiceStatus
+
+    staff = session.query(VanzaiStaff).filter(
+        VanzaiStaff.id == vanzai_staff_id,
+        VanzaiStaff.deleted_at == None,
+    ).first()
+
+    if not staff:
+        raise RecordNotFoundException(f"VANZAI staff not found: {vanzai_staff_id}")
+
+    _delete_preparing_payouts_by_recipient(
+        session=session,
+        recipient_type="vanzai_staff",
+        recipient_id=vanzai_staff_id,
+        period_key=period_key,
+    )
+
+    payout = Payout(
+        worker_id=None,
+        supplier_id=None,
+        recipient_type="vanzai_staff",
+        recipient_id=vanzai_staff_id,
+        payee_name_snapshot=staff.name,
+        project_id=None,
+        period_key=period_key,
+        payment_date=payment_date,
+        status=PayoutStatus.PREPARING,
+        version=1,
+        total_amount=Decimal("0"),
+    )
+    session.add(payout)
+    session.flush()
+
+    line_number = 1
+    total_amount = Decimal("0")
+    support_fee = Decimal(str(support_fee_amount or 0))
+    playing_manager_man_days = 0
+
+    if staff.role == "全体統括責任者":
+        drv_sales = (
+            session.query(func.coalesce(func.sum(Invoice.subtotal), 0))
+            .join(Project, Invoice.project_id == Project.id)
+            .join(Client, Project.client_id == Client.id)
+            .filter(
+                Invoice.deleted_at == None,
+                Invoice.period_key == period_key,
+                Invoice.status == InvoiceStatus.ISSUED,
+                Client.name == "drv社",
+            )
+            .scalar()
+        ) or Decimal("0")
+        drv_sales = Decimal(str(drv_sales))
+        admin_fee = (drv_sales * Decimal("0.08")).quantize(Decimal("0.01"))
+
+        if admin_fee > 0:
+            session.add(PayoutLine(
+                payout_id=payout.id,
+                line_number=line_number,
+                description="全体統括責任者報酬（drv社売上8%）",
+                unit_price_snapshot=admin_fee,
+                quantity_snapshot=Decimal("1"),
+                unit_type="lumpsum",
+                line_amount=admin_fee,
+                is_correction=False,
+                line_type="incentive",
+            ))
+            total_amount += admin_fee
+            line_number += 1
+
+        if staff.linked_worker_id:
+            actuals = _fetch_actuals_for_payout(
+                session=session,
+                worker_id=staff.linked_worker_id,
+                project_id=None,
+                period_key=period_key,
+            )
+            for actual in actuals:
+                if actual.applied_price_outsource is not None:
+                    price = actual.applied_price_outsource
+                else:
+                    price = resolve_outsource_price(session, actual.assignment, actual.work_date)
+
+                if price is None:
+                    continue
+
+                quantity = Decimal(actual.calc_minutes_total) / Decimal("60")
+                line_amount = price * quantity
+                session.add(PayoutLine(
+                    payout_id=payout.id,
+                    line_number=line_number,
+                    description=f"本人稼働: {actual.work_date} {actual.assignment.shift_slot.project.name}",
+                    actual_id=actual.id,
+                    unit_price_snapshot=price,
+                    quantity_snapshot=quantity,
+                    unit_type="hourly",
+                    line_amount=line_amount,
+                    is_correction=False,
+                ))
+                total_amount += line_amount
+                line_number += 1
+
+    elif staff.role == "事務":
+        fixed_fee = Decimal("43200")
+        session.add(PayoutLine(
+            payout_id=payout.id,
+            line_number=line_number,
+            description="経理業務委託費（固定）",
+            unit_price_snapshot=fixed_fee,
+            quantity_snapshot=Decimal("1"),
+            unit_type="lumpsum",
+            line_amount=fixed_fee,
+            is_correction=False,
+            line_type="incentive",
+        ))
+        total_amount += fixed_fee
+        line_number += 1
+
+        year = int(period_key[:4])
+        month = int(period_key[4:6])
+        from calendar import monthrange
+
+        days_in_month = monthrange(year, month)[1]
+        daily_fee = Decimal("2160")
+        variable_amount = daily_fee * Decimal(days_in_month)
+        session.add(PayoutLine(
+            payout_id=payout.id,
+            line_number=line_number,
+            description="決済業務委託費（日次）",
+            unit_price_snapshot=daily_fee,
+            quantity_snapshot=Decimal(days_in_month),
+            unit_type="days",
+            line_amount=variable_amount,
+            is_correction=False,
+            line_type="incentive",
+        ))
+        total_amount += variable_amount
+        line_number += 1
+    elif staff.role == "プレイングマネージャー":
+        fee_type = staff.playing_manager_fee_type or "subordinate_man_days"
+        if fee_type == "fixed_amount":
+            fixed_fee = Decimal(str(staff.playing_manager_fixed_fee or 0))
+            if fixed_fee <= 0:
+                raise ValidationException(
+                    f"固定額方式のプレイングマネージャーに固定額が設定されていません: {staff.name}"
+                )
+            session.add(PayoutLine(
+                payout_id=payout.id,
+                line_number=line_number,
+                description="現場管理報酬（固定）",
+                unit_price_snapshot=fixed_fee,
+                quantity_snapshot=Decimal("1"),
+                unit_type="lumpsum",
+                line_amount=fixed_fee,
+                is_correction=False,
+                line_type="incentive",
+            ))
+            total_amount += fixed_fee
+            line_number += 1
+        else:
+            playing_manager_man_days = _count_vanzai_manager_man_days(
+                session=session,
+                vanzai_staff_id=vanzai_staff_id,
+                period_key=period_key,
+            )
+            if playing_manager_man_days > 0:
+                management_fee = Decimal(playing_manager_man_days) * Decimal("1000")
+                session.add(PayoutLine(
+                    payout_id=payout.id,
+                    line_number=line_number,
+                    description="現場管理報酬（配下人工×1,000円）",
+                    unit_price_snapshot=Decimal("1000"),
+                    quantity_snapshot=Decimal(playing_manager_man_days),
+                    unit_type="days",
+                    line_amount=management_fee,
+                    is_correction=False,
+                    line_type="incentive",
+                ))
+                total_amount += management_fee
+                line_number += 1
+
+        if support_fee > 0:
+            session.add(PayoutLine(
+                payout_id=payout.id,
+                line_number=line_number,
+                description="運営協力費",
+                unit_price_snapshot=support_fee,
+                quantity_snapshot=Decimal("1"),
+                unit_type="lumpsum",
+                line_amount=support_fee,
+                is_correction=False,
+                line_type="incentive",
+            ))
+            total_amount += support_fee
+            line_number += 1
+    else:
+        raise ValidationException(
+            f"Unsupported VANZAI staff role for payout generation: {staff.role or '未設定'}"
+        )
+
+    if total_amount <= 0:
+        raise ValidationException(f"No payout lines found for VANZAI staff {staff.name} in period {period_key}")
+
+    payout.total_amount = total_amount
+    session.flush()
+
+    log(
+        session,
+        action=AuditAction.PAYOUT_CREATED,
+        table_name="payouts",
+        record_id=payout.id,
+        user_id=user_id,
+        extra_metadata={
+            "recipient_type": "vanzai_staff",
+            "recipient_id": vanzai_staff_id,
+            "role": staff.role,
+            "playing_manager_fee_type": staff.playing_manager_fee_type,
+            "playing_manager_man_days": playing_manager_man_days,
+            "support_fee_amount": float(support_fee),
+            "period_key": period_key,
+            "total_amount": float(total_amount),
+        },
+    )
+
     return payout

@@ -16,6 +16,7 @@ import {
   Database,
   ShieldCheck,
   MessageSquare,
+  ScanLine,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/operations/availability-calendar": CalendarDays,
   "/operations/csv-import": Upload,
+  "/operations/ocr-receipt": ScanLine,
   "/operations/actuals": ClipboardList,
   "/operations/assignments": Users,
   "/operations/assignment-responses": Bell,
@@ -39,6 +41,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
   "/operations/notices": MessageSquare,
+  "/operations/registration-requests": ClipboardList,
 };
 
 export function SideNav() {

@@ -21,6 +21,9 @@ import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
+import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
+import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
+import { ReceiptOcrPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -28,6 +31,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/403" element={<ForbiddenPage />} />
@@ -46,6 +50,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "site_manager"]}>
                 <CsvImportPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/ocr-receipt"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <ReceiptOcrPage />
               </PermissionRoute>
             }
           />
@@ -159,6 +171,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops"]}>
                 <NoticesPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/registration-requests"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <RegistrationRequestsPage />
               </PermissionRoute>
             }
           />

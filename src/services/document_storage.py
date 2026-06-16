@@ -68,3 +68,26 @@ def build_receipt_object_key(expense_id: str, expense_date: date, original_name:
     raw_suffix = Path(original_name or "").suffix.lower()
     suffix = raw_suffix if raw_suffix in _ALLOWED_RECEIPT_SUFFIXES else ".bin"
     return f"receipts/{expense_date.strftime('%Y%m')}/expense_{expense_id}{suffix}"
+
+
+_ALLOWED_REGISTRATION_FILE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+
+
+_ALLOWED_OCR_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
+def build_ocr_image_object_key(image_id: str, original_name: str | None) -> str:
+    raw_suffix = Path(original_name or "").suffix.lower()
+    suffix = raw_suffix if raw_suffix in _ALLOWED_OCR_SUFFIXES else ".jpg"
+    return f"images/{image_id}{suffix}"
+
+
+def build_registration_request_file_object_key(
+    request_id: str,
+    file_id: str,
+    uploaded_at: date,
+    original_name: str | None,
+) -> str:
+    raw_suffix = Path(original_name or "").suffix.lower()
+    suffix = raw_suffix if raw_suffix in _ALLOWED_REGISTRATION_FILE_SUFFIXES else ".bin"
+    return f"registration_requests/{uploaded_at.strftime('%Y%m')}/request_{request_id}/{file_id}{suffix}"

@@ -329,6 +329,12 @@ export interface InvoiceListItem {
   project_id: string | null;
   project_name: string;
   period_key: string;
+  billing_date: string;
+  document_type: string;
+  subject: string | null;
+  addressee_company_name: string | null;
+  addressee_name: string | null;
+  fixed_office_fee_amount: string | null;
   version: number;
   status: string;
   total_amount: string;
@@ -340,11 +346,26 @@ export interface InvoiceListItem {
 export interface InvoiceResponse {
   id: string;
   invoice_number: string;
+  document_type: string;
   client_name: string;
   project_name: string;
   period_key: string;
+  billing_date: string;
+  subject: string | null;
+  addressee_company_name: string | null;
+  addressee_name: string | null;
+  addressee_email: string | null;
+  addressee_address: string | null;
+  fixed_office_fee_amount: string | null;
   total_amount: string;
   status: string;
+  lines: Array<{
+    line_type: string;
+    description: string;
+    quantity: string | null;
+    unit_price: string | null;
+    amount: string;
+  }>;
   issued_at: string | null;
 }
 
@@ -365,6 +386,9 @@ export interface PayoutListItem {
   payout_number: string;
   payee_name: string;
   payee_type: string;
+  recipient_type: string | null;
+  recipient_id: string | null;
+  payee_name_snapshot: string | null;
   project_id: string | null;
   project_name: string;
   period_key: string;
@@ -428,6 +452,8 @@ export interface ProjectListItem {
   end_date: string | null;
   primary_manager_id: string | null;
   secondary_manager_id: string | null;
+  vanzai_manager_id: string | null;
+  vanzai_manager_name: string | null;
   notes: string | null;
   is_active: boolean;
 }
@@ -440,6 +466,7 @@ export interface ProjectCreateRequest {
   project_type_id: string | null;
   primary_manager_id: string | null;
   secondary_manager_id: string | null;
+  vanzai_manager_id: string | null;
   start_date: string | null;
   end_date: string | null;
   notes: string | null;
@@ -587,8 +614,15 @@ export interface PriceOutsourceUpdateRequest extends PriceOutsourceCreateRequest
 export interface WorkerListItem {
   id: string;
   name: string;
+  furigana: string | null;
   email: string | null;
   phone: string | null;
+  sole_proprietor_name: string | null;
+  emergency_contact_name_kana: string | null;
+  emergency_contact_phone: string | null;
+  gender: string | null;
+  invoice_registration_status: string | null;
+  invoice_number: string | null;
   is_active: boolean;
   introducer_supplier_id: string | null;
   introducer_supplier_name: string | null;
@@ -604,8 +638,15 @@ export interface WorkerListItem {
 
 export interface WorkerCreateRequest {
   name: string;
+  furigana: string | null;
   email: string | null;
   phone: string | null;
+  sole_proprietor_name: string | null;
+  emergency_contact_name_kana: string | null;
+  emergency_contact_phone: string | null;
+  gender: string | null;
+  invoice_registration_status: string | null;
+  invoice_number: string | null;
   introducer_supplier_id: string | null;
   notes: string | null;
   is_active: boolean;
@@ -678,6 +719,8 @@ export interface SupplierListItem {
   name: string;
   contact_email: string | null;
   contact_phone: string | null;
+  supplier_type: string | null;
+  entity_type: string | null;
   payout_terms_days: number;
   default_daily_price: string | null;
   is_active: boolean;
@@ -688,6 +731,8 @@ export interface SupplierCreateRequest {
   name: string;
   contact_email: string | null;
   contact_phone: string | null;
+  supplier_type: string | null;
+  entity_type: string | null;
   payout_terms_days: number;
   default_daily_price: string | null;
   is_active: boolean;
@@ -702,6 +747,7 @@ export interface ClientListItem {
   code: string | null;
   contact_name: string | null;
   contact_email: string | null;
+  billing_email: string | null;
 }
 
 export interface ClientCreateRequest {
@@ -710,6 +756,7 @@ export interface ClientCreateRequest {
   address: string | null;
   contact_name: string | null;
   contact_email: string | null;
+  billing_email: string | null;
 }
 
 export interface SiteListItem {
@@ -729,13 +776,251 @@ export interface ProjectTypeListItem {
   id: string;
   name: string;
   code: string | null;
+  category_level: string;
+  parent_id: string | null;
   description: string | null;
 }
 
 export interface ProjectTypeCreateRequest {
   name: string;
   code: string | null;
+  category_level: string;
+  parent_id: string | null;
   description: string | null;
+}
+
+export interface ProjectTypeTreeItem {
+  id: string;
+  name: string;
+  code: string | null;
+  category_level: string;
+  parent_id: string | null;
+  description: string | null;
+  selectable: boolean;
+  children: ProjectTypeTreeItem[];
+}
+
+export interface ProjectTypeTreeResponse {
+  items: ProjectTypeTreeItem[];
+}
+
+export interface RegistrationDedupeCandidateItem {
+  target_type: string;
+  target_id: string;
+  display_name: string;
+  match_reasons: string[];
+  phone: string | null;
+  email: string | null;
+  entity_type: string | null;
+  notes: string | null;
+  field_differences: RegistrationFieldDifferenceItem[];
+}
+
+export interface RegistrationFieldDifferenceItem {
+  field_name: string;
+  field_label: string;
+  request_value: string | null;
+  existing_value: string | null;
+  is_match: boolean;
+}
+
+export interface RegistrationRequestFileItem {
+  id: string;
+  document_type: string;
+  document_part: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  scan_status: string;
+  uploaded_at: string;
+  delete_after: string | null;
+  deleted_at: string | null;
+}
+
+export interface RegistrationRequestListItem {
+  id: string;
+  request_type: string;
+  status: string;
+  source_type: string;
+  summary_name: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  approved_target_type: string | null;
+  approved_target_id: string | null;
+  expires_at: string | null;
+  failed_attempts: number;
+  locked_at: string | null;
+  dedupe_key: string | null;
+  notes: string | null;
+}
+
+export interface RegistrationRequestDetailResponse {
+  id: string;
+  request_type: string;
+  status: string;
+  source_type: string;
+  summary_name: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  approved_target_type: string | null;
+  approved_target_id: string | null;
+  expires_at: string | null;
+  failed_attempts: number;
+  locked_at: string | null;
+  dedupe_key: string | null;
+  superseded_by_request_id: string | null;
+  submitted_ip: string | null;
+  user_agent: string | null;
+  notes: string | null;
+  detail_data: Record<string, unknown> | null;
+  dedupe_candidates: RegistrationDedupeCandidateItem[];
+  files: RegistrationRequestFileItem[];
+}
+
+export interface RegistrationLinkCreateRequest {
+  request_type: "worker" | "supplier_individual" | "supplier_corporation" | "introducer_identity";
+  expires_in_days: number;
+  notes: string | null;
+}
+
+export interface RegistrationLinkResponse {
+  request_id: string;
+  request_type: string;
+  status: string;
+  expires_at: string;
+  public_form_url: string;
+  public_token: string;
+  access_pin: string;
+  failed_attempts: number;
+  locked_at: string | null;
+  notes: string | null;
+}
+
+export interface PublicRegistrationAccessResponse {
+  request_id: string;
+  request_type: string;
+  status: string;
+  expires_at: string | null;
+  failed_attempts: number;
+  detail_data: Record<string, unknown> | null;
+  files: RegistrationRequestFileItem[];
+}
+
+export interface PublicRegistrationSubmitResponse {
+  request_id: string;
+  request_type: string;
+  status: string;
+  submitted_at: string;
+  dedupe_key: string | null;
+}
+
+export interface PublicRegistrationFileUploadResponse {
+  file: RegistrationRequestFileItem;
+  files: RegistrationRequestFileItem[];
+}
+
+export interface PublicWorkerRegistrationSubmitRequest {
+  token: string;
+  pin: string;
+  last_name: string | null;
+  first_name: string | null;
+  last_name_furigana: string | null;
+  first_name_furigana: string | null;
+  sole_proprietor_name: string | null;
+  gender: string | null;
+  route_group: string | null;
+  introducer_supplier_name_raw: string | null;
+  email: string | null;
+  phone: string | null;
+  zipcode: string | null;
+  prefecture: string | null;
+  city_address: string | null;
+  building_address: string | null;
+  emergency_contact_name_kana: string | null;
+  emergency_contact_phone: string | null;
+  bank_name: string | null;
+  bank_branch: string | null;
+  bank_branch_number: string | null;
+  bank_account_type: string | null;
+  bank_account_number: string | null;
+  bank_account_holder: string | null;
+  invoice_registration_status: string | null;
+  invoice_registration_number: string | null;
+  memo: string | null;
+}
+
+export interface PublicSupplierIndividualRegistrationSubmitRequest {
+  token: string;
+  pin: string;
+  supplier_type: string | null;
+  name: string | null;
+  name_furigana: string | null;
+  trade_name: string | null;
+  email: string | null;
+  phone: string | null;
+  zipcode: string | null;
+  prefecture: string | null;
+  city_address: string | null;
+  building_address: string | null;
+  bank_name: string | null;
+  bank_branch: string | null;
+  bank_branch_number: string | null;
+  bank_account_type: string | null;
+  bank_account_number: string | null;
+  bank_account_holder_kana: string | null;
+  invoice_registration_status: string | null;
+  invoice_registration_number: string | null;
+  memo: string | null;
+}
+
+export interface PublicSupplierCorporationRegistrationSubmitRequest {
+  token: string;
+  pin: string;
+  supplier_type: string | null;
+  company_name: string | null;
+  company_name_furigana: string | null;
+  representative_name: string | null;
+  representative_name_furigana: string | null;
+  email: string | null;
+  phone: string | null;
+  zipcode: string | null;
+  prefecture: string | null;
+  city_address: string | null;
+  building_address: string | null;
+  bank_name: string | null;
+  bank_branch: string | null;
+  bank_branch_number: string | null;
+  bank_account_type: string | null;
+  bank_account_number: string | null;
+  bank_account_holder_kana: string | null;
+  invoice_registration_status: string | null;
+  invoice_registration_number: string | null;
+  memo: string | null;
+}
+
+export interface PublicIntroducerIdentityRegistrationSubmitRequest {
+  token: string;
+  pin: string;
+  related_worker_request_id: string | null;
+  related_supplier_request_id: string | null;
+  subject_name: string | null;
+  subject_name_furigana: string | null;
+  submission_reason: string | null;
+  memo: string | null;
+}
+
+export interface RegistrationRequestApproveRequest {
+  approved_target_id: string | null;
+  dedupe_resolution: "create_new" | "merge_existing" | null;
+  notes: string | null;
+}
+
+export interface RegistrationRequestRejectRequest {
+  reason: string;
+  notes: string | null;
 }
 
 export interface RoleListItem {
@@ -768,6 +1053,8 @@ export interface NoticeCreateRequest {
   target_project_id?: string | null;
   target_worker_ids?: string[] | null;
   send_email: boolean;
+  /** push通知アクションボタン: "ok_ng" | "confirm" | null */
+  push_action_type?: string | null;
 }
 
 export interface NoticeListItem {
@@ -780,6 +1067,7 @@ export interface NoticeListItem {
   target_project_name: string | null;
   target_worker_ids: string[] | null;
   send_email: boolean;
+  push_action_type: string | null;
   sent_at: string | null;
   read_count: number;
   created_by: string | null;
@@ -812,4 +1100,256 @@ export interface WorkerNoticeListResponse {
   items: WorkerNoticeItem[];
   unread_count: number;
   total: number;
+}
+
+// ===========================
+// VanzaiStaff
+// ===========================
+
+export interface VanzaiStaffItem {
+  id: string;
+  name: string;
+  role: string | null;
+  linked_worker_id: string | null;
+  linked_worker_name: string | null;
+  playing_manager_fee_type: "subordinate_man_days" | "fixed_amount" | null;
+  playing_manager_fixed_fee: string | null;
+  phone: string | null;
+  email: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface VanzaiStaffCreateRequest {
+  name: string;
+  role: string | null;
+  linked_worker_id: string | null;
+  playing_manager_fee_type: "subordinate_man_days" | "fixed_amount" | null;
+  playing_manager_fixed_fee: string | null;
+  phone: string | null;
+  email: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface VanzaiStaffUpdateRequest extends VanzaiStaffCreateRequest {}
+
+// ===========================
+// ClientStaff
+// ===========================
+
+export interface ClientStaffItem {
+  id: string;
+  client_id: string;
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface ClientStaffCreateRequest {
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface ClientStaffUpdateRequest extends ClientStaffCreateRequest {}
+
+// ===========================
+// WorkerBankAccount
+// ===========================
+
+export interface WorkerBankAccountItem {
+  id: string;
+  worker_id: string;
+  bank_name: string;
+  branch_name: string;
+  branch_code: string | null;
+  account_type: string;
+  account_number: string;
+  account_holder_kana: string;
+  transfer_destination_name: string | null;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+}
+
+export interface WorkerBankAccountListResponse {
+  items: WorkerBankAccountItem[];
+  total: number;
+}
+
+export interface WorkerBankAccountCreateRequest {
+  bank_name: string;
+  branch_name: string;
+  branch_code: string | null;
+  account_type: string;
+  account_number: string;
+  account_holder_kana: string;
+  transfer_destination_name: string | null;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+}
+
+export interface WorkerBankAccountUpdateRequest extends WorkerBankAccountCreateRequest {}
+
+// ===========================
+// SupplierBankAccount
+// ===========================
+
+export interface SupplierBankAccountItem {
+  id: string;
+  supplier_id: string;
+  bank_name: string;
+  branch_name: string;
+  branch_code: string | null;
+  account_type: string;
+  account_number: string;
+  account_holder_kana: string;
+  transfer_destination_name: string | null;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+}
+
+export interface SupplierBankAccountListResponse {
+  items: SupplierBankAccountItem[];
+  total: number;
+}
+
+export interface SupplierBankAccountCreateRequest {
+  bank_name: string;
+  branch_name: string;
+  branch_code: string | null;
+  account_type: string;
+  account_number: string;
+  account_holder_kana: string;
+  transfer_destination_name: string | null;
+  effective_from: string;
+  effective_until: string | null;
+  is_primary: boolean;
+}
+
+export interface SupplierBankAccountUpdateRequest extends SupplierBankAccountCreateRequest {}
+
+// ===========================
+// OCR Receipt
+// ===========================
+
+export type OcrSourceType = "paygate_screenshot" | "paygate_settlement";
+
+export interface OcrSourceImageItem {
+  id: string;
+  source_type: OcrSourceType;
+  original_filename: string | null;
+  sha256: string;
+  mime_type: string | null;
+  size_bytes: number;
+  period_key: string | null;
+  parse_status: string;
+  uploaded_by: string | null;
+  last_job_id: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface OcrSourceImageListResponse {
+  items: OcrSourceImageItem[];
+  total: number;
+}
+
+export interface OcrParseJobResponse {
+  id: string;
+  status: string;
+  image_count: number;
+  success_count: number;
+  failed_count: number;
+  row_count: number;
+  executed_by: string | null;
+  completed_at: string | null;
+}
+
+export interface OcrExtractedRowItem {
+  id: string;
+  source_image_id: string;
+  parse_job_id: string | null;
+  source_type: OcrSourceType;
+  period_key: string | null;
+  record_date: string | null;
+  record_time: string | null;
+  amount: string | null;
+  currency: string;
+  transaction_no: string | null;
+  receipt_no: string | null;
+  payment_method: string | null;
+  terminal_id: string | null;
+  cash_sales: string | null;
+  credit_sales: string | null;
+  transaction_count: number | null;
+  tax_included: string | null;
+  subtotal: string | null;
+  store_name: string | null;
+  confidence: string | null;
+  status: string;
+  validation_errors: string[] | null;
+  project_id: string | null;
+  report_date: string | null;
+  linked_entity_type: string | null;
+  linked_entity_id: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+}
+
+export interface OcrExtractedRowListResponse {
+  items: OcrExtractedRowItem[];
+  total: number;
+}
+
+export interface OcrMonthlySummaryItem {
+  period_key: string;
+  source_type: string;
+  row_count: number;
+  total_amount: string;
+}
+
+export interface OcrMonthlySummaryResponse {
+  items: OcrMonthlySummaryItem[];
+}
+
+export interface OcrReconciliationResultItem {
+  id: string;
+  match_status: string;
+  ocr_row_id: string | null;
+  hq_row_index: number | null;
+  hq_payload: Record<string, string> | null;
+  amount_diff: string | null;
+  notes: string | null;
+}
+
+export interface OcrReconciliationBatchResponse {
+  id: string;
+  period_key: string | null;
+  file_name: string;
+  row_count: number;
+  matched_count: number;
+  unmatched_ocr_count: number;
+  unmatched_hq_count: number;
+  amount_diff_count: number;
+  results: OcrReconciliationResultItem[];
+}
+
+export interface OcrSelfReportCompareResponse {
+  period_key: string;
+  project_id: string | null;
+  ocr_row_count: number;
+  ocr_total_amount: string;
+  linked_count: number;
+  self_report_available: boolean;
+  message: string;
 }

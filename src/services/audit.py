@@ -38,6 +38,10 @@ TARGET_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
     "project": ("project", "projects"),
     "shift_slot": ("shift_slot", "shift_slots"),
     "user": ("user", "users"),
+    "ocr_source_image": ("ocr_source_image", "ocr_source_images"),
+    "ocr_parse_job": ("ocr_parse_job", "ocr_parse_jobs"),
+    "ocr_extracted_row": ("ocr_extracted_row", "ocr_extracted_rows"),
+    "ocr_reconciliation_batch": ("ocr_reconciliation_batch", "ocr_reconciliation_batches"),
 }
 
 

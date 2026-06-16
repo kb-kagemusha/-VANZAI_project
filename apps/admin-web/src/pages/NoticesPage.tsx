@@ -47,6 +47,12 @@ const TARGET_TYPE_LABELS: Record<NoticeTargetType, string> = {
 
 const PAGE_SIZE = 20;
 
+const PUSH_ACTION_TYPE_LABELS: Record<string, string> = {
+  "": "なし（通知タップのみ）",
+  ok_ng: "OK / NG ボタン",
+  confirm: "確認しましたボタン",
+};
+
 const INITIAL_FORM: NoticeCreateRequest = {
   title: "",
   body: "",
@@ -56,6 +62,29 @@ const INITIAL_FORM: NoticeCreateRequest = {
   target_project_id: null,
   target_worker_ids: null,
   send_email: false,
+  push_action_type: null,
+};
+
+const TALL_SELECT_STYLE = {
+  height: "58px",
+  padding: "0 1rem",
+  borderRadius: "14px",
+  border: "1.5px solid rgba(29, 39, 49, 0.18)",
+  background: "rgba(255, 255, 255, 0.96)",
+  fontSize: "0.98rem",
+  fontWeight: 500,
+};
+
+const TALL_CHECKBOX_ROW_STYLE = {
+  display: "flex",
+  gap: "0.65rem",
+  alignItems: "center",
+  minHeight: "58px",
+  padding: "0.9rem 1rem",
+  border: "1.5px solid rgba(29, 39, 49, 0.18)",
+  borderRadius: "14px",
+  background: "rgba(255, 255, 255, 0.96)",
+  cursor: "pointer",
 };
 
 export function NoticesPage() {
@@ -236,6 +265,7 @@ export function NoticesPage() {
             <label style={{ display: "grid", gap: "0.25rem" }}>
               <span>通知種別</span>
               <select
+                style={TALL_SELECT_STYLE}
                 value={form.notice_type}
                 onChange={(e) => setForm((f) => ({ ...f, notice_type: e.target.value as NoticeType }))}
               >
@@ -248,6 +278,7 @@ export function NoticesPage() {
             <label style={{ display: "grid", gap: "0.25rem" }}>
               <span>優先度</span>
               <select
+                style={TALL_SELECT_STYLE}
                 value={form.priority}
                 onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "normal" | "urgent" }))}
               >
@@ -259,6 +290,7 @@ export function NoticesPage() {
             <label style={{ display: "grid", gap: "0.25rem" }}>
               <span>送信対象</span>
               <select
+                style={TALL_SELECT_STYLE}
                 value={form.target_type}
                 onChange={(e) => setForm((f) => ({ ...f, target_type: e.target.value as NoticeTargetType }))}
               >
@@ -374,13 +406,33 @@ export function NoticesPage() {
             </div>
           )}
 
-          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", cursor: "pointer" }}>
+          <label style={TALL_CHECKBOX_ROW_STYLE}>
             <input
               type="checkbox"
               checked={form.send_email}
               onChange={(e) => setForm((f) => ({ ...f, send_email: e.target.checked }))}
+              style={{ width: "18px", height: "18px", flex: "0 0 auto" }}
             />
             <span>メールでも送信する</span>
+          </label>
+
+          <label style={{ display: "grid", gap: "0.25rem" }}>
+            <span>プッシュ通知のアクションボタン</span>
+            <select
+              style={TALL_SELECT_STYLE}
+              value={form.push_action_type ?? ""}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, push_action_type: e.target.value || null }))
+              }
+            >
+              {Object.entries(PUSH_ACTION_TYPE_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: "0.78em", color: "#666" }}>
+              {form.push_action_type === "ok_ng" && "スタッフが通知上で「OKです、了承します」「NGです」を選択できます"}
+              {form.push_action_type === "confirm" && "スタッフが通知上で「確認しました」を選択できます"}
+            </span>
           </label>
 
           <div style={{ display: "flex", gap: "0.75rem" }}>

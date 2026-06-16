@@ -46,6 +46,20 @@ import type {
   ProjectNotesUpdateRequest,
   ProjectTypeCreateRequest,
   ProjectTypeListItem,
+  ProjectTypeTreeResponse,
+  PublicIntroducerIdentityRegistrationSubmitRequest,
+  PublicRegistrationAccessResponse,
+  PublicRegistrationFileUploadResponse,
+  PublicRegistrationSubmitResponse,
+  PublicSupplierCorporationRegistrationSubmitRequest,
+  PublicSupplierIndividualRegistrationSubmitRequest,
+  PublicWorkerRegistrationSubmitRequest,
+  RegistrationLinkCreateRequest,
+  RegistrationLinkResponse,
+  RegistrationRequestApproveRequest,
+  RegistrationRequestDetailResponse,
+  RegistrationRequestListItem,
+  RegistrationRequestRejectRequest,
   RoleCreateRequest,
   RoleListItem,
   ShiftSlotCreateRequest,
@@ -67,9 +81,45 @@ import type {
   NoticeListItem,
   NoticeListResponse,
   AvailabilityCalendarResponse,
+  VanzaiStaffItem,
+  VanzaiStaffCreateRequest,
+  VanzaiStaffUpdateRequest,
+  ClientStaffItem,
+  ClientStaffCreateRequest,
+  ClientStaffUpdateRequest,
+  WorkerBankAccountItem,
+  WorkerBankAccountListResponse,
+  WorkerBankAccountCreateRequest,
+  WorkerBankAccountUpdateRequest,
+  SupplierBankAccountItem,
+  SupplierBankAccountListResponse,
+  SupplierBankAccountCreateRequest,
+  SupplierBankAccountUpdateRequest,
+  OcrSourceImageItem,
+  OcrSourceImageListResponse,
+  OcrParseJobResponse,
+  OcrExtractedRowItem,
+  OcrExtractedRowListResponse,
+  OcrMonthlySummaryResponse,
+  OcrReconciliationBatchResponse,
+  OcrSelfReportCompareResponse,
+  OcrSourceType,
 } from "../../types/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+function resolveApiBaseUrl(): string {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+
+  const { protocol, hostname } = window.location;
+  if (hostname === "vanzai-portal.com" || hostname === "www.vanzai-portal.com" || hostname === "staff.vanzai-portal.com") {
+    return `${protocol}//api.vanzai-portal.com`;
+  }
+
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "vanzai.admin.access_token";
 
 export class ApiError extends Error {
@@ -173,6 +223,77 @@ async function downloadBinaryFile(path: string, fallbackFileName: string) {
   }
 
   const response = await fetch(buildUrl(path), { headers });
+
+  if (!response.ok) {
+    const payload = await readResponse(response);
+    const message =
+      typeof payload === "object" && payload !== null && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "object" && payload !== null && "detail" in payload
+          ? String(payload.detail)
+          : response.statusText;
+
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+
+    throw new ApiError(response.status, message || "ファイルのダウンロードに失敗しました", payload);
+  }
+
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get("content-disposition") || "";
+  const matchedFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
+  const fileName = matchedFileName || fallbackFileName;
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}
+
+async function publicApiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
+  const headers = new Headers(init?.headers);
+
+  if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(buildUrl(path, params), {
+    ...init,
+    headers,
+  });
+  const payload = await readResponse(response);
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload !== null && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "object" && payload !== null && "detail" in payload
+          ? String(payload.detail)
+          : response.statusText;
+    throw new ApiError(response.status, message || "API request failed", payload);
+  }
+
+  return payload as T;
+}
+
+async function downloadBinaryFileWithQuery(path: string, fallbackFileName: string, params?: Record<string, string | number | boolean | undefined>) {
+  const headers = new Headers();
+  const token = getStoredAccessToken();
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(buildUrl(path, params), { headers });
 
   if (!response.ok) {
     const payload = await readResponse(response);
@@ -501,10 +622,26 @@ export function getImportBatches(params: Record<string, string | number | boolea
   return apiFetch<PageResponse<ImportBatchListItem>>("/api/import-batches", undefined, params);
 }
 
-export function generateInvoice(projectId: string, periodKey: string) {
+export function generateInvoice(params: {
+  projectId: string;
+  periodKey: string;
+  documentType?: "invoice" | "estimate";
+  clientStaffId?: string | null;
+  subject?: string | null;
+  fixedOfficeFeeAmount?: string | null;
+  billingDate?: string | null;
+}) {
   return apiFetch<InvoiceResponse>("/api/invoices/generate", {
     method: "POST",
-    body: JSON.stringify({ project_id: projectId, period_key: periodKey }),
+    body: JSON.stringify({
+      project_id: params.projectId,
+      period_key: params.periodKey,
+      document_type: params.documentType || "invoice",
+      client_staff_id: params.clientStaffId || null,
+      subject: params.subject || null,
+      fixed_office_fee_amount: params.fixedOfficeFeeAmount || null,
+      billing_date: params.billingDate || null,
+    }),
   });
 }
 
@@ -516,10 +653,23 @@ export function downloadInvoicePdf(invoiceId: string) {
   return downloadBinaryFile(`/api/invoices/${invoiceId}/pdf`, `invoice_${invoiceId}.pdf`);
 }
 
-export function generatePayout(projectId: string, workerId: string, periodKey: string) {
+export function generatePayout(params: {
+  projectId: string;
+  recipientType: string;
+  recipientId: string;
+  supportFeeAmount?: string;
+  periodKey: string;
+}) {
   return apiFetch<PayoutResponse>("/api/payouts/generate", {
     method: "POST",
-    body: JSON.stringify({ project_id: projectId, worker_id: workerId, period_key: periodKey }),
+    body: JSON.stringify({
+      project_id: params.projectId,
+      recipient_type: params.recipientType,
+      recipient_id: params.recipientId,
+      worker_id: params.recipientType === "worker" ? params.recipientId : null,
+      support_fee_amount: params.supportFeeAmount || null,
+      period_key: params.periodKey,
+    }),
   });
 }
 
@@ -681,6 +831,108 @@ export function getProjectTypes(params?: Record<string, string | number | boolea
   return apiFetch<PageResponse<ProjectTypeListItem>>("/api/project-types", undefined, params);
 }
 
+export function getProjectTypeTree(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<ProjectTypeTreeResponse>("/api/project-types/tree", undefined, params);
+}
+
+export function getRegistrationRequests(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<PageResponse<RegistrationRequestListItem>>("/api/registration-requests", undefined, params);
+}
+
+export function getRegistrationRequest(requestId: string) {
+  return apiFetch<RegistrationRequestDetailResponse>(`/api/registration-requests/${requestId}`);
+}
+
+export function approveRegistrationRequest(requestId: string, body: RegistrationRequestApproveRequest) {
+  return apiFetch<RegistrationRequestDetailResponse>(`/api/registration-requests/${requestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function rejectRegistrationRequest(requestId: string, body: RegistrationRequestRejectRequest) {
+  return apiFetch<RegistrationRequestDetailResponse>(`/api/registration-requests/${requestId}/reject`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function createRegistrationLink(body: RegistrationLinkCreateRequest) {
+  return apiFetch<RegistrationLinkResponse>("/api/registration-links", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function resetRegistrationLinkPinLock(requestId: string) {
+  return apiFetch<RegistrationRequestDetailResponse>(`/api/registration-links/${requestId}/reset-pin-lock`, {
+    method: "POST",
+  });
+}
+
+export function reissueRegistrationLink(requestId: string, body: RegistrationLinkCreateRequest) {
+  return apiFetch<RegistrationLinkResponse>(`/api/registration-links/${requestId}/reissue`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function downloadRegistrationRequestFile(requestId: string, fileId: string, reason: string) {
+  return downloadBinaryFileWithQuery(`/api/registration-requests/${requestId}/files/${fileId}`, `registration_file_${fileId}`, { reason });
+}
+
+export function getPublicRegistrationAccess(formType: string, token: string, pin: string) {
+  return publicApiFetch<PublicRegistrationAccessResponse>(`/public/registrations/${formType}`, undefined, { token, pin });
+}
+
+export function uploadPublicRegistrationFile(params: {
+  formType: string;
+  token: string;
+  pin: string;
+  documentType: string;
+  documentPart: string;
+  file: File;
+}) {
+  const formData = new FormData();
+  formData.set("token", params.token);
+  formData.set("pin", params.pin);
+  formData.set("document_type", params.documentType);
+  formData.set("document_part", params.documentPart);
+  formData.set("file", params.file);
+  return publicApiFetch<PublicRegistrationFileUploadResponse>(`/public/registrations/${params.formType}/files`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function submitPublicWorkerRegistration(body: PublicWorkerRegistrationSubmitRequest) {
+  return publicApiFetch<PublicRegistrationSubmitResponse>("/public/registrations/worker", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitPublicSupplierIndividualRegistration(body: PublicSupplierIndividualRegistrationSubmitRequest) {
+  return publicApiFetch<PublicRegistrationSubmitResponse>("/public/registrations/supplier-individual", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitPublicSupplierCorporationRegistration(body: PublicSupplierCorporationRegistrationSubmitRequest) {
+  return publicApiFetch<PublicRegistrationSubmitResponse>("/public/registrations/supplier-corporation", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitPublicIntroducerIdentityRegistration(body: PublicIntroducerIdentityRegistrationSubmitRequest) {
+  return publicApiFetch<PublicRegistrationSubmitResponse>("/public/registrations/introducer-identity", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function createProjectType(body: ProjectTypeCreateRequest) {
   return apiFetch<ProjectTypeListItem>("/api/project-types", {
     method: "POST",
@@ -721,4 +973,189 @@ export function listNotices(params?: {
 
 export function deleteNotice(noticeId: string) {
   return apiFetch<void>(`/api/notices/${noticeId}`, { method: "DELETE" });
+}
+
+// ===========================
+// VanzaiStaff
+// ===========================
+
+export function getVanzaiStaff(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<{ items: VanzaiStaffItem[]; total: number; page: number; limit: number }>("/api/vanzai-staff", undefined, params);
+}
+
+export function createVanzaiStaff(body: VanzaiStaffCreateRequest) {
+  return apiFetch<VanzaiStaffItem>("/api/vanzai-staff", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateVanzaiStaff(staffId: string, body: VanzaiStaffUpdateRequest) {
+  return apiFetch<VanzaiStaffItem>(`/api/vanzai-staff/${staffId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ===========================
+// ClientStaff
+// ===========================
+
+export function getClientStaff(clientId: string, params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<{ items: ClientStaffItem[]; total: number; page: number; limit: number }>(`/api/clients/${clientId}/staff`, undefined, params);
+}
+
+export function createClientStaff(clientId: string, body: ClientStaffCreateRequest) {
+  return apiFetch<ClientStaffItem>(`/api/clients/${clientId}/staff`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateClientStaff(clientId: string, staffMemberId: string, body: ClientStaffUpdateRequest) {
+  return apiFetch<ClientStaffItem>(`/api/clients/${clientId}/staff/${staffMemberId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ===========================
+// WorkerBankAccount
+// ===========================
+
+export function getWorkerBankAccounts(workerId: string) {
+  return apiFetch<WorkerBankAccountListResponse>(`/api/workers/${workerId}/bank-accounts`);
+}
+
+export function createWorkerBankAccount(workerId: string, body: WorkerBankAccountCreateRequest) {
+  return apiFetch<WorkerBankAccountItem>(`/api/workers/${workerId}/bank-accounts`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkerBankAccount(workerId: string, accountId: string, body: WorkerBankAccountUpdateRequest) {
+  return apiFetch<WorkerBankAccountItem>(`/api/workers/${workerId}/bank-accounts/${accountId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ===========================
+// SupplierBankAccount
+// ===========================
+
+export function getSupplierBankAccounts(supplierId: string) {
+  return apiFetch<SupplierBankAccountListResponse>(`/api/suppliers/${supplierId}/bank-accounts`);
+}
+
+export function createSupplierBankAccount(supplierId: string, body: SupplierBankAccountCreateRequest) {
+  return apiFetch<SupplierBankAccountItem>(`/api/suppliers/${supplierId}/bank-accounts`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateSupplierBankAccount(supplierId: string, accountId: string, body: SupplierBankAccountUpdateRequest) {
+  return apiFetch<SupplierBankAccountItem>(`/api/suppliers/${supplierId}/bank-accounts/${accountId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ===========================
+// OCR Receipt
+// ===========================
+
+export function uploadOcrImage(file: File, sourceType: OcrSourceType) {
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("source_type", sourceType);
+  return apiFetch<OcrSourceImageItem>("/api/ocr/images", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function listOcrImages(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<OcrSourceImageListResponse>("/api/ocr/images", undefined, params);
+}
+
+export function parseOcrImages(imageIds: string[]) {
+  return apiFetch<OcrParseJobResponse>("/api/ocr/jobs/parse", {
+    method: "POST",
+    body: JSON.stringify({ image_ids: imageIds }),
+  });
+}
+
+export function listOcrRows(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<OcrExtractedRowListResponse>("/api/ocr/rows", undefined, params);
+}
+
+export function updateOcrRow(rowId: string, body: Partial<OcrExtractedRowItem>) {
+  return apiFetch<OcrExtractedRowItem>(`/api/ocr/rows/${rowId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function confirmOcrRows(rowIds: string[]) {
+  return apiFetch<{ confirmed_count: number }>("/api/ocr/rows/confirm", {
+    method: "POST",
+    body: JSON.stringify({ row_ids: rowIds }),
+  });
+}
+
+export function getOcrMonthlySummary() {
+  return apiFetch<OcrMonthlySummaryResponse>("/api/ocr/monthly-summary");
+}
+
+export function downloadOcrCsv(periodKey: string, sourceType?: string) {
+  return downloadBinaryFileWithQuery(
+    `/api/ocr/exports/${periodKey}.csv`,
+    `ocr_${periodKey}.csv`,
+    sourceType ? { source_type: sourceType } : undefined,
+  );
+}
+
+export function downloadAllOcrCsv(sourceType?: string) {
+  return downloadBinaryFileWithQuery(
+    "/api/ocr/exports/all.csv",
+    "ocr_all.csv",
+    sourceType ? { source_type: sourceType } : undefined,
+  );
+}
+
+export function runOcrReconciliation(params: {
+  file: File;
+  columnMapping: Record<string, string>;
+  periodKey?: string;
+}) {
+  const formData = new FormData();
+  formData.set("file", params.file);
+  formData.set("column_mapping", JSON.stringify(params.columnMapping));
+  if (params.periodKey) {
+    formData.set("period_key", params.periodKey);
+  }
+  return apiFetch<OcrReconciliationBatchResponse>("/api/ocr/reconciliation", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function compareOcrSelfReport(periodKey: string, projectId?: string) {
+  return apiFetch<OcrSelfReportCompareResponse>("/api/ocr/compare/self-report", undefined, {
+    period_key: periodKey,
+    project_id: projectId,
+  });
+}
+
+export function linkOcrRow(
+  rowId: string,
+  body: { linked_entity_type: string; linked_entity_id: string; project_id?: string },
+) {
+  return apiFetch<OcrExtractedRowItem>(`/api/ocr/rows/${rowId}/link`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

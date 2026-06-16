@@ -478,6 +478,8 @@ class ProjectListItem(BaseModel):
     end_date: Optional[date] = None
     primary_manager_id: Optional[str] = None
     secondary_manager_id: Optional[str] = None
+    vanzai_manager_id: Optional[str] = None
+    vanzai_manager_name: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool
 
@@ -496,6 +498,7 @@ class ProjectCreateRequest(BaseModel):
     project_type_id: Optional[str] = None
     primary_manager_id: Optional[str] = None
     secondary_manager_id: Optional[str] = None
+    vanzai_manager_id: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     notes: Optional[str] = None
@@ -907,8 +910,15 @@ class WorkerListItem(BaseModel):
     """稼働者一覧の1行"""
     id: str
     name: str
+    furigana: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    sole_proprietor_name: Optional[str] = None
+    emergency_contact_name_kana: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    gender: Optional[str] = None
+    invoice_registration_status: Optional[str] = None
+    invoice_number: Optional[str] = None
     is_active: bool
     introducer_supplier_id: Optional[str] = None
     introducer_supplier_name: Optional[str] = None
@@ -931,8 +941,15 @@ class WorkerListResponse(PageResponse[WorkerListItem]):
 class WorkerCreateRequest(BaseModel):
     """稼働者作成リクエスト"""
     name: str = Field(..., min_length=1, max_length=100)
+    furigana: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=20)
+    sole_proprietor_name: Optional[str] = Field(None, max_length=200)
+    emergency_contact_name_kana: Optional[str] = Field(None, max_length=200)
+    emergency_contact_phone: Optional[str] = Field(None, max_length=20)
+    gender: Optional[str] = Field(None, max_length=20)
+    invoice_registration_status: Optional[str] = Field(None, max_length=30)
+    invoice_number: Optional[str] = Field(None, max_length=20)
     introducer_supplier_id: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool = True
@@ -973,6 +990,8 @@ class SupplierListItem(BaseModel):
     name: str
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    supplier_type: Optional[str] = None
+    entity_type: Optional[str] = None
     payout_terms_days: int
     default_daily_price: Optional[Decimal] = None
     is_active: bool
@@ -989,6 +1008,8 @@ class SupplierCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     contact_email: Optional[str] = Field(None, max_length=255)
     contact_phone: Optional[str] = Field(None, max_length=20)
+    supplier_type: Optional[str] = Field(None, max_length=20)
+    entity_type: Optional[str] = Field(None, max_length=20)
     payout_terms_days: int = Field(70, ge=0, le=365)
     default_daily_price: Optional[Decimal] = None
     is_active: bool = True
@@ -1012,6 +1033,7 @@ class ClientListItem(BaseModel):
     code: Optional[str] = None
     contact_name: Optional[str] = None
     contact_email: Optional[str] = None
+    billing_email: Optional[str] = None
 
 
 class ClientListResponse(PageResponse[ClientListItem]):
@@ -1026,6 +1048,7 @@ class ClientCreateRequest(BaseModel):
     address: Optional[str] = None
     contact_name: Optional[str] = Field(None, max_length=100)
     contact_email: Optional[str] = Field(None, max_length=255)
+    billing_email: Optional[str] = Field(None, max_length=255)
 
 
 class SiteListQuery(PaginationQuery, SortQuery):
@@ -1056,6 +1079,9 @@ class SiteCreateRequest(BaseModel):
 class ProjectTypeListQuery(PaginationQuery, SortQuery):
     """案件種別一覧クエリ"""
     search: Optional[str] = Field(None, max_length=100)
+    category_level: Optional[str] = None
+    parent_id: Optional[str] = None
+    selectable_only: bool = False
 
 
 class ProjectTypeListItem(BaseModel):
@@ -1063,6 +1089,8 @@ class ProjectTypeListItem(BaseModel):
     id: str
     name: str
     code: Optional[str] = None
+    category_level: str
+    parent_id: Optional[str] = None
     description: Optional[str] = None
 
 
@@ -1075,7 +1103,270 @@ class ProjectTypeCreateRequest(BaseModel):
     """案件種別作成リクエスト"""
     name: str = Field(..., min_length=1, max_length=100)
     code: Optional[str] = Field(None, max_length=50)
+    category_level: str = Field("minor", max_length=20)
+    parent_id: Optional[str] = None
     description: Optional[str] = None
+
+
+class ProjectTypeTreeItem(BaseModel):
+    """案件種別ツリーの1ノード"""
+    id: str
+    name: str
+    code: Optional[str] = None
+    category_level: str
+    parent_id: Optional[str] = None
+    description: Optional[str] = None
+    selectable: bool
+    children: List["ProjectTypeTreeItem"] = Field(default_factory=list)
+
+
+class ProjectTypeTreeResponse(BaseModel):
+    """案件種別ツリーレスポンス"""
+    items: List[ProjectTypeTreeItem]
+
+
+class RegistrationRequestListQuery(PaginationQuery, SortQuery):
+    """登録申請一覧クエリ"""
+    request_type: Optional[str] = None
+    status: Optional[str] = None
+    source_type: Optional[str] = None
+    search: Optional[str] = Field(None, max_length=100)
+
+
+class RegistrationRequestFileItem(BaseModel):
+    """登録申請添付ファイル"""
+    id: str
+    document_type: str
+    document_part: str
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    scan_status: str
+    uploaded_at: datetime
+    delete_after: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+
+
+class RegistrationFieldDifferenceItem(BaseModel):
+    """重複候補との差分 1 項目"""
+    field_name: str
+    field_label: str
+    request_value: Optional[str] = None
+    existing_value: Optional[str] = None
+    is_match: bool
+
+
+class RegistrationDedupeCandidateItem(BaseModel):
+    """重複候補"""
+    target_type: str
+    target_id: str
+    display_name: str
+    match_reasons: List[str] = Field(default_factory=list)
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    entity_type: Optional[str] = None
+    notes: Optional[str] = None
+    field_differences: List[RegistrationFieldDifferenceItem] = Field(default_factory=list)
+
+
+class RegistrationRequestListItem(BaseModel):
+    """登録申請一覧の1行"""
+    id: str
+    request_type: str
+    status: str
+    source_type: str
+    summary_name: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    approved_target_type: Optional[str] = None
+    approved_target_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    failed_attempts: int
+    locked_at: Optional[datetime] = None
+    dedupe_key: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class RegistrationRequestListResponse(PageResponse[RegistrationRequestListItem]):
+    """登録申請一覧レスポンス"""
+    pass
+
+
+class RegistrationRequestDetailResponse(BaseModel):
+    """登録申請詳細レスポンス"""
+    id: str
+    request_type: str
+    status: str
+    source_type: str
+    summary_name: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    reviewed_by_name: Optional[str] = None
+    approved_target_type: Optional[str] = None
+    approved_target_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    failed_attempts: int
+    locked_at: Optional[datetime] = None
+    dedupe_key: Optional[str] = None
+    superseded_by_request_id: Optional[str] = None
+    submitted_ip: Optional[str] = None
+    user_agent: Optional[str] = None
+    notes: Optional[str] = None
+    detail_data: Optional[dict] = None
+    dedupe_candidates: List[RegistrationDedupeCandidateItem] = Field(default_factory=list)
+    files: List[RegistrationRequestFileItem] = Field(default_factory=list)
+
+
+class RegistrationRequestApproveRequest(BaseModel):
+    """登録申請承認リクエスト"""
+    approved_target_id: Optional[str] = None
+    dedupe_resolution: Optional[Literal["create_new", "merge_existing"]] = None
+    notes: Optional[str] = None
+
+
+class RegistrationRequestRejectRequest(BaseModel):
+    """登録申請却下リクエスト"""
+    reason: str = Field(..., min_length=1, max_length=500)
+    notes: Optional[str] = None
+
+
+class RegistrationLinkCreateRequest(BaseModel):
+    """公開登録リンク作成リクエスト"""
+    request_type: Literal["worker", "supplier_individual", "supplier_corporation", "introducer_identity"]
+    expires_in_days: int = Field(7, ge=1, le=30)
+    notes: Optional[str] = None
+
+
+class RegistrationLinkResponse(BaseModel):
+    """公開登録リンクレスポンス"""
+    request_id: str
+    request_type: str
+    status: str
+    expires_at: datetime
+    public_form_url: str
+    public_token: str
+    access_pin: str
+    failed_attempts: int
+    locked_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class PublicRegistrationAccessResponse(BaseModel):
+    """公開登録フォームアクセス結果"""
+    request_id: str
+    request_type: str
+    status: str
+    expires_at: Optional[datetime] = None
+    failed_attempts: int
+    detail_data: Optional[dict] = None
+    files: List[RegistrationRequestFileItem] = Field(default_factory=list)
+
+
+class PublicRegistrationSubmitResponse(BaseModel):
+    """公開登録フォーム送信結果"""
+    request_id: str
+    request_type: str
+    status: str
+    submitted_at: datetime
+    dedupe_key: Optional[str] = None
+
+
+class PublicRegistrationFileUploadResponse(BaseModel):
+    """公開登録の添付ファイルアップロード結果"""
+    file: RegistrationRequestFileItem
+    files: List[RegistrationRequestFileItem] = Field(default_factory=list)
+
+
+class PublicWorkerRegistrationSubmitRequest(BaseModel):
+    token: str = Field(..., min_length=8, max_length=255)
+    pin: str = Field(..., min_length=4, max_length=20)
+    last_name: Optional[str] = Field(None, max_length=100)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name_furigana: Optional[str] = Field(None, max_length=100)
+    first_name_furigana: Optional[str] = Field(None, max_length=100)
+    sole_proprietor_name: Optional[str] = Field(None, max_length=200)
+    gender: Optional[str] = Field(None, max_length=20)
+    route_group: Optional[str] = Field(None, max_length=100)
+    introducer_supplier_name_raw: Optional[str] = Field(None, max_length=200)
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    zipcode: Optional[str] = Field(None, max_length=20)
+    prefecture: Optional[str] = Field(None, max_length=50)
+    city_address: Optional[str] = None
+    building_address: Optional[str] = None
+    emergency_contact_name_kana: Optional[str] = Field(None, max_length=200)
+    emergency_contact_phone: Optional[str] = Field(None, max_length=20)
+    bank_name: Optional[str] = Field(None, max_length=100)
+    bank_branch: Optional[str] = Field(None, max_length=100)
+    bank_branch_number: Optional[str] = Field(None, max_length=10)
+    bank_account_type: Optional[str] = Field(None, max_length=20)
+    bank_account_number: Optional[str] = Field(None, max_length=20)
+    bank_account_holder: Optional[str] = Field(None, max_length=200)
+    invoice_registration_status: Optional[str] = Field(None, max_length=30)
+    invoice_registration_number: Optional[str] = Field(None, max_length=20)
+    memo: Optional[str] = None
+
+
+class PublicSupplierIndividualRegistrationSubmitRequest(BaseModel):
+    token: str = Field(..., min_length=8, max_length=255)
+    pin: str = Field(..., min_length=4, max_length=20)
+    supplier_type: Optional[str] = Field(None, max_length=20)
+    name: Optional[str] = Field(None, max_length=100)
+    name_furigana: Optional[str] = Field(None, max_length=100)
+    trade_name: Optional[str] = Field(None, max_length=200)
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    zipcode: Optional[str] = Field(None, max_length=20)
+    prefecture: Optional[str] = Field(None, max_length=50)
+    city_address: Optional[str] = None
+    building_address: Optional[str] = None
+    bank_name: Optional[str] = Field(None, max_length=100)
+    bank_branch: Optional[str] = Field(None, max_length=100)
+    bank_branch_number: Optional[str] = Field(None, max_length=10)
+    bank_account_type: Optional[str] = Field(None, max_length=20)
+    bank_account_number: Optional[str] = Field(None, max_length=20)
+    bank_account_holder_kana: Optional[str] = Field(None, max_length=200)
+    invoice_registration_status: Optional[str] = Field(None, max_length=30)
+    invoice_registration_number: Optional[str] = Field(None, max_length=20)
+    memo: Optional[str] = None
+
+
+class PublicSupplierCorporationRegistrationSubmitRequest(BaseModel):
+    token: str = Field(..., min_length=8, max_length=255)
+    pin: str = Field(..., min_length=4, max_length=20)
+    supplier_type: Optional[str] = Field(None, max_length=20)
+    company_name: Optional[str] = Field(None, max_length=200)
+    company_name_furigana: Optional[str] = Field(None, max_length=200)
+    representative_name: Optional[str] = Field(None, max_length=100)
+    representative_name_furigana: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    zipcode: Optional[str] = Field(None, max_length=20)
+    prefecture: Optional[str] = Field(None, max_length=50)
+    city_address: Optional[str] = None
+    building_address: Optional[str] = None
+    bank_name: Optional[str] = Field(None, max_length=100)
+    bank_branch: Optional[str] = Field(None, max_length=100)
+    bank_branch_number: Optional[str] = Field(None, max_length=10)
+    bank_account_type: Optional[str] = Field(None, max_length=20)
+    bank_account_number: Optional[str] = Field(None, max_length=20)
+    bank_account_holder_kana: Optional[str] = Field(None, max_length=200)
+    invoice_registration_status: Optional[str] = Field(None, max_length=30)
+    invoice_registration_number: Optional[str] = Field(None, max_length=20)
+    memo: Optional[str] = None
+
+
+class PublicIntroducerIdentityRegistrationSubmitRequest(BaseModel):
+    token: str = Field(..., min_length=8, max_length=255)
+    pin: str = Field(..., min_length=4, max_length=20)
+    related_worker_request_id: Optional[str] = None
+    related_supplier_request_id: Optional[str] = None
+    subject_name: Optional[str] = Field(None, max_length=100)
+    subject_name_furigana: Optional[str] = Field(None, max_length=100)
+    submission_reason: Optional[str] = None
+    memo: Optional[str] = None
 
 
 class RoleListQuery(PaginationQuery, SortQuery):
@@ -1103,6 +1394,7 @@ class NoticeCreateRequest(BaseModel):
     target_project_id: Optional[str] = None
     target_worker_ids: Optional[List[str]] = None
     send_email: bool = Field(False, description="メール送信するか")
+    push_action_type: Optional[str] = Field(None, description="none | ok_ng | confirm")
 
 
 class NoticeListQuery(PaginationQuery, SortQuery):
@@ -1124,6 +1416,7 @@ class NoticeListItem(BaseModel):
     target_project_name: Optional[str] = None
     target_worker_ids: Optional[List[str]] = None
     send_email: bool
+    push_action_type: Optional[str] = None
     sent_at: Optional[datetime] = None
     read_count: int = 0
     created_by: Optional[str] = None
@@ -1151,6 +1444,7 @@ class WorkerNoticeItem(BaseModel):
     priority: str
     target_project_id: Optional[str] = None
     target_project_name: Optional[str] = None
+    push_action_type: Optional[str] = None
     is_read: bool = False
     read_at: Optional[datetime] = None
     # 返答状態: "ok" | "ng" | None(未回答)
@@ -1220,6 +1514,12 @@ class InvoiceListItem(BaseModel):
     project_id: Optional[str] = None
     project_name: str
     period_key: str
+    billing_date: date
+    document_type: str
+    subject: Optional[str] = None
+    addressee_company_name: Optional[str] = None
+    addressee_name: Optional[str] = None
+    fixed_office_fee_amount: Optional[Decimal] = None
     version: int
     status: str
     total_amount: Decimal
@@ -1236,6 +1536,11 @@ class InvoiceGenerateRequest(BaseModel):
     """請求書生成リクエスト"""
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$", description="期間キー YYYYMM")
+    document_type: Literal["invoice", "estimate"] = "invoice"
+    client_staff_id: Optional[str] = None
+    subject: Optional[str] = Field(None, max_length=255)
+    fixed_office_fee_amount: Optional[Decimal] = Field(None, ge=0)
+    billing_date: Optional[date] = None
 
 
 class InvoiceLineResponse(BaseModel):
@@ -1251,9 +1556,17 @@ class InvoiceResponse(BaseModel):
     """請求書レスポンス"""
     id: str
     invoice_number: str
+    document_type: str
     client_name: str
     project_name: str
     period_key: str
+    billing_date: date
+    subject: Optional[str] = None
+    addressee_company_name: Optional[str] = None
+    addressee_name: Optional[str] = None
+    addressee_email: Optional[str] = None
+    addressee_address: Optional[str] = None
+    fixed_office_fee_amount: Optional[Decimal] = None
     total_amount: Decimal
     status: str
     lines: List[InvoiceLineResponse]
@@ -1269,6 +1582,8 @@ class PayoutListQuery(PaginationQuery, SortQuery):
     period_key: Optional[str] = Field(None, pattern=r"^\d{6}$")
     worker_id: Optional[str] = None
     supplier_id: Optional[str] = None
+    recipient_type: Optional[str] = None
+    recipient_id: Optional[str] = None
     project_id: Optional[str] = None
     status: Optional[str] = None
     missing_default_recipient_only: bool = False
@@ -1281,6 +1596,9 @@ class PayoutListItem(BaseModel):
     payout_number: str
     payee_name: str
     payee_type: str
+    recipient_type: Optional[str] = None
+    recipient_id: Optional[str] = None
+    payee_name_snapshot: Optional[str] = None
     project_id: Optional[str] = None
     project_name: str
     period_key: str
@@ -1303,8 +1621,11 @@ class PayoutListResponse(PageResponse[PayoutListItem]):
 
 class PayoutGenerateRequest(BaseModel):
     """支払明細生成リクエスト"""
-    project_id: str
-    worker_id: str
+    project_id: Optional[str] = None
+    worker_id: Optional[str] = None
+    recipient_type: Optional[str] = Field(None, max_length=20)
+    recipient_id: Optional[str] = None
+    support_fee_amount: Optional[Decimal] = Field(None, ge=0)
     period_key: str = Field(..., pattern=r"^\d{6}$", description="期間キー YYYYMM")
 
 
@@ -1322,6 +1643,9 @@ class PayoutResponse(BaseModel):
     id: str
     payout_number: str
     worker_name: str
+    payee_name: str
+    recipient_type: Optional[str] = None
+    recipient_id: Optional[str] = None
     project_name: str
     period_key: str
     total_amount: Decimal
@@ -1464,6 +1788,344 @@ class AuditLogResponse(BaseModel):
 class AuditLogListResponse(PageResponse[AuditLogResponse]):
     """監査ログ一覧レスポンス"""
     pass
+
+
+# ===========================
+# VanzaiStaff Schemas
+# ===========================
+
+class VanzaiStaffListQuery(PaginationQuery, SortQuery):
+    """VANZAI担当者一覧クエリ"""
+    search: Optional[str] = Field(None, max_length=100)
+    is_active: Optional[bool] = None
+
+
+class VanzaiStaffItem(BaseModel):
+    """VANZAI担当者の1行"""
+    id: str
+    name: str
+    role: Optional[str] = None
+    linked_worker_id: Optional[str] = None
+    linked_worker_name: Optional[str] = None
+    playing_manager_fee_type: Optional[Literal["subordinate_man_days", "fixed_amount"]] = None
+    playing_manager_fixed_fee: Optional[Decimal] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    is_active: bool
+    notes: Optional[str] = None
+
+
+class VanzaiStaffListResponse(PageResponse[VanzaiStaffItem]):
+    """VANZAI担当者一覧レスポンス"""
+    pass
+
+
+class VanzaiStaffCreateRequest(BaseModel):
+    """VANZAI担当者作成リクエスト"""
+    name: str = Field(..., min_length=1, max_length=100)
+    role: Optional[str] = Field(None, max_length=100)
+    linked_worker_id: Optional[str] = None
+    playing_manager_fee_type: Optional[Literal["subordinate_man_days", "fixed_amount"]] = None
+    playing_manager_fixed_fee: Optional[Decimal] = Field(None, ge=0)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=255)
+    is_active: bool = True
+    notes: Optional[str] = None
+
+
+class VanzaiStaffUpdateRequest(VanzaiStaffCreateRequest):
+    """VANZAI担当者更新リクエスト"""
+    pass
+
+
+# ===========================
+# ClientStaff Schemas
+# ===========================
+
+class ClientStaffListQuery(PaginationQuery, SortQuery):
+    """クライアント担当者一覧クエリ"""
+    client_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ClientStaffItem(BaseModel):
+    """クライアント担当者の1行"""
+    id: str
+    client_id: str
+    name: str
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    is_active: bool
+    notes: Optional[str] = None
+
+
+class ClientStaffListResponse(PageResponse[ClientStaffItem]):
+    """クライアント担当者一覧レスポンス"""
+    pass
+
+
+class ClientStaffCreateRequest(BaseModel):
+    """クライアント担当者作成リクエスト"""
+    name: str = Field(..., min_length=1, max_length=100)
+    role: Optional[str] = Field(None, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=255)
+    is_active: bool = True
+    notes: Optional[str] = None
+
+
+class ClientStaffUpdateRequest(ClientStaffCreateRequest):
+    """クライアント担当者更新リクエスト"""
+    pass
+
+
+# ===========================
+# WorkerBankAccount Schemas
+# ===========================
+
+class WorkerBankAccountItem(BaseModel):
+    """稼働者口座の1行"""
+    id: str
+    worker_id: str
+    bank_name: str
+    branch_name: str
+    branch_code: Optional[str] = None
+    account_type: str
+    account_number: str
+    account_holder_kana: str
+    transfer_destination_name: Optional[str] = None
+    effective_from: date
+    effective_until: Optional[date] = None
+    is_primary: bool
+
+
+class WorkerBankAccountListResponse(BaseModel):
+    """稼働者口座一覧レスポンス"""
+    items: List[WorkerBankAccountItem]
+    total: int
+
+
+class WorkerBankAccountCreateRequest(BaseModel):
+    """稼働者口座作成リクエスト"""
+    bank_name: str = Field(..., min_length=1, max_length=100)
+    branch_name: str = Field(..., min_length=1, max_length=100)
+    branch_code: Optional[str] = Field(None, max_length=10)
+    account_type: str = Field(..., max_length=20)
+    account_number: str = Field(..., min_length=1, max_length=20)
+    account_holder_kana: str = Field(..., min_length=1, max_length=200)
+    transfer_destination_name: Optional[str] = Field(None, max_length=200)
+    effective_from: date
+    effective_until: Optional[date] = None
+    is_primary: bool = False
+
+
+class WorkerBankAccountUpdateRequest(WorkerBankAccountCreateRequest):
+    """稼働者口座更新リクエスト"""
+    pass
+
+
+# ===========================
+# SupplierBankAccount Schemas
+# ===========================
+
+class SupplierBankAccountItem(BaseModel):
+    """下請け口座の1行"""
+    id: str
+    supplier_id: str
+    bank_name: str
+    branch_name: str
+    branch_code: Optional[str] = None
+    account_type: str
+    account_number: str
+    account_holder_kana: str
+    transfer_destination_name: Optional[str] = None
+    effective_from: date
+    effective_until: Optional[date] = None
+    is_primary: bool
+
+
+class SupplierBankAccountListResponse(BaseModel):
+    """下請け口座一覧レスポンス"""
+    items: List[SupplierBankAccountItem]
+    total: int
+
+
+class SupplierBankAccountCreateRequest(BaseModel):
+    """下請け口座作成リクエスト"""
+    bank_name: str = Field(..., min_length=1, max_length=100)
+    branch_name: str = Field(..., min_length=1, max_length=100)
+    branch_code: Optional[str] = Field(None, max_length=10)
+    account_type: str = Field(..., max_length=20)
+    account_number: str = Field(..., min_length=1, max_length=20)
+    account_holder_kana: str = Field(..., min_length=1, max_length=200)
+    transfer_destination_name: Optional[str] = Field(None, max_length=200)
+    effective_from: date
+    effective_until: Optional[date] = None
+    is_primary: bool = False
+
+
+class SupplierBankAccountUpdateRequest(SupplierBankAccountCreateRequest):
+    """下請け口座更新リクエスト"""
+    pass
+
+
+# ===========================
+# OCR Receipt Schemas
+# ===========================
+
+class OcrSourceImageItem(BaseModel):
+    id: str
+    source_type: str
+    original_filename: Optional[str] = None
+    sha256: str
+    mime_type: Optional[str] = None
+    size_bytes: int
+    period_key: Optional[str] = None
+    parse_status: str
+    uploaded_by: Optional[str] = None
+    last_job_id: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+
+
+class OcrSourceImageListResponse(BaseModel):
+    items: List["OcrSourceImageItem"]
+    total: int
+
+
+class OcrParseJobRequest(BaseModel):
+    image_ids: List[str] = Field(..., min_length=1)
+
+
+class OcrParseJobResponse(BaseModel):
+    id: str
+    status: str
+    image_count: int
+    success_count: int
+    failed_count: int
+    row_count: int
+    executed_by: Optional[str] = None
+    completed_at: Optional[datetime] = None
+
+
+class OcrExtractedRowItem(BaseModel):
+    id: str
+    source_image_id: str
+    parse_job_id: Optional[str] = None
+    source_type: str
+    period_key: Optional[str] = None
+    record_date: Optional[date] = None
+    record_time: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: str
+    transaction_no: Optional[str] = None
+    receipt_no: Optional[str] = None
+    payment_method: Optional[str] = None
+    terminal_id: Optional[str] = None
+    cash_sales: Optional[Decimal] = None
+    credit_sales: Optional[Decimal] = None
+    transaction_count: Optional[int] = None
+    tax_included: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+    store_name: Optional[str] = None
+    confidence: Optional[Decimal] = None
+    status: str
+    validation_errors: Optional[List[str]] = None
+    project_id: Optional[str] = None
+    report_date: Optional[date] = None
+    linked_entity_type: Optional[str] = None
+    linked_entity_id: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    confirmed_by: Optional[str] = None
+
+
+class OcrExtractedRowListResponse(BaseModel):
+    items: List[OcrExtractedRowItem]
+    total: int
+
+
+class OcrExtractedRowUpdateRequest(BaseModel):
+    record_date: Optional[date] = None
+    record_time: Optional[str] = None
+    amount: Optional[Decimal] = None
+    transaction_no: Optional[str] = None
+    receipt_no: Optional[str] = None
+    payment_method: Optional[str] = None
+    terminal_id: Optional[str] = None
+    cash_sales: Optional[Decimal] = None
+    credit_sales: Optional[Decimal] = None
+    transaction_count: Optional[int] = None
+    tax_included: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+    store_name: Optional[str] = None
+    status: Optional[str] = None
+    project_id: Optional[str] = None
+    report_date: Optional[date] = None
+
+
+class OcrRowsConfirmRequest(BaseModel):
+    row_ids: List[str] = Field(..., min_length=1)
+
+
+class OcrRowsConfirmResponse(BaseModel):
+    confirmed_count: int
+
+
+class OcrMonthlySummaryItem(BaseModel):
+    period_key: str
+    source_type: str
+    row_count: int
+    total_amount: str
+
+
+class OcrMonthlySummaryResponse(BaseModel):
+    items: List[OcrMonthlySummaryItem]
+
+
+class OcrReconciliationColumnMapping(BaseModel):
+    transaction_no: Optional[str] = None
+    receipt_no: Optional[str] = None
+    record_date: Optional[str] = None
+    amount: Optional[str] = None
+
+
+class OcrReconciliationResultItem(BaseModel):
+    id: str
+    match_status: str
+    ocr_row_id: Optional[str] = None
+    hq_row_index: Optional[int] = None
+    hq_payload: Optional[dict] = None
+    amount_diff: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
+class OcrReconciliationBatchResponse(BaseModel):
+    id: str
+    period_key: Optional[str] = None
+    file_name: str
+    row_count: int
+    matched_count: int
+    unmatched_ocr_count: int
+    unmatched_hq_count: int
+    amount_diff_count: int
+    results: List[OcrReconciliationResultItem]
+
+
+class OcrRowLinkRequest(BaseModel):
+    linked_entity_type: str
+    linked_entity_id: str
+    project_id: Optional[str] = None
+
+
+class OcrSelfReportCompareResponse(BaseModel):
+    period_key: str
+    project_id: Optional[str] = None
+    ocr_row_count: int
+    ocr_total_amount: str
+    linked_count: int
+    self_report_available: bool
+    message: str
 
 
 # ===========================
