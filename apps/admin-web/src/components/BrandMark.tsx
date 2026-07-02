@@ -11,8 +11,8 @@ export function BrandMark({ size = 48 }: { size?: number }) {
       aria-label="VANZAI"
     >
       <rect width="32" height="32" rx="8" fill="#1b2530" />
-      <path fill="#f8efe1" d="M18 8h8.5v3H20.5l4.5 7H18v3h8.5v3H18v3h4.8l-4.5-7H26.5V24h-8.5V8z" />
-      <path fill="#d98f2b" d="M6.5 9h2.8l4 8.2L17.2 9H19.8l-5.8 14h-2.6L6.5 9z" />
+      <path fill="#f8efe1" d="M16 9L25.5 9L25.5 11.5L20 20.5L25.5 20.5L25.5 23L16 23L16 20.5L21.5 11.5L16 11.5Z" />
+      <path fill="#d98f2b" d="M6.5 9L9.5 9L14 17.8L18.5 9L21.5 9L14.8 23.5L12 23.5Z" />
     </svg>
   );
 }
