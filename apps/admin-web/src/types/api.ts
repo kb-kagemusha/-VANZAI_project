@@ -1257,6 +1257,8 @@ export interface OcrSourceImageItem {
   last_job_id: string | null;
   error_message: string | null;
   created_at: string;
+  reused_existing?: boolean;
+  has_filename_duplicate?: boolean;
 }
 
 export interface OcrSourceImageListResponse {
@@ -1278,6 +1280,7 @@ export interface OcrParseJobResponse {
 export interface OcrExtractedRowItem {
   id: string;
   source_image_id: string;
+  source_image_filename: string | null;
   parse_job_id: string | null;
   source_type: OcrSourceType;
   period_key: string | null;
@@ -1296,6 +1299,11 @@ export interface OcrExtractedRowItem {
   subtotal: string | null;
   store_name: string | null;
   confidence: string | null;
+  amount_inferred: boolean;
+  amount_source: string | null;
+  datetime_source: string | null;
+  confirm_required: boolean;
+  manually_edited: boolean;
   status: string;
   validation_errors: string[] | null;
   project_id: string | null;

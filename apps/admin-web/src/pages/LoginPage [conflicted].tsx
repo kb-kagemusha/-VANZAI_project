@@ -38,6 +38,8 @@ export function LoginPage() {
     } catch (submitError) {
       if (submitError instanceof ApiError) {
         setError(submitError.message);
+      } else if (submitError instanceof TypeError) {
+        setError("認証サーバーに接続できません。ネットワークまたはAPIの状態を確認してください。");
       } else {
         setError("ログイン処理に失敗しました");
       }

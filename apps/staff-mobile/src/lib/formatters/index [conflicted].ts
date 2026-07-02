@@ -10,16 +10,35 @@ export function formatDate(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+export function normalizeYenAmount(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numeric = Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  return Math.round(numeric);
+}
+
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  const normalized = normalizeYenAmount(value);
+  if (normalized === null) {
     return "-";
   }
 
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Number(value));
+  }).format(normalized);
 }
 
 export function formatStatus(value: string | null | undefined): string {

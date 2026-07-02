@@ -24,16 +24,44 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+export function normalizeYenAmount(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numeric = Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  return Math.round(numeric);
+}
+
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  const normalized = normalizeYenAmount(value);
+  if (normalized === null) {
     return "-";
   }
 
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Number(value));
+  }).format(normalized);
+}
+
+/** 編集フォーム用。小数点なしの整数文字列を返す。 */
+export function formatYenAmountPlain(value: string | number | null | undefined): string {
+  const normalized = normalizeYenAmount(value);
+  if (normalized === null) {
+    return "";
+  }
+  return String(normalized);
 }
 
 export function formatMaskedAccountNumber(value: string | null | undefined): string {
@@ -388,6 +416,19 @@ export function formatStatus(value: string | null | undefined): string {
     return "-";
   }
   return STATUS_LABELS[value] || value;
+}
+
+const OCR_PARSE_STATUS_LABELS: Record<string, string> = {
+  pending: "解析待ち",
+  completed: "完了",
+  failed: "失敗",
+};
+
+export function formatOcrParseStatus(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  return OCR_PARSE_STATUS_LABELS[value] || formatStatus(value);
 }
 
 export function formatRole(value: string | null | undefined): string {

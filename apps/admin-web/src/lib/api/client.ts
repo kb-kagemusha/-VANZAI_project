@@ -331,20 +331,30 @@ export async function requestToken(username: string, password: string): Promise<
   form.set("username", username);
   form.set("password", password);
 
-  const response = await fetch(buildUrl("/api/auth/token"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form.toString(),
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl("/api/auth/token"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "認証サーバーに接続できません。APIが停止している可能性があります。しばらく待ってから再試行してください。",
+    );
+  }
   const payload = await readResponse(response);
 
   if (!response.ok) {
     const message =
       typeof payload === "object" && payload !== null && "detail" in payload
         ? String(payload.detail)
-        : "ログインに失敗しました";
+        : response.status === 401
+          ? "ユーザー名またはパスワードが正しくありません"
+          : "ログインに失敗しました";
     throw new ApiError(response.status, message, payload);
   }
 
@@ -1081,6 +1091,44 @@ export function listOcrImages(params?: Record<string, string | number | boolean 
   return apiFetch<OcrSourceImageListResponse>("/api/ocr/images", undefined, params);
 }
 
+export async function fetchOcrImageBlobUrl(imageId: string): Promise<string> {
+  const headers = new Headers();
+  const token = getStoredAccessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(buildUrl(`/api/ocr/images/${imageId}/file`), { headers });
+  if (!response.ok) {
+    const payload = await readResponse(response);
+    const message =
+      typeof payload === "object" && payload !== null && "detail" in payload
+        ? String(payload.detail)
+        : response.statusText;
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+    throw new ApiError(response.status, message || "Image fetch failed", payload);
+  }
+
+  const blob = await response.blob();
+  return window.URL.createObjectURL(blob);
+}
+
+export function deleteOcrImages(imageIds: string[]) {
+  return apiFetch<{ deleted_count: number }>("/api/ocr/images", {
+    method: "DELETE",
+    body: JSON.stringify({ image_ids: imageIds }),
+  });
+}
+
+export function renameOcrImage(imageId: string, originalFilename: string) {
+  return apiFetch<OcrSourceImageItem>(`/api/ocr/images/${imageId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ original_filename: originalFilename }),
+  });
+}
+
 export function parseOcrImages(imageIds: string[]) {
   return apiFetch<OcrParseJobResponse>("/api/ocr/jobs/parse", {
     method: "POST",
@@ -1102,6 +1150,13 @@ export function updateOcrRow(rowId: string, body: Partial<OcrExtractedRowItem>) 
 export function confirmOcrRows(rowIds: string[]) {
   return apiFetch<{ confirmed_count: number }>("/api/ocr/rows/confirm", {
     method: "POST",
+    body: JSON.stringify({ row_ids: rowIds }),
+  });
+}
+
+export function deleteOcrRows(rowIds: string[]) {
+  return apiFetch<{ deleted_count: number }>("/api/ocr/rows", {
+    method: "DELETE",
     body: JSON.stringify({ row_ids: rowIds }),
   });
 }
