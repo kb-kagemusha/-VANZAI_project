@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VANZAI Favicon 候補</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "BIZ UDPGothic", "Yu Gothic UI", sans-serif;
+        background: #f6f2e8;
+        color: #1d2731;
+      }
+      body {
+        margin: 0;
+        padding: 2rem;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 0 0 2rem;
+        color: #5d6774;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1.25rem;
+        max-width: 960px;
+      }
+      .card {
+        background: #fff9ee;
+        border: 1px solid rgba(29, 39, 49, 0.12);
+        border-radius: 18px;
+        padding: 1.25rem;
+        box-shadow: 0 18px 40px rgba(29, 39, 49, 0.08);
+      }
+      .card h2 {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+      }
+      .card small {
+        color: #5d6774;
+      }
+      .preview {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin: 1rem 0;
+      }
+      .preview img {
+        width: 64px;
+        height: 64px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(29, 39, 49, 0.15);
+      }
+      .preview .tab {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(29, 39, 49, 0.2);
+      }
+      .note {
+        margin-top: 2rem;
+        padding: 1rem 1.25rem;
+        background: rgba(200, 85, 61, 0.1);
+        border-radius: 12px;
+        max-width: 720px;
+        font-size: 0.95rem;
+      }
+      code {
+        background: rgba(29, 39, 49, 0.06);
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>VANZAI Favicon 候補</h1>
+    <p>管理画面・スタッフモバイル共通。現在は <strong>候補B（VZ モノグラム）</strong> を本番 favicon に設定しています。</p>
+
+    <div class="grid">
+      <article class="card">
+        <h2>候補A — ブランド V</h2>
+        <small>サイドナビの brand-mark と同一デザイン</small>
+        <div class="preview">
+          <img src="/favicons/candidate-a-brand-v.svg" alt="候補A" />
+          <img class="tab" src="/favicons/candidate-a-brand-v.svg" alt="候補A タブサイズ" />
+        </div>
+        <p>オレンジ→テラコッタのグラデーション＋白い V。既存UIとの一体感が最も高い。</p>
+      </article>
+
+      <article class="card">
+        <h2>候補B — VZ モノグラム</h2>
+        <small>ダークネイビー × ゴールド</small>
+        <div class="preview">
+          <img src="/favicons/candidate-b-vz.svg" alt="候補B" />
+          <img class="tab" src="/favicons/candidate-b-vz.svg" alt="候補B タブサイズ" />
+        </div>
+        <p>V と Z を組み合わせたモノグラム。法人名の頭文字を強調。</p>
+      </article>
+
+      <article class="card">
+        <h2>候補C — ネイビー＆ゴールド</h2>
+        <small>円形・落ち着いた印象</small>
+        <div class="preview">
+          <img src="/favicons/candidate-c-navy-gold.svg" alt="候補C" />
+          <img class="tab" src="/favicons/candidate-c-navy-gold.svg" alt="候補C タブサイズ" />
+        </div>
+        <p>サイドナビのダークトーンに合わせた円形デザイン。ビジネス向けの堅実な印象。</p>
+      </article>
+
+      <article class="card">
+        <h2>候補D — フロー</h2>
+        <small>案件・シフトの流れを抽象化</small>
+        <div class="preview">
+          <img src="/favicons/candidate-d-flow.svg" alt="候補D" />
+          <img class="tab" src="/favicons/candidate-d-flow.svg" alt="候補D タブサイズ" />
+        </div>
+        <p>文字を使わず、緑・金・テラコッタの3点を結ぶワークフロー記号。</p>
+      </article>
+    </div>
+
+    <div class="note">
+      別候補に切り替える場合は <code>public/favicon.svg</code> を選んだ候補の SVG で上書きしてください。
+      例: <code>cp public/favicons/candidate-c-navy-gold.svg public/favicon.svg</code>
+    </div>
+  </body>
+</html>

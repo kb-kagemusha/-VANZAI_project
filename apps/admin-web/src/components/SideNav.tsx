@@ -22,6 +22,7 @@ import {
 
 import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
 import { useAuth } from "../lib/auth/auth-context";
+import { BrandMark } from "./BrandMark";
 
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
@@ -50,7 +51,7 @@ export function SideNav() {
   return (
     <aside className="side-nav">
       <div className="side-nav-brand">
-        <span className="brand-mark">V</span>
+        <BrandMark />
         <div>
           <p className="eyebrow">フェーズ1</p>
           <h2>管理画面</h2>
