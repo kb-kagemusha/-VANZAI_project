@@ -53,8 +53,8 @@ export function SideNav() {
       <div className="side-nav-brand">
         <BrandMark />
         <div>
-          <p className="eyebrow">繝輔ぉ繝ｼ繧ｺ1</p>
-          <h2>邂｡逅・判髱｢</h2>
+          <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
+          <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
         </div>
       </div>
       <nav className="side-nav-links">
