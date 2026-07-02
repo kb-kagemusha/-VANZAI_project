@@ -161,12 +161,8 @@ type OcrRowEditDraft = {
   terminal_short_id: string;
   subtotal: string;
   cash_sales: string;
-  credit_sales: string;
   pos_sales: string;
-  other_payment: string;
   transaction_count: string;
-  branch_id: string;
-  staff_id: string;
 };
 
 function OcrRowEditModal({
