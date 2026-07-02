@@ -1,6 +1,8 @@
 # CHANGELOG
 
 バージョン管理ルール（AGENTS.md セクション9 参照）
+- **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
+- **CHANGELOG の `## [X.Y.Z]` 見出し**は、上記 `package.json` を実際に更新した版のみ付与する（開発メモを版番号として記載しない）
 - **X（左）**: 大きな機能追加（新ドメイン追加、画面体系の大幅変更など）
 - **Y（中）**: 細かな機能追加（既存画面への機能追加、新APIエンドポイント、新ページなど）
 - **Z（右）**: バグ修正・軽微な変更（修正、リファクタリング、表示調整など）
@@ -12,60 +14,108 @@
   - VZ モノグラム（候補B）を管理画面・スタッフモバイルの favicon に適用
   - 管理画面サイドナビの brand-mark を同一デザインに変更
 
-## [0.9.21] - 2026-06-16
-
-### Added
-- **OCR 保存データの並び替え**（`ReceiptOcrPage.tsx`, `sortRows.ts`）
-  - 画像ファイル名・日付・金額・取引番号・レシート番号で昇順/降順
-  - 列ヘッダークリックまたはツールバーから切替
-
-## [0.9.20] - 2026-06-16
-
-### Added
-- **同一画像内の多数決補正**（`paygate_consensus.py`）
-  - 日付: 2025/05 等の OCR 誤読を同画面の多数派日付へ補正（要確認）
-  - 金額: 画面内がほぼ 980 円のとき 1980 円誤読を 980 へ補正（要確認）
-
 ### Fixed
-- **1980 円**: ¥980 の先頭誤読として 980 へ補正（1480 円はそのまま）
-- 5/6 混同による日付ズレ（2026-05-10 / 2025-06-10 等）
+- **CHANGELOG 版番号の整合**（`CHANGELOG.md`）
+  - 0.9.2–0.9.21 を個別デプロイ版として誤記していた記述を `[0.9.1]` へ統合（`package.json` は 0.9.1 → 0.9.22 のみが実績）
 
-## [0.9.19] - 2026-06-16
+## [0.9.1] - 2026-06-11 — 2026-06-16
 
-### Added
-- **Paygate 保存条件**: 日付・取引番号（7桁）・レシート番号（13桁）の3つが揃った行のみ DB 保存
-- レシート番号の `101…` → `781…` OCR 誤読補正
-- レシート番号アンカーによるブロック分割（取りこぼし低減）
-- Paygate 解析時に拡大前処理 OCR を常時マージ
+`package.json` は **0.9.1** のまま本番反映されていた期間の OCR 継続改善をまとめる。git 上も `6c50f6b`（0.9.1）から `45ad671`（0.9.22）まで版番号更新はなく、中間の 0.9.2–0.9.21 に相当する git tag / デプロイ版は存在しない。
 
-### Fixed
-- 取引番号6桁（123054 等）・レシート欠損行が不完全なまま保存されていた問題
-- 取引番号パターンを `1xxxxxx`（7桁）に拡張
+### Changed — Paygate 重複除去（初回 0.9.1 反映）
+- **Paygateスクリーンショット OCR**（`src/services/ocr/dedupe.py`, `src/services/ocr/parsers/paygate_screenshot.py`, `src/services/ocr_service.py`）
+  - 取引番号・レシート番号が重複する行を自動で統合（スクロール重なり・半分だけ写ったキャプチャ対策）
+  - 複数画像を一括解析した場合もジョブ内・既存 DB 行と突合して重複を除外
+  - 重複時は項目が揃っている行（レシート番号・決済方法など）を優先して保持
 
-## [0.9.18] - 2026-06-16
+### Changed — OCR 画像一覧 UI
+- **OCR 画像一覧 UI**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`, `global.css`）
+  - アップロード済み画像のサムネイル表示、選択削除、同一画像・同名ファイルの重複表示
+  - 解析失敗時のエラーメッセージを画像カードに表示
+  - カード内の文字重なりを解消する縦型レイアウトに変更
+  - 解析失敗（`failed`）画像も再解析対象に含める
+- **OCR 画像 API**（`src/api/ocr_routes.py`）
+  - 認証付き画像ファイル取得 `GET /api/ocr/images/{id}/file` と一括削除 `DELETE /api/ocr/images` を追加
 
-### Fixed
-- **Paygate OCR 行抽出**（`paygate_screenshot.py`, `paygate_receipt.py`）
-  - 「取引番号」ラベル欠落時も取引番号・レシート番号（781…）から行を復元
-  - 日時行を起点にブロック分割を強化し、8件スクショの取りこぼしを低減
-- **金額解釈**（`paygate_amount.py`）
-  - **1980 / 1480 を実金額として保持**（1980 を 980 に自動補正しない）
-  - 2980 / 7980 等の ￥誤読のみ 980 へ補正
+### Fixed — PaddleOCR 3.x 互換・前処理
+- **PaddleOCR 3.x 互換**（`pyproject.toml`, `src/services/ocr/paddle_engine.py`）
+  - 本番で `paddleocr 3.7` が paddlex 依存不足により全件解析失敗していた問題を修正（`paddleocr<3` に固定）
+- **OCR 前処理・アップロード**（`src/services/ocr/image_preprocess.py`, `src/services/ocr_service.py`）
+  - OpenCV 競合による `cv2.cvtColor` エラーを Pillow 前処理に切替えて解消
+  - 削除済み画像と同一内容を再アップロードした際の DB 一意制約エラーを解消（復元して再利用）
 
-## [0.9.17] - 2026-06-16
+### Changed — OCR 画像一覧 UI 拡張
+- **OCR 画像一覧 UI**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`）
+  - 表示形式の切替（サムネイル / 一覧＝ファイル名・日時のみ）
+  - セクションの折りたたみ
+  - 表示件数の変更（10 / 20 / 50 件）とページ送り
+- **エージェントルール**（`AGENTS.md`, `.cursor/rules/version-bump.mdc`）
+  - バグ修正・UI改善完了時もバージョンを上げることを明文化
 
-### Added
-- **OCR 保存データ削除の改善**（`ReceiptOcrPage.tsx`, `ocr_service.py`）
-  - 要確認行も含めすべての保存データ行を選択・削除可能
-  - 各行・各画像に「削除」ボタンを追加（確認ダイアログ付き）
-  - 画像削除時に関連する解析行をカスケード soft delete
+### Fixed — OCR 解析の安定性
+- **OCR 解析の安定性**（`restart_uvicorn.sh`, `scripts/deploy/systemd/vanzai-api.service`）
+  - PaddleOCR 初回ロード時に uvicorn ワーカーが落ちて「解析に失敗しました」となる問題を修正（`--workers 1` に変更）
 
-### Fixed
-- 要確認行がチェックボックス選択不可のため削除できなかった問題
+### Changed — OCR 画像・保存データ UI
+- **OCR 画像一覧**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`）
+  - 未解析状態の表示を「保留」から **「解析待ち」** に変更
+- **OCR 保存データ**（`src/api/ocr_routes.py`, `ReceiptOcrPage.tsx`）
+  - 解析結果行の選択削除（すべて選択含む）を追加
 
-## [0.9.16] - 2026-06-16
+### Changed — OCR 表示
+- **OCR 表示**（`ReceiptOcrPage.tsx`, `src/api/ocr_routes.py`）
+  - 種別ラベルを「Paygate」「レシート」に短縮
+  - 保存データに解析元の画像ファイル名を表示（10文字超は「・・・」で省略）
+  - アップロード後の画像ファイル名を変更可能に（保存データのファイル名も連動）
 
-### Added
+### Changed — OCR 画面（選択 UI）
+- **OCR 画面**（`ReceiptOcrPage.tsx`）
+  - 「すべて選択」をチェックボックスからボタン表示に変更（選択解除トグル付き）
+
+### Changed — OCR 画像プレビュー
+- **OCR 画面**（`ReceiptOcrPage.tsx`）
+  - サムネイル・画像ファイル名をホバー／クリックで拡大プレビュー表示
+  - ファイル名の省略表示を 10 文字から 24 文字に拡張（`title` で全文表示は維持）
+
+### Fixed — OCR 保存データ表示
+- **OCR 保存データ**（`ReceiptOcrPage.tsx`）
+  - 画像ファイル名の表示から拡張子（`.jpg` 等）を除外
+  - テーブル内ホバープレビューが見切れる問題を修正（ポータル表示で枠外に描画）
+
+### Fixed — Paygate スクリーンショット OCR（金額・行抽出）
+- **Paygate スクリーンショット OCR**（`paygate_screenshot.py`）
+  - 金額が `￥` なしの単独行（例: `980`）で読まれるケースに対応
+  - 日付・時刻・ラベルが改行区切りの OCR 結果でも金額を抽出
+- **OCR 画像プレビュー**（`ReceiptOcrPage.tsx`）
+  - アップロード前の画像・サムネイル・保存データのファイル名でホバーが効かない／見切れる問題を修正
+  - プレビューを常に画面全体へポータル表示し、トリガー付近に自動配置
+- **Paygate スクリーンショット OCR 金額**（`paygate_amount.py`, `paygate_screenshot.py`）
+  - ￥記号を数字（2/5/7 等）と誤認した `2980` `7980` 等を `980` に補正
+  - 青文字の金額領域を強調する画像前処理を追加
+
+### Fixed — Paygate OCR 金額
+- **Paygate OCR 金額**（`paygate_amount.py`, `ocr_service.py`, `image_preprocess.py`）
+  - 青文字 `￥980` 専用の OCR パスを追加し、取引行の右側読み取り・980 円フォールバックを実装
+  - 2980 等の誤読補正を維持しつつ、OCR が金額行を読めないケースでも 980 円を推定
+- **OCR 画面**（`ReceiptOcrPage.tsx`）
+  - 金額表示を整数円表示に統一（`980.00` → `¥980`）
+
+### Changed — OCR 解析フロー
+- **OCR 画面**（`ReceiptOcrPage.tsx`）
+  - 「解析」ボタンをアップロード済み画像セクションへ移動（アップロード後に解析する流れを明確化）
+
+### Fixed — Paygate レシート番号 OCR
+- **Paygate レシート番号 OCR**（`paygate_receipt.py`）
+  - `レツート番号` 等のラベル誤認識、`日` 混入数字に対応しレシート番号を抽出
+
+### Fixed — Paygate OCR パーサー
+- **Paygate OCR パーサー**（`paygate_datetime.py`, `paygate_screenshot.py`, `paygate_amount.py`, `ocr_service.py`）
+  - 日時の曖昧パース（`20:521`→`20:52:1`、`2034:01`→`20:34:01` 等）で厳密マッチ失敗時も行を抽出
+  - 取引番号をアンカーにブロック分割し、日時が壊れていても取引行を生成
+  - Paygate 向け gray + blue 2パス OCR、0行時は upscale 3パス目を追加
+  - 日時未取得時の金額抽出クラッシュを修正
+
+### Added — OCR 確定ガード・行編集
 - **OCR 確定ガード**（`confirm_metadata.py`, `ocr_service.py`, `ocr_routes.py`）
   - `confirm_required=true` や検証エラー行は confirmed にできない（全体拒否）
   - DB カラム: `amount_inferred`, `amount_source`, `datetime_source`, `confirm_required`, `manually_edited`
@@ -75,137 +125,51 @@
   - 推定・要確認メタデータ列を追加
 - **Vitest**（`rowDisplay.ts`）表示ラベルテスト
 
-### Fixed
+### Fixed — Paygate OCR メタデータ
 - **Paygate OCR メタデータ**（`paygate_amount.py`, `paygate_datetime.py`, `paygate_screenshot.py`）
   - 980 円フォールバック・補正 OCR・fuzzy/missing 日時を要確認として正規化
   - `HH:MM:SS` 形式でない時刻は確定不可
 
-## [0.9.15] - 2026-06-11
+### Added — OCR 保存データ削除の改善
+- **OCR 保存データ削除の改善**（`ReceiptOcrPage.tsx`, `ocr_service.py`）
+  - 要確認行も含めすべての保存データ行を選択・削除可能
+  - 各行・各画像に「削除」ボタンを追加（確認ダイアログ付き）
+  - 画像削除時に関連する解析行をカスケード soft delete
 
-### Fixed
-- **Paygate OCR パーサー**（`paygate_datetime.py`, `paygate_screenshot.py`, `paygate_amount.py`, `ocr_service.py`）
-  - 日時の曖昧パース（`20:521`→`20:52:1`、`2034:01`→`20:34:01` 等）で厳密マッチ失敗時も行を抽出
-  - 取引番号をアンカーにブロック分割し、日時が壊れていても取引行を生成
-  - Paygate 向け gray + blue 2パス OCR、0行時は upscale 3パス目を追加
-  - 日時未取得時の金額抽出クラッシュを修正
+### Fixed — OCR 行削除
+- 要確認行がチェックボックス選択不可のため削除できなかった問題
 
-## [0.9.14] - 2026-06-11
+### Fixed — Paygate OCR 行抽出・金額解釈
+- **Paygate OCR 行抽出**（`paygate_screenshot.py`, `paygate_receipt.py`）
+  - 「取引番号」ラベル欠落時も取引番号・レシート番号（781…）から行を復元
+  - 日時行を起点にブロック分割を強化し、8件スクショの取りこぼしを低減
+- **金額解釈**（`paygate_amount.py`）
+  - **1980 / 1480 を実金額として保持**（1980 を 980 に自動補正しない）
+  - 2980 / 7980 等の ￥誤読のみ 980 へ補正
 
-### Changed
-- **OCR 画面**（`ReceiptOcrPage.tsx`）
-  - 「解析」ボタンをアップロード済み画像セクションへ移動（アップロード後に解析する流れを明確化）
+### Added — Paygate 保存条件
+- **Paygate 保存条件**: 日付・取引番号（7桁）・レシート番号（13桁）の3つが揃った行のみ DB 保存
+- レシート番号の `101…` → `781…` OCR 誤読補正
+- レシート番号アンカーによるブロック分割（取りこぼし低減）
+- Paygate 解析時に拡大前処理 OCR を常時マージ
 
-### Fixed
-- **Paygate レシート番号 OCR**（`paygate_receipt.py`）
-  - `レツート番号` 等のラベル誤認識、`日` 混入数字に対応しレシート番号を抽出
+### Fixed — 取引番号・レシート欠損
+- 取引番号6桁（123054 等）・レシート欠損行が不完全なまま保存されていた問題
+- 取引番号パターンを `1xxxxxx`（7桁）に拡張
 
-## [0.9.13] - 2026-06-11
+### Added — 同一画像内の多数決補正
+- **同一画像内の多数決補正**（`paygate_consensus.py`）
+  - 日付: 2025/05 等の OCR 誤読を同画面の多数派日付へ補正（要確認）
+  - 金額: 画面内がほぼ 980 円のとき 1980 円誤読を 980 へ補正（要確認）
 
-### Fixed
-- **Paygate OCR 金額**（`paygate_amount.py`, `ocr_service.py`, `image_preprocess.py`）
-  - 青文字 `￥980` 専用の OCR パスを追加し、取引行の右側読み取り・980 円フォールバックを実装
-  - 2980 等の誤読補正を維持しつつ、OCR が金額行を読めないケースでも 980 円を推定
-- **OCR 画面**（`ReceiptOcrPage.tsx`）
-  - 金額表示を整数円表示に統一（`980.00` → `¥980`）
+### Fixed — 日付・金額誤読
+- **1980 円**: ¥980 の先頭誤読として 980 へ補正（1480 円はそのまま）
+- 5/6 混同による日付ズレ（2026-05-10 / 2025-06-10 等）
 
-## [0.9.12] - 2026-06-11
-
-### Fixed
-- **Paygate スクリーンショット OCR 金額**（`paygate_amount.py`, `paygate_screenshot.py`）
-  - ￥記号を数字（2/5/7 等）と誤認した `2980` `7980` 等を `980` に補正
-  - 青文字の金額領域を強調する画像前処理を追加
-
-## [0.9.11] - 2026-06-11
-
-### Fixed
-- **OCR 画像プレビュー**（`ReceiptOcrPage.tsx`）
-  - アップロード前の画像・サムネイル・保存データのファイル名でホバーが効かない／見切れる問題を修正
-  - プレビューを常に画面全体へポータル表示し、トリガー付近に自動配置
-
-## [0.9.10] - 2026-06-11
-
-### Fixed
-- **Paygate スクリーンショット OCR**（`paygate_screenshot.py`）
-  - 金額が `￥` なしの単独行（例: `980`）で読まれるケースに対応
-  - 日付・時刻・ラベルが改行区切りの OCR 結果でも金額を抽出
-
-## [0.9.9] - 2026-06-11
-
-### Fixed
-- **OCR 保存データ**（`ReceiptOcrPage.tsx`）
-  - 画像ファイル名の表示から拡張子（`.jpg` 等）を除外
-  - テーブル内ホバープレビューが見切れる問題を修正（ポータル表示で枠外に描画）
-
-## [0.9.8] - 2026-06-11
-
-### Changed
-- **OCR 画面**（`ReceiptOcrPage.tsx`）
-  - サムネイル・画像ファイル名をホバー／クリックで拡大プレビュー表示
-  - ファイル名の省略表示を 10 文字から 24 文字に拡張（`title` で全文表示は維持）
-
-## [0.9.7] - 2026-06-16
-
-### Changed
-- **OCR 画面**（`ReceiptOcrPage.tsx`）
-  - 「すべて選択」をチェックボックスからボタン表示に変更（選択解除トグル付き）
-
-## [0.9.6] - 2026-06-16
-
-### Changed
-- **OCR 表示**（`ReceiptOcrPage.tsx`, `src/api/ocr_routes.py`）
-  - 種別ラベルを「Paygate」「レシート」に短縮
-  - 保存データに解析元の画像ファイル名を表示（10文字超は「・・・」で省略）
-  - アップロード後の画像ファイル名を変更可能に（保存データのファイル名も連動）
-
-## [0.9.5] - 2026-06-16
-
-### Changed
-- **OCR 画像一覧**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`）
-  - 未解析状態の表示を「保留」から **「解析待ち」** に変更
-- **OCR 保存データ**（`src/api/ocr_routes.py`, `ReceiptOcrPage.tsx`）
-  - 解析結果行の選択削除（すべて選択含む）を追加
-
-## [0.9.4] - 2026-06-16
-
-### Fixed
-- **OCR 解析の安定性**（`restart_uvicorn.sh`, `scripts/deploy/systemd/vanzai-api.service`）
-  - PaddleOCR 初回ロード時に uvicorn ワーカーが落ちて「解析に失敗しました」となる問題を修正（`--workers 1` に変更）
-
-## [0.9.3] - 2026-06-16
-
-### Changed
-- **OCR 画像一覧 UI**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`）
-  - 表示形式の切替（サムネイル / 一覧＝ファイル名・日時のみ）
-  - セクションの折りたたみ
-  - 表示件数の変更（10 / 20 / 50 件）とページ送り
-- **エージェントルール**（`AGENTS.md`, `.cursor/rules/version-bump.mdc`）
-  - バグ修正・UI改善完了時もバージョンを上げることを明文化
-
-## [0.9.2] - 2026-06-16
-
-### Changed
-- **OCR 画像一覧 UI**（`apps/admin-web/src/pages/ReceiptOcrPage.tsx`, `global.css`）
-  - アップロード済み画像のサムネイル表示、選択削除、同一画像・同名ファイルの重複表示
-  - 解析失敗時のエラーメッセージを画像カードに表示
-  - カード内の文字重なりを解消する縦型レイアウトに変更
-  - 解析失敗（`failed`）画像も再解析対象に含める
-- **OCR 画像 API**（`src/api/ocr_routes.py`）
-  - 認証付き画像ファイル取得 `GET /api/ocr/images/{id}/file` と一括削除 `DELETE /api/ocr/images` を追加
-
-### Fixed
-- **PaddleOCR 3.x 互換**（`pyproject.toml`, `src/services/ocr/paddle_engine.py`）
-  - 本番で `paddleocr 3.7` が paddlex 依存不足により全件解析失敗していた問題を修正（`paddleocr<3` に固定）
-- **OCR 前処理・アップロード**（`src/services/ocr/image_preprocess.py`, `src/services/ocr_service.py`）
-  - OpenCV 競合による `cv2.cvtColor` エラーを Pillow 前処理に切替えて解消
-  - 削除済み画像と同一内容を再アップロードした際の DB 一意制約エラーを解消（復元して再利用）
-
-## [0.9.1] - 2026-06-16
-
-### Changed
-- **Paygateスクリーンショット OCR**（`src/services/ocr/dedupe.py`, `src/services/ocr/parsers/paygate_screenshot.py`, `src/services/ocr_service.py`）
-  - 取引番号・レシート番号が重複する行を自動で統合（スクロール重なり・半分だけ写ったキャプチャ対策）
-  - 複数画像を一括解析した場合もジョブ内・既存 DB 行と突合して重複を除外
-  - 重複時は項目が揃っている行（レシート番号・決済方法など）を優先して保持
+### Added — OCR 保存データの並び替え
+- **OCR 保存データの並び替え**（`ReceiptOcrPage.tsx`, `sortRows.ts`）
+  - 画像ファイル名・日付・金額・取引番号・レシート番号で昇順/降順
+  - 列ヘッダークリックまたはツールバーから切替
 
 ## [0.9.0] - 2026-04-11
 
