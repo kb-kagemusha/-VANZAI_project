@@ -61,8 +61,9 @@ ${VENV_DIR}/bin/pip install --upgrade pip -q
 ${VENV_DIR}/bin/pip install psycopg2-binary -q
 ${VENV_DIR}/bin/pip install -e ".[dev]" -q
 ${VENV_DIR}/bin/pip install -e ".[ocr]" -q
-${VENV_DIR}/bin/pip uninstall -y opencv-contrib-python opencv-python 2>/dev/null || true
-${VENV_DIR}/bin/pip install opencv-python-headless -q
+# OpenCV 5.x は PaddleOCR 2.x と非互換（cv2.INTER_LINEAR 等が欠落）。4.x の headless のみ入れる。
+${VENV_DIR}/bin/pip uninstall -y opencv-contrib-python opencv-python opencv-contrib-python-headless opencv-python-headless 2>/dev/null || true
+${VENV_DIR}/bin/pip install "opencv-python-headless>=4.8.0,<5.0.0" -q
 echo "  Python パッケージインストール完了"
 
 # ----------------------------------------

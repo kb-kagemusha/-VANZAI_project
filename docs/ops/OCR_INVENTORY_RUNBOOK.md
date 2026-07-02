@@ -115,7 +115,8 @@ API の `proxy_read_timeout` は OCR 用に **300s** を推奨（`tools/nginx_va
 | 症状 | 対処 |
 |------|------|
 | 503 PaddleOCR not installed | `pip install -e ".[ocr]"` を実行し API 再起動 |
-| libGL.so.1 エラー | `pip uninstall opencv-contrib-python opencv-python` 後 `pip install opencv-python-headless` |
+| libGL.so.1 エラー | `pip uninstall opencv-contrib-python opencv-python opencv-contrib-python-headless opencv-python-headless` 後 `pip install "opencv-python-headless>=4.8.0,<5.0.0"`（**5.x は PaddleOCR と非互換**） |
+| `cv2` has no attribute `INTER_LINEAR` | 上記と同様。複数の opencv パッケージが混在しているか、OpenCV 5.x が入っている |
 | 解析に失敗しました（画面のみ） | API ログで `Child process died` を確認 → `--workers 1` で再起動 |
 | 解析が途中で切れる | nginx `proxy_read_timeout` を 300s に延長 |
 | 取引が重複 | 同一取引番号・レシート番号は解析時に自動統合。既に登録済みの行はスキップ（未確定行はより完全なキャプチャで上書き更新） |
