@@ -112,6 +112,8 @@ type ImagePageSize = (typeof IMAGE_PAGE_SIZES)[number];
 type ImageViewMode = "thumbnail" | "compact";
 
 const IMAGE_VIEW_MODE_KEY = "vanzai.ocr.imageViewMode";
+const SAVED_DATA_TAB_KEY = "vanzai.ocr.savedDataTab";
+type SavedDataTab = OcrSourceType;
 
 const OCR_PARSE_STATUS_LABELS: Record<string, string> = {
   pending: "解析待ち",
@@ -1024,6 +1026,10 @@ export function ReceiptOcrPage() {
   const [imagePage, setImagePage] = useState(0);
   const [rowSortKey, setRowSortKey] = useState<OcrRowSortKey>("record_date");
   const [rowSortDirection, setRowSortDirection] = useState<SortDirection>("desc");
+  const [savedDataTab, setSavedDataTab] = useState<SavedDataTab>(() => {
+    const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
+    return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
+  });
 
   const rowsQuery = useQuery({
     queryKey: ["ocr-rows", selectedPeriodKey],
@@ -1422,12 +1428,21 @@ export function ReceiptOcrPage() {
     uploadedImages.length > 0 && uploadedImages.every((image) => selectedImageIds.includes(image.id));
 
   const savedRows = rowsQuery.data?.items ?? [];
-  const sortedSavedRows = useMemo(
-    () => sortOcrRows(savedRows, rowSortKey, rowSortDirection),
-    [savedRows, rowSortDirection, rowSortKey],
+  const paygateSavedRows = useMemo(
+    () => savedRows.filter((row) => row.source_type === "paygate_screenshot"),
+    [savedRows],
   );
-  const confirmableRows = savedRows.filter((row) => isOcrRowConfirmable(row));
-  const deletableRows = savedRows.filter((row) => isOcrRowDeletable(row));
+  const settlementSavedRows = useMemo(
+    () => savedRows.filter((row) => row.source_type === "paygate_settlement"),
+    [savedRows],
+  );
+  const tabSavedRows = savedDataTab === "paygate_screenshot" ? paygateSavedRows : settlementSavedRows;
+  const sortedSavedRows = useMemo(
+    () => sortOcrRows(tabSavedRows, rowSortKey, rowSortDirection),
+    [tabSavedRows, rowSortDirection, rowSortKey],
+  );
+  const confirmableRows = tabSavedRows.filter((row) => isOcrRowConfirmable(row));
+  const deletableRows = tabSavedRows.filter((row) => isOcrRowDeletable(row));
   const allSavedRowsSelected =
     deletableRows.length > 0 && deletableRows.every((row) => selectedRowIds.includes(row.id));
   const allConfirmableRowsSelected =
@@ -1461,6 +1476,11 @@ export function ReceiptOcrPage() {
     });
     return Array.from(keys).sort().reverse();
   }, [summaryQuery.data, rowsQuery.data]);
+
+  const tabSummaryItems = useMemo(() => {
+    if (!summaryQuery.data?.items.length) return [];
+    return summaryQuery.data.items.filter((item) => item.source_type === savedDataTab);
+  }, [savedDataTab, summaryQuery.data]);
 
   if (rowsQuery.error instanceof ApiError && rowsQuery.error.status === 403) {
     return <Navigate to="/403" replace />;
@@ -1521,6 +1541,12 @@ export function ReceiptOcrPage() {
     setRowSortKey(sortKey);
   };
 
+  const handleSavedDataTabChange = (tab: SavedDataTab) => {
+    setSavedDataTab(tab);
+    setSelectedRowIds([]);
+    window.localStorage.setItem(SAVED_DATA_TAB_KEY, tab);
+  };
+
   const renderSortableHeader = (sortKey: OcrRowSortKey, label: string) => (
     <OcrSortableHeader
       label={label}
@@ -1549,7 +1575,6 @@ export function ReceiptOcrPage() {
       header: "確認",
       render: (row: OcrExtractedRowItem) => <OcrRowQualityBadges row={row} />,
     },
-    { key: "source_type", header: "種別", render: (row: OcrExtractedRowItem) => SOURCE_LABELS[row.source_type] || row.source_type },
     {
       key: "source_image_filename",
       header: renderSortableHeader("source_image_filename", "画像ファイル"),
@@ -1682,6 +1707,20 @@ export function ReceiptOcrPage() {
       ),
     },
   ];
+
+  const PAYGATE_ONLY_COLUMN_KEYS = new Set(["terminal_id"]);
+  const SETTLEMENT_ONLY_COLUMN_KEYS = new Set([
+    "terminal_short_id",
+    "work_date",
+    "unit_breakdown",
+    "reconciliation_eligible",
+  ]);
+  const visibleRowColumns = rowColumns.filter((column) => {
+    if (savedDataTab === "paygate_screenshot") {
+      return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
+    }
+    return !PAYGATE_ONLY_COLUMN_KEYS.has(column.key);
+  });
 
   return (
     <div className="page-stack">
@@ -1865,8 +1904,34 @@ export function ReceiptOcrPage() {
         <PageHeader
           eyebrow="年月別"
           title="保存データ"
-          description="レシート日付から自動で YYYYMM に分類されます。"
+          description="レシート日付から自動で YYYYMM に分類されます。Paygate と精算レシートはタブで切り替えて表示します。"
         />
+        <div className="ocr-saved-data-tabs" role="tablist" aria-label="保存データの種別">
+          <button
+            type="button"
+            role="tab"
+            id="ocr-saved-tab-paygate"
+            aria-selected={savedDataTab === "paygate_screenshot"}
+            aria-controls="ocr-saved-data-panel"
+            className={`ocr-saved-data-tab${savedDataTab === "paygate_screenshot" ? " is-active" : ""}`}
+            onClick={() => handleSavedDataTabChange("paygate_screenshot")}
+          >
+            Paygate
+            <span className="ocr-saved-data-tab-count">{paygateSavedRows.length}件</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="ocr-saved-tab-settlement"
+            aria-selected={savedDataTab === "paygate_settlement"}
+            aria-controls="ocr-saved-data-panel"
+            className={`ocr-saved-data-tab${savedDataTab === "paygate_settlement" ? " is-active" : ""}`}
+            onClick={() => handleSavedDataTabChange("paygate_settlement")}
+          >
+            精算レシート
+            <span className="ocr-saved-data-tab-count">{settlementSavedRows.length}件</span>
+          </button>
+        </div>
         <div className="filter-row">
           <label>
             対象月
@@ -1968,13 +2033,11 @@ export function ReceiptOcrPage() {
           </button>
         </div>
 
-        {summaryQuery.data?.items.length ? (
+        {tabSummaryItems.length ? (
           <div className="upload-result-grid">
-            {summaryQuery.data.items.map((item) => (
+            {tabSummaryItems.map((item) => (
               <div key={`${item.period_key}-${item.source_type}`}>
-                <span className="upload-result-label">
-                  {formatPeriodKey(item.period_key)} / {SOURCE_LABELS[item.source_type as OcrSourceType] || item.source_type}
-                </span>
+                <span className="upload-result-label">{formatPeriodKey(item.period_key)}</span>
                 <strong>
                   {item.row_count}件 / {formatCurrency(item.total_amount)}
                 </strong>
@@ -1983,19 +2046,29 @@ export function ReceiptOcrPage() {
           </div>
         ) : null}
 
-        {rowsQuery.isLoading ? (
-          <LoadingOverlay label="解析結果を読み込み中..." />
-        ) : rowsQuery.isError ? (
-          <ErrorState title="解析結果の取得に失敗しました" description="API 接続または権限を確認してください。" />
-        ) : (
-          <DataTable
-            columns={rowColumns}
-            rows={sortedSavedRows}
-            getRowKey={(row) => row.id}
-            emptyTitle="解析結果がありません"
-            emptyDescription="画像をアップロードして解析を実行してください。"
-          />
-        )}
+        <div id="ocr-saved-data-panel" role="tabpanel" aria-labelledby={savedDataTab === "paygate_screenshot" ? "ocr-saved-tab-paygate" : "ocr-saved-tab-settlement"}>
+          {rowsQuery.isLoading ? (
+            <LoadingOverlay label="解析結果を読み込み中..." />
+          ) : rowsQuery.isError ? (
+            <ErrorState title="解析結果の取得に失敗しました" description="API 接続または権限を確認してください。" />
+          ) : (
+            <DataTable
+              columns={visibleRowColumns}
+              rows={sortedSavedRows}
+              getRowKey={(row) => row.id}
+              emptyTitle={
+                savedDataTab === "paygate_screenshot"
+                  ? "Paygateの保存データがありません"
+                  : "精算レシートの保存データがありません"
+              }
+              emptyDescription={
+                savedDataTab === "paygate_screenshot"
+                  ? "Paygateスクリーンショットをアップロードして解析を実行してください。"
+                  : "精算レシートをアップロードして解析を実行してください。"
+              }
+            />
+          )}
+        </div>
       </section>
 
       {editingRow ? (

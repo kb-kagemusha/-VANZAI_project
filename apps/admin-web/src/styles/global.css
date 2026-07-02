@@ -1464,6 +1464,56 @@ button {
   color: #b91c1c;
 }
 
+.ocr-saved-data-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.25rem;
+}
+
+.ocr-saved-data-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.5rem 0.5rem 0 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.9rem;
+}
+
+.ocr-saved-data-tab:hover {
+  color: #0f172a;
+}
+
+.ocr-saved-data-tab.is-active {
+  background: #fff;
+  border-color: #e2e8f0;
+  border-bottom-color: #fff;
+  color: #0f172a;
+}
+
+.ocr-saved-data-tab-count {
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0.2rem 0.45rem;
+}
+
+.ocr-saved-data-tab.is-active .ocr-saved-data-tab-count {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
 .filter-row {
   display: flex;
   flex-wrap: wrap;

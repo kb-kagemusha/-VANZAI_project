@@ -1,0 +1,28 @@
+---
+description: コード更新後は特に指定がなければVPSデプロイまで完了する
+alwaysApply: true
+---
+
+# 更新後のデプロイ（デフォルト）
+
+本番反映が必要なコード変更を完了したら、ユーザーが別途指示しない限り **コミット → push → VPSデプロイ → API再起動 → 動作確認** まで行う。
+
+## デプロイしない例外
+
+- ユーザーが「デプロイしない」「ローカルのみ」「コミットしない」等と明示したとき
+- 質問のみ・レビューのみでコード変更がないとき
+- ドキュメントだけの変更で本番反映が不要と判断できるとき（ユーザーが本番反映を求めている場合は除く）
+
+## 手順（正本: `scripts/deploy/DEPLOY_STEPS.md`）
+
+1. テスト実行（変更範囲に応じた最小セット）
+2. **ユーザー向けの変更（修正・UI改善含む）完了時は必ず**バージョン・`CHANGELOG.md` を更新（AGENTS.md セクション9、`.cursor/rules/version-bump.mdc`）
+3. コミット → `git push origin <現在ブランチ>`
+4. VPS: `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh`
+   - SSH: `ssh -i ~/.ssh/vanzai_vps vanzai@220.158.28.35`（または `Host vanzai-vps`）
+5. `systemctl restart vanzai-api` が sudo で失敗したら `bash /var/www/vanzai/restart_uvicorn.sh`
+6. API 応答を確認（例: `curl` で OCR/API エンドポイント）
+
+## 報告
+
+作業完了時にデプロイ結果（コミット hash、ビルドバージョン、再起動の成否）を簡潔に伝える。
