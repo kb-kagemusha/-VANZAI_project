@@ -78,17 +78,28 @@ button {
 
 .side-nav-brand .eyebrow {
   color: rgba(248, 239, 225, 0.55);
+  text-transform: none;
+  letter-spacing: 0.06em;
 }
 
 .side-nav-brand h2 {
   margin: 0;
+  font-family: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", sans-serif;
   font-size: 1.35rem;
-  line-height: 1.25;
-  font-weight: 700;
+  line-height: 1.35;
+  font-weight: 600;
+  font-synthesis: none;
   color: #f8efe1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   text-shadow: none;
+  letter-spacing: 0.02em;
+}
+
+.side-nav-brand > div {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .brand-mark {
