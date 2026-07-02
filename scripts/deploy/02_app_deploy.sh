@@ -10,6 +10,8 @@ set -euo pipefail
 APP_DIR="/var/www/vanzai"
 REPO_URL="https://github.com/kb-kagemusha/-VANZAI_project.git"
 VENV_DIR="${APP_DIR}/.venv"
+# PaddleOCR 2.x と互換のある OpenCV 4.x（5.x は cv2.INTER_LINEAR 欠落で OCR 失敗）
+OPENCV_HEADLESS_PIN="opencv-python-headless==4.10.0.84"
 
 echo "=============================="
 echo "  VANZAI アプリデプロイ開始"
@@ -61,9 +63,22 @@ ${VENV_DIR}/bin/pip install --upgrade pip -q
 ${VENV_DIR}/bin/pip install psycopg2-binary -q
 ${VENV_DIR}/bin/pip install -e ".[dev]" -q
 ${VENV_DIR}/bin/pip install -e ".[ocr]" -q
-# OpenCV 5.x は PaddleOCR 2.x と非互換（cv2.INTER_LINEAR 等が欠落）。4.x の headless のみ入れる。
-${VENV_DIR}/bin/pip uninstall -y opencv-contrib-python opencv-python opencv-contrib-python-headless opencv-python-headless 2>/dev/null || true
-${VENV_DIR}/bin/pip install "opencv-python-headless>=4.8.0,<5.0.0" -q
+
+# paddleocr の依存解決で OpenCV 5.x が入ることがある。5.x は PaddleOCR 2.x と非互換。
+# 全 opencv 系を一度外し、4.x headless を強制再インストールして検証する。
+${VENV_DIR}/bin/pip uninstall -y \
+    opencv-contrib-python opencv-python \
+    opencv-contrib-python-headless opencv-python-headless 2>/dev/null || true
+${VENV_DIR}/bin/pip install --force-reinstall "${OPENCV_HEADLESS_PIN}"
+${VENV_DIR}/bin/python - <<'PY'
+import cv2
+
+if not hasattr(cv2, "INTER_LINEAR"):
+    raise SystemExit(
+        f"opencv verify failed: cv2 has no INTER_LINEAR (file={getattr(cv2, '__file__', None)})"
+    )
+print(f"  opencv-python-headless OK: {cv2.__version__}")
+PY
 echo "  Python パッケージインストール完了"
 
 # ----------------------------------------
@@ -172,11 +187,8 @@ if sudo -n true 2>/dev/null; then
     sudo systemctl status vanzai-api --no-pager
 else
     echo "  sudo にパスワードが必要なため、サービス再起動はスキップしました"
-    echo "  root で以下を実行してください:"
-    echo "    systemctl daemon-reload"
-    echo "    systemctl enable vanzai-api"
-    echo "    systemctl restart vanzai-api"
-    echo "    systemctl status vanzai-api --no-pager"
+    echo "  以下を実行してください:"
+    echo "    bash ${APP_DIR}/restart_uvicorn.sh"
 fi
 
 echo ""
