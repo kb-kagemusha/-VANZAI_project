@@ -190,20 +190,9 @@ function OcrRowEditModal({
     terminal_short_id: row.terminal_short_id || "",
     subtotal: formatYenAmountPlain(row.subtotal),
     cash_sales: formatYenAmountPlain(row.cash_sales),
-    credit_sales: formatYenAmountPlain(row.credit_sales),
     pos_sales: formatYenAmountPlain(row.pos_sales),
-    other_payment: formatYenAmountPlain(row.other_payment),
     transaction_count: row.transaction_count != null ? String(row.transaction_count) : "",
-    branch_id: row.branch_id || "",
-    staff_id: row.staff_id || "",
   });
-  const needsManualUnitBreakdown = isSettlement && row.unit_breakdown_status === "manual";
-  const [manualCashUnits, setManualCashUnits] = useState(
-    row.cash_unit_count != null ? String(row.cash_unit_count) : "",
-  );
-  const [manualPosUnits, setManualPosUnits] = useState(
-    row.pos_unit_count != null ? String(row.pos_unit_count) : "",
-  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -224,16 +213,8 @@ function OcrRowEditModal({
         body.terminal_short_id = draft.terminal_short_id || null;
         body.subtotal = draft.subtotal || null;
         body.cash_sales = draft.cash_sales || null;
-        body.credit_sales = draft.credit_sales || null;
         body.pos_sales = draft.pos_sales || null;
-        body.other_payment = draft.other_payment || null;
         body.transaction_count = draft.transaction_count ? Number(draft.transaction_count) : null;
-        body.branch_id = draft.branch_id || null;
-        body.staff_id = draft.staff_id || null;
-        if (needsManualUnitBreakdown) {
-          body.cash_unit_count = manualCashUnits ? Number(manualCashUnits) : null;
-          body.pos_unit_count = manualPosUnits ? Number(manualPosUnits) : null;
-        }
       }
       await updateOcrRow(row.id, body);
       onSaved();
@@ -320,27 +301,11 @@ function OcrRowEditModal({
                 />
               </label>
               <label>
-                クレジット売上
-                <input
-                  type="text"
-                  value={draft.credit_sales}
-                  onChange={(event) => setDraft((current) => ({ ...current, credit_sales: event.target.value }))}
-                />
-              </label>
-              <label>
                 PAYGATE POS
                 <input
                   type="text"
                   value={draft.pos_sales}
                   onChange={(event) => setDraft((current) => ({ ...current, pos_sales: event.target.value }))}
-                />
-              </label>
-              <label>
-                その他支払い
-                <input
-                  type="text"
-                  value={draft.other_payment}
-                  onChange={(event) => setDraft((current) => ({ ...current, other_payment: event.target.value }))}
                 />
               </label>
               <label>
@@ -351,22 +316,6 @@ function OcrRowEditModal({
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, transaction_count: event.target.value }))
                   }
-                />
-              </label>
-              <label>
-                支社/現場ID
-                <input
-                  type="text"
-                  value={draft.branch_id}
-                  onChange={(event) => setDraft((current) => ({ ...current, branch_id: event.target.value }))}
-                />
-              </label>
-              <label>
-                稼働者ID
-                <input
-                  type="text"
-                  value={draft.staff_id}
-                  onChange={(event) => setDraft((current) => ({ ...current, staff_id: event.target.value }))}
                 />
               </label>
             </>
@@ -399,30 +348,6 @@ function OcrRowEditModal({
             </>
           )}
         </div>
-        {needsManualUnitBreakdown ? (
-          <div className="ocr-edit-grid ocr-manual-breakdown">
-            <p className="upload-help">
-              単価構成（¥980/¥1,480/¥2,980）が金額・取引数から一意に決まらないため、現金・PAYGATE
-              POSそれぞれの販売台数を手入力してください。内訳が不明なままでも在庫照合の主指標（通常取引数）には影響しません。
-            </p>
-            <label>
-              現金販売台数
-              <input
-                type="text"
-                value={manualCashUnits}
-                onChange={(event) => setManualCashUnits(event.target.value)}
-              />
-            </label>
-            <label>
-              PAYGATE POS販売台数
-              <input
-                type="text"
-                value={manualPosUnits}
-                onChange={(event) => setManualPosUnits(event.target.value)}
-              />
-            </label>
-          </div>
-        ) : null}
         {error ? <p className="ocr-warning-text">{error}</p> : null}
         <div className="ocr-modal-actions">
           <button type="button" className="ghost-button" onClick={onClose} disabled={saving}>
@@ -732,17 +657,22 @@ function OcrFilenamePreviewLink({
   imageId,
   filename,
   hideExtension = false,
+  clampLines = false,
 }: {
   imageId: string;
   filename: string;
   hideExtension?: boolean;
+  clampLines?: boolean;
 }) {
   const displayName = hideExtension ? stripOcrFilenameExtension(filename) : filename;
   const { url } = useOcrImageBlobUrl(imageId);
 
   return (
     <OcrImagePreview previewUrl={url} alt={filename} className="ocr-image-preview-trigger--filename">
-      <span className="ocr-filename-preview-link" title={displayName}>
+      <span
+        className={`ocr-filename-preview-link${clampLines ? " ocr-filename-clamp-2" : ""}`}
+        title={displayName}
+      >
         {formatOcrFilenameDisplay(filename, hideExtension)}
       </span>
     </OcrImagePreview>
@@ -1609,6 +1539,7 @@ export function ReceiptOcrPage() {
             imageId={row.source_image_id}
             filename={name}
             hideExtension
+            clampLines={savedDataTab === "paygate_settlement"}
           />
         );
       },
@@ -1765,16 +1696,46 @@ export function ReceiptOcrPage() {
     "subtotal",
     "cash_sales",
     "pos_sales",
+  ]);
+  const SETTLEMENT_HIDDEN_COLUMN_KEYS = new Set([
     "work_date",
     "unit_breakdown",
     "reconciliation_eligible",
+    "status",
   ]);
-  const visibleRowColumns = rowColumns.filter((column) => {
-    if (savedDataTab === "paygate_screenshot") {
-      return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
-    }
-    return !PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS.has(column.key);
-  });
+  const SETTLEMENT_COLUMN_ORDER = [
+    "select",
+    "quality",
+    "source_image_filename",
+    "terminal_short_id",
+    "settlement_date",
+    "settlement_time",
+    "terminal_id",
+    "subtotal",
+    "amount",
+    "cash_sales",
+    "pos_sales",
+    "transaction_count",
+    "validation_errors",
+    "edit",
+  ];
+  const visibleRowColumns = rowColumns
+    .filter((column) => {
+      if (savedDataTab === "paygate_screenshot") {
+        return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
+      }
+      return (
+        !PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS.has(column.key) &&
+        !SETTLEMENT_HIDDEN_COLUMN_KEYS.has(column.key)
+      );
+    })
+    .sort((left, right) => {
+      if (savedDataTab !== "paygate_settlement") {
+        return 0;
+      }
+      const order = new Map(SETTLEMENT_COLUMN_ORDER.map((key, index) => [key, index]));
+      return (order.get(left.key) ?? 999) - (order.get(right.key) ?? 999);
+    });
 
   return (
     <div className="page-stack">

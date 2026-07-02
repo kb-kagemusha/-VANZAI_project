@@ -8,7 +8,10 @@ from decimal import Decimal, InvalidOperation
 from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
-from src.services.ocr.settlement_processing import apply_settlement_derived_fields
+from src.services.ocr.settlement_processing import (
+    apply_settlement_derived_fields,
+    normalize_settlement_transaction_count,
+)
 
 _DATETIME_RE = re.compile(r"(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})")
 _SETTLEMENT_DATE_RE = re.compile(r"精算日\s*[：:]?\s*(\d{4}/\d{2}/\d{2})")
@@ -127,6 +130,13 @@ class PaygateSettlementParser(BaseOcrParser):
         terminal_short_id = _extract_terminal_short_id(text)
         store_match = _STORE_RE.search(text)
 
+        raw_txn_count = int(txn_count_match.group(1)) if txn_count_match else None
+        transaction_count = normalize_settlement_transaction_count(
+            raw_txn_count,
+            amounts.get("cash"),
+            amounts.get("pos"),
+        )
+
         confidences = [line.confidence for line in ocr_result.lines if line.confidence > 0]
         avg_conf = sum(confidences) / len(confidences) if confidences else 0.5
 
@@ -144,7 +154,7 @@ class PaygateSettlementParser(BaseOcrParser):
             credit_sales=amounts.get("credit"),
             pos_sales=amounts.get("pos"),
             other_payment=amounts.get("other"),
-            transaction_count=int(txn_count_match.group(1)) if txn_count_match else None,
+            transaction_count=transaction_count,
             tax_included=amounts.get("tax_included") or amounts.get("tax"),
             subtotal=amounts.get("subtotal"),
             store_name=store_match.group(1) if store_match else None,

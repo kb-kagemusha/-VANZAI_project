@@ -232,6 +232,24 @@ def test_paygate_settlement_parser_extracts_labeled_settlement_datetime():
     assert rows[0].record_time == "05:30:00"
 
 
+def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+精算日 2026/07/02
+精算時間 23:05:23
+合計 ¥15,880
+小計 ¥15,880
+現金売上 ¥15,880
+PAYGATE POS ¥0
+通常取引数 0
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].transaction_count is None
+    assert "unit_breakdown_invalid" not in (rows[0].warnings or [])
+
+
 def test_validate_parsed_row_flags_missing_date():
     row = ParsedOcrRow(source_type="paygate_screenshot", amount=Decimal("980"))
     errors = validate_parsed_row(row)

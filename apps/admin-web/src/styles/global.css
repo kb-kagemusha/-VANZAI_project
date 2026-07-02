@@ -1257,6 +1257,15 @@ button {
   text-underline-offset: 0.15em;
 }
 
+.ocr-filename-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 11rem;
+  word-break: break-all;
+}
+
 .ocr-image-preview-trigger {
   position: relative;
   display: inline-flex;

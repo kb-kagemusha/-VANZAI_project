@@ -130,9 +130,6 @@ def compute_settlement_blocking_errors(row) -> list[str]:
 def compute_settlement_warnings(row) -> list[str]:
     """paygate_settlement 行のOCR確定はブロックしないが、要注意な事項を返す。"""
     warnings: list[str] = []
-    unit_breakdown_status = getattr(row, "unit_breakdown_status", None)
-    if unit_breakdown_status in {"manual", "ambiguous", "invalid"}:
-        warnings.append(f"unit_breakdown_{unit_breakdown_status}")
     if getattr(row, "duplicate_receipt_candidate", False):
         warnings.append("duplicate_receipt_candidate")
     return warnings

@@ -50,7 +50,7 @@ describe("getOcrRowDisplayLabels", () => {
       unit_breakdown_status: "manual",
       reconciliation_eligible: false,
     });
-    expect(labels.map((item) => item.text)).toEqual(["重複候補", "単価構成要確認", "在庫照合対象外"]);
+    expect(labels.map((item) => item.text)).toEqual(["重複候補"]);
   });
 
   it("does not show settlement-only badges for paygate_screenshot rows", () => {
