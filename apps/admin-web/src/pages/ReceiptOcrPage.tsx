@@ -157,7 +157,9 @@ type OcrRowEditDraft = {
   transaction_no: string;
   receipt_no: string;
   payment_method: string;
+  terminal_id: string;
   terminal_short_id: string;
+  subtotal: string;
   cash_sales: string;
   credit_sales: string;
   pos_sales: string;
@@ -184,7 +186,9 @@ function OcrRowEditModal({
     transaction_no: row.transaction_no || "",
     receipt_no: row.receipt_no || "",
     payment_method: row.payment_method || "",
+    terminal_id: row.terminal_id || "",
     terminal_short_id: row.terminal_short_id || "",
+    subtotal: formatYenAmountPlain(row.subtotal),
     cash_sales: formatYenAmountPlain(row.cash_sales),
     credit_sales: formatYenAmountPlain(row.credit_sales),
     pos_sales: formatYenAmountPlain(row.pos_sales),
@@ -216,7 +220,9 @@ function OcrRowEditModal({
         payment_method: draft.payment_method || null,
       };
       if (isSettlement) {
+        body.terminal_id = draft.terminal_id || null;
         body.terminal_short_id = draft.terminal_short_id || null;
+        body.subtotal = draft.subtotal || null;
         body.cash_sales = draft.cash_sales || null;
         body.credit_sales = draft.credit_sales || null;
         body.pos_sales = draft.pos_sales || null;
@@ -251,7 +257,7 @@ function OcrRowEditModal({
         <h3 id="ocr-row-edit-title">{isSettlement ? "精算レシート行を編集" : "OCR行を編集"}</h3>
         <div className="ocr-edit-grid">
           <label>
-            日付
+            {isSettlement ? "精算日" : "日付"}
             <input
               type="date"
               value={draft.record_date}
@@ -259,7 +265,7 @@ function OcrRowEditModal({
             />
           </label>
           <label>
-            時刻 (HH:MM:SS)
+            {isSettlement ? "精算時間 (HH:MM:SS)" : "時刻 (HH:MM:SS)"}
             <input
               type="text"
               value={draft.record_time}
@@ -268,7 +274,7 @@ function OcrRowEditModal({
             />
           </label>
           <label>
-            金額（合計）
+            {isSettlement ? "合計" : "金額（合計）"}
             <input
               type="text"
               value={draft.amount}
@@ -286,6 +292,23 @@ function OcrRowEditModal({
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, terminal_short_id: event.target.value }))
                   }
+                />
+              </label>
+              <label>
+                端末番号
+                <input
+                  type="text"
+                  value={draft.terminal_id}
+                  placeholder="UUID"
+                  onChange={(event) => setDraft((current) => ({ ...current, terminal_id: event.target.value }))}
+                />
+              </label>
+              <label>
+                小計
+                <input
+                  type="text"
+                  value={draft.subtotal}
+                  onChange={(event) => setDraft((current) => ({ ...current, subtotal: event.target.value }))}
                 />
               </label>
               <label>
@@ -1595,7 +1618,32 @@ export function ReceiptOcrPage() {
       header: renderSortableHeader("record_date", "日付"),
       render: (row: OcrExtractedRowItem) => `${row.record_date || "-"} ${row.record_time || ""}`.trim(),
     },
-    { key: "amount", header: renderSortableHeader("amount", "金額"), render: (row: OcrExtractedRowItem) => formatCurrency(row.amount) },
+    {
+      key: "settlement_date",
+      header: renderSortableHeader("record_date", "精算日"),
+      render: (row: OcrExtractedRowItem) => row.record_date || "-",
+    },
+    {
+      key: "settlement_time",
+      header: "精算時間",
+      render: (row: OcrExtractedRowItem) => row.record_time || "-",
+    },
+    { key: "amount", header: renderSortableHeader("amount", "合計"), render: (row: OcrExtractedRowItem) => formatCurrency(row.amount) },
+    {
+      key: "subtotal",
+      header: "小計",
+      render: (row: OcrExtractedRowItem) => formatCurrency(row.subtotal),
+    },
+    {
+      key: "cash_sales",
+      header: "現金売上",
+      render: (row: OcrExtractedRowItem) => formatCurrency(row.cash_sales),
+    },
+    {
+      key: "pos_sales",
+      header: "PAYGATE POS",
+      render: (row: OcrExtractedRowItem) => formatCurrency(row.pos_sales),
+    },
     {
       key: "transaction_no",
       header: renderSortableHeader("transaction_no", "取引番号"),
@@ -1608,7 +1656,7 @@ export function ReceiptOcrPage() {
     },
     {
       key: "transaction_count",
-      header: "取引数",
+      header: "通常取引数",
       render: (row: OcrExtractedRowItem) => (row.transaction_count != null ? String(row.transaction_count) : "-"),
     },
     { key: "terminal_id", header: "端末番号", render: (row: OcrExtractedRowItem) => row.terminal_id || "-" },
@@ -1708,9 +1756,15 @@ export function ReceiptOcrPage() {
     },
   ];
 
-  const PAYGATE_ONLY_COLUMN_KEYS = new Set(["terminal_id"]);
+  const PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS = new Set(["transaction_no", "receipt_no", "record_date"]);
   const SETTLEMENT_ONLY_COLUMN_KEYS = new Set([
     "terminal_short_id",
+    "terminal_id",
+    "settlement_date",
+    "settlement_time",
+    "subtotal",
+    "cash_sales",
+    "pos_sales",
     "work_date",
     "unit_breakdown",
     "reconciliation_eligible",
@@ -1719,7 +1773,7 @@ export function ReceiptOcrPage() {
     if (savedDataTab === "paygate_screenshot") {
       return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
     }
-    return !PAYGATE_ONLY_COLUMN_KEYS.has(column.key);
+    return !PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS.has(column.key);
   });
 
   return (

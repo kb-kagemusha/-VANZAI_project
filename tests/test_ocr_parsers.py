@@ -26,15 +26,16 @@ PAYGATE_SCREENSHOT_TEXT = """
 SETTLEMENT_TEXT = """
 日本たばこ産業株式会社
 精算
-2026/05/08 23:04:16
+2026/06/13 19:10:23
 端末番号: 98f0ec2f-fc54-4e00-a503-2ecb6659c7be
-小計 ¥10,780
-合計 ¥10,780
-現金売上 ¥10,780
-クレジット売上 ¥0
-通常取引数 11
-消費税 ¥979
-内税額 ¥979
+端末識別番号: f353
+小計 ¥8,820
+合計 ¥8,820
+現金売上 ¥6,860
+-PAYGATE POS ¥1,960
+通常取引数 9
+消費税 ¥802
+内税額 ¥802
 """
 
 
@@ -203,10 +204,32 @@ def test_paygate_settlement_parser_extracts_summary():
     rows = parser.parse(run_ocr_from_text(SETTLEMENT_TEXT))
     assert len(rows) == 1
     row = rows[0]
-    assert row.amount == Decimal("10780")
-    assert row.transaction_count == 11
-    assert row.cash_sales == Decimal("10780")
+    assert row.terminal_short_id == "f353"
+    assert row.record_date == date(2026, 6, 13)
+    assert row.record_time == "19:10:23"
     assert row.terminal_id.startswith("98f0")
+    assert row.subtotal == Decimal("8820")
+    assert row.amount == Decimal("8820")
+    assert row.cash_sales == Decimal("6860")
+    assert row.pos_sales == Decimal("1960")
+    assert row.transaction_count == 9
+
+
+def test_paygate_settlement_parser_extracts_labeled_settlement_datetime():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+精算日 2026/06/14
+精算時間 05:30:00
+端末識別番号: f999
+合計 ¥980
+現金売上 ¥980
+通常取引数 1
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].record_date == date(2026, 6, 14)
+    assert rows[0].record_time == "05:30:00"
 
 
 def test_validate_parsed_row_flags_missing_date():
