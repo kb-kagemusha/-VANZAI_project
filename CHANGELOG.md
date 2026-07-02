@@ -7,6 +7,22 @@
 - **Y（中）**: 細かな機能追加（既存画面への機能追加、新APIエンドポイント、新ページなど）
 - **Z（右）**: バグ修正・軽微な変更（修正、リファクタリング、表示調整など）
 
+## [0.10.0] - 2026-07-02
+
+### Added
+- **精算レシート（PAYGATE）OCR強化・在庫照合機能を新規追加**（`PAYGATE精算レシート OCR・在庫照合 計画書 v4` に基づく実装。対象は `source_type=paygate_settlement` のみ、Paygateスクリーンショットは変更なし）
+  - OCR抽出項目を拡張: 端末識別番号（`terminal_short_id`）、PAYGATE POS金額、その他支払い、稼働日（`work_date`、深夜またぎルール対応）
+  - 単価構成（現金／PAYGATE POS台数）の逆算ソルバーを追加。曖昧・クレジット/その他非ゼロの場合は `unit_breakdown_status=manual` とし人手入力UIへ誘導
+  - 金額整合・1の位チェックによる `blocking_errors`（確定不可）と `warnings`（確定可）の分離
+  - 画像SHA一致とは別の意味的重複検知（`duplicate_receipt_candidate`）を追加
+  - 精算レシートのOCR確定条件を修正（`transaction_no`/`receipt_no` 必須の既知バグを解消。Paygateスクリーンショットの確定条件は変更なし）
+  - OCR行の無効化（`voided_at`等）、在庫照合対象採用フラグ（`reconciliation_eligible`、既定true・opt-out方式）を追加
+  - 実在庫入力（`inventory_snapshots`）・在庫照合実行（`inventory_reconciliation_batches`/`results`）のAPI・UIを新規追加
+  - 在庫照合対象は同一キー（`branch_id`+`terminal_short_id`+`work_date`）で常に1件のみに制限する部分ユニーク制約を追加
+  - 精算レシート専用CSV（拡張フォーマット）のエクスポート機能を追加
+  - 運用手順を `docs/ops/OCR_INVENTORY_RUNBOOK.md`（旧 `OCR_RECEIPT_RUNBOOK.md`）に集約し、月次 `adjustment_reason` レビュー手順を追記
+  - 仕様書 `docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md` を新規作成
+
 ## [0.9.29] - 2026-07-02
 
 ### Fixed

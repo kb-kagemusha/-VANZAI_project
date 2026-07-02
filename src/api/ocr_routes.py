@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+from pathlib import PurePath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,15 +23,24 @@ from src.api.schemas import (
     OcrReconciliationBatchResponse,
     OcrReconciliationResultItem,
     OcrRowLinkRequest,
+    OcrRowReconciliationEligibilityRequest,
+    OcrRowsConfirmRejectedResponse,
     OcrRowsConfirmRequest,
     OcrRowsConfirmResponse,
+    OcrRowsDeleteRequest,
+    OcrRowsDeleteResponse,
+    OcrRowVoidRequest,
     OcrSelfReportCompareResponse,
+    OcrSourceImageDeleteRequest,
+    OcrSourceImageDeleteResponse,
+    OcrSourceImageUpdateRequest,
     OcrSourceImageItem,
     OcrSourceImageListResponse,
 )
 from src.models.master import User
 from src.models.ocr import OcrExtractedRow, OcrParseJob, OcrReconciliationResult, OcrSourceImage
 from src.models.enums import UserRole
+from src.services.ocr.confirm_metadata import OcrConfirmRejectedError
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES
 from src.services.ocr_service import OcrService
 
@@ -43,7 +54,12 @@ def _ensure_ocr_permission(user: User) -> None:
         raise HTTPException(status_code=403, detail="OCR機能へのアクセス権限がありません")
 
 
-def _image_to_item(image: OcrSourceImage) -> OcrSourceImageItem:
+def _image_to_item(
+    image: OcrSourceImage,
+    *,
+    reused_existing: bool = False,
+    has_filename_duplicate: bool = False,
+) -> OcrSourceImageItem:
     return OcrSourceImageItem(
         id=image.id,
         source_type=image.source_type,
@@ -57,13 +73,20 @@ def _image_to_item(image: OcrSourceImage) -> OcrSourceImageItem:
         last_job_id=image.last_job_id,
         error_message=image.error_message,
         created_at=image.created_at,
+        reused_existing=reused_existing,
+        has_filename_duplicate=has_filename_duplicate,
     )
 
 
-def _row_to_item(row: OcrExtractedRow) -> OcrExtractedRowItem:
+def _row_to_item(
+    row: OcrExtractedRow,
+    *,
+    source_image_filename: str | None = None,
+) -> OcrExtractedRowItem:
     return OcrExtractedRowItem(
         id=row.id,
         source_image_id=row.source_image_id,
+        source_image_filename=source_image_filename,
         parse_job_id=row.parse_job_id,
         source_type=row.source_type,
         period_key=row.period_key,
@@ -82,6 +105,11 @@ def _row_to_item(row: OcrExtractedRow) -> OcrExtractedRowItem:
         subtotal=row.subtotal,
         store_name=row.store_name,
         confidence=row.confidence,
+        amount_inferred=row.amount_inferred,
+        amount_source=row.amount_source,
+        datetime_source=row.datetime_source,
+        confirm_required=row.confirm_required,
+        manually_edited=row.manually_edited,
         status=row.status,
         validation_errors=row.validation_errors,
         project_id=row.project_id,
@@ -90,6 +118,25 @@ def _row_to_item(row: OcrExtractedRow) -> OcrExtractedRowItem:
         linked_entity_id=row.linked_entity_id,
         confirmed_at=row.confirmed_at,
         confirmed_by=row.confirmed_by,
+        terminal_short_id=row.terminal_short_id,
+        pos_sales=row.pos_sales,
+        other_payment=row.other_payment,
+        cash_unit_count=row.cash_unit_count,
+        pos_unit_count=row.pos_unit_count,
+        work_date=row.work_date,
+        unit_breakdown_status=row.unit_breakdown_status,
+        unit_breakdown_json=row.unit_breakdown_json,
+        amount_ones_digit_ok=row.amount_ones_digit_ok,
+        blocking_errors=row.blocking_errors,
+        warnings=row.warnings,
+        duplicate_receipt_candidate=row.duplicate_receipt_candidate,
+        reconciliation_eligible=row.reconciliation_eligible,
+        excluded_reason=row.excluded_reason,
+        voided_at=row.voided_at,
+        voided_by=row.voided_by,
+        void_reason=row.void_reason,
+        branch_id=row.branch_id,
+        staff_id=row.staff_id,
     )
 
 
@@ -107,7 +154,7 @@ async def upload_ocr_image(
     content = await file.read()
     service = OcrService(db)
     try:
-        image = service.upload_image(
+        image, reused_existing = service.upload_image(
             file_bytes=content,
             file_name=file.filename,
             source_type=source_type,
@@ -119,7 +166,7 @@ async def upload_ocr_image(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return _image_to_item(image)
+    return _image_to_item(image, reused_existing=reused_existing)
 
 
 @router.get("/images", response_model=OcrSourceImageListResponse)
@@ -139,7 +186,76 @@ def list_ocr_images(
         limit=limit,
         offset=offset,
     )
-    return OcrSourceImageListResponse(items=[_image_to_item(i) for i in items], total=total)
+    duplicate_flags = service.filename_duplicate_flags(items)
+    return OcrSourceImageListResponse(
+        items=[
+            _image_to_item(
+                image,
+                has_filename_duplicate=duplicate_flags.get(image.id, False),
+            )
+            for image in items
+        ],
+        total=total,
+    )
+
+
+@router.get("/images/{image_id}/file", response_class=FileResponse)
+def download_ocr_image_file(
+    image_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    image = service.get_image(image_id)
+    if image is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if not service.storage.exists(image.storage_key):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    file_path = service.storage.resolve_path(image.storage_key)
+    media_type = image.mime_type or mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    filename = image.original_filename or PurePath(image.storage_key).name
+    return FileResponse(path=file_path, filename=filename, media_type=media_type)
+
+
+@router.delete("/images", response_model=OcrSourceImageDeleteResponse)
+def delete_ocr_images(
+    body: OcrSourceImageDeleteRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        deleted_count = service.delete_images(body.image_ids, actor=current_user.username)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return OcrSourceImageDeleteResponse(deleted_count=deleted_count)
+
+
+@router.patch("/images/{image_id}", response_model=OcrSourceImageItem)
+def update_ocr_image(
+    image_id: str,
+    body: OcrSourceImageUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        image = service.update_image_filename(
+            image_id,
+            original_filename=body.original_filename,
+            actor=current_user.username,
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
+    return _image_to_item(image)
 
 
 @router.post("/jobs/parse", response_model=OcrParseJobResponse)
@@ -213,7 +329,14 @@ def list_ocr_rows(
         limit=limit,
         offset=offset,
     )
-    return OcrExtractedRowListResponse(items=[_row_to_item(r) for r in items], total=total)
+    filenames = service.get_image_filenames({row.source_image_id for row in items})
+    return OcrExtractedRowListResponse(
+        items=[
+            _row_to_item(row, source_image_filename=filenames.get(row.source_image_id))
+            for row in items
+        ],
+        total=total,
+    )
 
 
 @router.patch("/rows/{row_id}", response_model=OcrExtractedRowItem)
@@ -235,10 +358,15 @@ def update_ocr_row(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _row_to_item(row)
+    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
+    return _row_to_item(row, source_image_filename=filename)
 
 
-@router.post("/rows/confirm", response_model=OcrRowsConfirmResponse)
+@router.post(
+    "/rows/confirm",
+    response_model=OcrRowsConfirmResponse,
+    responses={422: {"model": OcrRowsConfirmRejectedResponse}},
+)
 def confirm_ocr_rows(
     body: OcrRowsConfirmRequest,
     current_user: User = Depends(get_current_active_user),
@@ -246,9 +374,82 @@ def confirm_ocr_rows(
 ):
     _ensure_ocr_permission(current_user)
     service = OcrService(db)
-    count = service.confirm_rows(body.row_ids, current_user.username)
-    db.commit()
+    try:
+        count = service.confirm_rows(body.row_ids, current_user.username)
+        db.commit()
+    except OcrConfirmRejectedError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "detail": "Some rows cannot be confirmed",
+                "rejected_row_ids": exc.rejected_row_ids,
+                "reasons": exc.reasons,
+            },
+        ) from exc
     return OcrRowsConfirmResponse(confirmed_count=count)
+
+
+@router.post("/rows/{row_id}/void", response_model=OcrExtractedRowItem)
+def void_ocr_row(
+    row_id: str,
+    body: OcrRowVoidRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """OCR確定済みの精算行を無効化する（誤アップロード・誤確定・途中精算等）。"""
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        row = service.void_row(row_id, reason=body.void_reason, actor=current_user.username)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
+    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
+    return _row_to_item(row, source_image_filename=filename)
+
+
+@router.post("/rows/{row_id}/reconciliation-eligibility", response_model=OcrExtractedRowItem)
+def set_ocr_row_reconciliation_eligibility(
+    row_id: str,
+    body: OcrRowReconciliationEligibilityRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """在庫照合対象としての採用/除外を切り替える(opt-out方式。既定は採用=true)。"""
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        row = service.set_reconciliation_eligible(
+            row_id,
+            eligible=body.eligible,
+            excluded_reason=body.excluded_reason,
+            actor=current_user.username,
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
+    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
+    return _row_to_item(row, source_image_filename=filename)
+
+
+@router.delete("/rows", response_model=OcrRowsDeleteResponse)
+def delete_ocr_rows(
+    body: OcrRowsDeleteRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        deleted_count = service.delete_rows(body.row_ids, actor=current_user.username)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return OcrRowsDeleteResponse(deleted_count=deleted_count)
 
 
 @router.get("/monthly-summary", response_model=OcrMonthlySummaryResponse)
@@ -289,6 +490,29 @@ def download_ocr_csv(
         filename += f"_{source_type}"
     filename += ".csv"
 
+    return Response(
+        content=csv_content.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/exports/settlement.csv")
+def download_settlement_csv(
+    period_key: str | None = Query(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """精算レシート専用の拡張CSV（既存25列CSVとは独立。計画書 v4 §2.7）。"""
+    _ensure_ocr_permission(current_user)
+    if period_key is not None and (len(period_key) != 6 or not period_key.isdigit()):
+        raise HTTPException(status_code=400, detail="period_key must be YYYYMM")
+
+    service = OcrService(db)
+    csv_content = service.export_settlement_csv(period_key=period_key, actor=current_user.username)
+    db.commit()
+
+    filename = f"ocr_settlement_{period_key or 'all'}.csv"
     return Response(
         content=csv_content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
@@ -396,7 +620,8 @@ def link_ocr_row(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _row_to_item(row)
+    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
+    return _row_to_item(row, source_image_filename=filename)
 
 
 @router.get("/compare/self-report", response_model=OcrSelfReportCompareResponse)

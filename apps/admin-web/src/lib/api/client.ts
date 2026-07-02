@@ -104,6 +104,12 @@ import type {
   OcrReconciliationBatchResponse,
   OcrSelfReportCompareResponse,
   OcrSourceType,
+  InventorySnapshotItem,
+  InventorySnapshotListResponse,
+  InventorySnapshotCreateRequest,
+  InventorySnapshotUpdateRequest,
+  InventoryReconciliationBatchResponse,
+  InventoryReconciliationResultItem,
 } from "../../types/api";
 
 function resolveApiBaseUrl(): string {
@@ -1211,6 +1217,88 @@ export function linkOcrRow(
 ) {
   return apiFetch<OcrExtractedRowItem>(`/api/ocr/rows/${rowId}/link`, {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function voidOcrRow(rowId: string, voidReason: string) {
+  return apiFetch<OcrExtractedRowItem>(`/api/ocr/rows/${rowId}/void`, {
+    method: "POST",
+    body: JSON.stringify({ void_reason: voidReason }),
+  });
+}
+
+export function setOcrRowReconciliationEligibility(
+  rowId: string,
+  eligible: boolean,
+  excludedReason?: string | null,
+) {
+  return apiFetch<OcrExtractedRowItem>(`/api/ocr/rows/${rowId}/reconciliation-eligibility`, {
+    method: "POST",
+    body: JSON.stringify({ eligible, excluded_reason: excludedReason ?? null }),
+  });
+}
+
+export function downloadSettlementCsv(periodKey?: string) {
+  return downloadBinaryFileWithQuery(
+    "/api/ocr/exports/settlement.csv",
+    `ocr_settlement_${periodKey || "all"}.csv`,
+    periodKey ? { period_key: periodKey } : undefined,
+  );
+}
+
+// ===========================
+// Inventory Reconciliation (計画書 v4 Phase 2)
+// ===========================
+
+export function listInventorySnapshots(params?: {
+  branch_id?: string;
+  terminal_short_id?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return apiFetch<InventorySnapshotListResponse>("/api/inventory/snapshots", undefined, params);
+}
+
+export function createInventorySnapshot(body: InventorySnapshotCreateRequest) {
+  return apiFetch<InventorySnapshotItem>("/api/inventory/snapshots", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateInventorySnapshot(snapshotId: string, body: InventorySnapshotUpdateRequest) {
+  return apiFetch<InventorySnapshotItem>(`/api/inventory/snapshots/${snapshotId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteInventorySnapshot(snapshotId: string) {
+  return apiFetch<{ deleted: boolean }>(`/api/inventory/snapshots/${snapshotId}`, {
+    method: "DELETE",
+  });
+}
+
+export function runInventoryReconciliation(body: { date_from?: string; date_to?: string; period_key?: string }) {
+  return apiFetch<InventoryReconciliationBatchResponse>("/api/inventory/reconciliation/run", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getInventoryReconciliationBatch(batchId: string) {
+  return apiFetch<InventoryReconciliationBatchResponse>(`/api/inventory/reconciliation/batches/${batchId}`);
+}
+
+export function updateInventoryReconciliationResult(
+  resultId: string,
+  body: { diff_reason_category?: string | null; notes?: string | null; match_status?: string },
+) {
+  return apiFetch<InventoryReconciliationResultItem>(`/api/inventory/reconciliation/results/${resultId}`, {
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }

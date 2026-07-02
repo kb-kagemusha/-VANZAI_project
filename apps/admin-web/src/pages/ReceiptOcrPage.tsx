@@ -12,19 +12,28 @@ import {
   ApiError,
   compareOcrSelfReport,
   confirmOcrRows,
+  createInventorySnapshot,
+  deleteInventorySnapshot,
   deleteOcrImages,
   deleteOcrRows,
   downloadAllOcrCsv,
   downloadOcrCsv,
+  downloadSettlementCsv,
   fetchOcrImageBlobUrl,
   getOcrMonthlySummary,
+  listInventorySnapshots,
   listOcrImages,
   listOcrRows,
   parseOcrImages,
   renameOcrImage,
+  runInventoryReconciliation,
   runOcrReconciliation,
+  setOcrRowReconciliationEligibility,
+  updateInventorySnapshot,
+  updateInventoryReconciliationResult,
   updateOcrRow,
   uploadOcrImage,
+  voidOcrRow,
 } from "../lib/api/client";
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
@@ -35,7 +44,38 @@ import {
   type OcrRowSortKey,
   type SortDirection,
 } from "../lib/ocr/sortRows";
-import type { OcrExtractedRowItem, OcrSourceImageItem, OcrSourceType } from "../types/api";
+import type {
+  InventoryReconciliationResultItem,
+  InventorySnapshotItem,
+  OcrExtractedRowItem,
+  OcrSourceImageItem,
+  OcrSourceType,
+} from "../types/api";
+
+const DIFF_REASON_CATEGORY_LABELS: Record<string, string> = {
+  ocr_error: "OCR読取ミス",
+  inventory_input_error: "実在庫入力ミス",
+  receipt_missing: "レシート不足",
+  image_duplicate: "画像重複",
+  partial_settlement: "途中精算",
+  terminal_mismatch: "端末違い",
+  staff_mismatch: "担当者違い",
+  loss_damage: "紛失・破損",
+  unclassified: "未分類",
+};
+
+const MATCH_STATUS_LABELS: Record<string, string> = {
+  matched: "一致",
+  adjusted_matched: "調整済み一致",
+  count_mismatch: "差異あり",
+  sales_only: "OCRのみ",
+  inventory_only: "在庫のみ",
+  excluded: "除外",
+};
+
+function formatMatchStatus(value: string) {
+  return MATCH_STATUS_LABELS[value] || value;
+}
 
 type PendingUpload = {
   key: string;
@@ -115,6 +155,14 @@ type OcrRowEditDraft = {
   transaction_no: string;
   receipt_no: string;
   payment_method: string;
+  terminal_short_id: string;
+  cash_sales: string;
+  credit_sales: string;
+  pos_sales: string;
+  other_payment: string;
+  transaction_count: string;
+  branch_id: string;
+  staff_id: string;
 };
 
 function OcrRowEditModal({
@@ -126,6 +174,7 @@ function OcrRowEditModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isSettlement = row.source_type === "paygate_settlement";
   const [draft, setDraft] = useState<OcrRowEditDraft>({
     record_date: row.record_date || "",
     record_time: row.record_time || "",
@@ -133,7 +182,22 @@ function OcrRowEditModal({
     transaction_no: row.transaction_no || "",
     receipt_no: row.receipt_no || "",
     payment_method: row.payment_method || "",
+    terminal_short_id: row.terminal_short_id || "",
+    cash_sales: formatYenAmountPlain(row.cash_sales),
+    credit_sales: formatYenAmountPlain(row.credit_sales),
+    pos_sales: formatYenAmountPlain(row.pos_sales),
+    other_payment: formatYenAmountPlain(row.other_payment),
+    transaction_count: row.transaction_count != null ? String(row.transaction_count) : "",
+    branch_id: row.branch_id || "",
+    staff_id: row.staff_id || "",
   });
+  const needsManualUnitBreakdown = isSettlement && row.unit_breakdown_status === "manual";
+  const [manualCashUnits, setManualCashUnits] = useState(
+    row.cash_unit_count != null ? String(row.cash_unit_count) : "",
+  );
+  const [manualPosUnits, setManualPosUnits] = useState(
+    row.pos_unit_count != null ? String(row.pos_unit_count) : "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -141,14 +205,29 @@ function OcrRowEditModal({
     setSaving(true);
     setError(null);
     try {
-      await updateOcrRow(row.id, {
+      const body: Record<string, unknown> = {
         record_date: draft.record_date || null,
         record_time: draft.record_time || null,
         amount: draft.amount || null,
         transaction_no: draft.transaction_no || null,
         receipt_no: draft.receipt_no || null,
         payment_method: draft.payment_method || null,
-      });
+      };
+      if (isSettlement) {
+        body.terminal_short_id = draft.terminal_short_id || null;
+        body.cash_sales = draft.cash_sales || null;
+        body.credit_sales = draft.credit_sales || null;
+        body.pos_sales = draft.pos_sales || null;
+        body.other_payment = draft.other_payment || null;
+        body.transaction_count = draft.transaction_count ? Number(draft.transaction_count) : null;
+        body.branch_id = draft.branch_id || null;
+        body.staff_id = draft.staff_id || null;
+        if (needsManualUnitBreakdown) {
+          body.cash_unit_count = manualCashUnits ? Number(manualCashUnits) : null;
+          body.pos_unit_count = manualPosUnits ? Number(manualPosUnits) : null;
+        }
+      }
+      await updateOcrRow(row.id, body);
       onSaved();
       onClose();
     } catch (err) {
@@ -167,7 +246,7 @@ function OcrRowEditModal({
         aria-labelledby="ocr-row-edit-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <h3 id="ocr-row-edit-title">OCR行を編集</h3>
+        <h3 id="ocr-row-edit-title">{isSettlement ? "精算レシート行を編集" : "OCR行を編集"}</h3>
         <div className="ocr-edit-grid">
           <label>
             日付
@@ -187,38 +266,138 @@ function OcrRowEditModal({
             />
           </label>
           <label>
-            金額
+            金額（合計）
             <input
               type="text"
               value={draft.amount}
               onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
             />
           </label>
-          <label>
-            取引番号
-            <input
-              type="text"
-              value={draft.transaction_no}
-              onChange={(event) => setDraft((current) => ({ ...current, transaction_no: event.target.value }))}
-            />
-          </label>
-          <label>
-            レシート番号
-            <input
-              type="text"
-              value={draft.receipt_no}
-              onChange={(event) => setDraft((current) => ({ ...current, receipt_no: event.target.value }))}
-            />
-          </label>
-          <label>
-            決済方法
-            <input
-              type="text"
-              value={draft.payment_method}
-              onChange={(event) => setDraft((current) => ({ ...current, payment_method: event.target.value }))}
-            />
-          </label>
+          {isSettlement ? (
+            <>
+              <label>
+                端末識別番号
+                <input
+                  type="text"
+                  value={draft.terminal_short_id}
+                  placeholder="f353"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, terminal_short_id: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                現金売上
+                <input
+                  type="text"
+                  value={draft.cash_sales}
+                  onChange={(event) => setDraft((current) => ({ ...current, cash_sales: event.target.value }))}
+                />
+              </label>
+              <label>
+                クレジット売上
+                <input
+                  type="text"
+                  value={draft.credit_sales}
+                  onChange={(event) => setDraft((current) => ({ ...current, credit_sales: event.target.value }))}
+                />
+              </label>
+              <label>
+                PAYGATE POS
+                <input
+                  type="text"
+                  value={draft.pos_sales}
+                  onChange={(event) => setDraft((current) => ({ ...current, pos_sales: event.target.value }))}
+                />
+              </label>
+              <label>
+                その他支払い
+                <input
+                  type="text"
+                  value={draft.other_payment}
+                  onChange={(event) => setDraft((current) => ({ ...current, other_payment: event.target.value }))}
+                />
+              </label>
+              <label>
+                通常取引数
+                <input
+                  type="text"
+                  value={draft.transaction_count}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, transaction_count: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                支社/現場ID
+                <input
+                  type="text"
+                  value={draft.branch_id}
+                  onChange={(event) => setDraft((current) => ({ ...current, branch_id: event.target.value }))}
+                />
+              </label>
+              <label>
+                稼働者ID
+                <input
+                  type="text"
+                  value={draft.staff_id}
+                  onChange={(event) => setDraft((current) => ({ ...current, staff_id: event.target.value }))}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                取引番号
+                <input
+                  type="text"
+                  value={draft.transaction_no}
+                  onChange={(event) => setDraft((current) => ({ ...current, transaction_no: event.target.value }))}
+                />
+              </label>
+              <label>
+                レシート番号
+                <input
+                  type="text"
+                  value={draft.receipt_no}
+                  onChange={(event) => setDraft((current) => ({ ...current, receipt_no: event.target.value }))}
+                />
+              </label>
+              <label>
+                決済方法
+                <input
+                  type="text"
+                  value={draft.payment_method}
+                  onChange={(event) => setDraft((current) => ({ ...current, payment_method: event.target.value }))}
+                />
+              </label>
+            </>
+          )}
         </div>
+        {needsManualUnitBreakdown ? (
+          <div className="ocr-edit-grid ocr-manual-breakdown">
+            <p className="upload-help">
+              単価構成（¥980/¥1,480/¥2,980）が金額・取引数から一意に決まらないため、現金・PAYGATE
+              POSそれぞれの販売台数を手入力してください。内訳が不明なままでも在庫照合の主指標（通常取引数）には影響しません。
+            </p>
+            <label>
+              現金販売台数
+              <input
+                type="text"
+                value={manualCashUnits}
+                onChange={(event) => setManualCashUnits(event.target.value)}
+              />
+            </label>
+            <label>
+              PAYGATE POS販売台数
+              <input
+                type="text"
+                value={manualPosUnits}
+                onChange={(event) => setManualPosUnits(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
         {error ? <p className="ocr-warning-text">{error}</p> : null}
         <div className="ocr-modal-actions">
           <button type="button" className="ghost-button" onClick={onClose} disabled={saving}>
@@ -725,6 +904,102 @@ function OcrUploadedImageItem({
   );
 }
 
+function InventorySnapshotEditForm({
+  snapshot,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  snapshot: InventorySnapshotItem;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (body: {
+    staff_id?: string | null;
+    opening_count?: number;
+    closing_count?: number;
+    adjustment_count?: number;
+    adjustment_reason?: string | null;
+    note?: string | null;
+  }) => void;
+}) {
+  const [draft, setDraft] = useState({
+    staff_id: snapshot.staff_id || "",
+    opening_count: String(snapshot.opening_count),
+    closing_count: String(snapshot.closing_count),
+    adjustment_count: String(snapshot.adjustment_count),
+    adjustment_reason: snapshot.adjustment_reason || "",
+    note: snapshot.note || "",
+  });
+
+  return (
+    <>
+      <div className="ocr-edit-grid">
+        <label>
+          稼働者ID
+          <input value={draft.staff_id} onChange={(event) => setDraft((current) => ({ ...current, staff_id: event.target.value }))} />
+        </label>
+        <label>
+          開始在庫
+          <input
+            type="number"
+            value={draft.opening_count}
+            onChange={(event) => setDraft((current) => ({ ...current, opening_count: event.target.value }))}
+          />
+        </label>
+        <label>
+          終了在庫
+          <input
+            type="number"
+            value={draft.closing_count}
+            onChange={(event) => setDraft((current) => ({ ...current, closing_count: event.target.value }))}
+          />
+        </label>
+        <label>
+          調整数（減少=正/増加=負）
+          <input
+            type="number"
+            value={draft.adjustment_count}
+            onChange={(event) => setDraft((current) => ({ ...current, adjustment_count: event.target.value }))}
+          />
+        </label>
+        <label>
+          調整理由
+          <input
+            value={draft.adjustment_reason}
+            onChange={(event) => setDraft((current) => ({ ...current, adjustment_reason: event.target.value }))}
+          />
+        </label>
+        <label>
+          メモ
+          <input value={draft.note} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} />
+        </label>
+      </div>
+      <div className="ocr-modal-actions">
+        <button type="button" className="ghost-button" onClick={onCancel} disabled={saving}>
+          キャンセル
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={saving}
+          onClick={() =>
+            onSave({
+              staff_id: draft.staff_id || null,
+              opening_count: Number(draft.opening_count),
+              closing_count: Number(draft.closing_count),
+              adjustment_count: Number(draft.adjustment_count || 0),
+              adjustment_reason: draft.adjustment_reason || null,
+              note: draft.note || null,
+            })
+          }
+        >
+          {saving ? "保存中..." : "保存"}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function ReceiptOcrPage() {
   const queryClient = useQueryClient();
   const [pendingFiles, setPendingFiles] = useState<PendingUpload[]>([]);
@@ -952,6 +1227,188 @@ export function ReceiptOcrPage() {
     },
   });
 
+  const voidRowMutation = useMutation({
+    mutationFn: ({ rowId, reason }: { rowId: string; reason: string }) => voidOcrRow(rowId, reason),
+    onSuccess: async () => {
+      setFormError(null);
+      await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+    },
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "無効化に失敗しました");
+    },
+  });
+
+  const setEligibilityMutation = useMutation({
+    mutationFn: ({
+      rowId,
+      eligible,
+      excludedReason,
+    }: {
+      rowId: string;
+      eligible: boolean;
+      excludedReason?: string | null;
+    }) => setOcrRowReconciliationEligibility(rowId, eligible, excludedReason),
+    onSuccess: async () => {
+      setFormError(null);
+      await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+    },
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "在庫照合対象の切り替えに失敗しました");
+    },
+  });
+
+  const handleVoidRow = (row: OcrExtractedRowItem) => {
+    const reason = window.prompt(
+      "この精算行を無効化します。理由を入力してください（誤アップロード・誤確定など）。",
+      "",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setFormError("無効化には理由の入力が必須です");
+      return;
+    }
+    voidRowMutation.mutate({ rowId: row.id, reason: reason.trim() });
+  };
+
+  const handleToggleReconciliationEligibility = (row: OcrExtractedRowItem) => {
+    if (row.reconciliation_eligible) {
+      const reason = window.prompt(
+        "この行を在庫照合対象から除外します。理由を入力してください（途中精算・重複など）。",
+        "",
+      );
+      if (reason === null) return;
+      if (!reason.trim()) {
+        setFormError("在庫照合対象から除外するには理由の入力が必須です");
+        return;
+      }
+      setEligibilityMutation.mutate({ rowId: row.id, eligible: false, excludedReason: reason.trim() });
+    } else {
+      setEligibilityMutation.mutate({ rowId: row.id, eligible: true, excludedReason: null });
+    }
+  };
+
+  // --- 実在庫入力・在庫照合（計画書 v4 Phase 2b） -------------------------
+
+  const [inventoryFormError, setInventoryFormError] = useState<string | null>(null);
+  const [inventoryDraft, setInventoryDraft] = useState({
+    branch_id: "UNASSIGNED",
+    terminal_short_id: "",
+    work_date: "",
+    staff_id: "",
+    opening_count: "",
+    closing_count: "",
+    adjustment_count: "0",
+    adjustment_reason: "",
+    note: "",
+  });
+  const [editingSnapshot, setEditingSnapshot] = useState<InventorySnapshotItem | null>(null);
+  const [reconcilePeriodKey, setReconcilePeriodKey] = useState("");
+  const [reconcileDateFrom, setReconcileDateFrom] = useState("");
+  const [reconcileDateTo, setReconcileDateTo] = useState("");
+  const [reconciliationBatch, setReconciliationBatch] = useState<Awaited<
+    ReturnType<typeof runInventoryReconciliation>
+  > | null>(null);
+
+  const snapshotsQuery = useQuery({
+    queryKey: ["inventory-snapshots"],
+    queryFn: () => listInventorySnapshots({ limit: 200 }),
+  });
+
+  const createSnapshotMutation = useMutation({
+    mutationFn: () =>
+      createInventorySnapshot({
+        branch_id: inventoryDraft.branch_id || "UNASSIGNED",
+        terminal_short_id: inventoryDraft.terminal_short_id,
+        work_date: inventoryDraft.work_date,
+        staff_id: inventoryDraft.staff_id || null,
+        opening_count: Number(inventoryDraft.opening_count),
+        closing_count: Number(inventoryDraft.closing_count),
+        adjustment_count: Number(inventoryDraft.adjustment_count || 0),
+        adjustment_reason: inventoryDraft.adjustment_reason || null,
+        note: inventoryDraft.note || null,
+      }),
+    onSuccess: async () => {
+      setInventoryFormError(null);
+      setInventoryDraft((current) => ({
+        ...current,
+        terminal_short_id: "",
+        work_date: "",
+        staff_id: "",
+        opening_count: "",
+        closing_count: "",
+        adjustment_count: "0",
+        adjustment_reason: "",
+        note: "",
+      }));
+      await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
+    },
+    onError: (error) => {
+      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の登録に失敗しました");
+    },
+  });
+
+  const updateSnapshotMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateInventorySnapshot>[1] }) =>
+      updateInventorySnapshot(id, body),
+    onSuccess: async () => {
+      setInventoryFormError(null);
+      setEditingSnapshot(null);
+      await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
+    },
+    onError: (error) => {
+      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の更新に失敗しました");
+    },
+  });
+
+  const deleteSnapshotMutation = useMutation({
+    mutationFn: (id: string) => deleteInventorySnapshot(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
+    },
+    onError: (error) => {
+      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の削除に失敗しました");
+    },
+  });
+
+  const runReconciliationMutation = useMutation({
+    mutationFn: () =>
+      runInventoryReconciliation({
+        date_from: reconcileDateFrom || undefined,
+        date_to: reconcileDateTo || undefined,
+        period_key: reconcilePeriodKey || undefined,
+      }),
+    onSuccess: (batch) => {
+      setReconciliationBatch(batch);
+      setInventoryFormError(null);
+    },
+    onError: (error) => {
+      setInventoryFormError(error instanceof ApiError ? error.message : "在庫照合の実行に失敗しました");
+    },
+  });
+
+  const updateResultMutation = useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Parameters<typeof updateInventoryReconciliationResult>[1];
+    }) => updateInventoryReconciliationResult(id, body),
+    onSuccess: (updated) => {
+      setReconciliationBatch((current) =>
+        current
+          ? {
+              ...current,
+              results: current.results.map((result) => (result.id === updated.id ? updated : result)),
+            }
+          : current,
+      );
+    },
+    onError: (error) => {
+      setInventoryFormError(error instanceof ApiError ? error.message : "差異理由の更新に失敗しました");
+    },
+  });
+
   const uploadedImages = imagesQuery.data?.items ?? [];
   const totalImages = imagesQuery.data?.total ?? 0;
   const totalImagePages = Math.max(1, Math.ceil(totalImages / imagePageSize));
@@ -1131,6 +1588,47 @@ export function ReceiptOcrPage() {
     },
     { key: "terminal_id", header: "端末番号", render: (row: OcrExtractedRowItem) => row.terminal_id || "-" },
     {
+      key: "terminal_short_id",
+      header: "端末識別番号",
+      render: (row: OcrExtractedRowItem) =>
+        row.source_type === "paygate_settlement" ? row.terminal_short_id || "-" : "-",
+    },
+    {
+      key: "work_date",
+      header: "稼働日",
+      render: (row: OcrExtractedRowItem) => (row.source_type === "paygate_settlement" ? row.work_date || "-" : "-"),
+    },
+    {
+      key: "unit_breakdown",
+      header: "現金/POS台数",
+      render: (row: OcrExtractedRowItem) => {
+        if (row.source_type !== "paygate_settlement") return "-";
+        if (row.cash_unit_count == null && row.pos_unit_count == null) {
+          return row.unit_breakdown_status ? `未確定 (${row.unit_breakdown_status})` : "-";
+        }
+        return `現金${row.cash_unit_count ?? "?"} / POS${row.pos_unit_count ?? "?"}`;
+      },
+    },
+    {
+      key: "reconciliation_eligible",
+      header: "在庫照合対象",
+      render: (row: OcrExtractedRowItem) => {
+        if (row.source_type !== "paygate_settlement") return "-";
+        if (row.voided_at) return <span className="ocr-muted-text">無効化済み</span>;
+        return (
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={setEligibilityMutation.isPending}
+            onClick={() => handleToggleReconciliationEligibility(row)}
+            title={row.excluded_reason || undefined}
+          >
+            {row.reconciliation_eligible ? "対象" : "対象外（クリックで復帰）"}
+          </button>
+        );
+      },
+    },
+    {
       key: "status",
       header: "状態",
       render: (row: OcrExtractedRowItem) => <StatusBadge value={row.status} />,
@@ -1138,12 +1636,21 @@ export function ReceiptOcrPage() {
     {
       key: "validation_errors",
       header: "検証",
-      render: (row: OcrExtractedRowItem) =>
-        row.validation_errors?.length ? (
+      render: (row: OcrExtractedRowItem) => {
+        if (row.source_type === "paygate_settlement") {
+          const messages = [...(row.blocking_errors || []), ...(row.warnings || [])];
+          return messages.length ? (
+            <span className="ocr-warning-text">{messages.join(" / ")}</span>
+          ) : (
+            "OK"
+          );
+        }
+        return row.validation_errors?.length ? (
           <span className="ocr-warning-text">{row.validation_errors.join(" / ")}</span>
         ) : (
           "OK"
-        ),
+        );
+      },
     },
     {
       key: "edit",
@@ -1153,6 +1660,16 @@ export function ReceiptOcrPage() {
           <button type="button" className="ghost-button" onClick={() => setEditingRow(row)}>
             編集
           </button>
+          {row.source_type === "paygate_settlement" && row.status === "confirmed" && !row.voided_at ? (
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={voidRowMutation.isPending}
+              onClick={() => handleVoidRow(row)}
+            >
+              無効化
+            </button>
+          ) : null}
           <button
             type="button"
             className="ghost-button ocr-inline-delete"
@@ -1400,6 +1917,13 @@ export function ReceiptOcrPage() {
           <button
             type="button"
             className="secondary-button"
+            onClick={() => downloadSettlementCsv(selectedPeriodKey || undefined)}
+          >
+            精算レシートCSV（拡張）
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
             disabled={!deletableRows.length}
             onClick={toggleAllRowSelection}
           >
@@ -1483,6 +2007,294 @@ export function ReceiptOcrPage() {
           }}
         />
       ) : null}
+
+      <section className="panel-card page-stack">
+        <PageHeader
+          eyebrow="精算レシート"
+          title="実在庫入力"
+          description="端末識別番号×稼働日ごとの開始/終了在庫と、販売以外の増減（調整数）を記録します。調整数は在庫が減った場合は正、増えた場合は負の値です。"
+        />
+        <div className="filter-row">
+          <label>
+            支社/現場ID
+            <input
+              value={inventoryDraft.branch_id}
+              onChange={(event) => setInventoryDraft((current) => ({ ...current, branch_id: event.target.value }))}
+            />
+          </label>
+          <label>
+            端末識別番号
+            <input
+              value={inventoryDraft.terminal_short_id}
+              placeholder="f353"
+              onChange={(event) =>
+                setInventoryDraft((current) => ({ ...current, terminal_short_id: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            稼働日
+            <input
+              type="date"
+              value={inventoryDraft.work_date}
+              onChange={(event) => setInventoryDraft((current) => ({ ...current, work_date: event.target.value }))}
+            />
+          </label>
+          <label>
+            稼働者ID
+            <input
+              value={inventoryDraft.staff_id}
+              onChange={(event) => setInventoryDraft((current) => ({ ...current, staff_id: event.target.value }))}
+            />
+          </label>
+          <label>
+            開始在庫
+            <input
+              type="number"
+              value={inventoryDraft.opening_count}
+              onChange={(event) =>
+                setInventoryDraft((current) => ({ ...current, opening_count: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            終了在庫
+            <input
+              type="number"
+              value={inventoryDraft.closing_count}
+              onChange={(event) =>
+                setInventoryDraft((current) => ({ ...current, closing_count: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            調整数（減少=正/増加=負）
+            <input
+              type="number"
+              value={inventoryDraft.adjustment_count}
+              onChange={(event) =>
+                setInventoryDraft((current) => ({ ...current, adjustment_count: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            調整理由
+            <input
+              value={inventoryDraft.adjustment_reason}
+              placeholder="破損・紛失・移動など"
+              onChange={(event) =>
+                setInventoryDraft((current) => ({ ...current, adjustment_reason: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            メモ
+            <input
+              value={inventoryDraft.note}
+              onChange={(event) => setInventoryDraft((current) => ({ ...current, note: event.target.value }))}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={
+              createSnapshotMutation.isPending ||
+              !inventoryDraft.terminal_short_id ||
+              !inventoryDraft.work_date ||
+              inventoryDraft.opening_count === "" ||
+              inventoryDraft.closing_count === ""
+            }
+            onClick={() => createSnapshotMutation.mutate()}
+          >
+            {createSnapshotMutation.isPending ? "登録中..." : "実在庫記録を登録"}
+          </button>
+        </div>
+        {inventoryFormError ? <p className="form-error">{inventoryFormError}</p> : null}
+        {snapshotsQuery.isLoading ? (
+          <LoadingOverlay label="実在庫記録を読み込み中..." />
+        ) : (
+          <DataTable
+            columns={[
+              { key: "branch_id", header: "支社", render: (s: InventorySnapshotItem) => s.branch_id },
+              { key: "terminal_short_id", header: "端末識別番号", render: (s: InventorySnapshotItem) => s.terminal_short_id },
+              { key: "work_date", header: "稼働日", render: (s: InventorySnapshotItem) => s.work_date },
+              { key: "opening_count", header: "開始", render: (s: InventorySnapshotItem) => s.opening_count },
+              { key: "closing_count", header: "終了", render: (s: InventorySnapshotItem) => s.closing_count },
+              {
+                key: "adjustment",
+                header: "調整数/理由",
+                render: (s: InventorySnapshotItem) =>
+                  s.adjustment_count !== 0
+                    ? `${s.adjustment_count} (${s.adjustment_reason || "理由未記載"})`
+                    : "-",
+              },
+              {
+                key: "inventory_decrease",
+                header: "販売相当減数",
+                render: (s: InventorySnapshotItem) => s.inventory_decrease,
+              },
+              {
+                key: "actions",
+                header: "操作",
+                render: (s: InventorySnapshotItem) => (
+                  <div className="ocr-row-actions">
+                    <button type="button" className="ghost-button" onClick={() => setEditingSnapshot(s)}>
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button ocr-inline-delete"
+                      disabled={deleteSnapshotMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm("この実在庫記録を削除しますか？")) {
+                          deleteSnapshotMutation.mutate(s.id);
+                        }
+                      }}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            rows={snapshotsQuery.data?.items ?? []}
+            getRowKey={(s: InventorySnapshotItem) => s.id}
+            emptyTitle="実在庫記録がありません"
+            emptyDescription="上のフォームから稼働日ごとの開始/終了在庫を登録してください。"
+          />
+        )}
+      </section>
+
+      {editingSnapshot ? (
+        <div className="ocr-modal-backdrop" role="presentation" onClick={() => setEditingSnapshot(null)}>
+          <div
+            className="ocr-modal-card"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>実在庫記録を編集（{editingSnapshot.terminal_short_id} / {editingSnapshot.work_date}）</h3>
+            <InventorySnapshotEditForm
+              snapshot={editingSnapshot}
+              saving={updateSnapshotMutation.isPending}
+              onCancel={() => setEditingSnapshot(null)}
+              onSave={(body) => updateSnapshotMutation.mutate({ id: editingSnapshot.id, body })}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <section className="panel-card page-stack">
+        <PageHeader
+          eyebrow="精算レシート"
+          title="在庫照合実行・結果"
+          description="OCR確定済み・在庫照合対象(reconciliation_eligible=true)の精算行と実在庫記録を、支社×端末識別番号×稼働日で突合します。"
+        />
+        <div className="filter-row">
+          <label>
+            対象月 (YYYYMM)
+            <input
+              value={reconcilePeriodKey}
+              onChange={(event) => setReconcilePeriodKey(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="202606"
+            />
+          </label>
+          <label>
+            開始日
+            <input type="date" value={reconcileDateFrom} onChange={(event) => setReconcileDateFrom(event.target.value)} />
+          </label>
+          <label>
+            終了日
+            <input type="date" value={reconcileDateTo} onChange={(event) => setReconcileDateTo(event.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={
+              runReconciliationMutation.isPending ||
+              (!reconcilePeriodKey && !reconcileDateFrom && !reconcileDateTo)
+            }
+            onClick={() => runReconciliationMutation.mutate()}
+          >
+            {runReconciliationMutation.isPending ? "照合中..." : "在庫照合を実行"}
+          </button>
+        </div>
+        {reconciliationBatch ? (
+          <>
+            <div className="upload-result-grid">
+              <div>
+                <span className="upload-result-label">一致</span>
+                <strong>{reconciliationBatch.matched_count}</strong>
+              </div>
+              <div>
+                <span className="upload-result-label">調整済み一致</span>
+                <strong>{reconciliationBatch.adjusted_matched_count}</strong>
+              </div>
+              <div>
+                <span className="upload-result-label">差異あり</span>
+                <strong>{reconciliationBatch.count_mismatch_count}</strong>
+              </div>
+              <div>
+                <span className="upload-result-label">OCRのみ</span>
+                <strong>{reconciliationBatch.sales_only_count}</strong>
+              </div>
+              <div>
+                <span className="upload-result-label">在庫のみ</span>
+                <strong>{reconciliationBatch.inventory_only_count}</strong>
+              </div>
+            </div>
+            <DataTable
+              columns={[
+                { key: "terminal_short_id", header: "端末識別番号", render: (r: InventoryReconciliationResultItem) => r.terminal_short_id },
+                { key: "work_date", header: "稼働日", render: (r: InventoryReconciliationResultItem) => r.work_date },
+                {
+                  key: "ocr_transaction_count",
+                  header: "OCR取引数",
+                  render: (r: InventoryReconciliationResultItem) => r.ocr_transaction_count ?? "-",
+                },
+                {
+                  key: "inventory_decrease",
+                  header: "在庫減数",
+                  render: (r: InventoryReconciliationResultItem) => r.inventory_decrease ?? "-",
+                },
+                { key: "diff", header: "差異", render: (r: InventoryReconciliationResultItem) => r.diff ?? "-" },
+                {
+                  key: "match_status",
+                  header: "ステータス",
+                  render: (r: InventoryReconciliationResultItem) => formatMatchStatus(r.match_status),
+                },
+                {
+                  key: "diff_reason_category",
+                  header: "差異理由",
+                  render: (r: InventoryReconciliationResultItem) => (
+                    <select
+                      value={r.diff_reason_category || ""}
+                      disabled={updateResultMutation.isPending}
+                      onChange={(event) =>
+                        updateResultMutation.mutate({
+                          id: r.id,
+                          body: { diff_reason_category: event.target.value || null },
+                        })
+                      }
+                    >
+                      <option value="">未分類</option>
+                      {Object.entries(DIFF_REASON_CATEGORY_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  ),
+                },
+              ]}
+              rows={reconciliationBatch.results}
+              getRowKey={(r: InventoryReconciliationResultItem) => r.id}
+              emptyTitle="差異はありません"
+              emptyDescription="対象期間に照合結果がありません。"
+            />
+          </>
+        ) : null}
+      </section>
 
       <section className="panel-card page-stack">
         <PageHeader

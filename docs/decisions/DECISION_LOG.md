@@ -825,3 +825,44 @@
   - プレイングマネージャー候補の `linked_worker_id` 整備を進め、本人作業分の明細化可否を運用で確定する
   - 将来、本人稼働の除外要件が出た場合は別 decision として toggle 追加要否を再検討する
 
+---
+
+### DEC-026: PAYGATE精算レシート OCR・在庫照合機能の確定事項（2026-07-02）
+- Date: 2026-07-02
+- Status: Confirmed（一部 Follow-up あり）
+- Decision: `PAYGATE精算レシート OCR・在庫照合 計画書（改訂版 v4）`のレビュー③④で提起された論点のうち、`reconciliation_eligible` の既定値、在庫調整の自己申告制、`branch_id` の必須化タイミング、`credit_sales`/`pos_sales` の移行方針、同一端末・同日複数精算の扱いを実装方針として確定する
+- Context:
+  - 精算レシートOCRの在庫照合機能を実装するにあたり、複数回のレビュー（合計4件）で指摘された設計上の分岐点を実装前に確定する必要があった
+  - 未確定のまま実装すると、DB制約・API・UIのいずれかで手戻りが発生するリスクが高い
+- Options（主要論点ごと）:
+  - `reconciliation_eligible` 既定値: A. `false`（opt-in） / B. `true`（opt-out）
+  - 在庫調整の承認: A. 第三者承認フロー実装 / B. 自己申告制＋月次レビュー（システム改修なし）
+  - `branch_id`: A. Phase 0結果待ちで追加 / B. 最初から照合キーに含める
+  - `credit_sales`/`pos_sales`移行: A. 過去データ移行しない / B. マイグレーションで一括移行 / C. API吸収
+  - 同一端末・同日複数精算: A. 発生しない前提でキー一意制約のみ / B. 発生しうる前提でOCR行は複数許容、在庫照合対象のみ一意制約
+- Chosen:
+  - `reconciliation_eligible` 既定値: **B（true, opt-out方式）**
+  - 在庫調整: **B（自己申告制。`confirmed_by`は`entered_by`と同一人物で可。月次で事務局責任者が目視レビュー）**
+  - `branch_id`: **B（最初から照合キー`(branch_id, terminal_short_id, work_date)`に含める）**
+  - `credit_sales`/`pos_sales`移行: **A（過去データの遡及移行は行わない。新規解析分のみ`pos_sales`使用）**
+  - 同一端末・同日複数精算: **B（OCR確定行は複数許容。`reconciliation_eligible=true`の行のみ部分ユニーク制約で1件に制限）**
+- Why:
+  - opt-out方式は「大半の確定行はそのまま在庫照合に使う」という実態の運用負荷に合致するため。ただし複数行が誤って同時に対象化される事故を防ぐため、部分ユニーク制約をPhase 2の必須要件とした
+  - 在庫調整の第三者承認は事務局体制上のコストが高く、月次の事後レビューで不正・隠蔽リスクを許容水準まで軽減できると判断
+  - `branch_id`はレシートの端末識別番号が支社横断で一意である保証がなく、早期に含めるほうが安全
+  - `credit_sales`/`pos_sales`は過去データに新ラベル（PAYGATE POS）自体が抽出されていないため、遡及移行は事実上不可能
+  - 同一端末・同日複数精算は「発生しない」と断定する根拠がなく、現場運用（途中精算・レシート再発行等）を考慮すると発生しうる前提で安全側に倒すべき
+- Impact:
+  - Data model:
+    - `ocr_extracted_rows` に `terminal_short_id`, `pos_sales`, `other_payment`, `cash_unit_count`, `pos_unit_count`, `work_date`, `unit_breakdown_status`, `unit_breakdown_json`, `amount_ones_digit_ok`, `blocking_errors`, `warnings`, `duplicate_receipt_candidate`, `reconciliation_eligible`(DEFAULT true), `excluded_reason`, `voided_at`, `voided_by`, `void_reason`, `branch_id`, `staff_id` を追加
+    - `uq_ocr_settlement_reconciliation_target` 部分ユニークインデックスを追加（`branch_id, terminal_short_id, work_date` × `reconciliation_eligible=true` × `status=confirmed` × `voided_at IS NULL`）
+    - `inventory_snapshots` / `inventory_reconciliation_batches` / `inventory_reconciliation_results` を新規追加
+  - UI/UX: `ReceiptOcrPage.tsx` に精算レシート専用列・編集モーダル・無効化／照合対象除外操作・実在庫入力セクション・在庫照合実行セクションを追加
+  - Ops/Runbook: `docs/ops/OCR_INVENTORY_RUNBOOK.md`（旧`OCR_RECEIPT_RUNBOOK.md`）に月次`adjustment_reason`レビュー手順、実在庫入力手順、確定条件を追記。正式ルールは `docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md` に記載
+  - Migration: `alembic/versions/20260702a001_add_inventory_reconciliation.py`
+- Follow-ups:
+  - **JTとの契約上、決済・在庫関連データをVANZAI（社外DB）に保存してよいか**は未検討。契約内容の確認は本システム設計とは別タスクとして管理する（設計のブロッカーとしない）
+  - パイロット運用（`docs/ops/OCR_INVENTORY_PILOT_TEMPLATE.md`）の結果、「通常取引数＝販売台数」の前提が成立しないケースが多数見つかった場合は、在庫照合の主指標の見直しを別 decision として記録する
+  - `branch_id`の運用上の未入力が継続する場合、NOT NULL制約化を再検討する
+- Spec Reference: `PAYGATE精算レシート OCR・在庫照合 計画書（改訂版 v4）`、`docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md`
+

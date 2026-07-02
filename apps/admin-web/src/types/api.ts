@@ -1312,11 +1312,113 @@ export interface OcrExtractedRowItem {
   linked_entity_id: string | null;
   confirmed_at: string | null;
   confirmed_by: string | null;
+  // --- paygate_settlement 専用項目（計画書 v4） ---
+  terminal_short_id: string | null;
+  pos_sales: string | null;
+  other_payment: string | null;
+  cash_unit_count: number | null;
+  pos_unit_count: number | null;
+  work_date: string | null;
+  unit_breakdown_status: string | null;
+  unit_breakdown_json: Record<string, number | null> | null;
+  amount_ones_digit_ok: boolean | null;
+  blocking_errors: string[] | null;
+  warnings: string[] | null;
+  duplicate_receipt_candidate: boolean;
+  reconciliation_eligible: boolean;
+  excluded_reason: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
+  branch_id: string | null;
+  staff_id: string | null;
 }
 
 export interface OcrExtractedRowListResponse {
   items: OcrExtractedRowItem[];
   total: number;
+}
+
+// ===========================
+// Inventory Reconciliation (計画書 v4 Phase 2)
+// ===========================
+
+export interface InventorySnapshotItem {
+  id: string;
+  branch_id: string;
+  terminal_short_id: string;
+  work_date: string;
+  staff_id: string | null;
+  opening_count: number;
+  closing_count: number;
+  adjustment_count: number;
+  adjustment_reason: string | null;
+  inventory_decrease: number;
+  entered_by: string;
+  entered_at: string;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventorySnapshotListResponse {
+  items: InventorySnapshotItem[];
+  total: number;
+}
+
+export interface InventorySnapshotCreateRequest {
+  branch_id: string;
+  terminal_short_id: string;
+  work_date: string;
+  staff_id?: string | null;
+  opening_count: number;
+  closing_count: number;
+  adjustment_count?: number;
+  adjustment_reason?: string | null;
+  note?: string | null;
+}
+
+export interface InventorySnapshotUpdateRequest {
+  staff_id?: string | null;
+  opening_count?: number;
+  closing_count?: number;
+  adjustment_count?: number;
+  adjustment_reason?: string | null;
+  note?: string | null;
+}
+
+export interface InventoryReconciliationResultItem {
+  id: string;
+  batch_id: string;
+  branch_id: string;
+  terminal_short_id: string;
+  work_date: string;
+  ocr_row_id: string | null;
+  inventory_snapshot_id: string | null;
+  ocr_transaction_count: number | null;
+  inventory_decrease: number | null;
+  diff: number | null;
+  match_status: string;
+  diff_reason_category: string | null;
+  notes: string | null;
+}
+
+export interface InventoryReconciliationBatchResponse {
+  id: string;
+  period_key: string | null;
+  date_from: string | null;
+  date_to: string | null;
+  executed_by: string | null;
+  total_count: number;
+  matched_count: number;
+  adjusted_matched_count: number;
+  count_mismatch_count: number;
+  sales_only_count: number;
+  inventory_only_count: number;
+  excluded_count: number;
+  results: InventoryReconciliationResultItem[];
 }
 
 export interface OcrMonthlySummaryItem {

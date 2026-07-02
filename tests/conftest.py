@@ -21,6 +21,7 @@ from src.models.base import Base, generate_ulid
 from src.models.master import Worker, Client, Site, ProjectType, Role
 from src.models.transaction import Project, ShiftSlot, Assignment
 import src.models.ocr  # noqa: F401 — register OCR tables for metadata.create_all
+import src.models.inventory_reconciliation  # noqa: F401 — register inventory tables
 from src.models.enums import AssignmentStatus
 from src.api.main import app
 from src.api.deps import get_db

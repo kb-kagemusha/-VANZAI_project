@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.models.base import generate_ulid
@@ -25,14 +26,39 @@ from src.services.ocr.dedupe import (
     dedupe_paygate_screenshot_entries,
     paygate_row_completeness_score,
 )
-from src.services.ocr.image_preprocess import preprocess_for_ocr
+from src.services.ocr.duplicate_detection import find_duplicate_receipt_candidate
+from src.services.ocr.image_preprocess import (
+    preprocess_blue_amount_channel,
+    preprocess_for_ocr,
+    preprocess_upscaled_for_ocr,
+)
+from src.services.ocr.merge_results import merge_ocr_results
 from src.services.ocr.models import ParsedOcrRow
 from src.services.ocr.paddle_engine import run_ocr, run_ocr_from_text
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES, get_parser
 from src.services.ocr.reconciliation import parse_hq_csv, reconcile_rows, summarize_matches
-from src.services.ocr.export import rows_to_csv
+from src.services.ocr.confirm_metadata import (
+    OcrConfirmRejectedError,
+    get_confirm_rejection_reasons,
+    metadata_from_parsed_fields,
+    resolve_datetime_source,
+)
+from src.services.ocr.export import rows_to_csv, settlement_rows_to_csv
+from src.services.ocr.settlement_processing import DEFAULT_BRANCH_ID, apply_settlement_derived_fields
 
-from src.services.ocr.validation import validate_parsed_row
+from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
+
+_SETTLEMENT_RECOMPUTE_TRIGGER_FIELDS = {
+    "record_date",
+    "record_time",
+    "amount",
+    "cash_sales",
+    "credit_sales",
+    "pos_sales",
+    "other_payment",
+    "transaction_count",
+    "terminal_short_id",
+}
 
 OCR_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 _ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -49,14 +75,89 @@ def build_ocr_object_key(image_id: str, original_name: str | None) -> str:
     return f"images/{image_id}{suffix}"
 
 
+def _sync_metadata_from_parsed(row: OcrExtractedRow, parsed: ParsedOcrRow) -> None:
+    validation_errors = parsed.validation_errors or validate_parsed_row(parsed)
+    row.validation_errors = validation_errors or None
+    row.amount_inferred = parsed.amount_inferred
+    row.amount_source = parsed.amount_source
+    row.datetime_source = parsed.datetime_source
+    row.confirm_required = parsed.confirm_required
+    row.manually_edited = parsed.manually_edited
+
+
+def _recompute_row_metadata(
+    row: OcrExtractedRow,
+    *,
+    amount_touched: bool = False,
+    datetime_touched: bool = False,
+) -> None:
+    if amount_touched:
+        row.amount_source = "manual"
+        row.amount_inferred = False
+    if datetime_touched:
+        row.datetime_source = "manual"
+
+    parsed = _extracted_row_to_parsed(row)
+    validation_errors = validate_parsed_row(parsed)
+    row.validation_errors = validation_errors or None
+
+    amount_meta = {} if row.amount_source == "manual" else (row.raw_payload or {})
+    if row.datetime_source == "manual":
+        parsed_datetime_source = None
+        datetime_override = "manual"
+    else:
+        parsed_datetime_source = resolve_datetime_source(
+            row.record_date,
+            row.record_time,
+            row.datetime_source,
+        )
+        datetime_override = None
+
+    meta = metadata_from_parsed_fields(
+        record_date=row.record_date,
+        record_time=row.record_time,
+        amount=row.amount,
+        transaction_no=row.transaction_no,
+        receipt_no=row.receipt_no,
+        amount_meta=amount_meta,
+        parsed_datetime_source=parsed_datetime_source,
+        validation_errors=validation_errors or None,
+        manually_edited=row.manually_edited,
+        amount_source_override=row.amount_source if row.amount_source == "manual" else None,
+        amount_inferred_override=False if row.amount_source == "manual" else None,
+        datetime_source_override=datetime_override,
+    )
+    row.amount_inferred = meta.amount_inferred
+    row.amount_source = meta.amount_source
+    row.datetime_source = meta.datetime_source
+    row.confirm_required = meta.confirm_required
+
+
 def _parsed_to_db_row(
     parsed: ParsedOcrRow,
     *,
     source_image_id: str,
     parse_job_id: str,
 ) -> OcrExtractedRow:
-    validation_errors = validate_parsed_row(parsed)
-    return OcrExtractedRow(
+    validation_errors = parsed.validation_errors or validate_parsed_row(parsed)
+    if parsed.amount_source is None:
+        meta = metadata_from_parsed_fields(
+            record_date=parsed.record_date,
+            record_time=parsed.record_time,
+            amount=parsed.amount,
+            transaction_no=parsed.transaction_no,
+            receipt_no=parsed.receipt_no,
+            amount_meta=parsed.raw_payload,
+            parsed_datetime_source=parsed.datetime_source,
+            validation_errors=validation_errors or None,
+            manually_edited=parsed.manually_edited,
+        )
+        parsed.amount_inferred = meta.amount_inferred
+        parsed.amount_source = meta.amount_source
+        parsed.datetime_source = meta.datetime_source
+        parsed.confirm_required = meta.confirm_required
+
+    row = OcrExtractedRow(
         id=generate_ulid(),
         source_image_id=source_image_id,
         parse_job_id=parse_job_id,
@@ -76,11 +177,34 @@ def _parsed_to_db_row(
         subtotal=parsed.subtotal,
         store_name=parsed.store_name,
         confidence=Decimal(str(round(parsed.confidence, 4))),
+        amount_inferred=parsed.amount_inferred,
+        amount_source=parsed.amount_source,
+        datetime_source=parsed.datetime_source,
+        confirm_required=parsed.confirm_required,
+        manually_edited=parsed.manually_edited,
         status="pending_review",
         validation_errors=validation_errors or None,
         raw_payload=parsed.raw_payload,
         report_date=parsed.record_date,
     )
+
+    if parsed.source_type == "paygate_settlement":
+        row.terminal_short_id = parsed.terminal_short_id
+        row.pos_sales = parsed.pos_sales
+        row.other_payment = parsed.other_payment
+        row.cash_unit_count = parsed.cash_unit_count
+        row.pos_unit_count = parsed.pos_unit_count
+        row.work_date = parsed.work_date
+        row.unit_breakdown_status = parsed.unit_breakdown_status
+        row.unit_breakdown_json = parsed.unit_breakdown_json
+        row.amount_ones_digit_ok = parsed.amount_ones_digit_ok
+        row.blocking_errors = parsed.blocking_errors
+        row.warnings = parsed.warnings
+        row.branch_id = parsed.branch_id or DEFAULT_BRANCH_ID
+        row.staff_id = parsed.staff_id
+        row.reconciliation_eligible = True
+
+    return row
 
 
 def _extracted_row_to_parsed(row: OcrExtractedRow) -> ParsedOcrRow:
@@ -100,8 +224,47 @@ def _extracted_row_to_parsed(row: OcrExtractedRow) -> ParsedOcrRow:
         subtotal=row.subtotal,
         store_name=row.store_name,
         confidence=float(row.confidence or 0),
+        amount_inferred=row.amount_inferred,
+        amount_source=row.amount_source,
+        datetime_source=row.datetime_source,
+        confirm_required=row.confirm_required,
+        manually_edited=row.manually_edited,
         raw_payload=row.raw_payload or {},
+        terminal_short_id=getattr(row, "terminal_short_id", None),
+        pos_sales=getattr(row, "pos_sales", None),
+        other_payment=getattr(row, "other_payment", None),
+        branch_id=getattr(row, "branch_id", None),
+        staff_id=getattr(row, "staff_id", None),
     )
+
+
+def _recompute_settlement_row_metadata(session: Session, row: OcrExtractedRow) -> None:
+    """paygate_settlement 行の派生項目(work_date/unit_breakdown/blocking/warnings/
+    confirm_required/重複候補)を再計算する。update_row からの手動編集後、および
+    パース直後の重複検知に使用する。
+    """
+    if not row.branch_id:
+        row.branch_id = DEFAULT_BRANCH_ID
+    duplicate_id = find_duplicate_receipt_candidate(
+        session,
+        terminal_short_id=row.terminal_short_id,
+        record_date=row.record_date,
+        record_time=row.record_time,
+        amount=row.amount,
+        transaction_count=row.transaction_count,
+        exclude_row_id=row.id,
+    )
+    row.duplicate_receipt_candidate = duplicate_id is not None
+    apply_settlement_derived_fields(row)
+
+    # The pre-existing row that this one duplicates also needs to be flagged, since
+    # duplicate_receipt_candidate is a symmetric relationship (both receipts are
+    # candidates for manual review), not just the newly-parsed one.
+    if duplicate_id is not None:
+        other_row = session.get(OcrExtractedRow, duplicate_id)
+        if other_row is not None and not other_row.duplicate_receipt_candidate:
+            other_row.duplicate_receipt_candidate = True
+            apply_settlement_derived_fields(other_row)
 
 
 def _apply_parsed_to_extracted_row(row: OcrExtractedRow, parsed: ParsedOcrRow, *, parse_job_id: str) -> None:
@@ -114,9 +277,9 @@ def _apply_parsed_to_extracted_row(row: OcrExtractedRow, parsed: ParsedOcrRow, *
     row.receipt_no = parsed.receipt_no
     row.payment_method = parsed.payment_method
     row.confidence = Decimal(str(round(parsed.confidence, 4)))
-    row.validation_errors = validate_parsed_row(parsed) or None
     row.raw_payload = parsed.raw_payload
     row.report_date = parsed.record_date
+    _sync_metadata_from_parsed(row, parsed)
 
 
 def _find_existing_paygate_row(
@@ -155,7 +318,7 @@ class OcrService:
         source_type: str,
         uploaded_by: str,
         mime_type: str | None = None,
-    ) -> OcrSourceImage:
+    ) -> tuple[OcrSourceImage, bool]:
         if source_type not in VALID_SOURCE_TYPES:
             raise ValueError(f"Unsupported source_type: {source_type}")
         if not file_bytes:
@@ -165,13 +328,29 @@ class OcrService:
 
         sha256 = hashlib.sha256(file_bytes).hexdigest()
         existing = self.session.execute(
-            select(OcrSourceImage).where(
-                OcrSourceImage.sha256 == sha256,
-                OcrSourceImage.deleted_at.is_(None),
-            )
+            select(OcrSourceImage).where(OcrSourceImage.sha256 == sha256)
         ).scalar_one_or_none()
         if existing:
-            return existing
+            if existing.deleted_at is not None:
+                existing.deleted_at = None
+                existing.original_filename = file_name
+                existing.source_type = source_type
+                existing.mime_type = mime_type
+                existing.size_bytes = len(file_bytes)
+                existing.parse_status = "pending"
+                existing.error_message = None
+                existing.uploaded_by = uploaded_by
+                existing.period_key = None
+                existing.last_job_id = None
+                self.session.flush()
+                self.audit.log(
+                    "ocr_image_uploaded",
+                    target_type="ocr_source_image",
+                    target_id=existing.id,
+                    actor=uploaded_by,
+                    after_value={"source_type": source_type, "sha256": sha256, "restored": True},
+                )
+            return existing, True
 
         image_id = generate_ulid()
         storage_key = build_ocr_object_key(image_id, file_name)
@@ -198,7 +377,7 @@ class OcrService:
             actor=uploaded_by,
             after_value={"source_type": source_type, "sha256": sha256},
         )
-        return image
+        return image, False
 
     def list_images(
         self,
@@ -218,6 +397,121 @@ class OcrService:
             query.order_by(OcrSourceImage.created_at.desc()).offset(offset).limit(limit)
         ).scalars().all()
         return list(items), total
+
+    def filename_duplicate_flags(self, items: list[OcrSourceImage]) -> dict[str, bool]:
+        from collections import Counter
+
+        names = Counter(
+            image.original_filename
+            for image in items
+            if image.original_filename
+        )
+        return {
+            image.id: bool(image.original_filename and names[image.original_filename] > 1)
+            for image in items
+        }
+
+    def get_image(self, image_id: str) -> OcrSourceImage | None:
+        image = self.session.get(OcrSourceImage, image_id)
+        if image is None or image.deleted_at is not None:
+            return None
+        return image
+
+    def get_image_filenames(self, image_ids: set[str]) -> dict[str, str | None]:
+        if not image_ids:
+            return {}
+        rows = self.session.execute(
+            select(OcrSourceImage.id, OcrSourceImage.original_filename).where(
+                OcrSourceImage.id.in_(image_ids),
+                OcrSourceImage.deleted_at.is_(None),
+            )
+        ).all()
+        return {image_id: filename for image_id, filename in rows}
+
+    def update_image_filename(
+        self,
+        image_id: str,
+        *,
+        original_filename: str,
+        actor: str,
+    ) -> OcrSourceImage:
+        image = self.get_image(image_id)
+        if image is None:
+            raise ValueError("Image not found")
+
+        name = original_filename.strip()
+        if not name:
+            raise ValueError("Filename is required")
+
+        before = image.original_filename
+        image.original_filename = name
+        self.audit.log(
+            "ocr_image_renamed",
+            target_type="ocr_source_image",
+            target_id=image.id,
+            actor=actor,
+            before_value={"original_filename": before},
+            after_value={"original_filename": name},
+        )
+        return image
+
+    def read_image_bytes(self, image: OcrSourceImage) -> bytes:
+        return self.storage.read_bytes(image.storage_key)
+
+    def delete_images(self, image_ids: list[str], *, actor: str) -> int:
+        if not image_ids:
+            raise ValueError("image_ids is required")
+
+        now = datetime.now(timezone.utc)
+        deleted = 0
+        cascaded_row_ids: list[str] = []
+        for image_id in image_ids:
+            image = self.session.get(OcrSourceImage, image_id)
+            if image is None or image.deleted_at is not None:
+                continue
+            image.deleted_at = now
+            deleted += 1
+            self.audit.log(
+                "ocr_image_deleted",
+                target_type="ocr_source_image",
+                target_id=image.id,
+                actor=actor,
+                before_value={"parse_status": image.parse_status, "sha256": image.sha256},
+            )
+            related_rows = self.session.execute(
+                select(OcrExtractedRow).where(
+                    OcrExtractedRow.source_image_id == image.id,
+                    OcrExtractedRow.deleted_at.is_(None),
+                )
+            ).scalars().all()
+            for row in related_rows:
+                row.deleted_at = now
+                cascaded_row_ids.append(row.id)
+                self.audit.log(
+                    "ocr_row_deleted",
+                    target_type="ocr_extracted_row",
+                    target_id=row.id,
+                    actor=actor,
+                    before_value={
+                        "status": row.status,
+                        "period_key": row.period_key,
+                        "cascade_from_image_id": image.id,
+                    },
+                )
+
+        if cascaded_row_ids:
+            self.audit.log(
+                "ocr_rows_deleted",
+                target_type="ocr_extracted_row",
+                target_id=cascaded_row_ids[0],
+                actor=actor,
+                after_value={
+                    "count": len(cascaded_row_ids),
+                    "row_ids": cascaded_row_ids,
+                    "cascade_from_image_ids": image_ids,
+                },
+            )
+        return deleted
 
     def parse_images(
         self,
@@ -256,11 +550,26 @@ class OcrService:
                     ocr_result = run_ocr_from_text(ocr_text_override[image_id])
                 else:
                     image_bytes = self.storage.read_bytes(image.storage_key)
-                    array = preprocess_for_ocr(image_bytes)
-                    ocr_result = run_ocr(array)
+                    ocr_result = run_ocr(preprocess_for_ocr(image_bytes))
+                    if image.source_type == "paygate_screenshot":
+                        ocr_result = merge_ocr_results(
+                            ocr_result,
+                            run_ocr(preprocess_blue_amount_channel(image_bytes)),
+                            run_ocr(preprocess_upscaled_for_ocr(image_bytes)),
+                        )
 
                 parser = get_parser(image.source_type)
                 parsed_rows = parser.parse(ocr_result)
+                if (
+                    not parsed_rows
+                    and image.source_type == "paygate_screenshot"
+                    and not ocr_text_override
+                ):
+                    ocr_result = merge_ocr_results(
+                        ocr_result,
+                        run_ocr(preprocess_upscaled_for_ocr(image_bytes)),
+                    )
+                    parsed_rows = parser.parse(ocr_result)
                 if not parsed_rows:
                     image.parse_status = "failed"
                     image.error_message = "No structured rows extracted"
@@ -271,6 +580,8 @@ class OcrService:
                 period_keys = {parsed.period_key for parsed in parsed_rows if parsed.period_key}
                 if image.source_type == "paygate_screenshot":
                     for parsed in parsed_rows:
+                        if not is_paygate_row_saveable(parsed):
+                            continue
                         paygate_entries.append((image.id, parsed))
                 else:
                     for parsed in parsed_rows:
@@ -280,6 +591,9 @@ class OcrService:
                             parse_job_id=job.id,
                         )
                         self.session.add(db_row)
+                        if db_row.source_type == "paygate_settlement":
+                            self.session.flush()
+                            _recompute_settlement_row_metadata(self.session, db_row)
                         row_count += 1
 
                 image.parse_status = "completed"
@@ -386,8 +700,11 @@ class OcrService:
         }
 
         date_fields = {"record_date", "report_date"}
-        decimal_fields = {"amount", "cash_sales", "credit_sales", "tax_included", "subtotal"}
+        decimal_fields = {"amount", "cash_sales", "credit_sales", "tax_included", "subtotal", "pos_sales", "other_payment"}
         int_fields = {"transaction_count"}
+        amount_touched = "amount" in updates
+        datetime_touched = "record_date" in updates or "record_time" in updates
+        settlement_recompute_needed = bool(_SETTLEMENT_RECOMPUTE_TRIGGER_FIELDS & set(updates.keys()))
 
         for key, value in updates.items():
             if not hasattr(row, key):
@@ -406,23 +723,18 @@ class OcrService:
             if not row.report_date:
                 row.report_date = row.record_date
 
-        parsed = ParsedOcrRow(
-            source_type=row.source_type,
-            record_date=row.record_date,
-            record_time=row.record_time,
-            amount=row.amount,
-            transaction_no=row.transaction_no,
-            receipt_no=row.receipt_no,
-            payment_method=row.payment_method,
-            terminal_id=row.terminal_id,
-            cash_sales=row.cash_sales,
-            credit_sales=row.credit_sales,
-            transaction_count=row.transaction_count,
-            tax_included=row.tax_included,
-            subtotal=row.subtotal,
-            store_name=row.store_name,
-        )
-        row.validation_errors = validate_parsed_row(parsed) or None
+        row.manually_edited = True
+
+        if row.source_type == "paygate_settlement":
+            if amount_touched:
+                row.amount_source = "manual"
+                row.amount_inferred = False
+            if datetime_touched:
+                row.datetime_source = "manual"
+            if settlement_recompute_needed:
+                _recompute_settlement_row_metadata(self.session, row)
+        else:
+            _recompute_row_metadata(row, amount_touched=amount_touched, datetime_touched=datetime_touched)
 
         self.audit.log(
             "ocr_row_updated",
@@ -430,31 +742,159 @@ class OcrService:
             target_id=row.id,
             actor=actor,
             before_value=before,
-            after_value=updates,
+            after_value={
+                key: (
+                    value.isoformat()
+                    if isinstance(value, date)
+                    else str(value)
+                    if isinstance(value, Decimal)
+                    else value
+                )
+                for key, value in updates.items()
+            },
         )
         return row
 
     def confirm_rows(self, row_ids: list[str], actor: str) -> int:
+        if not row_ids:
+            raise ValueError("row_ids is required")
+
+        rejection_reasons: dict[str, list[str]] = {}
+        rows_to_confirm: list[OcrExtractedRow] = []
+
+        for row_id in row_ids:
+            row = self.session.get(OcrExtractedRow, row_id)
+            if row is None:
+                rejection_reasons[row_id] = ["not_found"]
+                continue
+            reasons = get_confirm_rejection_reasons(row)
+            if reasons:
+                rejection_reasons[row_id] = reasons
+            else:
+                rows_to_confirm.append(row)
+
+        if rejection_reasons:
+            raise OcrConfirmRejectedError(rejection_reasons)
+
         now = datetime.now(timezone.utc)
-        count = 0
+        for row in rows_to_confirm:
+            row.status = "confirmed"
+            row.confirmed_at = now
+            row.confirmed_by = actor
+
+        if rows_to_confirm:
+            self.audit.log(
+                "ocr_rows_confirmed",
+                target_type="ocr_extracted_row",
+                target_id=row_ids[0],
+                actor=actor,
+                after_value={"count": len(rows_to_confirm), "row_ids": row_ids},
+            )
+        return len(rows_to_confirm)
+
+    def void_row(self, row_id: str, *, reason: str, actor: str) -> OcrExtractedRow:
+        """OCR確定済みの精算行を無効化する（誤アップロード・誤確定・途中精算等）。
+
+        voided ≠ excluded: voidedはOCR行そのものを無効とし、削除はしないが在庫照合
+        からも除外される。excluded_reasonはOCRとしては正しいが在庫照合対象から
+        外す場合に使う（set_reconciliation_eligible参照）。
+        """
+        row = self.session.get(OcrExtractedRow, row_id)
+        if row is None or row.deleted_at is not None:
+            raise ValueError("Row not found")
+        if not reason or not reason.strip():
+            raise ValueError("void_reason is required")
+
+        before_status = row.status
+        row.voided_at = datetime.now(timezone.utc)
+        row.voided_by = actor
+        row.void_reason = reason.strip()
+        row.reconciliation_eligible = False
+
+        self.audit.log(
+            "ocr_row_voided",
+            target_type="ocr_extracted_row",
+            target_id=row.id,
+            actor=actor,
+            before_value={"status": before_status},
+            after_value={"void_reason": row.void_reason},
+        )
+        return row
+
+    def set_reconciliation_eligible(
+        self,
+        row_id: str,
+        *,
+        eligible: bool,
+        excluded_reason: str | None,
+        actor: str,
+    ) -> OcrExtractedRow:
+        """在庫照合対象としての採用/除外を切り替える(opt-out方式。既定はTrue)。
+
+        DB側の部分ユニーク制約(uq_ocr_settlement_reconciliation_target)が同一
+        branch_id x terminal_short_id x work_date で複数行がeligible=trueになる
+        事故を防ぐ最終防衛線。IntegrityErrorはValueErrorとして呼び出し元に伝える。
+        """
+        row = self.session.get(OcrExtractedRow, row_id)
+        if row is None or row.deleted_at is not None:
+            raise ValueError("Row not found")
+        if row.source_type != "paygate_settlement":
+            raise ValueError("reconciliation_eligible is only applicable to paygate_settlement rows")
+        if not eligible and not (excluded_reason and excluded_reason.strip()):
+            raise ValueError("excluded_reason is required when eligible=False")
+
+        before = {"reconciliation_eligible": row.reconciliation_eligible}
+        row.reconciliation_eligible = eligible
+        row.excluded_reason = excluded_reason.strip() if (excluded_reason and not eligible) else None
+
+        try:
+            self.session.flush()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise ValueError(
+                "同一の支社・端末識別番号・稼働日で既に在庫照合対象の行が存在します。"
+                "先に既存行を除外(または無効化)してください。"
+            ) from exc
+
+        self.audit.log(
+            "ocr_row_reconciliation_eligibility_changed",
+            target_type="ocr_extracted_row",
+            target_id=row.id,
+            actor=actor,
+            before_value=before,
+            after_value={"reconciliation_eligible": eligible, "excluded_reason": row.excluded_reason},
+        )
+        return row
+
+    def delete_rows(self, row_ids: list[str], *, actor: str) -> int:
+        if not row_ids:
+            raise ValueError("row_ids is required")
+
+        now = datetime.now(timezone.utc)
+        deleted = 0
         for row_id in row_ids:
             row = self.session.get(OcrExtractedRow, row_id)
             if row is None or row.deleted_at is not None:
                 continue
-            row.status = "confirmed"
-            row.confirmed_at = now
-            row.confirmed_by = actor
-            count += 1
-
-        if count:
+            row.deleted_at = now
+            deleted += 1
             self.audit.log(
-                "ocr_rows_confirmed",
+                "ocr_row_deleted",
                 target_type="ocr_extracted_row",
-                target_id=row_ids[0] if row_ids else None,
+                target_id=row.id,
                 actor=actor,
-                after_value={"count": count, "row_ids": row_ids},
+                before_value={"status": row.status, "period_key": row.period_key},
             )
-        return count
+
+        if deleted:
+            self.audit.log(
+                "ocr_rows_deleted",
+                target_type="ocr_extracted_row",
+                target_id=row_ids[0],
+                actor=actor,
+                after_value={"count": deleted, "row_ids": row_ids},
+            )
+        return deleted
 
     def monthly_summary(self) -> list[dict]:
         rows = self.session.execute(
@@ -528,6 +968,33 @@ class OcrService:
             },
         )
         return csv_content, export_record
+
+    def export_settlement_csv(
+        self,
+        *,
+        period_key: str | None,
+        actor: str,
+    ) -> str:
+        """paygate_settlement 専用の拡張CSV出力（既存25列CSVとは独立。計画書 v4 §2.7）。"""
+        query = select(OcrExtractedRow).where(
+            OcrExtractedRow.deleted_at.is_(None),
+            OcrExtractedRow.source_type == "paygate_settlement",
+        )
+        if period_key:
+            query = query.where(OcrExtractedRow.period_key == period_key)
+        rows = self.session.execute(
+            query.order_by(OcrExtractedRow.work_date, OcrExtractedRow.record_time)
+        ).scalars().all()
+
+        csv_content = settlement_rows_to_csv(list(rows))
+        self.audit.log(
+            "ocr_settlement_csv_exported",
+            target_type="ocr_monthly_export",
+            target_id=None,
+            actor=actor,
+            after_value={"period_key": period_key, "row_count": len(rows)},
+        )
+        return csv_content
 
     def run_reconciliation(
         self,

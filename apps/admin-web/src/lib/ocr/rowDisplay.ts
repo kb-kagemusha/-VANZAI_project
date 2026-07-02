@@ -13,8 +13,17 @@ export function getOcrRowDisplayLabels(row: Pick<
   | "amount_source"
   | "datetime_source"
   | "confirm_required"
+  | "source_type"
+  | "duplicate_receipt_candidate"
+  | "unit_breakdown_status"
+  | "reconciliation_eligible"
+  | "voided_at"
 >): OcrRowDisplayLabel[] {
   const labels: OcrRowDisplayLabel[] = [];
+
+  if (row.voided_at) {
+    labels.push({ key: "voided", text: "無効化済み", tone: "danger" });
+  }
 
   if (row.amount_inferred) {
     labels.push({ key: "amount-inferred", text: "金額: 推定", tone: "warning" });
@@ -30,6 +39,18 @@ export function getOcrRowDisplayLabels(row: Pick<
 
   if (row.confirm_required) {
     labels.push({ key: "confirm-required", text: "要確認", tone: "info" });
+  }
+
+  if (row.source_type === "paygate_settlement") {
+    if (row.duplicate_receipt_candidate) {
+      labels.push({ key: "duplicate-candidate", text: "重複候補", tone: "warning" });
+    }
+    if (row.unit_breakdown_status === "manual" || row.unit_breakdown_status === "ambiguous") {
+      labels.push({ key: "unit-breakdown-manual", text: "単価構成要確認", tone: "warning" });
+    }
+    if (!row.voided_at && row.reconciliation_eligible === false) {
+      labels.push({ key: "reconciliation-excluded", text: "在庫照合対象外", tone: "info" });
+    }
   }
 
   return labels;

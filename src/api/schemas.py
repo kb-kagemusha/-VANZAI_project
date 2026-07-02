@@ -1987,11 +1987,25 @@ class OcrSourceImageItem(BaseModel):
     last_job_id: Optional[str] = None
     error_message: Optional[str] = None
     created_at: datetime
+    reused_existing: bool = False
+    has_filename_duplicate: bool = False
 
 
 class OcrSourceImageListResponse(BaseModel):
     items: List["OcrSourceImageItem"]
     total: int
+
+
+class OcrSourceImageDeleteRequest(BaseModel):
+    image_ids: List[str] = Field(..., min_length=1)
+
+
+class OcrSourceImageDeleteResponse(BaseModel):
+    deleted_count: int
+
+
+class OcrSourceImageUpdateRequest(BaseModel):
+    original_filename: str = Field(..., min_length=1, max_length=255)
 
 
 class OcrParseJobRequest(BaseModel):
@@ -2012,6 +2026,7 @@ class OcrParseJobResponse(BaseModel):
 class OcrExtractedRowItem(BaseModel):
     id: str
     source_image_id: str
+    source_image_filename: Optional[str] = None
     parse_job_id: Optional[str] = None
     source_type: str
     period_key: Optional[str] = None
@@ -2030,6 +2045,11 @@ class OcrExtractedRowItem(BaseModel):
     subtotal: Optional[Decimal] = None
     store_name: Optional[str] = None
     confidence: Optional[Decimal] = None
+    amount_inferred: bool = False
+    amount_source: Optional[str] = None
+    datetime_source: Optional[str] = None
+    confirm_required: bool = True
+    manually_edited: bool = False
     status: str
     validation_errors: Optional[List[str]] = None
     project_id: Optional[str] = None
@@ -2038,6 +2058,26 @@ class OcrExtractedRowItem(BaseModel):
     linked_entity_id: Optional[str] = None
     confirmed_at: Optional[datetime] = None
     confirmed_by: Optional[str] = None
+    # --- paygate_settlement 専用項目（計画書 v4） ---
+    terminal_short_id: Optional[str] = None
+    pos_sales: Optional[Decimal] = None
+    other_payment: Optional[Decimal] = None
+    cash_unit_count: Optional[int] = None
+    pos_unit_count: Optional[int] = None
+    work_date: Optional[date] = None
+    unit_breakdown_status: Optional[str] = None
+    unit_breakdown_json: Optional[dict] = None
+    amount_ones_digit_ok: Optional[bool] = None
+    blocking_errors: Optional[List[str]] = None
+    warnings: Optional[List[str]] = None
+    duplicate_receipt_candidate: bool = False
+    reconciliation_eligible: bool = True
+    excluded_reason: Optional[str] = None
+    voided_at: Optional[datetime] = None
+    voided_by: Optional[str] = None
+    void_reason: Optional[str] = None
+    branch_id: Optional[str] = None
+    staff_id: Optional[str] = None
 
 
 class OcrExtractedRowListResponse(BaseModel):
@@ -2062,6 +2102,21 @@ class OcrExtractedRowUpdateRequest(BaseModel):
     status: Optional[str] = None
     project_id: Optional[str] = None
     report_date: Optional[date] = None
+    # --- paygate_settlement 専用項目 ---
+    terminal_short_id: Optional[str] = None
+    pos_sales: Optional[Decimal] = None
+    other_payment: Optional[Decimal] = None
+    branch_id: Optional[str] = None
+    staff_id: Optional[str] = None
+
+
+class OcrRowVoidRequest(BaseModel):
+    void_reason: str = Field(..., min_length=1, max_length=500)
+
+
+class OcrRowReconciliationEligibilityRequest(BaseModel):
+    eligible: bool
+    excluded_reason: Optional[str] = Field(None, max_length=200)
 
 
 class OcrRowsConfirmRequest(BaseModel):
@@ -2070,6 +2125,20 @@ class OcrRowsConfirmRequest(BaseModel):
 
 class OcrRowsConfirmResponse(BaseModel):
     confirmed_count: int
+
+
+class OcrRowsConfirmRejectedResponse(BaseModel):
+    detail: str = "Some rows cannot be confirmed"
+    rejected_row_ids: List[str]
+    reasons: dict[str, List[str]]
+
+
+class OcrRowsDeleteRequest(BaseModel):
+    row_ids: List[str] = Field(..., min_length=1)
+
+
+class OcrRowsDeleteResponse(BaseModel):
+    deleted_count: int
 
 
 class OcrMonthlySummaryItem(BaseModel):
@@ -2126,6 +2195,105 @@ class OcrSelfReportCompareResponse(BaseModel):
     linked_count: int
     self_report_available: bool
     message: str
+
+
+# ===========================
+# Inventory Reconciliation Schemas (計画書 v4 Phase 2)
+# ===========================
+
+class InventorySnapshotItem(BaseModel):
+    id: str
+    branch_id: str
+    terminal_short_id: str
+    work_date: date
+    staff_id: Optional[str] = None
+    opening_count: int
+    closing_count: int
+    adjustment_count: int = 0
+    adjustment_reason: Optional[str] = None
+    inventory_decrease: int
+    entered_by: str
+    entered_at: datetime
+    confirmed_by: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    note: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class InventorySnapshotListResponse(BaseModel):
+    items: List[InventorySnapshotItem]
+    total: int
+
+
+class InventorySnapshotCreateRequest(BaseModel):
+    branch_id: str = Field(..., min_length=1, max_length=50)
+    terminal_short_id: str = Field(..., min_length=1, max_length=20)
+    work_date: date
+    staff_id: Optional[str] = Field(None, max_length=50)
+    opening_count: int = Field(..., ge=0)
+    closing_count: int = Field(..., ge=0)
+    adjustment_count: int = 0
+    adjustment_reason: Optional[str] = None
+    note: Optional[str] = None
+
+
+class InventorySnapshotUpdateRequest(BaseModel):
+    staff_id: Optional[str] = Field(None, max_length=50)
+    opening_count: Optional[int] = Field(None, ge=0)
+    closing_count: Optional[int] = Field(None, ge=0)
+    adjustment_count: Optional[int] = None
+    adjustment_reason: Optional[str] = None
+    note: Optional[str] = None
+
+
+class InventoryReconciliationRunRequest(BaseModel):
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    period_key: Optional[str] = None
+
+
+class InventoryReconciliationResultItem(BaseModel):
+    id: str
+    batch_id: str
+    branch_id: str
+    terminal_short_id: str
+    work_date: date
+    ocr_row_id: Optional[str] = None
+    inventory_snapshot_id: Optional[str] = None
+    ocr_transaction_count: Optional[int] = None
+    inventory_decrease: Optional[int] = None
+    diff: Optional[int] = None
+    match_status: str
+    diff_reason_category: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class InventoryReconciliationResultUpdateRequest(BaseModel):
+    diff_reason_category: Optional[str] = Field(None, max_length=50)
+    notes: Optional[str] = None
+    match_status: Optional[str] = None
+
+
+class InventoryReconciliationBatchResponse(BaseModel):
+    id: str
+    period_key: Optional[str] = None
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    executed_by: Optional[str] = None
+    total_count: int
+    matched_count: int
+    adjusted_matched_count: int
+    count_mismatch_count: int
+    sales_only_count: int
+    inventory_only_count: int
+    excluded_count: int
+    results: List[InventoryReconciliationResultItem] = []
+
+
+class InventoryReconciliationBatchListResponse(BaseModel):
+    items: List[InventoryReconciliationBatchResponse]
+    total: int
 
 
 # ===========================
