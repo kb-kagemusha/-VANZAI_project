@@ -390,6 +390,38 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
     assert row.transaction_count == 6
 
 
+def test_paygate_settlement_parser_handles_receipt_260703_16_layout():
+    """精算現金の空欄直前の数字が通常取引数（実レシート 84e2 / 取引数8）。"""
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+端末識別番号 84e2
+精算
+2026/07/02 23:02:48
+端末番号 84e2772f-ed32-428c-9ce2-5bb57333a249
+小計 ¥7,840
+合計 ¥7,840
+現金売上 ¥6,860
+クレジット売上 ¥0
+-PAYGATE POS ¥980
+消費税 ¥712
+-内税額 ¥712
+-外税額 ¥0
+返品計 ¥0
+取消計 ¥0
+通常取引数 8
+精算現金
+-1万円札 (0枚) ¥0
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb57333a249"
+    assert row.transaction_count == 8
+    assert row.amount == Decimal("7840")
+
+
 def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():
     parser = PaygateSettlementParser()
     text = """

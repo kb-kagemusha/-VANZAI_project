@@ -13,6 +13,9 @@ from src.services.ocr.parsers.settlement_terminal_id import (
     format_terminal_id_from_hex32,
     normalize_settlement_terminal_id,
 )
+from src.services.ocr.parsers.settlement_transaction_count import (
+    extract_transaction_count_before_cash_blank,
+)
 from src.services.ocr.settlement_processing import (
     apply_settlement_derived_fields,
     normalize_settlement_transaction_count,
@@ -185,6 +188,9 @@ def _extract_terminal_short_id(text: str, terminal_id: str | None = None) -> str
 
 
 def _extract_transaction_count(text: str) -> int | None:
+    count = extract_transaction_count_before_cash_blank(text)
+    if count is not None:
+        return count
     for pattern in _TXN_COUNT_PATTERNS:
         match = pattern.search(text)
         if match:
