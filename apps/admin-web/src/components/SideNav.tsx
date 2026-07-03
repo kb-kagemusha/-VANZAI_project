@@ -57,14 +57,25 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
 
   return (
     <aside className={`side-nav${collapsed ? " is-collapsed" : ""}`}>
-      <div className="side-nav-brand">
-        <BrandMark size={collapsed ? 36 : 48} />
-        {!collapsed ? (
-          <div>
-            <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
-            <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
-          </div>
-        ) : null}
+      <div className="side-nav-header">
+        <button
+          type="button"
+          className="side-nav-toggle"
+          onClick={onToggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+        >
+          {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
+        </button>
+        <div className="side-nav-brand">
+          <BrandMark size={collapsed ? 36 : 48} />
+          {!collapsed ? (
+            <div>
+              <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
+              <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
+            </div>
+          ) : null}
+        </div>
       </div>
       <nav className="side-nav-links" aria-label="メインメニュー">
         {NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles)).map((item) => {
@@ -91,15 +102,6 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
           );
         })}
       </nav>
-      <button
-        type="button"
-        className="side-nav-toggle"
-        onClick={onToggleCollapsed}
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? "サイドバーを展開" : "サイドバーを縮小"}
-      >
-        {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
-      </button>
     </aside>
   );
 }
