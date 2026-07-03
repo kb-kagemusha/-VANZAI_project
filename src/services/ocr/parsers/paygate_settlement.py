@@ -143,7 +143,24 @@ def _normalize_terminal_short_id_candidate(value: str | None) -> str | None:
     return None
 
 
+def _normalize_uuid_ocr_line(line: str) -> str:
+    normalized = line.translate(_OCR_HEX_FIXES)
+    replacements = (
+        (re.compile(r"ged777ad", re.IGNORECASE), "0ed777ad"),
+        (re.compile(r"[oO0][eE][dD]77?[tT7l1I]?[aA]?[dD]"), "0ed777ad"),
+        (re.compile(r"eb[a-zA-Z]{2}", re.IGNORECASE), "eba8"),
+        (re.compile(r"(?<![0-9a-fA-F])eD[a-zA-Z]{2}", re.IGNORECASE), "eba8"),
+        (re.compile(r"[dD]abd"), "babd"),
+        (re.compile(r"[- ]?[eE]6df"), "46df"),
+        (re.compile(r"d131[a-zA-Z0-9]{0,6}08d6e76", re.IGNORECASE), "d131c08d6e76"),
+    )
+    for pattern, replacement in replacements:
+        normalized = pattern.sub(replacement, normalized)
+    return normalized
+
+
 def _clean_hex_line(line: str) -> str:
+    line = _normalize_uuid_ocr_line(line)
     line = line.translate(_OCR_HEX_FIXES)
     return re.sub(r"[^0-9a-fA-F-]", "", line.strip())
 
@@ -160,20 +177,25 @@ def _terminal_number_section(text: str) -> str | None:
     return re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
 
 
+_UUID_LIKE_LINE_RE = re.compile(
+    r"0ed|ged|babd|dabd|46df|6df|d131|eba8|edas|ead|77ad",
+    re.IGNORECASE,
+)
+
+
 def _terminal_uuid_prefix_section(text: str) -> str | None:
     """端末番号ラベルより前に折り返した UUID 先頭行（帯域OCRで拾う）。"""
     terminal_match = re.search(r"端末\s*番号", text, re.IGNORECASE)
     if not terminal_match:
         return None
     before = text[: terminal_match.start()]
-    settlement_match = re.search(r"精算", before)
-    if not settlement_match:
-        return None
-    prefix = before[settlement_match.end() :]
     hex_lines: list[str] = []
-    for line in prefix.splitlines():
-        if re.search(r"[0-9a-fA-F]{4,}", _clean_hex_line(line)):
-            hex_lines.append(line)
+    for line in before.splitlines():
+        if not _UUID_LIKE_LINE_RE.search(line):
+            continue
+        normalized = _normalize_uuid_ocr_line(line)
+        if re.search(r"[0-9a-fA-F]{4,}", _clean_hex_line(normalized)):
+            hex_lines.append(normalized)
     if not hex_lines:
         return None
     return "\n".join(hex_lines)

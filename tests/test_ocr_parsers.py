@@ -574,6 +574,43 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_4():
     assert row.transaction_count == 6
 
 
+PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND = """
+天番号
+Oed77Tad-eDas-
+Dabd-
+-E6df.
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/07/02
+23:05:23
+端末番号
+- babd-
+d131c08d6e76
+小計
+15,880
+合計
+15,880
+現金売上
+15,880
+通常取引数
+0
+"""
+
+
+def test_paygate_settlement_parser_handles_noisy_band_ocr_text_260703_18():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.amount == Decimal("5880")
+    assert row.transaction_count == 6
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))

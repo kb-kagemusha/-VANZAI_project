@@ -45,9 +45,8 @@ def preprocess_settlement_terminal_band(image_bytes: bytes) -> np.ndarray:
 
 
 def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
-    """Run focused band OCR first, then default passes, and merge line texts."""
+    """Run focused terminal-band OCR first, then default passes, and merge line texts."""
     return merge_ocr_results(
-        run_ocr(preprocess_settlement_header_band(image_bytes)),
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
         run_ocr(preprocess_for_ocr(image_bytes)),
         run_ocr(preprocess_upscaled_for_ocr(image_bytes, scale=2.0, max_width=2800)),
