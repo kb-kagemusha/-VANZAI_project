@@ -530,6 +530,47 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_16():
     assert row.pos_sales == Decimal("980")
 
 
+PRODUCTION_OCR_TEXT_260703_4 = """
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/06/29
+23:00:30
+端末番号
+-af4C
+f22d625c6a7
+小計
+15,880
+合計
+15,880
+現金売上
+5,880
+クレヅット売上
+0
+その他支払い
+-PAYGATE POS
+10
+-その他
+消費税
+1534
+通常取引数
+精算現金
+(0枚)
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_4():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_4))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "af4c"
+    assert row.terminal_id is None
+    assert row.transaction_count == 6
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))

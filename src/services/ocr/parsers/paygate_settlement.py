@@ -209,6 +209,20 @@ def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
     return None
 
 
+def _is_uuid_middle_fragment_line(stripped: str) -> bool:
+    """UUID 折返しの途中行（例: - babd-, -7f8d-）かどうか。"""
+    compact = stripped.replace(" ", "").replace("　", "")
+    return bool(re.fullmatch(r"-[0-9a-fA-F]{3,4}-", compact))
+
+
+def _short_id_from_leading_dash_hex_line(stripped: str) -> str | None:
+    """先頭欠落で `-af4C` のように始まる行から 4 桁16進を復元する。"""
+    compact = stripped.replace(" ", "").replace("　", "").lstrip("-－")
+    if not compact or "-" in compact:
+        return None
+    return _normalize_terminal_short_id_candidate(compact)
+
+
 def _short_id_from_terminal_number_section(text: str) -> str | None:
     if "端末" not in text:
         return None
@@ -219,13 +233,25 @@ def _short_id_from_terminal_number_section(text: str) -> str | None:
     for line in section.splitlines():
         stripped = line.strip()
         if stripped.startswith(("-", "－")):
-            # 先頭が欠落した UUID の途中断片（例: -babd-）は端末識別番号にしない。
-            return None
+            if _is_uuid_middle_fragment_line(stripped):
+                continue
+            candidate = _short_id_from_leading_dash_hex_line(stripped)
+            if candidate and _is_plausible_terminal_short_id(candidate):
+                return candidate
+            continue
         cleaned = _clean_hex_line(line).strip("-")
         if len(cleaned) < 4:
             continue
-        candidate = _normalize_terminal_short_id_candidate(cleaned)
-        if candidate:
+        if len(cleaned) > 8 and "-" not in cleaned:
+            # UUID 折返しの途中・末尾断片（d131c08d6e76 等）は端末識別番号にしない。
+            continue
+        if len(cleaned) == 8:
+            candidate = _normalize_terminal_short_id_candidate(cleaned[:4])
+        elif len(cleaned) == 4:
+            candidate = _normalize_terminal_short_id_candidate(cleaned)
+        else:
+            continue
+        if candidate and _is_plausible_terminal_short_id(candidate):
             return candidate
     return None
 
