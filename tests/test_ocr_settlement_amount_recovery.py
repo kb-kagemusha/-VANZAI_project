@@ -25,3 +25,26 @@ def test_repair_pos_amount_before_paygate_label():
 """
     amounts = repair_settlement_amounts(text, {"pos": Decimal(0)})
     assert amounts["pos"] == Decimal("1960")
+
+
+def test_other_payment_ignores_misaligned_tax_amount():
+    text = """
+その他支払い
+1,960
+-PAYGATE POS
+0
+-その他
+534
+消費税
+534
+"""
+    amounts = repair_settlement_amounts(
+        text,
+        {
+            "total": Decimal("5880"),
+            "cash": Decimal("3920"),
+            "pos": Decimal("1960"),
+            "other": Decimal("1960"),
+        },
+    )
+    assert amounts["other"] == Decimal(0)

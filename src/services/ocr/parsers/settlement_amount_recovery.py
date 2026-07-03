@@ -41,7 +41,19 @@ def repair_settlement_amounts(
             if index + 1 < len(lines):
                 amount = _standalone_amount(lines[index + 1])
                 if amount is not None:
-                    repaired["other"] = amount
+                    total = repaired.get("total")
+                    cash = repaired.get("cash") or Decimal(0)
+                    pos = repaired.get("pos") or Decimal(0)
+                    if amount == 0:
+                        repaired["other"] = Decimal(0)
+                    elif (
+                        total is not None
+                        and int(amount) % 10 == 0
+                        and cash + pos + amount == total
+                    ):
+                        repaired["other"] = amount
+                    else:
+                        repaired["other"] = Decimal(0)
             break
 
     for index, line in enumerate(lines):
