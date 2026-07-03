@@ -68,31 +68,42 @@ button {
 }
 
 .side-nav {
+  --side-nav-bg: linear-gradient(180deg, rgba(27, 37, 48, 0.96), rgba(39, 53, 67, 0.94));
+  position: sticky;
+  top: 0;
+  align-self: start;
   display: flex;
   flex-direction: column;
-  padding: 2rem 1.4rem;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  padding: 0;
   border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(27, 37, 48, 0.96), rgba(39, 53, 67, 0.94));
+  background: var(--side-nav-bg);
   color: #f8efe1;
+}
+
+.side-nav-toggle-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 1rem 1.4rem 0.5rem;
+  background: rgba(27, 37, 48, 0.98);
+  z-index: 2;
+}
+
+.side-nav-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.4rem 2rem;
 }
 
 .side-nav-brand {
   display: flex;
   gap: 1rem;
   align-items: center;
-  padding: 0 0.8rem 0.4rem;
-}
-
-.side-nav-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.side-nav-header .side-nav-brand {
-  padding-bottom: 0;
+  padding: 0 0.8rem 0.75rem;
 }
 
 .side-nav-brand .eyebrow {
@@ -178,18 +189,18 @@ button {
   opacity: 0.78;
 }
 
-.side-nav.is-collapsed {
-  padding: 1.25rem 0.65rem;
+.side-nav.is-collapsed .side-nav-toggle-bar {
+  justify-content: center;
+  padding: 1rem 0.65rem 0.5rem;
+}
+
+.side-nav.is-collapsed .side-nav-body {
+  padding: 0 0.65rem 1.25rem;
 }
 
 .side-nav.is-collapsed .side-nav-brand {
   justify-content: center;
   padding: 0;
-}
-
-.side-nav.is-collapsed .side-nav-header {
-  align-items: center;
-  margin-bottom: 0.5rem;
 }
 
 .side-nav.is-collapsed .nav-link {
@@ -219,7 +230,6 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  align-self: flex-end;
   width: auto;
   min-width: 2.25rem;
   padding: 0.45rem 0.55rem;
@@ -231,7 +241,6 @@ button {
 }
 
 .side-nav.is-collapsed .side-nav-toggle {
-  align-self: center;
   width: 100%;
 }
 
@@ -1019,14 +1028,28 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .side-nav,
-  .side-nav.is-collapsed {
-    padding: 1.25rem 1rem;
-  }
-
   .side-nav {
+    position: static;
+    height: auto;
+    max-height: none;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .side-nav-toggle-bar {
+    padding: 1rem 1rem 0.5rem;
+  }
+
+  .side-nav-body {
+    padding: 0 1rem 1.25rem;
+  }
+
+  .side-nav.is-collapsed .side-nav-toggle-bar {
+    padding: 1rem 1rem 0.5rem;
+  }
+
+  .side-nav.is-collapsed .side-nav-body {
+    padding: 0 1rem 1.25rem;
   }
 
   .side-nav.is-collapsed .side-nav-brand {

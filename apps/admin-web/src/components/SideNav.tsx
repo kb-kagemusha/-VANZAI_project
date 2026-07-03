@@ -57,7 +57,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
 
   return (
     <aside className={`side-nav${collapsed ? " is-collapsed" : ""}`}>
-      <div className="side-nav-header">
+      <div className="side-nav-toggle-bar">
         <button
           type="button"
           className="side-nav-toggle"
@@ -67,6 +67,8 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
         >
           {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
         </button>
+      </div>
+      <div className="side-nav-body">
         <div className="side-nav-brand">
           <BrandMark size={collapsed ? 36 : 48} />
           {!collapsed ? (
@@ -76,8 +78,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
             </div>
           ) : null}
         </div>
-      </div>
-      <nav className="side-nav-links" aria-label="メインメニュー">
+        <nav className="side-nav-links" aria-label="メインメニュー">
         {NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles)).map((item) => {
           const Icon = NAV_ICONS[item.to];
           return (
@@ -101,7 +102,8 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
             </NavLink>
           );
         })}
-      </nav>
+        </nav>
+      </div>
     </aside>
   );
 }
