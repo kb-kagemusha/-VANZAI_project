@@ -27,6 +27,31 @@ def test_extract_count_when_label_and_value_are_split():
     assert extract_transaction_count_before_cash_blank(text) == 8
 
 
+def test_extract_count_when_ocr_misreads_eight_as_dash():
+    text = """
+返品計
+0
+取消計
+通常取引数
+-
+精算現金
+1万円札
+"""
+    assert extract_transaction_count_before_cash_blank(text) == 8
+
+
+def test_extract_count_ignores_return_cancel_zeros():
+    text = """
+返品計
+0
+取消計
+通常取引数
+8
+精算現金
+"""
+    assert extract_transaction_count_before_cash_blank(text) == 8
+
+
 def test_extract_count_uses_cash_breakdown_when_cash_header_missing():
     text = """
 通常取引数

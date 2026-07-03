@@ -365,6 +365,53 @@ e0b50bfe1671
 """
 
 
+PRODUCTION_OCR_TEXT_260703_16 = """
+日本たばこ産業株式会社
+端末識別番号:84e2
+精算
+2026/07/02
+23:02:48
+端末番号
+84e2772F
+ed32-428c-9ce2-5bb57333a24
+90
+小計
+7,840
+合計
+7,840
+現金売上
+16,860
+クレジット売上
+その他支払い
+-PAYGATE
+POS
+1980
+消費税
+712
+返品計
+0
+取消計
+通常取引数
+-
+精算現金
+1万円札
+(0枚)
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_16():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_16))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb57333a249"
+    assert row.transaction_count == 8
+    assert row.amount == Decimal("7840")
+    assert row.cash_sales == Decimal("6860")
+    assert row.pos_sales == Decimal("980")
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))

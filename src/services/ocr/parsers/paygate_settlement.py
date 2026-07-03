@@ -145,9 +145,11 @@ def _extract_terminal_id(text: str) -> str | None:
     chunks: list[str] = []
     for line in section.splitlines():
         cleaned = _clean_hex_line(line).strip("-")
-        if len(cleaned) < 4:
+        if len(cleaned) < 2:
             continue
         if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
+            continue
+        if len(cleaned) < 4 and "-" in cleaned:
             continue
         chunks.append(cleaned)
     if not chunks:
@@ -159,12 +161,14 @@ def _extract_terminal_id(text: str) -> str | None:
             joined = chunk
         elif joined.endswith("-") or chunk.startswith("-"):
             joined += chunk.lstrip("-")
+        elif len(chunk) <= 2 and re.fullmatch(r"[0-9a-fA-F]+", chunk):
+            joined += chunk.lower()
         else:
             joined += "-" + chunk
     joined = re.sub(r"-+", "-", joined).strip("-").lower()
     hex_only = re.sub(r"[^0-9a-f]", "", joined)
-    if len(hex_only) == 32:
-        return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only))
+    if len(hex_only) >= 32:
+        return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
     return None
 
 
@@ -206,10 +210,16 @@ def _infer_transaction_count_from_sales(
     if ocr_count and ocr_count > 0:
         return ocr_count
     normalized = normalize_settlement_transaction_count(ocr_count, cash_sales, pos_sales)
-    if normalized is not None and normalized > 0:
-        return normalized
     cash_yen = int(cash_sales or 0)
     pos_yen = int(pos_sales or 0)
+    cash_units = cash_yen // 980 if cash_yen > 0 and cash_yen % 980 == 0 else 0
+    pos_units = pos_yen // 980 if pos_yen > 0 and pos_yen % 980 == 0 else 0
+    inferred = cash_units + pos_units
+    if 1 <= inferred <= 99 and (cash_units > 0 or pos_units > 0):
+        if normalized is None or normalized == 0:
+            return inferred
+    if normalized is not None and normalized > 0:
+        return normalized
     if cash_yen > 0 and pos_yen == 0 and cash_yen % 980 == 0:
         units = cash_yen // 980
         if 1 <= units <= 99:
