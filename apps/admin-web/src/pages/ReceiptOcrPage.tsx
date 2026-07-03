@@ -1089,6 +1089,20 @@ export function ReceiptOcrPage() {
     },
   });
 
+  const reparseRowMutation = useMutation({
+    mutationFn: async (imageId: string) => parseOcrImages([imageId]),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+      await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
+      await queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] });
+      setFormError(null);
+    },
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "再解析に失敗しました");
+    },
+  });
+
   const confirmMutation = useMutation({
     mutationFn: (rowIds: string[]) => confirmOcrRows(rowIds),
     onSuccess: async () => {
@@ -1660,6 +1674,16 @@ export function ReceiptOcrPage() {
           <button type="button" className="ghost-button" onClick={() => setEditingRow(row)}>
             編集
           </button>
+          {row.source_type === "paygate_settlement" && row.status !== "confirmed" ? (
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={reparseRowMutation.isPending}
+              onClick={() => reparseRowMutation.mutate(row.source_image_id)}
+            >
+              再解析
+            </button>
+          ) : null}
           {row.source_type === "paygate_settlement" && row.status === "confirmed" && !row.voided_at ? (
             <button
               type="button"

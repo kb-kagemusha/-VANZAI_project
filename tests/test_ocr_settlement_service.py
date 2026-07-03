@@ -115,3 +115,21 @@ def test_set_reconciliation_eligible_conflict_is_prevented(db_session):
     # DB partial unique index (safety net for accidental duplicate eligibility).
     with pytest.raises(ValueError):
         service.set_reconciliation_eligible(row_a.id, eligible=True, excluded_reason=None, actor="tester")
+
+
+def test_settlement_reparse_updates_existing_pending_row(db_session):
+    service = OcrService(db_session)
+    _upload_and_parse(db_session, service, SETTLEMENT_TEXT, filename="reparse.png")
+    rows, total = service.list_rows(source_type="paygate_settlement")
+    assert total == 1
+    row = rows[0]
+    row.terminal_short_id = "wrong"
+    row.transaction_count = None
+    db_session.flush()
+
+    _upload_and_parse(db_session, service, SETTLEMENT_TEXT, filename="reparse.png")
+    rows, total = service.list_rows(source_type="paygate_settlement")
+    assert total == 1
+    assert rows[0].id == row.id
+    assert rows[0].terminal_short_id == "f353"
+    assert rows[0].transaction_count == 9

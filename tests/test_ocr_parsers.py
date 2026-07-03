@@ -304,6 +304,92 @@ def test_paygate_settlement_parser_rejects_registration_segment_as_short_id():
     assert rows[0].terminal_short_id is None
 
 
+PRODUCTION_OCR_TEXT_260703_18 = """
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/07/02
+23:05:23
+端末番号
+- babd-
+d131c08d6e76
+小計
+15,880
+合計
+15,880
+現金売上
+15,880
+クレヅット売上
+0
+その他支払い
+-PAYGATE
+POS
+0
+-その他
+10
+消費税
+534
+-内税額
+534
+-外税額
+返品計
+取消計
+20
+通常取引数
+0
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_19 = """
+日本たはこ産業株式会社
+登録番号.
+14-0104-0102-
+3000
+端末識別番号2C0e
+精算
+2026/07/0223:09:37
+端末番号
+1c0e8213-6cd5-
+-4f9á-bc6a-
+e0b50bfe1671
+小計
+15/880
+合計
+15880
+現金売上
+15880
+通常取引数
+6
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id is None
+    assert row.terminal_id == "babd-d131c08d6e76"
+    assert row.amount == Decimal("5880")
+    assert row.subtotal == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_19))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "2c0e"
+    assert row.terminal_id == "1c0e8213-6cd5-4f9a-bc6a-e0b50bfe1671"
+    assert row.amount == Decimal("5880")
+    assert row.subtotal == Decimal("5880")
+    assert row.transaction_count == 6
+
+
 def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():
     parser = PaygateSettlementParser()
     text = """
@@ -319,7 +405,7 @@ PAYGATE POS 0
     rows = parser.parse(run_ocr_from_text(text))
     assert len(rows) == 1
     assert rows[0].amount == Decimal("5880")
-    assert rows[0].transaction_count is None
+    assert rows[0].transaction_count == 6
     assert "unit_breakdown_invalid" not in (rows[0].warnings or [])
 
 

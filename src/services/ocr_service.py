@@ -282,6 +282,66 @@ def _apply_parsed_to_extracted_row(row: OcrExtractedRow, parsed: ParsedOcrRow, *
     _sync_metadata_from_parsed(row, parsed)
 
 
+def _find_settlement_rows_for_image(session: Session, image_id: str) -> list[OcrExtractedRow]:
+    return list(
+        session.execute(
+            select(OcrExtractedRow)
+            .where(
+                OcrExtractedRow.source_image_id == image_id,
+                OcrExtractedRow.source_type == "paygate_settlement",
+                OcrExtractedRow.deleted_at.is_(None),
+            )
+            .order_by(OcrExtractedRow.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _apply_settlement_parsed_to_extracted_row(
+    row: OcrExtractedRow,
+    parsed: ParsedOcrRow,
+    *,
+    parse_job_id: str,
+    session: Session,
+) -> None:
+    row.parse_job_id = parse_job_id
+    row.period_key = parsed.period_key
+    row.record_date = parsed.record_date
+    row.record_time = parsed.record_time
+    row.amount = parsed.amount
+    row.transaction_no = parsed.transaction_no
+    row.receipt_no = parsed.receipt_no
+    row.payment_method = parsed.payment_method
+    row.terminal_id = parsed.terminal_id
+    row.cash_sales = parsed.cash_sales
+    row.credit_sales = parsed.credit_sales
+    row.pos_sales = parsed.pos_sales
+    row.other_payment = parsed.other_payment
+    row.transaction_count = parsed.transaction_count
+    row.tax_included = parsed.tax_included
+    row.subtotal = parsed.subtotal
+    row.store_name = parsed.store_name
+    row.confidence = Decimal(str(round(parsed.confidence, 4)))
+    row.raw_payload = parsed.raw_payload
+    row.report_date = parsed.record_date
+    row.terminal_short_id = parsed.terminal_short_id
+    row.cash_unit_count = parsed.cash_unit_count
+    row.pos_unit_count = parsed.pos_unit_count
+    row.work_date = parsed.work_date
+    row.unit_breakdown_status = parsed.unit_breakdown_status
+    row.unit_breakdown_json = parsed.unit_breakdown_json
+    row.amount_ones_digit_ok = parsed.amount_ones_digit_ok
+    row.blocking_errors = parsed.blocking_errors
+    row.warnings = parsed.warnings
+    if not row.branch_id:
+        row.branch_id = DEFAULT_BRANCH_ID
+    row.manually_edited = False
+    row.validation_errors = parsed.validation_errors or validate_parsed_row(parsed) or None
+    _sync_metadata_from_parsed(row, parsed)
+    _recompute_settlement_row_metadata(session, row)
+
+
 def _find_existing_paygate_row(
     session: Session,
     *,
@@ -584,17 +644,33 @@ class OcrService:
                             continue
                         paygate_entries.append((image.id, parsed))
                 else:
+                    now = datetime.now(timezone.utc)
                     for parsed in parsed_rows:
-                        db_row = _parsed_to_db_row(
-                            parsed,
-                            source_image_id=image.id,
-                            parse_job_id=job.id,
-                        )
-                        self.session.add(db_row)
-                        if db_row.source_type == "paygate_settlement":
+                        existing_rows = _find_settlement_rows_for_image(self.session, image.id)
+                        pending_rows = [row for row in existing_rows if row.status != "confirmed"]
+                        if pending_rows:
+                            target = pending_rows[0]
+                            _apply_settlement_parsed_to_extracted_row(
+                                target,
+                                parsed,
+                                parse_job_id=job.id,
+                                session=self.session,
+                            )
+                            for duplicate in pending_rows[1:]:
+                                duplicate.deleted_at = now
+                            row_count += 1
+                        elif not existing_rows:
+                            db_row = _parsed_to_db_row(
+                                parsed,
+                                source_image_id=image.id,
+                                parse_job_id=job.id,
+                            )
+                            self.session.add(db_row)
                             self.session.flush()
                             _recompute_settlement_row_metadata(self.session, db_row)
-                        row_count += 1
+                            row_count += 1
+                        else:
+                            dedupe_skipped += 1
 
                 image.parse_status = "completed"
                 image.error_message = None
