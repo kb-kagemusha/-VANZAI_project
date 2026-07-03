@@ -8,6 +8,8 @@ import { formatRole } from "../lib/formatters";
 import { updateProfile, ApiError } from "../lib/api/client";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 
+const NAV_COLLAPSED_KEY = "vanzai.admin.navCollapsed";
+
 const REGISTRATION_FORM_DEFINITIONS = [
   { key: "worker", label: "稼働者登録", path: "/public/registrations/worker" },
   { key: "supplier-individual", label: "個人下請け登録", path: "/public/registrations/supplier-individual" },
@@ -23,6 +25,7 @@ export function AppShell() {
   const [editError, setEditError] = useState<string | null>(null);
   const [urlCopyMessage, setUrlCopyMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
 
   const displayedName = user?.display_name || user?.username;
@@ -52,6 +55,14 @@ export function AppShell() {
     }
   }
 
+  function toggleNavCollapsed() {
+    setNavCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(NAV_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
+
   async function handleSave() {
     if (!editName.trim()) {
       setEditError("表示名を入力してください");
@@ -71,8 +82,8 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-shell">
-      <SideNav />
+    <div className={`app-shell${navCollapsed ? " app-shell--nav-collapsed" : ""}`}>
+      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} />
       <main className="app-main">
         <header className="topbar">
           <div className="topbar-heading">

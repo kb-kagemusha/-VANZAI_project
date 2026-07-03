@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   MessageSquare,
   ScanLine,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,35 +47,43 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/registration-requests": ClipboardList,
 };
 
-export function SideNav() {
+type SideNavProps = {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+};
+
+export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
 
   return (
-    <aside className="side-nav">
+    <aside className={`side-nav${collapsed ? " is-collapsed" : ""}`}>
       <div className="side-nav-brand">
-        <BrandMark />
-        <div>
-          <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
-          <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
-        </div>
+        <BrandMark size={collapsed ? 36 : 48} />
+        {!collapsed ? (
+          <div>
+            <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
+            <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
+          </div>
+        ) : null}
       </div>
-      <nav className="side-nav-links">
+      <nav className="side-nav-links" aria-label="メインメニュー">
         {NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles)).map((item) => {
           const Icon = NAV_ICONS[item.to];
           return (
             <NavLink
               key={item.to}
               to={item.to}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
             >
-              {Icon && (
+              {Icon ? (
                 <Icon
-                  size={16}
-                  style={{ flexShrink: 0, opacity: 0.75, alignSelf: "center" }}
+                  className="nav-link-icon"
+                  size={collapsed ? 20 : 16}
                   aria-hidden="true"
                 />
-              )}
-              <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              ) : null}
+              <span className="nav-link-text">
                 <span className="nav-link-label">{item.label}</span>
                 <span className="nav-link-description">{item.description}</span>
               </span>
@@ -81,6 +91,15 @@ export function SideNav() {
           );
         })}
       </nav>
+      <button
+        type="button"
+        className="side-nav-toggle"
+        onClick={onToggleCollapsed}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+      >
+        {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
+      </button>
     </aside>
   );
 }
