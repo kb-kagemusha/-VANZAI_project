@@ -240,7 +240,7 @@ def test_paygate_settlement_parser_corrects_yen_misread_amounts():
 2026/07/02 23:05:23
 登録番号
 T4-0104-0102-3000
-0ed7
+端末識別番号:0ed7
 端末番号:
 0ed777ad-eba8-46df-babd-d131c08d6e76
 小計 15,880
@@ -259,6 +259,49 @@ PAYGATE POS 0
     assert row.cash_sales == Decimal("5880")
     assert row.transaction_count == 6
     assert row.raw_payload.get("amount_corrections")
+
+
+def test_paygate_settlement_parser_handles_split_terminal_uuid_and_loose_labels():
+    """実レシート相当: UUID改行折返し・登録番号断片3000の誤検知防止・通常取引数の余白。"""
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+端末識別番号:0ed7
+精算
+2026/07/02 23:05:23
+端末番号:
+0ed777ad-eba8-46df-babd-
+d131c08d6e76
+小計 5,880
+合計 5,880
+現金売上 5,880
+ -PAYGATE POS 0
+通常取引数        6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_rejects_registration_segment_as_short_id():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+2026/07/02 23:05:23
+登録番号
+3000
+小計 5,880
+合計 5,880
+現金売上 5,880
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id is None
 
 
 def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():

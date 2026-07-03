@@ -25,24 +25,50 @@ _AMOUNT_LABEL_RE = re.compile(
     r"\s*(?:[¥￥]\s*)?"
     r"([\d,]+)"
 )
-_UUID_RE = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+_UUID_BODY_RE = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}"
+)
+# 端末番号(UUID)は感熱紙幅で2行に折り返されることが多い
 _TERMINAL_RE = re.compile(
-    rf"端末番号\s*[：:]?\s*(?:\n\s*)?({_UUID_RE})"
-)
-_TERMINAL_FALLBACK_RE = re.compile(
-    rf"端末番号[\s\S]{{0,80}}?({_UUID_RE})"
-)
-_TXN_COUNT_RE = re.compile(r"通常取引数\s*[：:]?\s*(\d+)")
-# 端末識別番号（例: f353 / 0ed7）。端末番号(UUID)とは別項目。
-_TERMINAL_SHORT_ID_INLINE_RE = re.compile(r"端末識別番号\s*[：:]?\s*([A-Za-z0-9]{2,10})")
-_TERMINAL_SHORT_ID_NEXT_LINE_RE = re.compile(
-    r"端末識別番号\s*[：:]?\s*(?:\n|\r\n)\s*([A-Za-z0-9]{2,10})\b"
-)
-# 登録番号（T4-xxxx）直後に印字される短ID（ラベル行が OCR 落ちするケース）
-_TERMINAL_SHORT_AFTER_REG_RE = re.compile(
-    r"(?:登録番号|T4-\d{4}-\d{4}-\d{4})\s*\n\s*([0-9a-fA-F]{4})\b",
+    rf"端末\s*番号\s*[：:]?\s*(?:\n\s*)?({_UUID_BODY_RE})",
     re.IGNORECASE,
 )
+_TERMINAL_SPLIT_RE = re.compile(
+    rf"端末\s*番号\s*[：:]?\s*(?:\n\s*)?"
+    rf"([0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-)\s*(?:\n\s*)?"
+    rf"([0-9a-fA-F]{{12}})",
+    re.IGNORECASE,
+)
+_TERMINAL_FALLBACK_RE = re.compile(
+    rf"端末\s*番号[\s\S]{{0,120}}?({_UUID_BODY_RE})",
+    re.IGNORECASE,
+)
+_TXN_COUNT_PATTERNS = (
+    re.compile(r"通常\s*取引数\s*[：:]?\s*(\d+)"),
+    re.compile(r"通常取引数\s*[：:]?\s*(\d+)"),
+    re.compile(r"通常\s*取引数\s*[：:]?\s*\n\s*(\d+)"),
+    re.compile(r"通常取引数\s*[：:]?\s*\n\s*(\d+)"),
+)
+# 端末識別番号（例: f353 / 0ed7）。端末番号(UUID)とは別項目。
+_TERMINAL_SHORT_ID_PATTERNS = (
+    re.compile(r"端末\s*識別番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
+    re.compile(
+        r"端末\s*識別番号\s*[：:]?\s*(?:\n|\r\n)\s*([0-9a-zA-Z]{2,10})\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"T4-\d{4}-\d{4}-\d{4}\s*\n\s*([0-9a-fA-F]{4})\b",
+        re.IGNORECASE,
+    ),
+    # 端末識別番号ラベルが落ち、UUID直前の1行に短IDだけ印字されるケース
+    re.compile(
+        r"(?:^|\n)\s*([0-9a-fA-F]{4})\s*\n\s*端末\s*番号",
+        re.IGNORECASE | re.MULTILINE,
+    ),
+)
+# 登録番号 T4-xxxx の数字列（3000 等）と区別するため純数字4桁は除外
+_REGISTRATION_SEGMENT_RE = re.compile(r"^\d{4}$")
 _STORE_RE = re.compile(r"(日本たばこ産業株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
 
 _LABEL_CANONICAL = {
@@ -63,27 +89,55 @@ def _canonical_label(label: str) -> str:
     return _LABEL_CANONICAL.get(label, label)
 
 
+def _is_plausible_terminal_short_id(value: str) -> bool:
+    """登録番号 T4-xxxx-xxxx-3000 の末尾4桁と区別する。"""
+    if not re.fullmatch(r"[0-9a-zA-Z]{2,10}", value):
+        return False
+    if _REGISTRATION_SEGMENT_RE.fullmatch(value):
+        return False
+    # 端末識別番号は英字を含む hex が多い（0ed7, f353）。純数字4桁は登録番号断片の誤検知。
+    if value.isdigit():
+        return False
+    return bool(re.search(r"[a-zA-Z]", value))
+
+
 def _extract_terminal_id(text: str) -> str | None:
+    split_match = _TERMINAL_SPLIT_RE.search(text)
+    if split_match:
+        return f"{split_match.group(1)}{split_match.group(2)}".lower()
+
     terminal_match = _TERMINAL_RE.search(text)
     if terminal_match:
-        return terminal_match.group(1)
+        return terminal_match.group(1).lower()
+
     fallback = _TERMINAL_FALLBACK_RE.search(text)
     if fallback:
-        return fallback.group(1)
+        return fallback.group(1).lower()
     return None
 
 
 def _extract_terminal_short_id(text: str) -> str | None:
-    inline = _TERMINAL_SHORT_ID_INLINE_RE.search(text)
-    if inline:
-        return inline.group(1)
-    next_line = _TERMINAL_SHORT_ID_NEXT_LINE_RE.search(text)
-    if next_line:
-        return next_line.group(1)
-    after_reg = _TERMINAL_SHORT_AFTER_REG_RE.search(text)
-    if after_reg:
-        return after_reg.group(1)
+    for pattern in _TERMINAL_SHORT_ID_PATTERNS:
+        match = pattern.search(text)
+        if match and _is_plausible_terminal_short_id(match.group(1)):
+            return match.group(1).lower()
     return None
+
+
+def _extract_transaction_count(text: str) -> int | None:
+    for pattern in _TXN_COUNT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _normalize_terminal_uuid_lines(text: str) -> str:
+    """UUID が2行に折り返された OCR テキストを1行に結合する。"""
+    return _TERMINAL_SPLIT_RE.sub(
+        lambda match: f"端末番号: {match.group(1)}{match.group(2)}",
+        text,
+    )
 
 
 def _normalize_settlement_text(text: str) -> str:
@@ -98,6 +152,7 @@ def _normalize_settlement_text(text: str) -> str:
         flags=re.IGNORECASE,
     )
     normalized = re.sub(r"PAYGATEPOS", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = _normalize_terminal_uuid_lines(normalized)
     return normalized
 
 
@@ -145,12 +200,12 @@ class PaygateSettlementParser(BaseOcrParser):
             if corrected_from:
                 amount_corrections[key] = corrected_from
 
-        txn_count_match = _TXN_COUNT_RE.search(text)
+        txn_count_match = _extract_transaction_count(text)
         terminal_id = _extract_terminal_id(text)
         terminal_short_id = _extract_terminal_short_id(text)
         store_match = _STORE_RE.search(text)
 
-        raw_txn_count = int(txn_count_match.group(1)) if txn_count_match else None
+        raw_txn_count = txn_count_match
         transaction_count = normalize_settlement_transaction_count(
             raw_txn_count,
             amounts.get("cash"),
