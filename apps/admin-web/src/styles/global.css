@@ -74,9 +74,6 @@ button {
   align-self: start;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-height: 100vh;
-  overflow: hidden;
   padding: 0;
   border-right: 1px solid var(--line);
   background: var(--side-nav-bg);
@@ -111,10 +108,7 @@ button {
 }
 
 .side-nav-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 1.4rem 2rem;
+  padding: 1rem 1.4rem 2rem;
 }
 
 .side-nav-brand {
@@ -160,8 +154,6 @@ button {
 .side-nav-links {
   display: grid;
   gap: 0.85rem;
-  flex: 1;
-  min-height: 0;
   align-content: start;
 }
 
@@ -1052,8 +1044,6 @@ button {
 
   .side-nav {
     position: static;
-    height: auto;
-    max-height: none;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
