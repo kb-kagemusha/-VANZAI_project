@@ -84,12 +84,30 @@ button {
 }
 
 .side-nav-toggle-bar {
-  flex-shrink: 0;
+  position: absolute;
+  top: 0.75rem;
+  right: 1.4rem;
+  left: 1.4rem;
   display: flex;
   justify-content: flex-end;
-  padding: 1rem 1.4rem 0.5rem;
-  background: rgba(27, 37, 48, 0.98);
-  z-index: 2;
+  z-index: 3;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+
+.side-nav:hover .side-nav-toggle-bar,
+.side-nav:focus-within .side-nav-toggle-bar {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.side-nav.is-collapsed .side-nav-toggle-bar {
+  left: 0.65rem;
+  right: 0.65rem;
+  justify-content: center;
 }
 
 .side-nav-body {
@@ -189,11 +207,6 @@ button {
   opacity: 0.78;
 }
 
-.side-nav.is-collapsed .side-nav-toggle-bar {
-  justify-content: center;
-  padding: 1rem 0.65rem 0.5rem;
-}
-
 .side-nav.is-collapsed .side-nav-body {
   padding: 0 0.65rem 1.25rem;
 }
@@ -235,7 +248,8 @@ button {
   padding: 0.45rem 0.55rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(27, 37, 48, 0.96);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   color: rgba(248, 239, 225, 0.9);
   transition: background 120ms ease, color 120ms ease;
 }
@@ -245,8 +259,16 @@ button {
 }
 
 .side-nav-toggle:hover {
-  background: rgba(255, 249, 238, 0.1);
+  background: rgba(39, 53, 67, 0.98);
   color: #fff;
+}
+
+@media (hover: none) {
+  .side-nav-toggle-bar {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
 }
 
 .app-main {
@@ -1037,7 +1059,12 @@ button {
   }
 
   .side-nav-toggle-bar {
-    padding: 1rem 1rem 0.5rem;
+    top: 0.75rem;
+    right: 1rem;
+    left: 1rem;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .side-nav-body {
@@ -1045,7 +1072,8 @@ button {
   }
 
   .side-nav.is-collapsed .side-nav-toggle-bar {
-    padding: 1rem 1rem 0.5rem;
+    left: 1rem;
+    right: 1rem;
   }
 
   .side-nav.is-collapsed .side-nav-body {
