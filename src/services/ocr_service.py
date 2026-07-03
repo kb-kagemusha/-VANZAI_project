@@ -45,6 +45,7 @@ from src.services.ocr.confirm_metadata import (
 )
 from src.services.ocr.export import rows_to_csv, settlement_rows_to_csv
 from src.services.ocr.settlement_processing import DEFAULT_BRANCH_ID, apply_settlement_derived_fields
+from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_id
 
 from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
 
@@ -169,7 +170,7 @@ def _parsed_to_db_row(
         transaction_no=parsed.transaction_no,
         receipt_no=parsed.receipt_no,
         payment_method=parsed.payment_method,
-        terminal_id=parsed.terminal_id,
+        terminal_id=normalize_settlement_terminal_id(parsed.terminal_id),
         cash_sales=parsed.cash_sales,
         credit_sales=parsed.credit_sales,
         transaction_count=parsed.transaction_count,
@@ -313,7 +314,7 @@ def _apply_settlement_parsed_to_extracted_row(
     row.transaction_no = parsed.transaction_no
     row.receipt_no = parsed.receipt_no
     row.payment_method = parsed.payment_method
-    row.terminal_id = parsed.terminal_id
+    row.terminal_id = normalize_settlement_terminal_id(parsed.terminal_id)
     row.cash_sales = parsed.cash_sales
     row.credit_sales = parsed.credit_sales
     row.pos_sales = parsed.pos_sales
@@ -802,6 +803,8 @@ class OcrService:
         row.manually_edited = True
 
         if row.source_type == "paygate_settlement":
+            if "terminal_id" in updates:
+                row.terminal_id = normalize_settlement_terminal_id(row.terminal_id)
             if amount_touched:
                 row.amount_source = "manual"
                 row.amount_inferred = False

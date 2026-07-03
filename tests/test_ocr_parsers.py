@@ -371,7 +371,7 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     assert len(rows) == 1
     row = rows[0]
     assert row.terminal_short_id is None
-    assert row.terminal_id == "babd-d131c08d6e76"
+    assert row.terminal_id is None
     assert row.amount == Decimal("5880")
     assert row.subtotal == Decimal("5880")
     assert row.cash_sales == Decimal("5880")

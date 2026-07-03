@@ -9,6 +9,10 @@ from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
 from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
+from src.services.ocr.parsers.settlement_terminal_id import (
+    format_terminal_id_from_hex32,
+    normalize_settlement_terminal_id,
+)
 from src.services.ocr.settlement_processing import (
     apply_settlement_derived_fields,
     normalize_settlement_transaction_count,
@@ -110,25 +114,24 @@ def _clean_hex_line(line: str) -> str:
     return re.sub(r"[^0-9a-fA-F-]", "", line.strip())
 
 
-def _format_uuid(hex_only: str) -> str:
-    return (
-        f"{hex_only[:8]}-{hex_only[8:12]}-{hex_only[12:16]}-"
-        f"{hex_only[16:20]}-{hex_only[20:32]}"
-    ).lower()
-
-
 def _extract_terminal_id(text: str) -> str | None:
     split_match = _TERMINAL_SPLIT_RE.search(text)
     if split_match:
-        return f"{split_match.group(1)}{split_match.group(2)}".lower()
+        candidate = normalize_settlement_terminal_id(f"{split_match.group(1)}{split_match.group(2)}")
+        if candidate:
+            return candidate
 
     terminal_match = _TERMINAL_RE.search(text)
     if terminal_match:
-        return terminal_match.group(1).lower()
+        candidate = normalize_settlement_terminal_id(terminal_match.group(1))
+        if candidate:
+            return candidate
 
     fallback = _TERMINAL_FALLBACK_RE.search(text)
     if fallback:
-        return fallback.group(1).lower()
+        candidate = normalize_settlement_terminal_id(fallback.group(1))
+        if candidate:
+            return candidate
 
     if "端末" not in text:
         return None
@@ -156,11 +159,9 @@ def _extract_terminal_id(text: str) -> str | None:
         else:
             joined += "-" + chunk
     joined = re.sub(r"-+", "-", joined).strip("-").lower()
-    hex_only = joined.replace("-", "")
+    hex_only = re.sub(r"[^0-9a-f]", "", joined)
     if len(hex_only) == 32:
-        return _format_uuid(hex_only)
-    if len(hex_only) >= 12:
-        return joined
+        return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only))
     return None
 
 
