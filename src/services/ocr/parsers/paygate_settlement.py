@@ -16,7 +16,9 @@ from src.services.ocr.parsers.settlement_amount import (
 from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
 from src.services.ocr.parsers.settlement_terminal_id import (
     format_terminal_id_from_hex32,
+    is_valid_settlement_terminal_short_id,
     normalize_settlement_terminal_id,
+    normalize_settlement_terminal_short_id,
 )
 from src.services.ocr.parsers.settlement_transaction_count import (
     extract_transaction_count_before_cash_blank,
@@ -65,8 +67,6 @@ _TERMINAL_SHORT_ID_PATTERNS = (
         re.IGNORECASE | re.MULTILINE,
     ),
 )
-_REGISTRATION_SEGMENT_RE = re.compile(r"^\d{4}$")
-_TERMINAL_SHORT_ID_BODY_RE = re.compile(r"^[0-9a-f]{4}$")
 _STORE_RE = re.compile(r"(日本たばこ産業株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
 _OCR_HEX_FIXES = str.maketrans(
     {
@@ -119,28 +119,13 @@ def _canonical_label(label: str) -> str:
 
 
 def _is_plausible_terminal_short_id(value: str) -> bool:
-    normalized = _normalize_terminal_short_id_candidate(value)
-    if not normalized:
-        return False
-    if _REGISTRATION_SEGMENT_RE.fullmatch(normalized):
-        return False
-    if normalized.isdigit():
-        return False
-    return _TERMINAL_SHORT_ID_BODY_RE.fullmatch(normalized) is not None
+    return is_valid_settlement_terminal_short_id(
+        normalize_settlement_terminal_short_id(value, from_ocr=True)
+    )
 
 
 def _normalize_terminal_short_id_candidate(value: str | None) -> str | None:
-    if not value:
-        return None
-    translated = value.translate(_OCR_HEX_FIXES)
-    candidate = re.sub(r"[^0-9a-fA-F]", "", translated).lower()
-    if len(candidate) < 4:
-        return None
-    if len(candidate) > 4:
-        candidate = candidate[:4]
-    if _TERMINAL_SHORT_ID_BODY_RE.fullmatch(candidate) and not candidate.isdigit():
-        return candidate
-    return None
+    return normalize_settlement_terminal_short_id(value, from_ocr=True)
 
 
 def _normalize_uuid_ocr_line(line: str) -> str:

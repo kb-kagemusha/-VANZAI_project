@@ -12,6 +12,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from src.services.ocr.parsers.settlement_terminal_id import is_valid_settlement_terminal_short_id
+
 AMOUNT_SOURCES = frozenset({"ocr", "corrected_ocr", "fallback_default", "manual"})
 DATETIME_SOURCES = frozenset({"ocr_strict", "fuzzy", "missing", "manual"})
 STRICT_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}$")
@@ -190,6 +192,8 @@ def _get_settlement_confirm_rejection_reasons(row: Any) -> list[str]:
         reasons.append("missing_transaction_count")
     if not getattr(row, "terminal_short_id", None):
         reasons.append("missing_terminal_short_id")
+    elif not is_valid_settlement_terminal_short_id(row.terminal_short_id):
+        reasons.append("invalid_terminal_short_id")
     return reasons
 
 

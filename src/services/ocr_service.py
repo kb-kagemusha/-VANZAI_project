@@ -46,7 +46,7 @@ from src.services.ocr.confirm_metadata import (
 )
 from src.services.ocr.export import rows_to_csv, settlement_rows_to_csv
 from src.services.ocr.settlement_processing import DEFAULT_BRANCH_ID, apply_settlement_derived_fields
-from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_id
+from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_id, normalize_settlement_terminal_short_id
 
 from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
 
@@ -191,7 +191,10 @@ def _parsed_to_db_row(
     )
 
     if parsed.source_type == "paygate_settlement":
-        row.terminal_short_id = parsed.terminal_short_id
+        row.terminal_short_id = normalize_settlement_terminal_short_id(
+            parsed.terminal_short_id,
+            from_ocr=True,
+        )
         row.pos_sales = parsed.pos_sales
         row.other_payment = parsed.other_payment
         row.cash_unit_count = parsed.cash_unit_count
@@ -327,7 +330,10 @@ def _apply_settlement_parsed_to_extracted_row(
     row.confidence = Decimal(str(round(parsed.confidence, 4)))
     row.raw_payload = parsed.raw_payload
     row.report_date = parsed.record_date
-    row.terminal_short_id = parsed.terminal_short_id
+    row.terminal_short_id = normalize_settlement_terminal_short_id(
+        parsed.terminal_short_id,
+        from_ocr=True,
+    )
     row.cash_unit_count = parsed.cash_unit_count
     row.pos_unit_count = parsed.pos_unit_count
     row.work_date = parsed.work_date
@@ -844,6 +850,15 @@ class OcrService:
         if row.source_type == "paygate_settlement":
             if "terminal_id" in updates:
                 row.terminal_id = normalize_settlement_terminal_id(row.terminal_id)
+            if "terminal_short_id" in updates:
+                raw_short_id = updates.get("terminal_short_id")
+                if raw_short_id in (None, ""):
+                    row.terminal_short_id = None
+                else:
+                    normalized_short_id = normalize_settlement_terminal_short_id(raw_short_id)
+                    if normalized_short_id is None:
+                        raise ValueError("terminal_short_id must be exactly 4 hexadecimal characters")
+                    row.terminal_short_id = normalized_short_id
             if amount_touched:
                 row.amount_source = "manual"
                 row.amount_inferred = False

@@ -39,6 +39,7 @@ import {
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrValidationMessages } from "../lib/ocr/validationMessages";
+import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
   nextSortDirection,
   OCR_ROW_SORTABLE_COLUMNS,
@@ -268,8 +269,15 @@ function OcrRowEditModal({
                   type="text"
                   value={draft.terminal_short_id}
                   placeholder="f353"
+                  maxLength={4}
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   onChange={(event) =>
-                    setDraft((current) => ({ ...current, terminal_short_id: event.target.value }))
+                    setDraft((current) => ({
+                      ...current,
+                      terminal_short_id: normalizeTerminalShortIdInput(event.target.value),
+                    }))
                   }
                 />
               </label>
@@ -2176,8 +2184,15 @@ export function ReceiptOcrPage() {
             <input
               value={inventoryDraft.terminal_short_id}
               placeholder="f353"
+              maxLength={4}
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
               onChange={(event) =>
-                setInventoryDraft((current) => ({ ...current, terminal_short_id: event.target.value }))
+                setInventoryDraft((current) => ({
+                  ...current,
+                  terminal_short_id: normalizeTerminalShortIdInput(event.target.value),
+                }))
               }
             />
           </label>

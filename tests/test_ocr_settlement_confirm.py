@@ -48,6 +48,12 @@ def test_settlement_row_missing_terminal_short_id_is_rejected():
     assert "missing_terminal_short_id" in reasons
 
 
+def test_settlement_row_invalid_terminal_short_id_is_rejected():
+    row = _settlement_row(terminal_short_id="f35")
+    reasons = get_confirm_rejection_reasons(row)
+    assert "invalid_terminal_short_id" in reasons
+
+
 def test_settlement_row_missing_transaction_count_is_rejected():
     row = _settlement_row(transaction_count=None)
     reasons = get_confirm_rejection_reasons(row)

@@ -7,6 +7,7 @@ from decimal import Decimal
 from src.services.ocr.confirm_metadata import STRICT_TIME_RE
 from src.services.ocr.models import ParsedOcrRow
 from src.services.ocr.parsers.settlement_amount import is_valid_settlement_unit_sales_amount
+from src.services.ocr.parsers.settlement_terminal_id import is_valid_settlement_terminal_short_id
 
 _PAYGATE_TXN_RE = re.compile(r"^1\d{6}$")
 _PAYGATE_RECEIPT_RE = re.compile(r"^(77\d{11}|781\d{10})$")
@@ -132,6 +133,12 @@ def compute_settlement_blocking_errors(row) -> list[str]:
 
     if getattr(row, "amount", None) is None:
         errors.append("settlement_amount_missing")
+
+    short_id = getattr(row, "terminal_short_id", None)
+    if not short_id:
+        errors.append("missing_terminal_short_id")
+    elif not is_valid_settlement_terminal_short_id(short_id):
+        errors.append("invalid_terminal_short_id")
 
     return errors
 

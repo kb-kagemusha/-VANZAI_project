@@ -4,8 +4,10 @@ APIリクエスト・レスポンスのPydanticスキーマ定義
 from datetime import date, datetime
 from typing import Generic, List, Literal, Optional, TypeVar
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from decimal import Decimal
+
+from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_short_id
 
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
@@ -2109,6 +2111,16 @@ class OcrExtractedRowUpdateRequest(BaseModel):
     branch_id: Optional[str] = None
     staff_id: Optional[str] = None
 
+    @field_validator("terminal_short_id")
+    @classmethod
+    def validate_terminal_short_id(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return value
+        normalized = normalize_settlement_terminal_short_id(value)
+        if normalized is None:
+            raise ValueError("端末識別番号は4桁の16進（0-9a-f）で入力してください")
+        return normalized
+
 
 class OcrRowVoidRequest(BaseModel):
     void_reason: str = Field(..., min_length=1, max_length=500)
@@ -2228,7 +2240,7 @@ class InventorySnapshotListResponse(BaseModel):
 
 class InventorySnapshotCreateRequest(BaseModel):
     branch_id: str = Field(..., min_length=1, max_length=50)
-    terminal_short_id: str = Field(..., min_length=1, max_length=20)
+    terminal_short_id: str = Field(..., min_length=4, max_length=4, pattern=r"^[0-9a-f]{4}$")
     work_date: date
     staff_id: Optional[str] = Field(None, max_length=50)
     opening_count: int = Field(..., ge=0)
@@ -2236,6 +2248,14 @@ class InventorySnapshotCreateRequest(BaseModel):
     adjustment_count: int = 0
     adjustment_reason: Optional[str] = None
     note: Optional[str] = None
+
+    @field_validator("terminal_short_id")
+    @classmethod
+    def validate_terminal_short_id(cls, value: str) -> str:
+        normalized = normalize_settlement_terminal_short_id(value)
+        if normalized is None:
+            raise ValueError("端末識別番号は4桁の16進（0-9a-f）で入力してください")
+        return normalized
 
 
 class InventorySnapshotUpdateRequest(BaseModel):
