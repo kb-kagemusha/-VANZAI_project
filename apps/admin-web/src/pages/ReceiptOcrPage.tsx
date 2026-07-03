@@ -37,6 +37,7 @@ import {
 } from "../lib/api/client";
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
+import { formatOcrValidationMessages } from "../lib/ocr/validationMessages";
 import {
   nextSortDirection,
   OCR_ROW_SORTABLE_COLUMNS,
@@ -1654,13 +1655,13 @@ export function ReceiptOcrPage() {
         if (row.source_type === "paygate_settlement") {
           const messages = [...(row.blocking_errors || []), ...(row.warnings || [])];
           return messages.length ? (
-            <span className="ocr-warning-text">{messages.join(" / ")}</span>
+            <span className="ocr-warning-text">{formatOcrValidationMessages(messages)}</span>
           ) : (
             "OK"
           );
         }
         return row.validation_errors?.length ? (
-          <span className="ocr-warning-text">{row.validation_errors.join(" / ")}</span>
+          <span className="ocr-warning-text">{formatOcrValidationMessages(row.validation_errors)}</span>
         ) : (
           "OK"
         );

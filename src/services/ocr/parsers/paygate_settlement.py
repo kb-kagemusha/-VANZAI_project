@@ -9,6 +9,7 @@ from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
 from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
+from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
 from src.services.ocr.parsers.settlement_terminal_id import (
     format_terminal_id_from_hex32,
     normalize_settlement_terminal_id,
@@ -250,6 +251,7 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
             amounts[key] = amount
         if corrected_from:
             corrections[key] = corrected_from
+    amounts = repair_settlement_amounts(text, amounts)
     return amounts, corrections
 
 

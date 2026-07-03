@@ -7,6 +7,7 @@ from src.services.ocr.paddle_engine import run_ocr_from_text
 from src.services.ocr.parsers.paygate_screenshot import PaygateScreenshotParser
 from src.services.ocr.parsers.paygate_settlement import PaygateSettlementParser
 from src.services.ocr.models import ParsedOcrRow
+from src.services.ocr.settlement_processing import apply_settlement_derived_fields
 from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
 
 
@@ -397,6 +398,57 @@ POS
 1万円札
 (0枚)
 """
+
+
+PRODUCTION_OCR_TEXT_260703_17 = """
+端末識別番号e9c0
+精算
+2026/07/02
+23:03:46
+端末番号
+e9c01
+785
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計
+5,880
+合計
+5,880
+3,920
+現金売上
+0
+クレジット売上
+その他支払い
+1,960
+-PAYGATE POS
+0
+-その他
+0
+消費税
+534
+返品計
+0
+取消計
+通常取引数
+精算現金
+1万円札
+(0枚)
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_17():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_17))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    assert row.terminal_id == "e9c01785-7f8d-4b74-aa67-dc21e2b79fbf"
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("3920")
+    assert row.pos_sales == Decimal("1960")
+    assert row.transaction_count == 6
+    assert "amount_breakdown_mismatch" not in (row.blocking_errors or [])
 
 
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_16():
