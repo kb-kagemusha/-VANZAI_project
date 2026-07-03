@@ -232,20 +232,50 @@ def test_paygate_settlement_parser_extracts_labeled_settlement_datetime():
     assert rows[0].record_time == "05:30:00"
 
 
+def test_paygate_settlement_parser_corrects_yen_misread_amounts():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+精算
+2026/07/02 23:05:23
+登録番号
+T4-0104-0102-3000
+0ed7
+端末番号:
+0ed777ad-eba8-46df-babd-d131c08d6e76
+小計 15,880
+合計 15,880
+現金売上 15,880
+PAYGATE POS 0
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.subtotal == Decimal("5880")
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+    assert row.raw_payload.get("amount_corrections")
+
+
 def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():
     parser = PaygateSettlementParser()
     text = """
 精算
 精算日 2026/07/02
 精算時間 23:05:23
-合計 ¥15,880
-小計 ¥15,880
-現金売上 ¥15,880
-PAYGATE POS ¥0
+合計 15,880
+小計 15,880
+現金売上 15,880
+PAYGATE POS 0
 通常取引数 0
 """
     rows = parser.parse(run_ocr_from_text(text))
     assert len(rows) == 1
+    assert rows[0].amount == Decimal("5880")
     assert rows[0].transaction_count is None
     assert "unit_breakdown_invalid" not in (rows[0].warnings or [])
 

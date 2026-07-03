@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
+from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
 from src.services.ocr.settlement_processing import (
     apply_settlement_derived_fields,
     normalize_settlement_transaction_count,
@@ -21,16 +22,26 @@ _SETTLEMENT_TIME_RE = re.compile(r"精算時間\s*[：:]?\s*(\d{2}:\d{2}:\d{2})"
 _AMOUNT_LABEL_RE = re.compile(
     r"(?:[-－]\s*)?"
     r"(小計|合計|現金売上|クレジット売上|PAYGATE[\s　]*POS|その他支払い|消費税|内税額)"
-    r"\s*[¥￥]?\s*([\d,]+)"
+    r"\s*(?:[¥￥]\s*)?"
+    r"([\d,]+)"
+)
+_UUID_RE = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+_TERMINAL_RE = re.compile(
+    rf"端末番号\s*[：:]?\s*(?:\n\s*)?({_UUID_RE})"
+)
+_TERMINAL_FALLBACK_RE = re.compile(
+    rf"端末番号[\s\S]{{0,80}}?({_UUID_RE})"
 )
 _TXN_COUNT_RE = re.compile(r"通常取引数\s*[：:]?\s*(\d+)")
-_TERMINAL_RE = re.compile(
-    r"端末番号[：:]\s*([0-9a-fA-F\-]{8,})"
-)
-# 端末識別番号（例: f353）。端末番号(UUID)とは別項目。
-_TERMINAL_SHORT_ID_INLINE_RE = re.compile(r"端末識別番号[：:]?\s*([A-Za-z0-9]{2,10})")
+# 端末識別番号（例: f353 / 0ed7）。端末番号(UUID)とは別項目。
+_TERMINAL_SHORT_ID_INLINE_RE = re.compile(r"端末識別番号\s*[：:]?\s*([A-Za-z0-9]{2,10})")
 _TERMINAL_SHORT_ID_NEXT_LINE_RE = re.compile(
-    r"端末識別番号\s*(?:\n|\r\n)\s*([A-Za-z0-9]{2,10})\b"
+    r"端末識別番号\s*[：:]?\s*(?:\n|\r\n)\s*([A-Za-z0-9]{2,10})\b"
+)
+# 登録番号（T4-xxxx）直後に印字される短ID（ラベル行が OCR 落ちするケース）
+_TERMINAL_SHORT_AFTER_REG_RE = re.compile(
+    r"(?:登録番号|T4-\d{4}-\d{4}-\d{4})\s*\n\s*([0-9a-fA-F]{4})\b",
+    re.IGNORECASE,
 )
 _STORE_RE = re.compile(r"(日本たばこ産業株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
 
@@ -52,13 +63,27 @@ def _canonical_label(label: str) -> str:
     return _LABEL_CANONICAL.get(label, label)
 
 
-def _parse_amount(value: str | None) -> Decimal | None:
-    if not value:
-        return None
-    try:
-        return Decimal(value.replace(",", ""))
-    except (InvalidOperation, AttributeError):
-        return None
+def _extract_terminal_id(text: str) -> str | None:
+    terminal_match = _TERMINAL_RE.search(text)
+    if terminal_match:
+        return terminal_match.group(1)
+    fallback = _TERMINAL_FALLBACK_RE.search(text)
+    if fallback:
+        return fallback.group(1)
+    return None
+
+
+def _extract_terminal_short_id(text: str) -> str | None:
+    inline = _TERMINAL_SHORT_ID_INLINE_RE.search(text)
+    if inline:
+        return inline.group(1)
+    next_line = _TERMINAL_SHORT_ID_NEXT_LINE_RE.search(text)
+    if next_line:
+        return next_line.group(1)
+    after_reg = _TERMINAL_SHORT_AFTER_REG_RE.search(text)
+    if after_reg:
+        return after_reg.group(1)
+    return None
 
 
 def _normalize_settlement_text(text: str) -> str:
@@ -101,16 +126,6 @@ def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, st
     return None, None, "missing"
 
 
-def _extract_terminal_short_id(text: str) -> str | None:
-    inline = _TERMINAL_SHORT_ID_INLINE_RE.search(text)
-    if inline:
-        return inline.group(1)
-    next_line = _TERMINAL_SHORT_ID_NEXT_LINE_RE.search(text)
-    if next_line:
-        return next_line.group(1)
-    return None
-
-
 class PaygateSettlementParser(BaseOcrParser):
     source_type = "paygate_settlement"
 
@@ -122,11 +137,16 @@ class PaygateSettlementParser(BaseOcrParser):
         record_date, record_time, parsed_datetime_source = _extract_settlement_datetime(text)
 
         amounts: dict[str, Decimal | None] = {}
+        amount_corrections: dict[str, str] = {}
         for label, value in _AMOUNT_LABEL_RE.findall(text):
-            amounts[_canonical_label(label)] = _parse_amount(value)
+            amount, corrected_from = sanitize_settlement_amount(value)
+            key = _canonical_label(label)
+            amounts[key] = amount
+            if corrected_from:
+                amount_corrections[key] = corrected_from
 
         txn_count_match = _TXN_COUNT_RE.search(text)
-        terminal_match = _TERMINAL_RE.search(text)
+        terminal_id = _extract_terminal_id(text)
         terminal_short_id = _extract_terminal_short_id(text)
         store_match = _STORE_RE.search(text)
 
@@ -141,14 +161,17 @@ class PaygateSettlementParser(BaseOcrParser):
         avg_conf = sum(confidences) / len(confidences) if confidences else 0.5
 
         total = amounts.get("total")
-        amount_meta = {"amount_source": "ocr"} if total is not None else {}
+        amount_meta: dict[str, str] = {"amount_source": "ocr"} if total is not None else {}
+        if amount_corrections.get("total"):
+            amount_meta["amount_corrected_from"] = amount_corrections["total"]
+            amount_meta["amount_source"] = "corrected_ocr"
 
         parsed = ParsedOcrRow(
             source_type=self.source_type,
             record_date=record_date,
             record_time=record_time,
             amount=total,
-            terminal_id=terminal_match.group(1) if terminal_match else None,
+            terminal_id=terminal_id,
             terminal_short_id=terminal_short_id,
             cash_sales=amounts.get("cash"),
             credit_sales=amounts.get("credit"),
@@ -159,7 +182,11 @@ class PaygateSettlementParser(BaseOcrParser):
             subtotal=amounts.get("subtotal"),
             store_name=store_match.group(1) if store_match else None,
             confidence=avg_conf,
-            raw_payload={"amounts": {k: str(v) for k, v in amounts.items() if v is not None}, **amount_meta},
+            raw_payload={
+                "amounts": {k: str(v) for k, v in amounts.items() if v is not None},
+                **({"amount_corrections": amount_corrections} if amount_corrections else {}),
+                **amount_meta,
+            },
         )
         apply_settlement_derived_fields(parsed)
         # validation_errors (legacy column) is mirrored from blocking_errors by
