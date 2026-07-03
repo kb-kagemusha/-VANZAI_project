@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from src.services.ocr.confirm_metadata import STRICT_TIME_RE
 from src.services.ocr.models import ParsedOcrRow
+from src.services.ocr.parsers.settlement_amount import is_valid_settlement_unit_sales_amount
 
 _PAYGATE_TXN_RE = re.compile(r"^1\d{6}$")
 _PAYGATE_RECEIPT_RE = re.compile(r"^(77\d{11}|781\d{10})$")
@@ -104,6 +105,14 @@ def compute_settlement_blocking_errors(row) -> list[str]:
         value = getattr(row, field_name, None)
         if _ones_digit_is_bad(value):
             errors.append(f"{label}_ones_digit_invalid")
+
+    for field_name, code in (
+        ("cash_sales", "cash_sales_unit_invalid"),
+        ("pos_sales", "pos_sales_unit_invalid"),
+    ):
+        value = getattr(row, field_name, None)
+        if value is not None and value > 0 and not is_valid_settlement_unit_sales_amount(value):
+            errors.append(code)
 
     amount = getattr(row, "amount", None)
     components = [

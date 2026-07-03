@@ -4,7 +4,11 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 
-from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
+from src.services.ocr.parsers.settlement_amount import (
+    is_valid_settlement_unit_sales_amount,
+    sanitize_settlement_amount,
+    sanitize_settlement_sales_amount,
+)
 
 _STANDALONE_AMOUNT_RE = re.compile(r"^(?:[¥￥]\s*)?([\d,/]+)\s*$")
 _SKIP_AMOUNT_LINE_KEYWORDS = ("売上", "小計", "合計", "計", "税", "PAYGATE", "その他", "精算", "端末", "登録")
@@ -27,6 +31,39 @@ def _is_skipped_amount_context(line: str) -> bool:
     return any(keyword in compact for keyword in _SKIP_AMOUNT_LINE_KEYWORDS)
 
 
+def _needs_sales_recovery(value: Decimal | None) -> bool:
+    if value is None or value == 0:
+        return True
+    return not is_valid_settlement_unit_sales_amount(value)
+
+
+def _accept_sales_amount(amount: Decimal | None) -> bool:
+    return amount is not None and amount > 0 and is_valid_settlement_unit_sales_amount(amount)
+
+
+def _infer_sales_from_total(repaired: dict[str, Decimal | None]) -> None:
+    total = repaired.get("total")
+    if total is None:
+        return
+    cash = repaired.get("cash") or Decimal(0)
+    credit = repaired.get("credit") or Decimal(0)
+    other = repaired.get("other") or Decimal(0)
+    pos = repaired.get("pos") or Decimal(0)
+
+    if not (pos > 0 and is_valid_settlement_unit_sales_amount(pos)):
+        remainder = total - cash - credit - other
+        if is_valid_settlement_unit_sales_amount(remainder):
+            repaired["pos"] = remainder
+        elif pos > 0:
+            repaired["pos"] = Decimal(0)
+
+    cash = repaired.get("cash") or Decimal(0)
+    if not (cash > 0 and is_valid_settlement_unit_sales_amount(cash)):
+        remainder = total - (repaired.get("pos") or Decimal(0)) - credit - other
+        if is_valid_settlement_unit_sales_amount(remainder):
+            repaired["cash"] = remainder
+
+
 def repair_settlement_amounts(
     text: str,
     amounts: dict[str, Decimal | None],
@@ -34,6 +71,11 @@ def repair_settlement_amounts(
     """ラベルと金額が別行にずれた本番OCR向けの補正。"""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     repaired = dict(amounts)
+
+    for key in ("cash", "pos"):
+        value = repaired.get(key)
+        if value is not None and value > 0 and not is_valid_settlement_unit_sales_amount(value):
+            repaired[key] = Decimal(0)
 
     for index, line in enumerate(lines):
         compact = _compact(line)
@@ -60,7 +102,7 @@ def repair_settlement_amounts(
         compact = _compact(line)
         if "現金売上" not in compact:
             continue
-        if repaired.get("cash") not in (None, Decimal(0)):
+        if not _needs_sales_recovery(repaired.get("cash")):
             break
         if index == 0:
             break
@@ -68,7 +110,7 @@ def repair_settlement_amounts(
         if _is_skipped_amount_context(previous):
             break
         amount = _standalone_amount(previous)
-        if amount is not None and amount > 0:
+        if _accept_sales_amount(amount):
             repaired["cash"] = amount
         break
 
@@ -76,19 +118,25 @@ def repair_settlement_amounts(
         compact = _compact(line).upper().replace("-", "")
         if "PAYGATEPOS" not in compact:
             continue
-        if repaired.get("pos") not in (None, Decimal(0)):
+        if not _needs_sales_recovery(repaired.get("pos")):
             break
         for lookback in range(index - 1, max(index - 5, -1), -1):
             candidate = lines[lookback]
-            if "その他支払" in _compact(candidate):
+            candidate_compact = _compact(candidate)
+            if any(
+                marker in candidate_compact
+                for marker in ("その他支払", "現金売上", "クレジット", "小計", "合計", "消費税")
+            ):
                 break
             if _is_skipped_amount_context(candidate) and "POS" not in _compact(candidate).upper():
                 continue
             amount = _standalone_amount(candidate)
-            if amount is not None and amount > 0:
+            if _accept_sales_amount(amount):
                 repaired["pos"] = amount
                 break
         break
+
+    _infer_sales_from_total(repaired)
 
     other = repaired.get("other")
     pos = repaired.get("pos")

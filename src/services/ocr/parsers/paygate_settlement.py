@@ -8,7 +8,10 @@ from decimal import Decimal
 from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
-from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
+from src.services.ocr.parsers.settlement_amount import (
+    sanitize_settlement_amount,
+    sanitize_settlement_sales_amount,
+)
 from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
 from src.services.ocr.parsers.settlement_terminal_id import (
     format_terminal_id_from_hex32,
@@ -228,7 +231,13 @@ def _infer_transaction_count_from_sales(
     return normalized
 
 
-def _extract_labeled_amount(text: str, labels: tuple[str, ...]) -> tuple[Decimal | None, str | None]:
+def _extract_labeled_amount(
+    text: str,
+    labels: tuple[str, ...],
+    *,
+    sales_field: bool = False,
+) -> tuple[Decimal | None, str | None]:
+    sanitize = sanitize_settlement_sales_amount if sales_field else sanitize_settlement_amount
     for label in labels:
         escaped = re.escape(label)
         patterns = (
@@ -238,15 +247,20 @@ def _extract_labeled_amount(text: str, labels: tuple[str, ...]) -> tuple[Decimal
         for pattern in patterns:
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
-                return sanitize_settlement_amount(match.group(1))
+                return sanitize(match.group(1))
     return None, None
 
 
 def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], dict[str, str]]:
     amounts: dict[str, Decimal | None] = {}
     corrections: dict[str, str] = {}
+    sales_keys = {"cash", "pos"}
     for key, labels in _AMOUNT_FIELD_SPECS:
-        amount, corrected_from = _extract_labeled_amount(text, labels)
+        amount, corrected_from = _extract_labeled_amount(
+            text,
+            labels,
+            sales_field=key in sales_keys,
+        )
         if amount is not None:
             amounts[key] = amount
         if corrected_from:

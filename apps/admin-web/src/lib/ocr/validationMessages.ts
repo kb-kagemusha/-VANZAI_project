@@ -8,6 +8,10 @@ const OCR_VALIDATION_MESSAGE_JA: Record<string, string> = {
   amount_ones_digit_invalid: "合計金額の1の位が不正です（10円単位ではありません）",
   cash_sales_ones_digit_invalid: "現金売上の1の位が不正です（10円単位ではありません）",
   pos_sales_ones_digit_invalid: "PAYGATE POS売上の1の位が不正です（10円単位ではありません）",
+  pos_sales_unit_invalid:
+    "PAYGATE POS売上が不正です（¥980/¥1,480/¥2,980の組み合わせではありません）",
+  cash_sales_unit_invalid:
+    "現金売上が不正です（¥980/¥1,480/¥2,980の組み合わせではありません）",
   credit_sales_ones_digit_invalid: "クレジット売上の1の位が不正です（10円単位ではありません）",
   other_payment_ones_digit_invalid: "その他支払いの1の位が不正です（10円単位ではありません）",
 };

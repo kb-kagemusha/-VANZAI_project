@@ -34,6 +34,23 @@ def _is_settlement_amount_plausible(amount: Decimal) -> bool:
     return bool(solve_unit_combinations(int(amount)))
 
 
+def is_valid_settlement_unit_sales_amount(amount: Decimal | None) -> bool:
+    """現金売上・PAYGATE POS は 980/1480/2980 の組み合わせ（または 0）のみ。"""
+    if amount is None or amount == 0:
+        return True
+    return _is_settlement_amount_plausible(amount)
+
+
+def sanitize_settlement_sales_amount(raw: str | None) -> tuple[Decimal | None, str | None]:
+    """単価組み合わせとして成立しない売上金額は採用しない。"""
+    amount, source = sanitize_settlement_amount(raw)
+    if amount is None:
+        return None, None
+    if amount > 0 and not is_valid_settlement_unit_sales_amount(amount):
+        return Decimal(0), None
+    return amount, source
+
+
 def correct_settlement_yen_misread_amount(
     amount: Decimal,
     *,

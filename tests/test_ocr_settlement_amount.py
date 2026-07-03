@@ -3,7 +3,11 @@ from decimal import Decimal
 
 import pytest
 
-from src.services.ocr.parsers.settlement_amount import sanitize_settlement_amount
+from src.services.ocr.parsers.settlement_amount import (
+    is_valid_settlement_unit_sales_amount,
+    sanitize_settlement_amount,
+    sanitize_settlement_sales_amount,
+)
 
 
 @pytest.mark.parametrize(
@@ -22,3 +26,24 @@ def test_sanitize_settlement_amount_corrects_yen_misread(raw, expected, correcte
     amount, source = sanitize_settlement_amount(raw)
     assert amount == expected
     assert source == corrected_from
+
+
+@pytest.mark.parametrize(
+    ("amount", "valid"),
+    [
+        (Decimal(0), True),
+        (Decimal(980), True),
+        (Decimal(1960), True),
+        (Decimal(10), False),
+        (Decimal(534), False),
+    ],
+)
+def test_is_valid_settlement_unit_sales_amount(amount, valid):
+    assert is_valid_settlement_unit_sales_amount(amount) is valid
+
+
+def test_sanitize_settlement_sales_amount_rejects_implausible_pos():
+    amount, source = sanitize_settlement_sales_amount("10")
+    assert amount == Decimal(0)
+    assert source is None
+
