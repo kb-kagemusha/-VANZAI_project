@@ -53,9 +53,10 @@ _TXN_COUNT_PATTERNS = (
     re.compile(r"通常取引数\s*[：:]?\s*\n\s*(\d+)\s*(?:\n|$)"),
 )
 _TERMINAL_SHORT_ID_PATTERNS = (
-    re.compile(r"端末\s*識別番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
+    re.compile(r"(?:端末|端未)\s*(?:識別|認別|職別)\s*番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
+    re.compile(r"(?:識別|認別|職別)\s*番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
     re.compile(
-        r"端末\s*識別番号\s*[：:]?\s*(?:\n|\r\n)\s*([0-9a-zA-Z]{2,10})\b",
+        r"(?:端末|端未)\s*(?:識別|認別|職別)\s*番号\s*[：:]?\s*(?:\n|\r\n)\s*([0-9a-zA-Z]{2,10})\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -64,6 +65,7 @@ _TERMINAL_SHORT_ID_PATTERNS = (
     ),
 )
 _REGISTRATION_SEGMENT_RE = re.compile(r"^\d{4}$")
+_TERMINAL_SHORT_ID_BODY_RE = re.compile(r"^[0-9a-f]{4}$")
 _STORE_RE = re.compile(r"(日本たばこ産業株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
 _OCR_HEX_FIXES = str.maketrans(
     {
@@ -75,6 +77,13 @@ _OCR_HEX_FIXES = str.maketrans(
         "\u00c0": "a",
         "\u00c2": "a",
         "\u00c4": "a",
+        "O": "0",
+        "o": "0",
+        "Ｑ": "0",
+        "ｑ": "0",
+        "Ｉ": "1",
+        "ｌ": "1",
+        "l": "1",
     }
 )
 
@@ -107,13 +116,28 @@ def _canonical_label(label: str) -> str:
 
 
 def _is_plausible_terminal_short_id(value: str) -> bool:
-    if not re.fullmatch(r"[0-9a-zA-Z]{2,10}", value):
+    normalized = _normalize_terminal_short_id_candidate(value)
+    if not normalized:
         return False
-    if _REGISTRATION_SEGMENT_RE.fullmatch(value):
+    if _REGISTRATION_SEGMENT_RE.fullmatch(normalized):
         return False
-    if value.isdigit():
+    if normalized.isdigit():
         return False
-    return bool(re.search(r"[a-zA-Z]", value))
+    return _TERMINAL_SHORT_ID_BODY_RE.fullmatch(normalized) is not None
+
+
+def _normalize_terminal_short_id_candidate(value: str | None) -> str | None:
+    if not value:
+        return None
+    translated = value.translate(_OCR_HEX_FIXES)
+    candidate = re.sub(r"[^0-9a-fA-F]", "", translated).lower()
+    if len(candidate) < 4:
+        return None
+    if len(candidate) > 4:
+        candidate = candidate[:4]
+    if _TERMINAL_SHORT_ID_BODY_RE.fullmatch(candidate) and not candidate.isdigit():
+        return candidate
+    return None
 
 
 def _clean_hex_line(line: str) -> str:
@@ -181,18 +205,55 @@ def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
         return None
     first_segment = terminal_id.split("-", 1)[0]
     if len(first_segment) == 8 and re.fullmatch(r"[0-9a-f]{8}", first_segment):
-        candidate = first_segment[:4]
-        if _is_plausible_terminal_short_id(candidate):
+        return _normalize_terminal_short_id_candidate(first_segment[:4])
+    return None
+
+
+def _short_id_from_terminal_number_section(text: str) -> str | None:
+    if "端末" not in text:
+        return None
+    parts = re.split(r"端末\s*番号", text, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) < 2:
+        return None
+    section = re.split(r"(?:^|\n)\s*小計", parts[1], maxsplit=1, flags=re.IGNORECASE)[0]
+    for line in section.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("-", "－")):
+            # 先頭が欠落した UUID の途中断片（例: -babd-）は端末識別番号にしない。
+            return None
+        cleaned = _clean_hex_line(line).strip("-")
+        if len(cleaned) < 4:
+            continue
+        candidate = _normalize_terminal_short_id_candidate(cleaned)
+        if candidate:
             return candidate
+    return None
+
+
+def _short_id_from_line_before_settlement(text: str) -> str | None:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if line.replace(" ", "").replace("　", "") != "精算":
+            continue
+        for lookback in range(index - 1, max(index - 5, -1), -1):
+            candidate = _normalize_terminal_short_id_candidate(lines[lookback])
+            if candidate and _is_plausible_terminal_short_id(candidate):
+                return candidate
     return None
 
 
 def _extract_terminal_short_id(text: str, terminal_id: str | None = None) -> str | None:
     for pattern in _TERMINAL_SHORT_ID_PATTERNS:
         match = pattern.search(text)
-        if match and _is_plausible_terminal_short_id(match.group(1)):
-            return match.group(1).lower()
-    return _short_id_from_terminal_id(terminal_id)
+        if match:
+            candidate = _normalize_terminal_short_id_candidate(match.group(1))
+            if candidate and _is_plausible_terminal_short_id(candidate):
+                return candidate
+    return (
+        _short_id_from_terminal_id(terminal_id)
+        or _short_id_from_terminal_number_section(text)
+        or _short_id_from_line_before_settlement(text)
+    )
 
 
 def _extract_transaction_count(text: str) -> int | None:

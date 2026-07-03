@@ -305,6 +305,72 @@ def test_paygate_settlement_parser_rejects_registration_segment_as_short_id():
     assert rows[0].terminal_short_id is None
 
 
+def test_paygate_settlement_parser_recovers_short_id_from_terminal_uuid_when_label_missing():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+精算
+2026/07/02 23:03:46
+端末番号
+e9c01785
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
+def test_paygate_settlement_parser_recovers_short_id_from_line_before_settlement():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+e9cO
+精算
+2026/07/02 23:03:46
+端末番号
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
+def test_paygate_settlement_parser_handles_noisy_short_id_label():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+端未認別番号:e9cO
+精算
+2026/07/02 23:03:46
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
 PRODUCTION_OCR_TEXT_260703_18 = """
 1105-6927
 登録番号
