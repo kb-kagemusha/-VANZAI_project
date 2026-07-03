@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Navigate } from "react-router-dom";
@@ -25,6 +25,7 @@ import {
   listOcrImages,
   listOcrRows,
   parseOcrImages,
+  reparseOcrRow,
   renameOcrImage,
   runInventoryReconciliation,
   runOcrReconciliation,
@@ -570,6 +571,38 @@ function useOcrPreviewPosition(
   return { style, updatePosition };
 }
 
+function OcrImageLightbox({
+  previewUrl,
+  alt,
+  onClose,
+}: {
+  previewUrl: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="ocr-image-lightbox" role="dialog" aria-modal="true" aria-label={`${alt} の拡大表示`} onClick={onClose}>
+      <div className="ocr-image-lightbox-panel" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="ocr-image-lightbox-close" onClick={onClose} aria-label="閉じる">
+          ×
+        </button>
+        <img src={previewUrl} alt={alt} className="ocr-image-lightbox-image" />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function OcrImagePreview({
   alt,
   previewUrl,
@@ -583,12 +616,12 @@ function OcrImagePreview({
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [hovering, setHovering] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const showPreview = (hovering || pinned) && Boolean(previewUrl);
-  const { style, updatePosition } = useOcrPreviewPosition(anchorRef, showPreview);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const showHoverPreview = hovering && !lightboxOpen && Boolean(previewUrl);
+  const { style, updatePosition } = useOcrPreviewPosition(anchorRef, showHoverPreview);
 
-  const popover =
-    showPreview && previewUrl ? (
+  const hoverPopover =
+    showHoverPreview && previewUrl ? (
       <span
         className="ocr-image-preview-popover ocr-image-preview-popover--portal"
         style={style}
@@ -599,26 +632,34 @@ function OcrImagePreview({
     ) : null;
 
   return (
-    <span
-      className={["ocr-image-preview-trigger", className].filter(Boolean).join(" ")}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-    >
-      <button
-        ref={anchorRef}
-        type="button"
-        className="ocr-image-preview-button"
-        aria-label={`${alt} の画像プレビュー`}
-        aria-expanded={showPreview}
-        onClick={(event) => {
-          event.stopPropagation();
-          setPinned((value) => !value);
-        }}
+    <>
+      <span
+        className={["ocr-image-preview-trigger", className].filter(Boolean).join(" ")}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
       >
-        {children}
-      </button>
-      {popover ? createPortal(popover, document.body) : null}
-    </span>
+        <button
+          ref={anchorRef}
+          type="button"
+          className="ocr-image-preview-button"
+          aria-label={`${alt} の画像を拡大表示`}
+          aria-haspopup="dialog"
+          disabled={!previewUrl}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (previewUrl) {
+              setLightboxOpen(true);
+            }
+          }}
+        >
+          {children}
+        </button>
+        {hoverPopover ? createPortal(hoverPopover, document.body) : null}
+      </span>
+      {lightboxOpen && previewUrl ? (
+        <OcrImageLightbox previewUrl={previewUrl} alt={alt} onClose={() => setLightboxOpen(false)} />
+      ) : null}
+    </>
   );
 }
 
@@ -988,6 +1029,7 @@ export function ReceiptOcrPage() {
         period_key: selectedPeriodKey || undefined,
         limit: 500,
       }),
+    placeholderData: keepPreviousData,
   });
 
   const summaryQuery = useQuery({
@@ -1091,12 +1133,10 @@ export function ReceiptOcrPage() {
   });
 
   const reparseRowMutation = useMutation({
-    mutationFn: async (imageId: string) => parseOcrImages([imageId]),
+    mutationFn: async (rowId: string) => reparseOcrRow(rowId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
-      await queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] });
       setFormError(null);
     },
     onError: (error) => {
@@ -1679,10 +1719,10 @@ export function ReceiptOcrPage() {
             <button
               type="button"
               className="ghost-button"
-              disabled={reparseRowMutation.isPending}
-              onClick={() => reparseRowMutation.mutate(row.source_image_id)}
+              disabled={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
+              onClick={() => reparseRowMutation.mutate(row.id)}
             >
-              再解析
+              {reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? "解析中..." : "再解析"}
             </button>
           ) : null}
           {row.source_type === "paygate_settlement" && row.status === "confirmed" && !row.voided_at ? (
@@ -2083,7 +2123,7 @@ export function ReceiptOcrPage() {
         ) : null}
 
         <div id="ocr-saved-data-panel" role="tabpanel" aria-labelledby={savedDataTab === "paygate_screenshot" ? "ocr-saved-tab-paygate" : "ocr-saved-tab-settlement"}>
-          {rowsQuery.isLoading ? (
+          {rowsQuery.isPending ? (
             <LoadingOverlay label="解析結果を読み込み中..." />
           ) : rowsQuery.isError ? (
             <ErrorState title="解析結果の取得に失敗しました" description="API 接続または権限を確認してください。" />

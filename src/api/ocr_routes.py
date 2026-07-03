@@ -288,6 +288,38 @@ def parse_ocr_images(
     )
 
 
+@router.post("/rows/{row_id}/reparse", response_model=OcrParseJobResponse)
+def reparse_ocr_row(
+    row_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    service = OcrService(db)
+    try:
+        job = service.reparse_settlement_row(row_id=row_id, executed_by=current_user.username)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    except RuntimeError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return OcrParseJobResponse(
+        id=job.id,
+        status=job.status,
+        image_count=job.image_count,
+        success_count=job.success_count,
+        failed_count=job.failed_count,
+        row_count=job.row_count,
+        executed_by=job.executed_by,
+        completed_at=job.completed_at,
+    )
+
+
 @router.get("/jobs/{job_id}", response_model=OcrParseJobResponse)
 def get_ocr_job(
     job_id: str,

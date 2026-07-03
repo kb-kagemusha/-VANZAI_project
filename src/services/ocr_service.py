@@ -574,12 +574,27 @@ class OcrService:
             )
         return deleted
 
+    def reparse_settlement_row(self, *, row_id: str, executed_by: str) -> OcrParseJob:
+        row = self.session.get(OcrExtractedRow, row_id)
+        if row is None or row.deleted_at is not None:
+            raise ValueError("Row not found")
+        if row.source_type != "paygate_settlement":
+            raise ValueError("Only settlement rows support reparse")
+        if row.status == "confirmed":
+            raise ValueError("Confirmed rows cannot be reparsed")
+        return self.parse_images(
+            image_ids=[row.source_image_id],
+            executed_by=executed_by,
+            settlement_target_row_ids={row.source_image_id: row_id},
+        )
+
     def parse_images(
         self,
         *,
         image_ids: list[str],
         executed_by: str,
         ocr_text_override: dict[str, str] | None = None,
+        settlement_target_row_ids: dict[str, str] | None = None,
     ) -> OcrParseJob:
         if not image_ids:
             raise ValueError("image_ids is required")
@@ -647,6 +662,26 @@ class OcrService:
                 else:
                     now = datetime.now(timezone.utc)
                     for parsed in parsed_rows:
+                        target_row_id = (settlement_target_row_ids or {}).get(image.id)
+                        if target_row_id:
+                            target = self.session.get(OcrExtractedRow, target_row_id)
+                            if (
+                                target is None
+                                or target.deleted_at is not None
+                                or target.source_image_id != image.id
+                                or target.source_type != "paygate_settlement"
+                                or target.status == "confirmed"
+                            ):
+                                raise ValueError("Reparse target row is not available")
+                            _apply_settlement_parsed_to_extracted_row(
+                                target,
+                                parsed,
+                                parse_job_id=job.id,
+                                session=self.session,
+                            )
+                            row_count += 1
+                            continue
+
                         existing_rows = _find_settlement_rows_for_image(self.session, image.id)
                         pending_rows = [row for row in existing_rows if row.status != "confirmed"]
                         if pending_rows:

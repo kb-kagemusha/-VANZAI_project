@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from src.models.ocr import OcrExtractedRow
+from src.models.base import generate_ulid
 from src.services.ocr.paddle_engine import run_ocr_from_text
 from src.services.ocr_service import OcrService
 
@@ -133,3 +135,34 @@ def test_settlement_reparse_updates_existing_pending_row(db_session):
     assert rows[0].id == row.id
     assert rows[0].terminal_short_id == "f353"
     assert rows[0].transaction_count == 9
+
+
+def test_settlement_reparse_targets_only_requested_row(db_session):
+    service = OcrService(db_session)
+    _upload_and_parse(db_session, service, SETTLEMENT_TEXT, filename="reparse-target.png")
+    rows, total = service.list_rows(source_type="paygate_settlement")
+    assert total == 1
+    original = rows[0]
+
+    duplicate = OcrExtractedRow(
+        id=generate_ulid(),
+        source_image_id=original.source_image_id,
+        source_type="paygate_settlement",
+        status="pending_review",
+        amount=original.amount,
+        terminal_short_id="keep",
+        transaction_count=1,
+    )
+    db_session.add(duplicate)
+    db_session.flush()
+
+    with patch("src.services.ocr_service.preprocess_for_ocr", return_value=object()):
+        with patch("src.services.ocr_service.run_ocr", return_value=run_ocr_from_text(SETTLEMENT_TEXT)):
+            job = service.reparse_settlement_row(row_id=original.id, executed_by="tester")
+    db_session.flush()
+    assert job.row_count == 1
+
+    refreshed_original = db_session.get(OcrExtractedRow, original.id)
+    refreshed_duplicate = db_session.get(OcrExtractedRow, duplicate.id)
+    assert refreshed_original.terminal_short_id == "f353"
+    assert refreshed_duplicate.terminal_short_id == "keep"

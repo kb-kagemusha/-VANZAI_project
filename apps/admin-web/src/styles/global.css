@@ -1283,7 +1283,7 @@ button {
 
 .ocr-image-preview-trigger--filename .ocr-image-preview-button {
   line-height: inherit;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
 .ocr-image-preview-popover {
@@ -1333,6 +1333,54 @@ button {
   max-height: min(480px, 60vh);
   object-fit: contain;
   border-radius: 6px;
+}
+
+.ocr-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.ocr-image-lightbox-panel {
+  position: relative;
+  max-width: min(96vw, 1200px);
+  max-height: 92vh;
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+}
+
+.ocr-image-lightbox-image {
+  display: block;
+  max-width: min(94vw, 1180px);
+  max-height: calc(92vh - 2rem);
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.ocr-image-lightbox-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ocr-image-lightbox-close:hover {
+  background: rgba(15, 23, 42, 0.14);
 }
 
 .ocr-filename-edit {
