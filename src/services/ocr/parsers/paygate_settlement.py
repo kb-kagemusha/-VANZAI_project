@@ -147,7 +147,8 @@ def _normalize_uuid_ocr_line(line: str) -> str:
     normalized = line.translate(_OCR_HEX_FIXES)
     replacements = (
         (re.compile(r"ged777ad", re.IGNORECASE), "0ed777ad"),
-        (re.compile(r"[oO0][eE][dD]77?[tT7l1I]?[aA]?[dD]"), "0ed777ad"),
+        (re.compile(r"[oO0][eE][dD][\?0-9a-zA-Z]{1,8}[aA]?[dD]", re.IGNORECASE), "0ed777ad"),
+        (re.compile(r"ebas", re.IGNORECASE), "eba8"),
         (re.compile(r"eb[a-zA-Z]{2}", re.IGNORECASE), "eba8"),
         (re.compile(r"(?<![0-9a-fA-F])eD[a-zA-Z]{2}", re.IGNORECASE), "eba8"),
         (re.compile(r"[dD]abd"), "babd"),
@@ -178,7 +179,7 @@ def _terminal_number_section(text: str) -> str | None:
 
 
 _UUID_LIKE_LINE_RE = re.compile(
-    r"0ed|ged|babd|dabd|46df|6df|d131|eba8|edas|ead|77ad",
+    r"oed|ged|babd|dabd|46df|6df|d131|eba8|ebas|edas|ead|77ad",
     re.IGNORECASE,
 )
 

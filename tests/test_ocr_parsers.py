@@ -576,7 +576,7 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_4():
 
 PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND = """
 天番号
-Oed77Tad-eDas-
+Oed?rTad-ebas.
 Dabd-
 -E6df.
 1105-6927
