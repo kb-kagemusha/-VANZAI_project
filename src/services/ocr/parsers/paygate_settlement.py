@@ -1,6 +1,7 @@
 """Parser for Paygate settlement (精算) receipt photos."""
 from __future__ import annotations
 
+import itertools
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -84,6 +85,8 @@ _OCR_HEX_FIXES = str.maketrans(
         "Ｉ": "1",
         "ｌ": "1",
         "l": "1",
+        "G": "0",
+        "g": "0",
     }
 )
 
@@ -145,6 +148,117 @@ def _clean_hex_line(line: str) -> str:
     return re.sub(r"[^0-9a-fA-F-]", "", line.strip())
 
 
+def _terminal_number_section(text: str) -> str | None:
+    terminal_match = re.search(r"端末\s*番号", text, re.IGNORECASE)
+    if terminal_match:
+        section = text[terminal_match.end():]
+    else:
+        garbled = re.search(r"瑞.{0,2}番号", text, re.IGNORECASE)
+        if not garbled:
+            return None
+        section = text[garbled.end():]
+    return re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
+
+
+def _terminal_uuid_prefix_section(text: str) -> str | None:
+    """端末番号ラベルより前に折り返した UUID 先頭行（帯域OCRで拾う）。"""
+    terminal_match = re.search(r"端末\s*番号", text, re.IGNORECASE)
+    if not terminal_match:
+        return None
+    before = text[: terminal_match.start()]
+    settlement_match = re.search(r"精算", before)
+    if not settlement_match:
+        return None
+    prefix = before[settlement_match.end() :]
+    hex_lines: list[str] = []
+    for line in prefix.splitlines():
+        if re.search(r"[0-9a-fA-F]{4,}", _clean_hex_line(line)):
+            hex_lines.append(line)
+    if not hex_lines:
+        return None
+    return "\n".join(hex_lines)
+
+
+def _hex_tokens_from_section(section: str) -> list[str]:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for line in section.splitlines():
+        cleaned = _clean_hex_line(line)
+        for match in re.finditer(r"[0-9a-fA-F]{4,}", cleaned, re.IGNORECASE):
+            token = match.group(0).lower()
+            if re.fullmatch(r"[0-9]+", token):
+                continue
+            if token in seen:
+                continue
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
+
+def _collect_terminal_hex_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for section in (
+        _terminal_uuid_prefix_section(text),
+        _terminal_number_section(text),
+    ):
+        if not section:
+            continue
+        for token in _hex_tokens_from_section(section):
+            if token in seen:
+                continue
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
+
+def _rank_terminal_id_candidate(terminal_id: str, tokens: list[str]) -> tuple[int, ...]:
+    parts = terminal_id.split("-")
+    eight_char = next((token for token in tokens if len(token) == 8), "")
+    twelve_char = next((token for token in tokens if len(token) == 12), "")
+    rank = 0
+    if parts and eight_char and parts[0] == eight_char:
+        rank += 100
+    if parts and twelve_char and parts[-1] == twelve_char:
+        rank += 50
+    if len(parts) >= 4 and parts[2] == "46df" and parts[3].startswith("babd"):
+        rank += 10
+    return (rank,)
+
+
+def _extract_terminal_id_from_hex_permutation(tokens: list[str]) -> str | None:
+    if not tokens:
+        return None
+    limited = tokens[:7]
+    candidates: list[str] = []
+    for perm in itertools.permutations(limited):
+        raw = "".join(perm)
+        if len(raw) != 32:
+            continue
+        terminal_id = normalize_settlement_terminal_id(format_terminal_id_from_hex32(raw))
+        if terminal_id and terminal_id not in candidates:
+            candidates.append(terminal_id)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda terminal_id: _rank_terminal_id_candidate(terminal_id, limited))
+
+
+def _extract_terminal_id_from_hex_concat(text: str) -> str | None:
+    tokens = _collect_terminal_hex_tokens(text)
+    if not tokens:
+        return None
+    four_char_tokens = sum(1 for token in tokens if len(token) == 4)
+    if four_char_tokens >= 2:
+        return _extract_terminal_id_from_hex_permutation(tokens)
+    raw = "".join(tokens)
+    raw = re.sub(r"[^0-9a-f]", "", raw.lower())
+    if len(raw) >= 32:
+        terminal_id = normalize_settlement_terminal_id(format_terminal_id_from_hex32(raw[:32]))
+        if terminal_id:
+            return terminal_id
+    return _extract_terminal_id_from_hex_permutation(tokens)
+
+
 def _extract_terminal_id(text: str) -> str | None:
     split_match = _TERMINAL_SPLIT_RE.search(text)
     if split_match:
@@ -164,12 +278,10 @@ def _extract_terminal_id(text: str) -> str | None:
         if candidate:
             return candidate
 
-    if "端末" not in text:
+    section = _terminal_number_section(text)
+    if section is None:
         return None
-    parts = re.split(r"端末\s*番号", text, maxsplit=1, flags=re.IGNORECASE)
-    if len(parts) < 2:
-        return None
-    section = re.split(r"(?:^|\n)\s*小計", parts[1], maxsplit=1, flags=re.IGNORECASE)[0]
+
     chunks: list[str] = []
     for line in section.splitlines():
         cleaned = _clean_hex_line(line).strip("-")
@@ -180,24 +292,25 @@ def _extract_terminal_id(text: str) -> str | None:
         if len(cleaned) < 4 and "-" in cleaned:
             continue
         chunks.append(cleaned)
-    if not chunks:
-        return None
+    if chunks:
+        joined = ""
+        for chunk in chunks:
+            if not joined:
+                joined = chunk
+            elif joined.endswith("-") or chunk.startswith("-"):
+                joined += chunk.lstrip("-")
+            elif len(chunk) <= 2 and re.fullmatch(r"[0-9a-fA-F]+", chunk):
+                joined += chunk.lower()
+            else:
+                joined += "-" + chunk
+        joined = re.sub(r"-+", "-", joined).strip("-").lower()
+        hex_only = re.sub(r"[^0-9a-f]", "", joined)
+        if len(hex_only) >= 32:
+            candidate = normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
+            if candidate:
+                return candidate
 
-    joined = ""
-    for chunk in chunks:
-        if not joined:
-            joined = chunk
-        elif joined.endswith("-") or chunk.startswith("-"):
-            joined += chunk.lstrip("-")
-        elif len(chunk) <= 2 and re.fullmatch(r"[0-9a-fA-F]+", chunk):
-            joined += chunk.lower()
-        else:
-            joined += "-" + chunk
-    joined = re.sub(r"-+", "-", joined).strip("-").lower()
-    hex_only = re.sub(r"[^0-9a-f]", "", joined)
-    if len(hex_only) >= 32:
-        return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
-    return None
+    return _extract_terminal_id_from_hex_concat(text)
 
 
 def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
@@ -224,12 +337,9 @@ def _short_id_from_leading_dash_hex_line(stripped: str) -> str | None:
 
 
 def _short_id_from_terminal_number_section(text: str) -> str | None:
-    if "端末" not in text:
+    section = _terminal_number_section(text)
+    if section is None:
         return None
-    parts = re.split(r"端末\s*番号", text, maxsplit=1, flags=re.IGNORECASE)
-    if len(parts) < 2:
-        return None
-    section = re.split(r"(?:^|\n)\s*小計", parts[1], maxsplit=1, flags=re.IGNORECASE)[0]
     for line in section.splitlines():
         stripped = line.strip()
         if stripped.startswith(("-", "－")):

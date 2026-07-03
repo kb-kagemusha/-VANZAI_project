@@ -35,6 +35,7 @@ from src.services.ocr.image_preprocess import (
 from src.services.ocr.merge_results import merge_ocr_results
 from src.services.ocr.models import ParsedOcrRow
 from src.services.ocr.paddle_engine import run_ocr, run_ocr_from_text
+from src.services.ocr.settlement_ocr import run_settlement_ocr
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES, get_parser
 from src.services.ocr.reconciliation import parse_hq_csv, reconcile_rows, summarize_matches
 from src.services.ocr.confirm_metadata import (
@@ -626,7 +627,10 @@ class OcrService:
                     ocr_result = run_ocr_from_text(ocr_text_override[image_id])
                 else:
                     image_bytes = self.storage.read_bytes(image.storage_key)
-                    ocr_result = run_ocr(preprocess_for_ocr(image_bytes))
+                    if image.source_type == "paygate_settlement":
+                        ocr_result = run_settlement_ocr(image_bytes)
+                    else:
+                        ocr_result = run_ocr(preprocess_for_ocr(image_bytes))
                     if image.source_type == "paygate_screenshot":
                         ocr_result = merge_ocr_results(
                             ocr_result,

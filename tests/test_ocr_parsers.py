@@ -379,6 +379,9 @@ PRODUCTION_OCR_TEXT_260703_18 = """
 精算
 2026/07/02
 23:05:23
+Ged777ad-eba8-
+babd-
+-46df-
 端末番号
 - babd-
 d131c08d6e76
@@ -576,8 +579,8 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))
     assert len(rows) == 1
     row = rows[0]
-    assert row.terminal_short_id is None
-    assert row.terminal_id is None
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
     assert row.amount == Decimal("5880")
     assert row.subtotal == Decimal("5880")
     assert row.cash_sales == Decimal("5880")
