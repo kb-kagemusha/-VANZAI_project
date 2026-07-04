@@ -73,8 +73,26 @@ _TERMINAL_SHORT_ID_PATTERNS = (
         r"(?:^|\n)\s*([0-9a-fA-F]{4})\s*\n\s*端末\s*番号",
         re.IGNORECASE | re.MULTILINE,
     ),
+    re.compile(
+        r"(?:識別|認別|職別|証別|護別)\s*番号\s*[：:.]?\s*([0-9a-zA-Z]{2,10})\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"末[護証]別番号\s*[：:.]?\s*([0-9a-zA-Z]{2,10})\b",
+        re.IGNORECASE,
+    ),
 )
-_STORE_RE = re.compile(r"(日本たばこ産業株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
+_STORE_RE = re.compile(r"(日本た[ばはほ][こに]?[産要].*?株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
+_SETTLEMENT_SIGNAL_RE = re.compile(
+    r"精算|現[金会]売上|小計|通常\s*取引|端末\s*番号|"
+    r"[澤矯瑞][末未]\s*番号|証別\s*番号|護別\s*番号|"
+    r"日本た[ばはほ]|PAYGATE\s*POS",
+    re.IGNORECASE,
+)
+_GARBLED_TERMINAL_LABEL_RE = re.compile(
+    r"[澤矯瑞末未][末未識]?[番]?号|[末未][護証][別]?番号",
+    re.IGNORECASE,
+)
 _OCR_HEX_FIXES = str.maketrans(
     {
         "\u00e1": "a",
@@ -96,13 +114,15 @@ _OCR_HEX_FIXES = str.maketrans(
         "g": "0",
         "\u0111": "d",
         "\u0110": "d",
+        "\u3058": "b",  # じ
+        "\u65e5": "a",  # 日
     }
 )
 
 _AMOUNT_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("subtotal", ("小計",)),
-    ("total", ("合計",)),
-    ("cash", ("現金売上",)),
+    ("total", ("合計", "会計")),
+    ("cash", ("現金売上", "現会売上")),
     ("credit", ("クレジット売上", "クレヅット売上")),
     ("pos", ("PAYGATE POS",)),
     ("other", ("その他支払い",)),
@@ -148,6 +168,9 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"[dD]abd"), "babd"),
         (re.compile(r"[- ]?[eE]6df"), "46df"),
         (re.compile(r"d131[a-zA-Z0-9]{0,6}08d6e76", re.IGNORECASE), "d131c08d6e76"),
+        (re.compile(r"(?<![0-9a-f])[23]d32", re.IGNORECASE), "ed32"),
+        (re.compile(r"5\u3058b", re.IGNORECASE), "5bb"),
+        (re.compile(r"9ce\?", re.IGNORECASE), "9ce2"),
     )
     for pattern, replacement in replacements:
         normalized = pattern.sub(replacement, normalized)
@@ -161,15 +184,25 @@ def _clean_hex_line(line: str) -> str:
 
 
 def _terminal_number_section(text: str) -> str | None:
-    terminal_match = re.search(r"端末\s*番号", text, re.IGNORECASE)
-    if terminal_match:
-        section = text[terminal_match.end():]
-    else:
+    sections = _terminal_number_sections(text)
+    return sections[-1] if sections else None
+
+
+def _terminal_number_sections(text: str) -> list[str]:
+    sections: list[str] = []
+    for match in re.finditer(r"端末\s*番号", text, re.IGNORECASE):
+        section = text[match.end():]
+        section = re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
+        sections.append(section)
+    if sections:
+        return sections
+    garbled = _GARBLED_TERMINAL_LABEL_RE.search(text)
+    if not garbled:
         garbled = re.search(r"瑞.{0,2}番号", text, re.IGNORECASE)
-        if not garbled:
-            return None
-        section = text[garbled.end():]
-    return re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
+    if not garbled:
+        return []
+    section = text[garbled.end():]
+    return [re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]]
 
 
 _UUID_LIKE_LINE_RE = re.compile(
@@ -196,6 +229,17 @@ def _terminal_uuid_prefix_section(text: str) -> str | None:
     return "\n".join(hex_lines)
 
 
+_HEX_TOKEN_NOISE = frozenset(
+    {"2026", "0701", "2301", "2302", "5923", "3000", "0102", "0104", "1056", "6927", "8402"}
+)
+
+
+def _is_noise_hex_token(token: str) -> bool:
+    if token in _HEX_TOKEN_NOISE:
+        return True
+    return len(token) == 4 and re.fullmatch(r"\d{4}", token) is not None
+
+
 def _hex_tokens_from_section(section: str) -> list[str]:
     tokens: list[str] = []
     seen: set[str] = set()
@@ -203,13 +247,43 @@ def _hex_tokens_from_section(section: str) -> list[str]:
         cleaned = _clean_hex_line(line)
         for match in re.finditer(r"[0-9a-fA-F]{4,}", cleaned, re.IGNORECASE):
             token = match.group(0).lower()
-            if re.fullmatch(r"[0-9]+", token):
+            if _is_noise_hex_token(token):
                 continue
             if token in seen:
                 continue
             seen.add(token)
             tokens.append(token)
     return tokens
+
+
+def _join_terminal_chunks_from_section(section: str) -> str | None:
+    chunks: list[str] = []
+    for line in section.splitlines():
+        cleaned = _clean_hex_line(line).strip("-")
+        if len(cleaned) < 2:
+            continue
+        if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
+            continue
+        if len(cleaned) < 4 and "-" in cleaned:
+            continue
+        chunks.append(cleaned)
+    if not chunks:
+        return None
+    joined = ""
+    for chunk in chunks:
+        if not joined:
+            joined = chunk
+        elif joined.endswith("-") or chunk.startswith("-"):
+            joined += chunk.lstrip("-")
+        elif len(chunk) <= 2 and re.fullmatch(r"[0-9a-fA-F]+", chunk):
+            joined += chunk.lower()
+        else:
+            joined += "-" + chunk
+    joined = re.sub(r"-+", "-", joined).strip("-").lower()
+    hex_only = re.sub(r"[^0-9a-f]", "", joined)
+    if len(hex_only) < 32:
+        return None
+    return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
 
 
 def _collect_terminal_hex_tokens(text: str) -> list[str]:
@@ -297,35 +371,15 @@ def _extract_terminal_id(text: str) -> str | None:
 
     section = _terminal_number_section(text)
     if section is None:
-        return None
+        return _extract_terminal_id_from_hex_concat(text)
 
-    chunks: list[str] = []
-    for line in section.splitlines():
-        cleaned = _clean_hex_line(line).strip("-")
-        if len(cleaned) < 2:
-            continue
-        if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
-            continue
-        if len(cleaned) < 4 and "-" in cleaned:
-            continue
-        chunks.append(cleaned)
-    if chunks:
-        joined = ""
-        for chunk in chunks:
-            if not joined:
-                joined = chunk
-            elif joined.endswith("-") or chunk.startswith("-"):
-                joined += chunk.lstrip("-")
-            elif len(chunk) <= 2 and re.fullmatch(r"[0-9a-fA-F]+", chunk):
-                joined += chunk.lower()
-            else:
-                joined += "-" + chunk
-        joined = re.sub(r"-+", "-", joined).strip("-").lower()
-        hex_only = re.sub(r"[^0-9a-f]", "", joined)
-        if len(hex_only) >= 32:
-            candidate = normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
-            if candidate:
-                return candidate
+    section_candidates: list[str] = []
+    for terminal_section in reversed(_terminal_number_sections(text)):
+        candidate = _join_terminal_chunks_from_section(terminal_section)
+        if candidate and candidate not in section_candidates:
+            section_candidates.append(candidate)
+    if section_candidates:
+        return section_candidates[0]
 
     return _extract_terminal_id_from_hex_concat(text)
 
@@ -425,17 +479,18 @@ def _infer_transaction_count_from_sales(
     pos_sales: Decimal | None,
     ocr_count: int | None,
 ) -> int | None:
-    if ocr_count and ocr_count > 0:
-        return ocr_count
-    normalized = normalize_settlement_transaction_count(ocr_count, cash_sales, pos_sales)
     cash_yen = int(cash_sales or 0)
     pos_yen = int(pos_sales or 0)
     cash_units = cash_yen // 980 if cash_yen > 0 and cash_yen % 980 == 0 else 0
     pos_units = pos_yen // 980 if pos_yen > 0 and pos_yen % 980 == 0 else 0
-    inferred = cash_units + pos_units
-    if 1 <= inferred <= 99 and (cash_units > 0 or pos_units > 0):
-        if normalized is None or normalized == 0:
-            return inferred
+    inferred_from_sales = cash_units + pos_units
+    if 1 <= inferred_from_sales <= 99 and (cash_units > 0 or pos_units > 0):
+        if ocr_count is None or ocr_count == 0 or ocr_count != inferred_from_sales:
+            return inferred_from_sales
+
+    if ocr_count and ocr_count > 0:
+        return ocr_count
+    normalized = normalize_settlement_transaction_count(ocr_count, cash_sales, pos_sales)
     if normalized is not None and normalized > 0:
         return normalized
     if cash_yen > 0 and pos_yen == 0 and cash_yen % 980 == 0:
@@ -493,6 +548,12 @@ def _normalize_terminal_uuid_lines(text: str) -> str:
 def _normalize_settlement_text(text: str) -> str:
     normalized = text.replace("\r\n", "\n")
     normalized = normalized.replace("　", " ")
+    normalized = re.sub(r"現会売上", "現金売上", normalized)
+    normalized = re.sub(r"クレンット元上", "クレジット売上", normalized)
+    normalized = re.sub(r"消責税", "消費税", normalized)
+    normalized = re.sub(r"(?:澤|矯)?末[護証]別番号", "端末識別番号", normalized)
+    normalized = re.sub(r"[澤矯瑞][末未]番号", "端末番号", normalized)
+    normalized = re.sub(r"岡条番号", "端末番号", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",
         "PAYGATE POS",
@@ -541,7 +602,7 @@ class PaygateSettlementParser(BaseOcrParser):
 
     def parse(self, ocr_result: OcrEngineResult) -> list[ParsedOcrRow]:
         text = _normalize_settlement_text(ocr_result.full_text)
-        if "精算" not in text and "現金売上" not in text:
+        if not _SETTLEMENT_SIGNAL_RE.search(text):
             return []
 
         record_date, record_time, parsed_datetime_source = _extract_settlement_datetime(text)

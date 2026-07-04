@@ -32,8 +32,23 @@ _OCR_SHORT_ID_FIXES = str.maketrans(
         "g": "0",
         "\u0111": "d",
         "\u0110": "d",
+        "\u3058": "b",  # じ
+        "\u65e5": "a",  # 日
     }
 )
+
+
+def _repair_all_digit_short_id(value: str) -> str | None:
+    """OCR が e を 0 と誤読した 4 桁数字（例: 8402 → 84e2）を復元する。"""
+    if not re.fullmatch(r"\d{4}", value):
+        return None
+    for index, char in enumerate(value):
+        if char != "0":
+            continue
+        trial = f"{value[:index]}e{value[index + 1:]}"
+        if _SETTLEMENT_TERMINAL_SHORT_ID_RE.fullmatch(trial):
+            return trial
+    return None
 
 
 def _fold_ocr_accents(value: str) -> str:
@@ -82,6 +97,10 @@ def normalize_settlement_terminal_short_id(
             return None
         if len(candidate) > 4:
             candidate = candidate[:4]
+        if candidate.isdigit():
+            repaired = _repair_all_digit_short_id(candidate)
+            if repaired:
+                candidate = repaired
     elif len(candidate) != 4:
         return None
     if _REGISTRATION_SEGMENT_RE.fullmatch(candidate):

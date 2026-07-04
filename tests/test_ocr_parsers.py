@@ -654,6 +654,64 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_8():
     assert row.transaction_count == 4
 
 
+PRODUCTION_OCR_TEXT_260703_11 = """
+末護別番号:8402
+2026/07/01
+23:02:59
+澤末番号
+84e2772F
+3d32-428C-9ce2
+5bb5733a24
+06
+小計
+04900
+会計
+24900
+現会売上
+14900
+通常取引数
+10
+日本たはに産要代口会社
+登録番号
+14-0104-0102
+3000
+澤末証別番号.84e2
+2026/07/01
+23:02:59
+矯末番号
+84e2772F
+2d32-428C-9ce?
+5じb5733日24
+90
+小計
+44900
+会計
+YA900
+現会売上
+006ヤR
+クレンット元上
+0袋
+その他支払い
+PAYGATE POS
+0
+消責税
+445
+通常取引数
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_11():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_11))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb5733a2490"
+    assert row.amount == Decimal("4900")
+    assert row.cash_sales == Decimal("4900")
+    assert row.transaction_count == 5
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_19))

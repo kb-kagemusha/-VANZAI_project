@@ -10,6 +10,7 @@ from src.services.ocr.unit_breakdown import solve_unit_combinations
 _YEN_MARKERS = "¥￥円YＹyｙ"
 _YEN_MISREAD_COMMA_RE = re.compile(r"^1(\d{1,2}[,/]\d{3}(?:[,/]\d{3})*)$")
 _YEN_MISREAD_PLAIN_RE = re.compile(r"^1(\d{3,})$")
+_FIVE_DIGIT_PREFIX_NOISE_RE = re.compile(r"^[024](\d{4})$")
 
 
 def _normalize_amount_fragment(raw: str) -> str:
@@ -60,6 +61,14 @@ def correct_settlement_yen_misread_amount(
         return amount, None
 
     fragment = _normalize_amount_fragment(raw_fragment or str(int(amount)))
+
+    five_digit = re.sub(r"[^\d]", "", fragment)
+    if len(five_digit) == 5:
+        prefix_match = _FIVE_DIGIT_PREFIX_NOISE_RE.match(five_digit)
+        if prefix_match:
+            corrected = _parse_digits(prefix_match.group(1))
+            if corrected is not None and _is_settlement_amount_plausible(corrected):
+                return corrected, five_digit
 
     comma_match = _YEN_MISREAD_COMMA_RE.match(fragment)
     if comma_match:

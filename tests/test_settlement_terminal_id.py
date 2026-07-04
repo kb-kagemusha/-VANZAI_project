@@ -32,6 +32,10 @@ def test_normalize_terminal_id_fixes_d_with_stroke():
     )
 
 
+def test_repair_all_digit_short_id_8402_to_84e2():
+    assert normalize_settlement_terminal_short_id("8402", from_ocr=True) == "84e2"
+
+
 def test_is_valid_settlement_terminal_short_id():
     assert is_valid_settlement_terminal_short_id("84e2")
     assert not is_valid_settlement_terminal_short_id("1234")

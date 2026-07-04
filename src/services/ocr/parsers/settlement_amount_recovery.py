@@ -100,7 +100,7 @@ def repair_settlement_amounts(
 
     for index, line in enumerate(lines):
         compact = _compact(line)
-        if "現金売上" not in compact:
+        if "現金売上" not in compact and "現会売上" not in compact:
             continue
         if not _needs_sales_recovery(repaired.get("cash")):
             break
