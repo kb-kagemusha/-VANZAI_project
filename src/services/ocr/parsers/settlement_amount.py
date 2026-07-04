@@ -16,6 +16,10 @@ _FIVE_DIGIT_PREFIX_NOISE_RE = re.compile(r"^[024](\d{4})$")
 def _normalize_amount_fragment(raw: str) -> str:
     fragment = normalize_amount_text(raw.strip())
     fragment = re.sub(rf"^[{_YEN_MARKERS}]\s*", "", fragment)
+    # OCR がカンマをドットに誤認（15.880 → 15,880）
+    dot_thousands = re.match(r"^(\d{1,2})\.(\d{3})$", fragment)
+    if dot_thousands:
+        fragment = f"{dot_thousands.group(1)},{dot_thousands.group(2)}"
     # OCR がカンマをスラッシュに誤認（15/880）
     return fragment.replace("/", ",")
 

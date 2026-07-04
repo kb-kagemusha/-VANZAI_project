@@ -21,6 +21,11 @@ from src.services.ocr.parsers.settlement_terminal_id import (
     normalize_settlement_terminal_id,
     normalize_settlement_terminal_short_id,
 )
+from src.services.ocr.parsers.settlement_layout import (
+    extract_amounts_from_layout,
+    extract_settlement_datetime_from_layout,
+    merge_layout_amounts,
+)
 from src.services.ocr.parsers.settlement_transaction_count import (
     extract_transaction_count_before_cash_blank,
 )
@@ -289,6 +294,10 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
             score += 35
     if parts[4].startswith("5bb5733a249"):
         score += 50
+    if parts[4].endswith("90"):
+        score += 25
+    if parts[4].endswith("06"):
+        score -= 25
     for part in parts:
         if part in _HEX_TOKEN_NOISE:
             score -= 80
@@ -617,6 +626,8 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
         if amounts.get(key) is None and value is not None:
             amounts[key] = value
     corrections.update({k: v for k, v in garbled_corrections.items() if k not in corrections})
+    layout_amounts, layout_corrections = extract_amounts_from_layout(text)
+    amounts, corrections = merge_layout_amounts(amounts, corrections, layout_amounts, layout_corrections)
     amounts = repair_settlement_amounts(text, amounts)
     return amounts, corrections
 
@@ -637,8 +648,10 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"消責税|消賛稁|消費稁", "消費税", normalized)
     normalized = re.sub(r"(?:澤|矯|携)?末[護証藤]別番号", "端末識別番号", normalized)
     normalized = re.sub(r"[澤矯瑞市][末未]番号|末香号|末番号|岡条番号", "端末番号", normalized)
-    normalized = re.sub(r"小[計訳訁]", "小計", normalized)
+    normalized = re.sub(r"小[計訳訁餁]", "小計", normalized)
     normalized = re.sub(r"[今会][計訳訁]", "合計", normalized)
+    normalized = re.sub(r"絹[箁算E]+", "精算", normalized)
+    normalized = re.sub(r"(\d{4}/\d{2}/\d{2})(\d{2}:\d{2}:\d{2})", r"\1 \2", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",
         "PAYGATE POS",
@@ -658,6 +671,10 @@ def _normalize_settlement_text(text: str) -> str:
 
 
 def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, str]:
+    layout_date, layout_time = extract_settlement_datetime_from_layout(text)
+    if layout_date and layout_time:
+        return layout_date, layout_time, "layout"
+
     dt_match = _DATETIME_RE.search(text)
     if dt_match:
         return (

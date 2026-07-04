@@ -761,6 +761,45 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_11_stored_
     assert row.transaction_count == 5
 
 
+PRODUCTION_OCR_TEXT_260703_1_STORED = """
+端末識別番号:84e2
+絹箁E2026/06/2723:04:46
+端末番号
+84e2772F
+2d32-428c-9ce2-
+5bb5733a24
+90
+小訁E15,880
+今訁E15.880
+現金売丁E45880
+クレジット売上
+20
+その他支払い
+-PAYGATE POS
+0
+消費税
+534
+内税額
+534
+通常取引数
+6
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_1_stored_jpg():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_1_STORED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 6, 27)
+    assert row.record_time == "23:04:46"
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb5733a2490"
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_19))
