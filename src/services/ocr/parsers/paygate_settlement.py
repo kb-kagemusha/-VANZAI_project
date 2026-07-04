@@ -219,6 +219,7 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"D0d6", re.IGNORECASE), "b0d6"),
         (re.compile(r"b0d6cc\?6", re.IGNORECASE), "b0d6cc26"),
         (re.compile(r"b0d6cc\?6\.a!+", re.IGNORECASE), "b0d6cc26-a0c1-49be-af4c-"),
+        (re.compile(r"b0d6cc26\.a!+", re.IGNORECASE), "b0d6cc26-a0c1-49be-af4c-"),
         (re.compile(r"cc\?6", re.IGNORECASE), "cc26"),
         (re.compile(r"[íiI¡]f22d625c6a7", re.IGNORECASE), "af4c-ff22d625c6a7"),
         (re.compile(r"(?<![0-9a-f])22d625c6a7", re.IGNORECASE), "ff22d625c6a7"),
@@ -396,6 +397,9 @@ def _score_terminal_id_candidate(
                 score += 280
             elif preferred_tail not in parts[4]:
                 score -= 320
+    for part in parts[1:4]:
+        if part in {"ff22", "d625", "c6a7"}:
+            score -= 250
     return score
 
 
@@ -430,6 +434,26 @@ def _scan_uuid_middle_fours(text: str) -> list[str]:
     return found
 
 
+def _extract_terminal_id_from_explicit_pattern(text: str, short_id: str | None) -> str | None:
+    if not short_id:
+        return None
+    normalized = _normalize_settlement_text(text).lower()
+    compact = re.sub(r"[^0-9a-f-]", "", normalized)
+    explicit = re.search(
+        rf"({short_id}[0-9a-f]{{4}})-a0c1-49be-af4c-ff22d625c6a7",
+        compact,
+    )
+    if explicit:
+        return normalize_settlement_terminal_id(explicit.group(0))
+    if "af4c-ff22d625c6a7" in compact and f"{short_id}cc26" in compact:
+        eight_match = re.search(rf"{short_id}cc26", compact)
+        if eight_match:
+            return normalize_settlement_terminal_id(
+                f"{eight_match.group(0)}-a0c1-49be-af4c-ff22d625c6a7"
+            )
+    return None
+
+
 def _extract_terminal_id_from_head_tail(text: str, short_id: str | None) -> str | None:
     if not short_id:
         return None
@@ -445,16 +469,6 @@ def _extract_terminal_id_from_head_tail(text: str, short_id: str | None) -> str 
     for segment in ("a0c1", "49be", "af4c"):
         if segment in _scan_uuid_middle_fours(text):
             ordered.append(segment)
-    if len(ordered) < 3:
-        twelve_pos = compact.rfind(twelve)
-        between = compact[eight_match.end() : twelve_pos] if twelve_pos > eight_match.end() else ""
-        between = "".join(
-            chunk
-            for chunk in re.findall(r"[0-9a-f]{4}", between)
-            if not _is_noise_hex_token(chunk) and not _is_datetime_uuid_part(chunk)
-        )
-        if len(between) >= 12:
-            ordered = [between[0:4], between[4:8], between[8:12]]
     if len(ordered) < 3:
         return None
     return normalize_settlement_terminal_id(
@@ -702,6 +716,10 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
         candidate = normalize_settlement_terminal_id(fallback.group(1))
         if candidate:
             return candidate
+
+    explicit_candidate = _extract_terminal_id_from_explicit_pattern(text, short_id_hint)
+    if explicit_candidate:
+        return _repair_terminal_id_split_suffix(text, explicit_candidate)
 
     section_candidates: list[str] = []
     for terminal_section in _terminal_number_sections(text):
