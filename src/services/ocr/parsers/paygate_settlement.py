@@ -522,6 +522,9 @@ def _infer_transaction_count_from_sales(
     pos_sales: Decimal | None,
     ocr_count: int | None,
 ) -> int | None:
+    if pos_sales and cash_sales and pos_sales == cash_sales:
+        pos_sales = Decimal(0)
+
     cash_yen = int(cash_sales or 0)
     pos_yen = int(pos_sales or 0) if is_valid_settlement_unit_sales_amount(pos_sales) else 0
     if cash_yen > 0 and pos_yen == 0 and cash_yen % 980 == 0:

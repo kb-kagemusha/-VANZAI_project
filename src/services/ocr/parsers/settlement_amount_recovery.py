@@ -72,6 +72,9 @@ def repair_settlement_amounts(
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     repaired = dict(amounts)
 
+    if repaired.get("cash") and repaired.get("pos") == repaired.get("cash"):
+        repaired["pos"] = Decimal(0)
+
     for key in ("cash", "pos", "credit"):
         value = repaired.get(key)
         if value is not None and value > 0 and not is_valid_settlement_unit_sales_amount(value):
