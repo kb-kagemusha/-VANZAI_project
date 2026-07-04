@@ -622,6 +622,8 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     assert row.subtotal == Decimal("5880")
     assert row.cash_sales == Decimal("5880")
     assert row.transaction_count == 6
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:05:23"
 
 
 PRODUCTION_OCR_TEXT_260703_8 = """
@@ -710,6 +712,8 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_11():
     assert row.amount == Decimal("4900")
     assert row.cash_sales == Decimal("4900")
     assert row.transaction_count == 5
+    assert row.record_date == date(2026, 7, 1)
+    assert row.record_time == "23:02:59"
 
 
 PRODUCTION_OCR_TEXT_260703_11_STORED = """
@@ -759,6 +763,38 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_11_stored_
     assert row.amount == Decimal("4900")
     assert row.cash_sales == Decimal("4900")
     assert row.transaction_count == 5
+    assert row.record_date == date(2026, 7, 1)
+    assert row.record_time == "23:02:59"
+
+
+PRODUCTION_OCR_TEXT_260703_15_GARBLED = """
+1番号:0b21
+202607/02
+23:01:45
+岡末番号
+0b21ee3e-0e48
+475b-8246-7fd3b19741ea
+小計
+8,820
+合計
+8,820
+現金売上
+7,840
+-PAYGATE POS
+980
+通常取引数
+9
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:45"
+    assert row.amount == Decimal("8820")
 
 
 PRODUCTION_OCR_TEXT_260703_1_STORED = """

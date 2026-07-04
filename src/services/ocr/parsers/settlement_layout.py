@@ -16,8 +16,15 @@ from src.services.ocr.parsers.settlement_amount import (
 )
 
 _DATETIME_RE = re.compile(r"(\d{4}/\d{2}/\d{2})\s*(\d{2}:\d{2}:\d{2})")
+_DATE_STANDARD_RE = re.compile(r"(20\d{2})[/／](\d{2})[/／](\d{2})")
+_DATE_MERGED_SLASH_RE = re.compile(r"20(\d{2})(\d{2})[/／](\d{2})")
+_TIME_COLON_RE = re.compile(r"(\d{2}):(\d{2}):(\d{2})")
 _SETTLEMENT_TITLE_RE = re.compile(r"精算")
 _TERMINAL_LABEL_RE = re.compile(r"端末\s*番号")
+_TERMINAL_SHORT_ID_ZONE_RE = re.compile(
+    r"(?:端末|境末|末|携末|備末|市末)[識議護鉄証藤鉄]?[別][番]?号",
+    re.IGNORECASE,
+)
 _SALES_BLOCK_END_RE = re.compile(r"通常\s*取引数|消[費賢][税稁]|精算現金|日本た")
 _AMOUNT_TAIL_RE = re.compile(r"([\d,./]+)\s*$")
 
@@ -78,20 +85,108 @@ def _first_settlement_sales_block(text: str) -> str | None:
     return block
 
 
+def _valid_settlement_date(year: int, month: int, day: int) -> date | None:
+    if year < 2020 or year > 2035:
+        return None
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _parse_settlement_date_from_text(line: str) -> date | None:
+    cleaned = line.replace("O", "0").replace("o", "0").replace("　", " ").strip()
+    match = _DATE_STANDARD_RE.search(cleaned)
+    if match:
+        return _valid_settlement_date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    match = _DATE_MERGED_SLASH_RE.search(cleaned)
+    if match:
+        return _valid_settlement_date(
+            int(f"20{match.group(1)}"),
+            int(match.group(2)),
+            int(match.group(3)),
+        )
+    return None
+
+
+def _parse_settlement_time_from_text(line: str) -> str | None:
+    cleaned = line.replace("O", "0").replace("o", "0").strip()
+    match = _TIME_COLON_RE.search(cleaned)
+    if match:
+        hour, minute, second = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+            return f"{hour:02d}:{minute:02d}:{second:02d}"
+    if re.fullmatch(r"\d{6}", cleaned):
+        hour = int(cleaned[0:2])
+        minute = int(cleaned[2:4])
+        second = int(cleaned[4:6])
+        if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+            return f"{hour:02d}:{minute:02d}:{second:02d}"
+    return None
+
+
+def _extract_datetime_from_zone(zone: str) -> tuple[date | None, str | None]:
+    match = _DATETIME_RE.search(zone)
+    if match:
+        return (
+            datetime.strptime(match.group(1), "%Y/%m/%d").date(),
+            match.group(2),
+        )
+
+    lines = [line.strip() for line in zone.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        record_date = _parse_settlement_date_from_text(line)
+        if not record_date:
+            continue
+        same_line_time = _parse_settlement_time_from_text(line)
+        if same_line_time:
+            return record_date, same_line_time
+        for lookahead in lines[index + 1 : index + 4]:
+            record_time = _parse_settlement_time_from_text(lookahead)
+            if record_time:
+                return record_date, record_time
+    return None, None
+
+
+def extract_settlement_datetime(text: str) -> tuple[date | None, str | None]:
+    """精算レシートの日時を、固定順序と行分割の両方から抽出する。"""
+    for settlement in _SETTLEMENT_TITLE_RE.finditer(text):
+        after_settlement = text[settlement.end() :]
+        terminal = _TERMINAL_LABEL_RE.search(after_settlement)
+        header = after_settlement[: terminal.start()] if terminal else after_settlement[:250]
+        record_date, record_time = _extract_datetime_from_zone(header)
+        if record_date and record_time:
+            return record_date, record_time
+
+    for match in _TERMINAL_SHORT_ID_ZONE_RE.finditer(text):
+        zone = text[match.end() : match.end() + 220]
+        terminal = _TERMINAL_LABEL_RE.search(zone)
+        header = zone[: terminal.start()] if terminal else zone
+        record_date, record_time = _extract_datetime_from_zone(header)
+        if record_date and record_time:
+            return record_date, record_time
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        record_date = _parse_settlement_date_from_text(line)
+        if not record_date:
+            continue
+        for lookahead in lines[index : index + 4]:
+            record_time = _parse_settlement_time_from_text(lookahead)
+            if record_time:
+                return record_date, record_time
+
+    match = _DATETIME_RE.search(text)
+    if match:
+        return (
+            datetime.strptime(match.group(1), "%Y/%m/%d").date(),
+            match.group(2),
+        )
+    return None, None
+
+
 def extract_settlement_datetime_from_layout(text: str) -> tuple[date | None, str | None]:
-    settlement = _SETTLEMENT_TITLE_RE.search(text)
-    if not settlement:
-        return None, None
-    after_settlement = text[settlement.end() :]
-    terminal = _TERMINAL_LABEL_RE.search(after_settlement)
-    header = after_settlement[: terminal.start()] if terminal else after_settlement[:120]
-    match = _DATETIME_RE.search(header)
-    if not match:
-        return None, None
-    return (
-        datetime.strptime(match.group(1), "%Y/%m/%d").date(),
-        match.group(2),
-    )
+    return extract_settlement_datetime(text)
 
 
 def extract_amounts_from_layout(text: str) -> tuple[dict[str, Decimal | None], dict[str, str]]:

@@ -23,7 +23,7 @@ from src.services.ocr.parsers.settlement_terminal_id import (
 )
 from src.services.ocr.parsers.settlement_layout import (
     extract_amounts_from_layout,
-    extract_settlement_datetime_from_layout,
+    extract_settlement_datetime,
     merge_layout_amounts,
 )
 from src.services.ocr.parsers.settlement_transaction_count import (
@@ -700,6 +700,8 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"小[計訳訁餁]", "小計", normalized)
     normalized = re.sub(r"[今会][計訳訁]", "合計", normalized)
     normalized = re.sub(r"絹[箁算E]+", "精算", normalized)
+    normalized = re.sub(r"20(\d{2})(\d{2})/(\d{2})", r"20\1/\2/\3", normalized)
+    normalized = re.sub(r"20(\d{2})(\d{2})／(\d{2})", r"20\1/\2/\3", normalized)
     normalized = re.sub(r"(\d{4}/\d{2}/\d{2})(\d{2}:\d{2}:\d{2})", r"\1 \2", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",
@@ -720,7 +722,7 @@ def _normalize_settlement_text(text: str) -> str:
 
 
 def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, str]:
-    layout_date, layout_time = extract_settlement_datetime_from_layout(text)
+    layout_date, layout_time = extract_settlement_datetime(text)
     if layout_date and layout_time:
         return layout_date, layout_time, "layout"
 
