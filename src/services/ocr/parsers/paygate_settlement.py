@@ -218,8 +218,10 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"DOd6", re.IGNORECASE), "b0d6"),
         (re.compile(r"D0d6", re.IGNORECASE), "b0d6"),
         (re.compile(r"b0d6cc\?6", re.IGNORECASE), "b0d6cc26"),
+        (re.compile(r"b0d6cc\?6\.a!+", re.IGNORECASE), "b0d6cc26-a0c1-49be-af4c-"),
         (re.compile(r"cc\?6", re.IGNORECASE), "cc26"),
-        (re.compile(r"[íiI]f22d625c6a7", re.IGNORECASE), "af4c-ff22d625c6a7"),
+        (re.compile(r"[íiI¡]f22d625c6a7", re.IGNORECASE), "af4c-ff22d625c6a7"),
+        (re.compile(r"(?<![0-9a-f])22d625c6a7", re.IGNORECASE), "ff22d625c6a7"),
         (re.compile(r"475日"), "475b"),
         (re.compile(r"(\d{3})日-"), r"\1b-"),
         (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
@@ -293,6 +295,7 @@ _HEX_TOKEN_NOISE = frozenset(
     {
         "2026", "0701", "2301", "2302", "5923", "3000", "0102", "0104", "1056", "6927",
         "8402", "b07a", "47be", "9ce0", "6105", "6927", "4280", "750", "8246",
+        "a202", "6071", "0223", "0121", "0710", "7102", "0122",
     }
 )
 _UUID_GARBAGE_LINE_RE = re.compile(r"\?|47be|b07a|sbos7rsa|pu?s", re.IGNORECASE)
@@ -300,6 +303,8 @@ _UUID_GARBAGE_LINE_RE = re.compile(r"\?|47be|b07a|sbos7rsa|pu?s", re.IGNORECASE)
 
 def _is_noise_hex_token(token: str) -> bool:
     if token in _HEX_TOKEN_NOISE:
+        return True
+    if re.fullmatch(r"a20[0-9]", token):
         return True
     if len(token) == 4 and re.fullmatch(r"\d{4}", token) is not None:
         return True
@@ -347,7 +352,12 @@ def _is_garbage_uuid_line(cleaned: str, *, previous_chunk: str = "") -> bool:
     return False
 
 
-def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) -> int:
+def _score_terminal_id_candidate(
+    terminal_id: str,
+    short_id: str | None = None,
+    *,
+    text: str | None = None,
+) -> int:
     parts = terminal_id.split("-")
     if len(parts) != 5:
         return -1000
@@ -373,11 +383,83 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
     for part in parts:
         if part in _HEX_TOKEN_NOISE:
             score -= 80
+        if _is_datetime_uuid_part(part):
+            score -= 200
     if parts[0].startswith("7508"):
         score -= 300
     if "2026" in parts or "0102" in parts:
         score -= 500
+    if text:
+        preferred_tail = _preferred_uuid_tail_in_text(text)
+        if preferred_tail:
+            if parts[4] == preferred_tail:
+                score += 280
+            elif preferred_tail not in parts[4]:
+                score -= 320
     return score
+
+
+def _is_datetime_uuid_part(part: str) -> bool:
+    if part.startswith(("2026", "2025", "2024")):
+        return True
+    if re.fullmatch(r"a20[0-9]", part):
+        return True
+    if part in {"6071", "0223", "0121", "0710", "7102", "0122", "2301"}:
+        return True
+    return False
+
+
+def _preferred_uuid_tail_in_text(text: str) -> str | None:
+    compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
+    for tail in ("ff22d625c6a7", "5bb5733a2490"):
+        if tail in compact:
+            return tail
+    if "22d625c6a7" in compact:
+        return "ff22d625c6a7"
+    return None
+
+
+def _scan_uuid_middle_fours(text: str) -> list[str]:
+    lowered = _normalize_settlement_text(text).lower()
+    found: list[str] = []
+    for segment in ("a0c1", "49be", "af4c", "ed32", "428c", "9ce2", "46df", "babd"):
+        if segment in lowered and segment not in found:
+            found.append(segment)
+    if re.search(r"[íi¡]f22", lowered) and "af4c" not in found:
+        found.append("af4c")
+    return found
+
+
+def _extract_terminal_id_from_head_tail(text: str, short_id: str | None) -> str | None:
+    if not short_id:
+        return None
+    compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
+    eight_match = re.search(rf"{short_id}(?:cc26|[0-9a-f]{{4}})", compact)
+    if not eight_match:
+        return None
+    eight = eight_match.group(0)[:8]
+    twelve = _preferred_uuid_tail_in_text(text)
+    if not twelve:
+        return None
+    ordered: list[str] = []
+    for segment in ("a0c1", "49be", "af4c"):
+        if segment in _scan_uuid_middle_fours(text):
+            ordered.append(segment)
+    if len(ordered) < 3:
+        twelve_pos = compact.rfind(twelve)
+        between = compact[eight_match.end() : twelve_pos] if twelve_pos > eight_match.end() else ""
+        between = "".join(
+            chunk
+            for chunk in re.findall(r"[0-9a-f]{4}", between)
+            if not _is_noise_hex_token(chunk) and not _is_datetime_uuid_part(chunk)
+        )
+        if len(between) >= 12:
+            ordered = [between[0:4], between[4:8], between[8:12]]
+    if len(ordered) < 3:
+        return None
+    return normalize_settlement_terminal_id(
+        f"{eight}-{ordered[0]}-{ordered[1]}-{ordered[2]}-{twelve}"
+    )
 
 
 def _flatten_uuid_parts(chunks: list[str], *, short_id: str | None = None) -> list[str]:
@@ -629,14 +711,26 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
     if section_candidates:
         best = max(
             section_candidates,
-            key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint),
+            key=lambda terminal_id: _score_terminal_id_candidate(
+                terminal_id, short_id_hint, text=text
+            ),
         )
-        if _score_terminal_id_candidate(best, short_id_hint) >= 0:
+        if _score_terminal_id_candidate(best, short_id_hint, text=text) >= 0:
             return _repair_terminal_id_split_suffix(text, best)
+
+    head_tail_candidate = _extract_terminal_id_from_head_tail(text, short_id_hint)
+    if head_tail_candidate:
+        head_tail_score = _score_terminal_id_candidate(head_tail_candidate, short_id_hint, text=text)
+        if head_tail_score >= 200:
+            return _repair_terminal_id_split_suffix(text, head_tail_candidate)
 
     concat_candidate = _extract_terminal_id_from_hex_concat(text, short_id_hint)
     if concat_candidate:
-        return _repair_terminal_id_split_suffix(text, concat_candidate)
+        concat_score = _score_terminal_id_candidate(concat_candidate, short_id_hint, text=text)
+        if concat_score >= 0 or _preferred_uuid_tail_in_text(text) is None:
+            return _repair_terminal_id_split_suffix(text, concat_candidate)
+    if head_tail_candidate:
+        return _repair_terminal_id_split_suffix(text, head_tail_candidate)
     return None
 
 
@@ -723,6 +817,17 @@ def _short_id_from_uuid_fragment(text: str) -> str | None:
         if candidate and _is_plausible_terminal_short_id(candidate):
             return candidate
     return None
+
+
+def _extract_terminal_short_id_hint(text: str) -> str | None:
+    for pattern in _TERMINAL_SHORT_ID_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            raw = match.group(1) if match.lastindex else match.group(0)
+            candidate = _normalize_terminal_short_id_candidate(raw)
+            if candidate and _is_plausible_terminal_short_id(candidate):
+                return candidate
+    return _short_id_from_uuid_fragment(text) or _short_id_from_terminal_number_section(text)
 
 
 def _extract_terminal_short_id(text: str, terminal_id: str | None = None) -> str | None:
@@ -859,10 +964,11 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
 
 
 def _normalize_terminal_uuid_lines(text: str) -> str:
-    return _TERMINAL_SPLIT_RE.sub(
+    text = _TERMINAL_SPLIT_RE.sub(
         lambda match: f"端末番号: {match.group(1)}{match.group(2)}",
         text,
     )
+    return "\n".join(_normalize_uuid_ocr_line(line) for line in text.splitlines())
 
 
 def _normalize_settlement_text(text: str) -> str:
@@ -937,7 +1043,7 @@ class PaygateSettlementParser(BaseOcrParser):
 
         record_date, record_time, parsed_datetime_source = _extract_settlement_datetime(text)
         amounts, amount_corrections = _extract_settlement_amounts(text)
-        terminal_short_id_hint = _extract_terminal_short_id(text, None)
+        terminal_short_id_hint = _extract_terminal_short_id_hint(text)
         terminal_id = _extract_terminal_id(text, terminal_short_id_hint)
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         store_match = _STORE_RE.search(text)

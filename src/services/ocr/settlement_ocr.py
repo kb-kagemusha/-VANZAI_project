@@ -54,12 +54,18 @@ def preprocess_settlement_uuid_wide_band(image_bytes: bytes) -> np.ndarray:
     return _preprocess_settlement_band(image_bytes, y0=0.16, y1=0.48, scale=4.5, max_width=3600)
 
 
+def preprocess_settlement_uuid_mid_band(image_bytes: bytes) -> np.ndarray:
+    """端末番号の折り返し中腹（a0c1-49be-af4c 付近）向けの狭い高解像度帯。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.20, y1=0.36, scale=6.0, max_width=3800)
+
+
 def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
     """Run focused header/terminal band OCR first, then default passes, and merge."""
     return merge_ocr_results(
         run_ocr(preprocess_settlement_header_band(image_bytes)),
         run_ocr(preprocess_settlement_id_line_band(image_bytes)),
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
+        run_ocr(preprocess_settlement_uuid_mid_band(image_bytes)),
         run_ocr(preprocess_settlement_uuid_wide_band(image_bytes)),
         run_ocr(preprocess_for_ocr(image_bytes)),
         run_ocr(preprocess_upscaled_for_ocr(image_bytes, scale=2.0, max_width=2800)),
