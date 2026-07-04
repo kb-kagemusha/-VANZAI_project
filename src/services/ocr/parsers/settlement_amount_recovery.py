@@ -10,7 +10,7 @@ from src.services.ocr.parsers.settlement_amount import (
     sanitize_settlement_sales_amount,
 )
 
-_STANDALONE_AMOUNT_RE = re.compile(r"^(?:[¥￥]\s*)?([\d,/]+)\s*$")
+_STANDALONE_AMOUNT_RE = re.compile(r"^(?:[`'\"´]|[¥￥YＹyｙ])?\s*([\d,/]+)\s*$")
 _SKIP_AMOUNT_LINE_KEYWORDS = ("売上", "小計", "合計", "計", "税", "PAYGATE", "その他", "精算", "端末", "登録")
 
 
@@ -51,9 +51,10 @@ def _infer_sales_from_total(repaired: dict[str, Decimal | None]) -> None:
     pos = repaired.get("pos") or Decimal(0)
 
     if not (pos > 0 and is_valid_settlement_unit_sales_amount(pos)):
-        remainder = total - cash - credit - other
-        if is_valid_settlement_unit_sales_amount(remainder):
-            repaired["pos"] = remainder
+        if cash > 0 and is_valid_settlement_unit_sales_amount(cash):
+            remainder = total - cash - credit - other
+            if is_valid_settlement_unit_sales_amount(remainder):
+                repaired["pos"] = remainder
         elif pos > 0:
             repaired["pos"] = Decimal(0)
 
@@ -111,14 +112,15 @@ def repair_settlement_amounts(
             continue
         if not _needs_sales_recovery(repaired.get("cash")):
             break
-        if index == 0:
-            break
-        previous = lines[index - 1]
-        if _is_skipped_amount_context(previous):
-            break
-        amount = _standalone_amount(previous)
-        if _accept_sales_amount(amount):
-            repaired["cash"] = amount
+        candidates: list[Decimal | None] = []
+        if index + 1 < len(lines):
+            candidates.append(_standalone_amount(lines[index + 1]))
+        if index > 0:
+            candidates.append(_standalone_amount(lines[index - 1]))
+        for amount in candidates:
+            if _accept_sales_amount(amount):
+                repaired["cash"] = amount
+                break
         break
 
     for index, line in enumerate(lines):
@@ -127,6 +129,11 @@ def repair_settlement_amounts(
             continue
         if not _needs_sales_recovery(repaired.get("pos")):
             break
+        if index + 1 < len(lines):
+            amount = _standalone_amount(lines[index + 1])
+            if _accept_sales_amount(amount):
+                repaired["pos"] = amount
+                break
         for lookback in range(index - 1, max(index - 5, -1), -1):
             candidate = lines[lookback]
             candidate_compact = _compact(candidate)

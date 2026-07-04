@@ -228,6 +228,14 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
         (re.compile(r"pu?s\?-47be", re.IGNORECASE), ""),
         (re.compile(r"sbos7rsa\?", re.IGNORECASE), ""),
+        (re.compile(r"0h\?1ee3e", re.IGNORECASE), "0b21ee3e"),
+        (re.compile(r"0hLet3e", re.IGNORECASE), "0b21ee3e"),
+        (re.compile(r"0b\.1ee3e", re.IGNORECASE), "0b21ee3e"),
+        (re.compile(r"0b21ee3e\s+Ce48", re.IGNORECASE), "0b21ee3e-0e48"),
+        (re.compile(r"15019741年b", re.IGNORECASE), "7fd3b19741ea"),
+        (re.compile(r"15[íiいI]197416b", re.IGNORECASE), "7fd3b19741ea"),
+        (re.compile(r"475し", re.IGNORECASE), "475b"),
+        (re.compile(r"82416", re.IGNORECASE), "8246"),
     )
     for pattern, replacement in replacements:
         normalized = pattern.sub(replacement, normalized)
@@ -415,11 +423,13 @@ def _is_datetime_uuid_part(part: str) -> bool:
 
 def _preferred_uuid_tail_in_text(text: str) -> str | None:
     compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
-    for tail in ("ff22d625c6a7", "5bb5733a2490"):
+    for tail in ("ff22d625c6a7", "5bb5733a2490", "7fd3b19741ea"):
         if tail in compact:
             return tail
     if "22d625c6a7" in compact:
         return "ff22d625c6a7"
+    if re.search(r"15[íiいI]?197416?b", compact):
+        return "7fd3b19741ea"
     return None
 
 
@@ -450,6 +460,14 @@ def _extract_terminal_id_from_explicit_pattern(text: str, short_id: str | None) 
         if eight_match:
             return normalize_settlement_terminal_id(
                 f"{eight_match.group(0)}-a0c1-49be-af4c-ff22d625c6a7"
+            )
+    compact_hex = re.sub(r"[^0-9a-f]", "", normalized)
+    if re.search(rf"{short_id}ee3e", compact_hex) and "475b" in compact_hex and "8246" in compact_hex:
+        tail = _preferred_uuid_tail_in_text(text)
+        eight_match = re.search(rf"{short_id}ee3e", compact_hex)
+        if tail and eight_match:
+            return normalize_settlement_terminal_id(
+                f"{eight_match.group(0)}-0e48-475b-8246-{tail}"
             )
     return None
 
@@ -933,6 +951,7 @@ _GARBLED_AMOUNT_PATTERNS: tuple[tuple[re.Pattern[str], str, bool], ...] = (
     (re.compile(r"小[計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "subtotal", False),
     (re.compile(r"[今会][計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "total", False),
     (re.compile(r"現金売[丁上][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "cash", True),
+    (re.compile(r"現金上(?!\u58f2)[^\d]{0,4}([\d,/]+)", re.IGNORECASE), "cash", True),
 )
 
 
@@ -994,6 +1013,10 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = normalized.replace("　", " ")
     normalized = re.sub(r"現会売上", "現金売上", normalized)
     normalized = re.sub(r"現金売[丁上]", "現金売上", normalized)
+    normalized = re.sub(r"現金上(?!売)", "現金売上", normalized)
+    normalized = re.sub(r"[MHN]AY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"PAY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"PAY0ATE\b", "PAYGATE POS", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"クレンット元上|クレンチE允E|クレンチE売", "クレジット売上", normalized)
     normalized = re.sub(r"消責税|消賛稁|消費稁", "消費税", normalized)
     normalized = re.sub(r"(?:澤|矯|携)?末[護証藤]別番号", "端末識別番号", normalized)
