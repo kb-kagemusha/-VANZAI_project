@@ -39,16 +39,28 @@ def preprocess_settlement_header_band(image_bytes: bytes) -> np.ndarray:
     return _preprocess_settlement_band(image_bytes, y0=0.0, y1=0.22, scale=4.0)
 
 
+def preprocess_settlement_id_line_band(image_bytes: bytes) -> np.ndarray:
+    """端末識別番号〜精算タイトル帯（感熱紙の薄い上段向け）。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.08, y1=0.30, scale=5.0, max_width=3600)
+
+
 def preprocess_settlement_terminal_band(image_bytes: bytes) -> np.ndarray:
     """Terminal UUID band: often missed on a single full-image pass."""
     return _preprocess_settlement_band(image_bytes, y0=0.18, y1=0.40, scale=4.0)
+
+
+def preprocess_settlement_uuid_wide_band(image_bytes: bytes) -> np.ndarray:
+    """端末番号 UUID が折り返す帯域を広めに取得。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.16, y1=0.48, scale=4.5, max_width=3600)
 
 
 def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
     """Run focused header/terminal band OCR first, then default passes, and merge."""
     return merge_ocr_results(
         run_ocr(preprocess_settlement_header_band(image_bytes)),
+        run_ocr(preprocess_settlement_id_line_band(image_bytes)),
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
+        run_ocr(preprocess_settlement_uuid_wide_band(image_bytes)),
         run_ocr(preprocess_for_ocr(image_bytes)),
         run_ocr(preprocess_upscaled_for_ocr(image_bytes, scale=2.0, max_width=2800)),
     )

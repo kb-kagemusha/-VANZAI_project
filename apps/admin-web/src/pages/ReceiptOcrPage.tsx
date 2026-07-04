@@ -7,7 +7,10 @@ import { DataTable } from "../components/DataTable";
 import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
-import { OcrParseProgress } from "../components/OcrParseProgress";
+import {
+  createSingleImageParseProgress,
+  OcrParseProgressHover,
+} from "../components/OcrParseProgressHover";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import {
@@ -1057,6 +1060,7 @@ export function ReceiptOcrPage() {
   });
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
+  const [reparseProgress, setReparseProgress] = useState<OcrParseProgressState | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const isParsingRef = useRef(false);
 
@@ -1247,6 +1251,9 @@ export function ReceiptOcrPage() {
 
   const reparseRowMutation = useMutation({
     mutationFn: async (rowId: string) => reparseOcrRow(rowId),
+    onMutate: () => {
+      setReparseProgress(createSingleImageParseProgress());
+    },
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
@@ -1272,6 +1279,22 @@ export function ReceiptOcrPage() {
         message: formatted.message,
         detail: formatted.detail,
       });
+    },
+    onSettled: (result, error) => {
+      const failed = Boolean(error) || (result?.failed_count ?? 0) > 0;
+      setReparseProgress((current) => {
+        if (!current) {
+          return null;
+        }
+        return {
+          ...current,
+          phase: "done",
+          processedImages: 1,
+          successCount: failed ? 0 : 1,
+          failedCount: failed ? 1 : 0,
+        };
+      });
+      window.setTimeout(() => setReparseProgress(null), 2500);
     },
   });
 
@@ -1847,14 +1870,21 @@ export function ReceiptOcrPage() {
             編集
           </button>
           {row.source_type === "paygate_settlement" && row.status !== "confirmed" ? (
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
-              onClick={() => reparseRowMutation.mutate(row.id)}
+            <OcrParseProgressHover
+              progress={
+                reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? reparseProgress : null
+              }
+              active={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
             >
-              {reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? "解析中..." : "再解析"}
-            </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
+                onClick={() => reparseRowMutation.mutate(row.id)}
+              >
+                {reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? "解析中..." : "再解析"}
+              </button>
+            </OcrParseProgressHover>
           ) : null}
           {row.source_type === "paygate_settlement" && row.status === "confirmed" && !row.voided_at ? (
             <button
@@ -2022,14 +2052,16 @@ export function ReceiptOcrPage() {
               </span>
             </div>
             <div className="upload-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!imageIdsToParse.length || isParsing}
-                onClick={() => void handleParseImages()}
-              >
-                {isParsing ? "解析中..." : `解析 (${imageIdsToParse.length}枚)`}
-              </button>
+              <OcrParseProgressHover progress={parseProgress} active={isParsing}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={!imageIdsToParse.length || isParsing}
+                  onClick={() => void handleParseImages()}
+                >
+                  {isParsing ? "解析中..." : `解析 (${imageIdsToParse.length}枚)`}
+                </button>
+              </OcrParseProgressHover>
               <button
                 type="button"
                 className="secondary-button"
@@ -2047,7 +2079,6 @@ export function ReceiptOcrPage() {
                 {deleteImagesMutation.isPending ? "削除中..." : `選択を削除 (${selectedImageIds.length})`}
               </button>
             </div>
-            {parseProgress ? <OcrParseProgress progress={parseProgress} /> : null}
             {parseResultSummary && !isParsing ? (
               <p className="upload-help">
                 解析完了: 成功 {parseResultSummary.successCount} / 失敗 {parseResultSummary.failedCount}

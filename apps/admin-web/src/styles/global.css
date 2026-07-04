@@ -2064,3 +2064,36 @@ button {
   color: var(--muted);
   font-size: 0.88rem;
 }
+
+.ocr-parse-progress-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ocr-parse-progress-trigger--active .primary-button,
+.ocr-parse-progress-trigger--active .ghost-button {
+  box-shadow: 0 0 0 2px rgba(200, 85, 61, 0.28);
+}
+
+.ocr-parse-progress-trigger-hint {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  text-transform: uppercase;
+  animation: ocr-parse-pulse 1.2s ease-in-out infinite;
+}
+
+.ocr-parse-progress-popover--portal {
+  padding: 0;
+  border: none;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.ocr-parse-progress-popover--portal .ocr-parse-progress {
+  margin-top: 0;
+  box-shadow: 0 12px 32px rgba(29, 39, 49, 0.16);
+}

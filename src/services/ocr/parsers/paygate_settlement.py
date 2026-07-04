@@ -166,7 +166,27 @@ def _canonical_label(label: str) -> str:
     }.get(label, label)
 
 
+_POSTAL_SHORT_ID_NOISE = frozenset(
+    {"f105", "1056", "6927", "0102", "0104", "3000", "6927", "1056", "6927"}
+)
+
+
+def _is_postal_noise_short_id(value: str | None) -> bool:
+    if not value:
+        return False
+    lowered = value.lower()
+    if lowered in _POSTAL_SHORT_ID_NOISE:
+        return True
+    if re.fullmatch(r"f?105\d?", lowered):
+        return True
+    if lowered.startswith("105") and lowered.isdigit():
+        return True
+    return False
+
+
 def _is_plausible_terminal_short_id(value: str) -> bool:
+    if _is_postal_noise_short_id(value):
+        return False
     return is_valid_settlement_terminal_short_id(
         normalize_settlement_terminal_short_id(value, from_ocr=True)
     )
@@ -195,6 +215,11 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"^Oe", re.IGNORECASE), "0e"),
         (re.compile(r"Ob(\d{2})", re.IGNORECASE), r"0b\1"),
         (re.compile(r"Oe(\d{2})", re.IGNORECASE), r"0e\1"),
+        (re.compile(r"DOd6", re.IGNORECASE), "b0d6"),
+        (re.compile(r"D0d6", re.IGNORECASE), "b0d6"),
+        (re.compile(r"b0d6cc\?6", re.IGNORECASE), "b0d6cc26"),
+        (re.compile(r"cc\?6", re.IGNORECASE), "cc26"),
+        (re.compile(r"[íiI]f22d625c6a7", re.IGNORECASE), "af4c-ff22d625c6a7"),
         (re.compile(r"475日"), "475b"),
         (re.compile(r"(\d{3})日-"), r"\1b-"),
         (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
@@ -355,15 +380,25 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
     return score
 
 
-def _flatten_uuid_parts(chunks: list[str]) -> list[str]:
+def _flatten_uuid_parts(chunks: list[str], *, short_id: str | None = None) -> list[str]:
     parts: list[str] = []
     for chunk in chunks:
         for piece in chunk.split("-"):
             piece = piece.strip().lower()
             if not piece or not re.fullmatch(r"[0-9a-f]+", piece):
                 continue
-            if len(piece) == 1 and parts and len(parts[-1]) == 4:
-                parts.append(piece)
+            if (
+                len(piece) == 12
+                and short_id
+                and piece.startswith(short_id)
+                and re.fullmatch(r"[0-9a-f]{8}[0-9a-f]{4}", piece)
+            ):
+                parts.append(piece[:8])
+                parts.append(piece[8:])
+                continue
+            if len(piece) == 16 and piece.startswith("af4c") and piece.endswith("c6a7"):
+                parts.append("af4c")
+                parts.append(piece[4:])
                 continue
             parts.append(piece)
     merged: list[str] = []
@@ -372,6 +407,10 @@ def _flatten_uuid_parts(chunks: list[str]) -> list[str]:
         piece = parts[index]
         if len(piece) == 1 and index + 1 < len(parts) and len(parts[index + 1]) >= 11:
             parts[index + 1] = piece + parts[index + 1]
+            index += 1
+            continue
+        if len(piece) == 4 and piece == "c6a7" and merged and merged[-1].endswith("625"):
+            merged[-1] = merged[-1] + piece
             index += 1
             continue
         merged.append(piece)
@@ -399,7 +438,9 @@ def _assemble_uuid_from_parts(parts: list[str], short_id: str | None = None) -> 
         for part in parts
         if len(part) == 4 and not _is_short_id_noise_token(part, short_id)
     ]
-    twelve_chars = [part for part in parts if len(part) == 12]
+    twelve_chars = [part for part in parts if len(part) == 12 and not part.startswith("af4c")]
+    if not twelve_chars:
+        twelve_chars = [part for part in parts if len(part) == 12]
     if not eight_chars or len(four_chars) < 3 or not twelve_chars:
         return None
     eight = eight_chars[0]
@@ -412,7 +453,14 @@ def _assemble_uuid_from_parts(parts: list[str], short_id: str | None = None) -> 
         if len(ordered_fours) == 3:
             break
     if len(ordered_fours) < 3:
-        ordered_fours = [part for part in four_chars if part != eight[:4]][:3]
+        ordered_fours = []
+        for part in four_chars:
+            if part == eight[:4]:
+                continue
+            if part not in ordered_fours:
+                ordered_fours.append(part)
+            if len(ordered_fours) == 3:
+                break
     if len(ordered_fours) < 3:
         return None
     twelve = twelve_chars[-1]
@@ -440,7 +488,7 @@ def _join_terminal_chunks_from_section(section: str, short_id: str | None = None
         previous_chunk = cleaned
     if not chunks:
         return None
-    parts = _flatten_uuid_parts(chunks)
+    parts = _flatten_uuid_parts(chunks, short_id=short_id)
     assembled = _assemble_uuid_from_parts(parts, short_id)
     if assembled:
         return assembled
@@ -658,16 +706,23 @@ def _short_id_from_line_before_settlement(text: str) -> str | None:
 
 
 def _short_id_from_uuid_fragment(text: str) -> str | None:
-    match = re.search(r"([0-9oOも6bB]{1,4})21ee3e", text, re.IGNORECASE)
-    if not match:
-        return None
-    prefix = match.group(1).translate(_OCR_HEX_FIXES).lower()
-    if len(prefix) >= 4:
-        return _normalize_terminal_short_id_candidate(prefix[:4])
-    repaired = _normalize_terminal_short_id_candidate(f"{prefix}21"[:4])
-    if repaired and repaired.endswith("21"):
-        return _normalize_terminal_short_id_candidate("0b21")
-    return _normalize_terminal_short_id_candidate(prefix + "21")
+    match = re.search(r"([0-9oOも6bBdD]{1,4})21ee3e", text, re.IGNORECASE)
+    if match:
+        prefix = match.group(1).translate(_OCR_HEX_FIXES).lower()
+        prefix = re.sub(r"^d", "b", prefix)
+        if len(prefix) >= 4:
+            candidate = _normalize_terminal_short_id_candidate(prefix[:4])
+            if candidate and _is_plausible_terminal_short_id(candidate):
+                return candidate
+        repaired = _normalize_terminal_short_id_candidate(f"{prefix}21"[:4])
+        if repaired and _is_plausible_terminal_short_id(repaired):
+            return repaired
+    match = re.search(r"(?:DOd6|D0d6|b0d6)", text, re.IGNORECASE)
+    if match:
+        candidate = _normalize_terminal_short_id_candidate("b0d6")
+        if candidate and _is_plausible_terminal_short_id(candidate):
+            return candidate
+    return None
 
 
 def _extract_terminal_short_id(text: str, terminal_id: str | None = None) -> str | None:

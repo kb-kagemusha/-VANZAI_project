@@ -828,6 +828,40 @@ PAYGATE POS
 """
 
 
+PRODUCTION_OCR_TEXT_260703_14_LIVE_GARBLED = """
+F 105-6927
+登録番号:
+精算
+2026/07102
+23:01:21
+端端末番号
+DOd6cc?6.a0c1-
+49be-af4c-
+íf22d625c6a7
+小計
+4,900
+合計
+4,900
+現金売上
+4,900
+通常取引数
+5
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_14_live_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_14_LIVE_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:21"
+    assert row.amount == Decimal("4900")
+    assert row.transaction_count == 5
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_live_garbled():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_LIVE_GARBLED))
