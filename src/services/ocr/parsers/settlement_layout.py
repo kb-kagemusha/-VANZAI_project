@@ -18,7 +18,9 @@ from src.services.ocr.parsers.settlement_amount import (
 _DATETIME_RE = re.compile(r"(\d{4}/\d{2}/\d{2})\s*(\d{2}:\d{2}:\d{2})")
 _DATE_STANDARD_RE = re.compile(r"(20\d{2})[/／](\d{2})[/／](\d{2})")
 _DATE_MERGED_SLASH_RE = re.compile(r"20(\d{2})(\d{2})[/／](\d{2})")
+_DATE_COMPACT8_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
 _TIME_COLON_RE = re.compile(r"(\d{2}):(\d{2}):(\d{2})")
+_TIME_PARTIAL_COLON_RE = re.compile(r"(\d{2}):(\d{4})\b")
 _SETTLEMENT_TITLE_RE = re.compile(r"精算")
 _TERMINAL_LABEL_RE = re.compile(r"端末\s*番号")
 _TERMINAL_SHORT_ID_ZONE_RE = re.compile(
@@ -94,8 +96,50 @@ def _valid_settlement_date(year: int, month: int, day: int) -> date | None:
         return None
 
 
-def _parse_settlement_date_from_text(line: str) -> date | None:
+def _valid_settlement_time(hour: int, minute: int, second: int) -> str | None:
+    if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+        return f"{hour:02d}:{minute:02d}:{second:02d}"
+    return None
+
+
+def _normalize_datetime_line(line: str) -> str:
     cleaned = line.replace("O", "0").replace("o", "0").replace("　", " ").strip()
+    cleaned = cleaned.replace("：", ":").replace("／", "/")
+    cleaned = re.sub(r"[\]】|｜]", "/", cleaned)
+    cleaned = re.sub(r"(?<=\d{2})[円元](?=\d{2})", ":", cleaned)
+    cleaned = re.sub(r"(\d{2}):(\d{2})-(\d{2})\b", r"\1:\2:\3", cleaned)
+    cleaned = re.sub(r"(\d{2})-(\d{2}):(\d{2})\b", r"\1:\2:\3", cleaned)
+    if "/" not in cleaned:
+        cleaned = re.sub(r"\b(20\d{2})(\d{2})(\d{2})\b", r"\1/\2/\3", cleaned)
+    cleaned = re.sub(
+        r"(20\d{2})/(\d{5})(?!\d)",
+        lambda match: f"{match.group(1)}/{match.group(2)[:2]}/{match.group(2)[3:5]}",
+        cleaned,
+    )
+    return cleaned
+
+
+def _join_split_date_lines(lines: list[str]) -> list[str]:
+    joined: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if re.fullmatch(r"20\d{2}", line) and index + 1 < len(lines):
+            next_line = lines[index + 1]
+            match = re.match(r"(\d{2})[/／](\d{1,2})", next_line)
+            if match:
+                day_digits = re.sub(r"[^\d]", "", match.group(2))[:2]
+                if day_digits:
+                    joined.append(f"{line}/{match.group(1)}/{int(day_digits):02d}")
+                    index += 2
+                    continue
+        joined.append(line)
+        index += 1
+    return joined
+
+
+def _parse_settlement_date_from_text(line: str) -> date | None:
+    cleaned = _normalize_datetime_line(line)
     match = _DATE_STANDARD_RE.search(cleaned)
     if match:
         return _valid_settlement_date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
@@ -106,46 +150,68 @@ def _parse_settlement_date_from_text(line: str) -> date | None:
             int(match.group(2)),
             int(match.group(3)),
         )
+    match = _DATE_COMPACT8_RE.search(cleaned)
+    if match:
+        digits = match.group(1)
+        return _valid_settlement_date(int(digits[0:4]), int(digits[4:6]), int(digits[6:8]))
     return None
 
 
 def _parse_settlement_time_from_text(line: str) -> str | None:
-    cleaned = line.replace("O", "0").replace("o", "0").strip()
+    cleaned = _normalize_datetime_line(line)
     match = _TIME_COLON_RE.search(cleaned)
     if match:
-        hour, minute, second = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-        if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
-            return f"{hour:02d}:{minute:02d}:{second:02d}"
-    if re.fullmatch(r"\d{6}", cleaned):
-        hour = int(cleaned[0:2])
-        minute = int(cleaned[2:4])
-        second = int(cleaned[4:6])
-        if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
-            return f"{hour:02d}:{minute:02d}:{second:02d}"
+        return _valid_settlement_time(
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)),
+        )
+    match = _TIME_PARTIAL_COLON_RE.search(cleaned)
+    if match:
+        rest = match.group(2)
+        return _valid_settlement_time(int(match.group(1)), int(rest[0:2]), int(rest[2:4]))
+    if re.fullmatch(r"\d{6,7}", cleaned):
+        digits = cleaned[:6]
+        return _valid_settlement_time(int(digits[0:2]), int(digits[2:4]), int(digits[4:6]))
     return None
 
 
+def _pair_date_time_from_lines(lines: list[str], *, max_gap: int = 3) -> tuple[date | None, str | None]:
+    normalized = _join_split_date_lines([_normalize_datetime_line(line) for line in lines])
+    date_hits: list[tuple[int, date]] = []
+    time_hits: list[tuple[int, str]] = []
+    for index, line in enumerate(normalized):
+        record_date = _parse_settlement_date_from_text(line)
+        record_time = _parse_settlement_time_from_text(line)
+        if record_date and record_time:
+            return record_date, record_time
+        if record_date:
+            date_hits.append((index, record_date))
+        if record_time:
+            time_hits.append((index, record_time))
+
+    best: tuple[date | None, str | None] = (None, None)
+    best_gap = max_gap + 1
+    for date_index, record_date in date_hits:
+        for time_index, record_time in time_hits:
+            gap = abs(date_index - time_index)
+            if gap <= max_gap and gap < best_gap:
+                best = (record_date, record_time)
+                best_gap = gap
+    return best
+
+
 def _extract_datetime_from_zone(zone: str) -> tuple[date | None, str | None]:
-    match = _DATETIME_RE.search(zone)
+    normalized_zone = "\n".join(_normalize_datetime_line(line) for line in zone.splitlines())
+    match = _DATETIME_RE.search(normalized_zone)
     if match:
         return (
             datetime.strptime(match.group(1), "%Y/%m/%d").date(),
             match.group(2),
         )
 
-    lines = [line.strip() for line in zone.splitlines() if line.strip()]
-    for index, line in enumerate(lines):
-        record_date = _parse_settlement_date_from_text(line)
-        if not record_date:
-            continue
-        same_line_time = _parse_settlement_time_from_text(line)
-        if same_line_time:
-            return record_date, same_line_time
-        for lookahead in lines[index + 1 : index + 4]:
-            record_time = _parse_settlement_time_from_text(lookahead)
-            if record_time:
-                return record_date, record_time
-    return None, None
+    lines = [line.strip() for line in normalized_zone.splitlines() if line.strip()]
+    return _pair_date_time_from_lines(lines)
 
 
 def extract_settlement_datetime(text: str) -> tuple[date | None, str | None]:
@@ -167,16 +233,12 @@ def extract_settlement_datetime(text: str) -> tuple[date | None, str | None]:
             return record_date, record_time
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for index, line in enumerate(lines):
-        record_date = _parse_settlement_date_from_text(line)
-        if not record_date:
-            continue
-        for lookahead in lines[index : index + 4]:
-            record_time = _parse_settlement_time_from_text(lookahead)
-            if record_time:
-                return record_date, record_time
+    record_date, record_time = _pair_date_time_from_lines(lines, max_gap=4)
+    if record_date and record_time:
+        return record_date, record_time
 
-    match = _DATETIME_RE.search(text)
+    normalized_text = "\n".join(_normalize_datetime_line(line) for line in text.splitlines())
+    match = _DATETIME_RE.search(normalized_text)
     if match:
         return (
             datetime.strptime(match.group(1), "%Y/%m/%d").date(),
