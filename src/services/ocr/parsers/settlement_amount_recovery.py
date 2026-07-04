@@ -163,6 +163,16 @@ def repair_settlement_amounts(
             if value and (value < 100 or not is_valid_settlement_unit_sales_amount(value)):
                 repaired[key] = Decimal(0)
 
+    if (
+        repaired.get("total") is not None
+        and repaired.get("cash") is not None
+        and repaired.get("total") == repaired.get("cash")
+        and repaired.get("cash") > 0
+    ):
+        repaired["credit"] = Decimal(0)
+        repaired["pos"] = Decimal(0)
+        repaired["other"] = Decimal(0)
+
     other = repaired.get("other")
     pos = repaired.get("pos")
     if other not in (None, Decimal(0)) and pos not in (None, Decimal(0)) and other == pos:
