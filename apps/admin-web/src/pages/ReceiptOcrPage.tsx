@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Navigate } from "react-router-dom";
 
 import { DataTable } from "../components/DataTable";
+import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
@@ -36,6 +37,7 @@ import {
   uploadOcrImage,
   voidOcrRow,
 } from "../lib/api/client";
+import { formatRequestError } from "../lib/formatRequestError";
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrValidationMessages } from "../lib/ocr/validationMessages";
@@ -1009,6 +1011,20 @@ export function ReceiptOcrPage() {
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [editingRow, setEditingRow] = useState<OcrExtractedRowItem | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<AppNotificationState & { open: boolean }>({
+    open: false,
+    tone: "info",
+    title: "",
+    message: "",
+  });
+
+  const showNotification = useCallback((next: AppNotificationState) => {
+    setNotification({ ...next, open: true });
+  }, []);
+
+  const closeNotification = useCallback(() => {
+    setNotification((current) => ({ ...current, open: false }));
+  }, []);
   const [hqFile, setHqFile] = useState<File | null>(null);
   const [hqTxnColumn, setHqTxnColumn] = useState("取引番号");
   const [hqReceiptColumn, setHqReceiptColumn] = useState("レシート番号");
@@ -1117,7 +1133,14 @@ export function ReceiptOcrPage() {
       await queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] });
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "画像アップロードに失敗しました");
+      const formatted = formatRequestError(error, "画像アップロードに失敗しました");
+      setFormError(formatted.message);
+      showNotification({
+        tone: "error",
+        title: formatted.title,
+        message: formatted.message,
+        detail: formatted.detail,
+      });
     },
   });
 
@@ -1129,26 +1152,57 @@ export function ReceiptOcrPage() {
       await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] });
       setSelectedImageIds([]);
-      setFormError(
-        result.failed_count > 0
-          ? `解析完了: 成功 ${result.success_count} / 失敗 ${result.failed_count}。失敗した画像のエラー内容を下の一覧で確認してください。`
-          : null,
-      );
+      if (result.failed_count > 0) {
+        const message = `成功 ${result.success_count} 件 / 失敗 ${result.failed_count} 件。失敗した画像のエラー内容を下の一覧で確認してください。`;
+        setFormError(message);
+        showNotification({
+          tone: "warning",
+          title: "一部の画像の解析に失敗しました",
+          message,
+        });
+        return;
+      }
+      setFormError(null);
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "解析に失敗しました");
+      const formatted = formatRequestError(error, "解析に失敗しました");
+      setFormError(formatted.message);
+      showNotification({
+        tone: "error",
+        title: formatted.title,
+        message: formatted.message,
+        detail: formatted.detail,
+      });
     },
   });
 
   const reparseRowMutation = useMutation({
     mutationFn: async (rowId: string) => reparseOcrRow(rowId),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
+      if (result.failed_count > 0) {
+        const message = "再解析の結果、必要な項目を読み取れませんでした。画像一覧のエラー内容を確認してください。";
+        setFormError(message);
+        showNotification({
+          tone: "warning",
+          title: "再解析に失敗しました",
+          message,
+        });
+        return;
+      }
       setFormError(null);
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "再解析に失敗しました");
+      const formatted = formatRequestError(error, "再解析に失敗しました");
+      setFormError(formatted.message);
+      showNotification({
+        tone: "error",
+        title: formatted.title,
+        message: formatted.message,
+        detail: formatted.detail,
+      });
     },
   });
 
@@ -2552,6 +2606,16 @@ export function ReceiptOcrPage() {
         ) : null}
         {compareQuery.data?.message ? <p className="upload-help">{compareQuery.data.message}</p> : null}
       </section>
+
+      <AppNotification
+        open={notification.open}
+        tone={notification.tone}
+        title={notification.title}
+        message={notification.message}
+        detail={notification.detail}
+        confirmLabel={notification.confirmLabel}
+        onClose={closeNotification}
+      />
     </div>
   );
 }
