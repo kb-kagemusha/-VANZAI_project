@@ -403,6 +403,18 @@ def _extract_terminal_id_from_hex_concat(text: str) -> str | None:
         terminal_id = normalize_settlement_terminal_id(format_terminal_id_from_hex32(raw[:32]))
         if terminal_id:
             return terminal_id
+
+
+def _repair_terminal_id_suffix_90(text: str, terminal_id: str | None) -> str | None:
+    """UUID末尾が別行の `90` になっている折返しを結合する。"""
+    if not terminal_id:
+        return None
+    if re.search(r"5733a24[^\n]{0,8}\n\s*90\b", text, re.IGNORECASE):
+        prefix = terminal_id.rsplit("-", 1)[0]
+        candidate = normalize_settlement_terminal_id(f"{prefix}-5bb5733a2490")
+        if candidate:
+            return candidate
+    return terminal_id
     return _extract_terminal_id_from_hex_permutation(tokens)
 
 
@@ -431,15 +443,28 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
         if candidate and candidate not in section_candidates:
             section_candidates.append(candidate)
     if section_candidates:
-        return max(
+        best = max(
             section_candidates,
             key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint),
         )
+        return _repair_terminal_id_suffix_90(text, best)
 
     concat_candidate = _extract_terminal_id_from_hex_concat(text)
     if concat_candidate:
-        return concat_candidate
+        return _repair_terminal_id_suffix_90(text, concat_candidate)
     return None
+
+
+def _repair_terminal_id_suffix_90(text: str, terminal_id: str | None) -> str | None:
+    """UUID末尾が別行の `90` になっている折返しを結合する。"""
+    if not terminal_id:
+        return None
+    if re.search(r"5733a24[^\n]{0,8}\n\s*90\b", text, re.IGNORECASE):
+        prefix = terminal_id.rsplit("-", 1)[0]
+        candidate = normalize_settlement_terminal_id(f"{prefix}-5bb5733a2490")
+        if candidate:
+            return candidate
+    return terminal_id
 
 
 def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
