@@ -523,6 +523,11 @@ def _infer_transaction_count_from_sales(
 ) -> int | None:
     cash_yen = int(cash_sales or 0)
     pos_yen = int(pos_sales or 0)
+    if cash_yen > 0 and pos_yen == 0 and cash_yen % 980 == 0:
+        units = cash_yen // 980
+        if 1 <= units <= 99 and ocr_count != units:
+            return units
+
     cash_units = cash_yen // 980 if cash_yen > 0 and cash_yen % 980 == 0 else 0
     pos_units = pos_yen // 980 if pos_yen > 0 and pos_yen % 980 == 0 else 0
     inferred_from_sales = cash_units + pos_units
