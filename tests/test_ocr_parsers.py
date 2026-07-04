@@ -792,6 +792,49 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_garbled
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_GARBLED))
     assert len(rows) == 1
     row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.terminal_id == "0b21ee3e-0e48-475b-8246-7fd3b19741ea"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:45"
+    assert row.amount == Decimal("8820")
+
+
+PRODUCTION_OCR_TEXT_260703_15_LIVE_GARBLED = """
+境識別番号:0も21
+2370145
+鍋端末番号
+-750-
+8246-?
+Ob21ee3e-0e48-
+端末話別番号:0621
+精弾
+2026/01八02
+23:01:45
+備端末番号
+475日-
+8246-7
+Ob21ee3e-0e48-
+7fd3b19741ea
+小計
+8,820
+合計
+8,820
+現金売上
+7,840
+PAYGATE POS
+980
+通常取引数
+9
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_live_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_LIVE_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.terminal_id == "0b21ee3e-0e48-475b-8246-7fd3b19741ea"
     assert row.record_date == date(2026, 7, 2)
     assert row.record_time == "23:01:45"
     assert row.amount == Decimal("8820")

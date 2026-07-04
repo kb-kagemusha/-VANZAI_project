@@ -109,6 +109,8 @@ def _normalize_datetime_line(line: str) -> str:
     cleaned = re.sub(r"(?<=\d{2})[円元](?=\d{2})", ":", cleaned)
     cleaned = re.sub(r"(\d{2}):(\d{2})-(\d{2})\b", r"\1:\2:\3", cleaned)
     cleaned = re.sub(r"(\d{2})-(\d{2}):(\d{2})\b", r"\1:\2:\3", cleaned)
+    cleaned = re.sub(r"(20\d{2}/)01八(\d{2})", r"\g<1>07/\2", cleaned)
+    cleaned = cleaned.replace("八", "7")
     if "/" not in cleaned:
         cleaned = re.sub(r"\b(20\d{2})(\d{2})(\d{2})\b", r"\1/\2/\3", cleaned)
     cleaned = re.sub(

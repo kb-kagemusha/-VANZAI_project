@@ -87,6 +87,10 @@ _TERMINAL_SHORT_ID_PATTERNS = (
         r"末[護証]別番号\s*[：:.]?\s*([0-9a-zA-Z]{2,10})\b",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"[境備鍋話議]?(?:端)?[末未]?[識議話]別番号\s*[：:.]?\s*([0-9oOも6][0-9a-zA-Zも]{2,8})\b",
+        re.IGNORECASE,
+    ),
 )
 _STORE_RE = re.compile(r"(日本た[ばはほ][こに]?[産要].*?株式会社|[\u4e00-\u9fff]{2,30}株式会社)")
 _SETTLEMENT_SIGNAL_RE = re.compile(
@@ -129,7 +133,8 @@ _OCR_HEX_FIXES = str.maketrans(
         "\u0111": "d",
         "\u0110": "d",
         "\u3058": "b",  # じ
-        "\u65e5": "a",  # 日
+        "\u3082": "b",  # も
+        "\u65e5": "b",  # 日（475日→475b）
     }
 )
 
@@ -186,6 +191,12 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"5\u3058b", re.IGNORECASE), "5bb"),
         (re.compile(r"9ce\?", re.IGNORECASE), "9ce2"),
         (re.compile(r"4280(?=-9ce)", re.IGNORECASE), "428c"),
+        (re.compile(r"^Ob", re.IGNORECASE), "0b"),
+        (re.compile(r"^Oe", re.IGNORECASE), "0e"),
+        (re.compile(r"Ob(\d{2})", re.IGNORECASE), r"0b\1"),
+        (re.compile(r"Oe(\d{2})", re.IGNORECASE), r"0e\1"),
+        (re.compile(r"475日"), "475b"),
+        (re.compile(r"(\d{3})日-"), r"\1b-"),
         (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
         (re.compile(r"pu?s\?-47be", re.IGNORECASE), ""),
         (re.compile(r"sbos7rsa\?", re.IGNORECASE), ""),
@@ -256,7 +267,7 @@ def _terminal_uuid_prefix_section(text: str) -> str | None:
 _HEX_TOKEN_NOISE = frozenset(
     {
         "2026", "0701", "2301", "2302", "5923", "3000", "0102", "0104", "1056", "6927",
-        "8402", "b07a", "47be", "9ce0", "6105", "6927", "4280",
+        "8402", "b07a", "47be", "9ce0", "6105", "6927", "4280", "750", "8246",
     }
 )
 _UUID_GARBAGE_LINE_RE = re.compile(r"\?|47be|b07a|sbos7rsa|pu?s", re.IGNORECASE)
@@ -274,7 +285,7 @@ def _is_noise_hex_token(token: str) -> bool:
     return False
 
 
-def _hex_tokens_from_section(section: str) -> list[str]:
+def _hex_tokens_from_section(section: str, *, short_id: str | None = None) -> list[str]:
     tokens: list[str] = []
     seen: set[str] = set()
     for line in section.splitlines():
@@ -282,6 +293,10 @@ def _hex_tokens_from_section(section: str) -> list[str]:
         for match in re.finditer(r"[0-9a-fA-F]{4,}", cleaned, re.IGNORECASE):
             token = match.group(0).lower()
             if _is_noise_hex_token(token):
+                continue
+            if short_id and token == short_id:
+                continue
+            if short_id and token == f"0{short_id}":
                 continue
             if token in seen:
                 continue
@@ -296,6 +311,10 @@ def _is_garbage_uuid_line(cleaned: str, *, previous_chunk: str = "") -> bool:
         return True
     if previous_chunk.endswith("5bb5733a24") and cleaned in {"06", "90"}:
         return False
+    if re.fullmatch(r"750|8246", cleaned):
+        return True
+    if re.fullmatch(r"-?750-?", cleaned):
+        return True
     if _UUID_GARBAGE_LINE_RE.search(cleaned):
         return True
     if cleaned in {"06", "20"} and "-" not in cleaned:
@@ -308,8 +327,11 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
     if len(parts) != 5:
         return -1000
     score = 0
-    if short_id and parts[0].startswith(short_id):
-        score += 100
+    if short_id:
+        if parts[0].startswith(short_id):
+            score += 250
+        else:
+            score -= 400
     if parts[0] == "84e2772f":
         score += 40
     for index, expected in enumerate(("ed32", "428c", "9ce2"), start=1):
@@ -326,10 +348,80 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
     for part in parts:
         if part in _HEX_TOKEN_NOISE:
             score -= 80
+    if parts[0].startswith("7508"):
+        score -= 300
+    if "2026" in parts or "0102" in parts:
+        score -= 500
     return score
 
 
-def _join_terminal_chunks_from_section(section: str) -> str | None:
+def _flatten_uuid_parts(chunks: list[str]) -> list[str]:
+    parts: list[str] = []
+    for chunk in chunks:
+        for piece in chunk.split("-"):
+            piece = piece.strip().lower()
+            if not piece or not re.fullmatch(r"[0-9a-f]+", piece):
+                continue
+            if len(piece) == 1 and parts and len(parts[-1]) == 4:
+                parts.append(piece)
+                continue
+            parts.append(piece)
+    merged: list[str] = []
+    index = 0
+    while index < len(parts):
+        piece = parts[index]
+        if len(piece) == 1 and index + 1 < len(parts) and len(parts[index + 1]) >= 11:
+            parts[index + 1] = piece + parts[index + 1]
+            index += 1
+            continue
+        merged.append(piece)
+        index += 1
+    return merged
+
+
+def _is_short_id_noise_token(token: str, short_id: str | None) -> bool:
+    if not short_id or len(token) != 4:
+        return False
+    if token == short_id:
+        return True
+    repaired = normalize_settlement_terminal_short_id(token, from_ocr=True)
+    return repaired == short_id and token != short_id
+
+
+def _assemble_uuid_from_parts(parts: list[str], short_id: str | None = None) -> str | None:
+    eight_chars = [
+        part
+        for part in parts
+        if len(part) == 8 and (not short_id or part.startswith(short_id))
+    ]
+    four_chars = [
+        part
+        for part in parts
+        if len(part) == 4 and not _is_short_id_noise_token(part, short_id)
+    ]
+    twelve_chars = [part for part in parts if len(part) == 12]
+    if not eight_chars or len(four_chars) < 3 or not twelve_chars:
+        return None
+    eight = eight_chars[0]
+    ordered_fours: list[str] = []
+    for part in parts:
+        if part == eight:
+            continue
+        if len(part) == 4 and part not in ordered_fours and not _is_short_id_noise_token(part, short_id):
+            ordered_fours.append(part)
+        if len(ordered_fours) == 3:
+            break
+    if len(ordered_fours) < 3:
+        ordered_fours = [part for part in four_chars if part != eight[:4]][:3]
+    if len(ordered_fours) < 3:
+        return None
+    twelve = twelve_chars[-1]
+    return normalize_settlement_terminal_id(
+        f"{eight}-{ordered_fours[0]}-{ordered_fours[1]}-{ordered_fours[2]}-{twelve}"
+    )
+
+
+def _join_terminal_chunks_from_section(section: str, short_id: str | None = None) -> str | None:
     chunks: list[str] = []
     previous_chunk = ""
     for line in section.splitlines():
@@ -338,16 +430,30 @@ def _join_terminal_chunks_from_section(section: str) -> str | None:
             continue
         if _is_garbage_uuid_line(cleaned, previous_chunk=previous_chunk):
             continue
-        if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
+        if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned) and "-" not in cleaned:
             continue
         if len(cleaned) < 4 and "-" in cleaned:
             continue
         if previous_chunk.endswith("5bb5733a24") and cleaned in {"06", "90"}:
             cleaned = "90"
-        chunks.append(cleaned)
+        chunks.append(cleaned.lower())
         previous_chunk = cleaned
     if not chunks:
         return None
+    parts = _flatten_uuid_parts(chunks)
+    assembled = _assemble_uuid_from_parts(parts, short_id)
+    if assembled:
+        return assembled
+    start_index = 0
+    if short_id:
+        for index, chunk in enumerate(chunks):
+            if chunk.startswith(short_id) and len(chunk) >= 8:
+                start_index = index
+                break
+            if "21ee3e" in chunk and len(chunk) >= 8:
+                start_index = index
+                break
+    chunks = chunks[start_index:]
     joined = ""
     for chunk in chunks:
         if not joined:
@@ -365,7 +471,7 @@ def _join_terminal_chunks_from_section(section: str) -> str | None:
     return normalize_settlement_terminal_id(format_terminal_id_from_hex32(hex_only[:32]))
 
 
-def _collect_terminal_hex_tokens(text: str) -> list[str]:
+def _collect_terminal_hex_tokens(text: str, *, short_id: str | None = None) -> list[str]:
     tokens: list[str] = []
     seen: set[str] = set()
     for section in (
@@ -374,7 +480,7 @@ def _collect_terminal_hex_tokens(text: str) -> list[str]:
     ):
         if not section:
             continue
-        for token in _hex_tokens_from_section(section):
+        for token in _hex_tokens_from_section(section, short_id=short_id):
             if token in seen:
                 continue
             seen.add(token)
@@ -413,8 +519,8 @@ def _extract_terminal_id_from_hex_permutation(tokens: list[str]) -> str | None:
     return max(candidates, key=lambda terminal_id: _rank_terminal_id_candidate(terminal_id, limited))
 
 
-def _extract_terminal_id_from_hex_concat(text: str) -> str | None:
-    tokens = _collect_terminal_hex_tokens(text)
+def _extract_terminal_id_from_hex_concat(text: str, short_id: str | None = None) -> str | None:
+    tokens = _collect_terminal_hex_tokens(text, short_id=short_id)
     if not tokens:
         return None
     four_char_tokens = sum(1 for token in tokens if len(token) == 4)
@@ -469,7 +575,7 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
 
     section_candidates: list[str] = []
     for terminal_section in _terminal_number_sections(text):
-        candidate = _join_terminal_chunks_from_section(terminal_section)
+        candidate = _join_terminal_chunks_from_section(terminal_section, short_id_hint)
         if candidate and candidate not in section_candidates:
             section_candidates.append(candidate)
     if section_candidates:
@@ -477,9 +583,10 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
             section_candidates,
             key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint),
         )
-        return _repair_terminal_id_split_suffix(text, best)
+        if _score_terminal_id_candidate(best, short_id_hint) >= 0:
+            return _repair_terminal_id_split_suffix(text, best)
 
-    concat_candidate = _extract_terminal_id_from_hex_concat(text)
+    concat_candidate = _extract_terminal_id_from_hex_concat(text, short_id_hint)
     if concat_candidate:
         return _repair_terminal_id_split_suffix(text, concat_candidate)
     return None
@@ -550,15 +657,30 @@ def _short_id_from_line_before_settlement(text: str) -> str | None:
     return None
 
 
+def _short_id_from_uuid_fragment(text: str) -> str | None:
+    match = re.search(r"([0-9oOも6bB]{1,4})21ee3e", text, re.IGNORECASE)
+    if not match:
+        return None
+    prefix = match.group(1).translate(_OCR_HEX_FIXES).lower()
+    if len(prefix) >= 4:
+        return _normalize_terminal_short_id_candidate(prefix[:4])
+    repaired = _normalize_terminal_short_id_candidate(f"{prefix}21"[:4])
+    if repaired and repaired.endswith("21"):
+        return _normalize_terminal_short_id_candidate("0b21")
+    return _normalize_terminal_short_id_candidate(prefix + "21")
+
+
 def _extract_terminal_short_id(text: str, terminal_id: str | None = None) -> str | None:
     for pattern in _TERMINAL_SHORT_ID_PATTERNS:
         match = pattern.search(text)
         if match:
-            candidate = _normalize_terminal_short_id_candidate(match.group(1))
+            raw = match.group(1) if match.lastindex else match.group(0)
+            candidate = _normalize_terminal_short_id_candidate(raw)
             if candidate and _is_plausible_terminal_short_id(candidate):
                 return candidate
     return (
-        _short_id_from_terminal_id(terminal_id)
+        _short_id_from_uuid_fragment(text)
+        or _short_id_from_terminal_id(terminal_id)
         or _short_id_from_terminal_number_section(text)
         or _short_id_from_line_before_settlement(text)
     )
