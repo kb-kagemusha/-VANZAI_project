@@ -99,6 +99,14 @@ _GARBLED_TERMINAL_LABEL_RE = re.compile(
     r"[澤矯瑞末未][末未識]?[番]?号|[末未][護証][別]?番号",
     re.IGNORECASE,
 )
+_TERMINAL_SECTION_END_RE = re.compile(
+    r"(?:^|\n)\s*小[計餅訳訁]",
+    re.IGNORECASE,
+)
+_SPLIT_UUID_SUFFIX_RE = re.compile(
+    r"5733a24[^\n]{0,8}\n\s*(?:90|06)\b",
+    re.IGNORECASE,
+)
 _OCR_HEX_FIXES = str.maketrans(
     {
         "\u00e1": "a",
@@ -198,12 +206,18 @@ def _terminal_number_section(text: str) -> str | None:
     return sections[-1] if sections else None
 
 
+def _trim_terminal_section(section: str) -> str:
+    boundary = _TERMINAL_SECTION_END_RE.search(section)
+    if boundary:
+        return section[: boundary.start()]
+    return re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
+
+
 def _terminal_number_sections(text: str) -> list[str]:
     sections: list[str] = []
     for match in re.finditer(r"端末\s*番号", text, re.IGNORECASE):
-        section = text[match.end():]
-        section = re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]
-        sections.append(section)
+        section = text[match.end() :]
+        sections.append(_trim_terminal_section(section))
     if sections:
         return sections
     garbled = _GARBLED_TERMINAL_LABEL_RE.search(text)
@@ -211,8 +225,8 @@ def _terminal_number_sections(text: str) -> list[str]:
         garbled = re.search(r"瑞.{0,2}番号", text, re.IGNORECASE)
     if not garbled:
         return []
-    section = text[garbled.end():]
-    return [re.split(r"(?:^|\n)\s*小計", section, maxsplit=1, flags=re.IGNORECASE)[0]]
+    section = text[garbled.end() :]
+    return [_trim_terminal_section(section)]
 
 
 _UUID_LIKE_LINE_RE = re.compile(
@@ -255,6 +269,8 @@ def _is_noise_hex_token(token: str) -> bool:
         return True
     if len(token) == 2 and re.fullmatch(r"\d{2}", token) is not None:
         return True
+    if len(token) >= 5 and re.fullmatch(r"\d+", token) is not None:
+        return True
     return False
 
 
@@ -274,9 +290,12 @@ def _hex_tokens_from_section(section: str) -> list[str]:
     return tokens
 
 
-def _is_garbage_uuid_line(cleaned: str) -> bool:
+def _is_garbage_uuid_line(cleaned: str, *, previous_chunk: str = "") -> bool:
+    """UUID 折返しの途中行（例: - babd-, -7f8d-）かどうか。"""
     if not cleaned:
         return True
+    if previous_chunk.endswith("5bb5733a24") and cleaned in {"06", "90"}:
+        return False
     if _UUID_GARBAGE_LINE_RE.search(cleaned):
         return True
     if cleaned in {"06", "20"} and "-" not in cleaned:
@@ -312,17 +331,21 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
 
 def _join_terminal_chunks_from_section(section: str) -> str | None:
     chunks: list[str] = []
+    previous_chunk = ""
     for line in section.splitlines():
         cleaned = _clean_hex_line(line).strip("-")
         if len(cleaned) < 2:
             continue
-        if _is_garbage_uuid_line(cleaned):
+        if _is_garbage_uuid_line(cleaned, previous_chunk=previous_chunk):
             continue
         if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
             continue
         if len(cleaned) < 4 and "-" in cleaned:
             continue
+        if previous_chunk.endswith("5bb5733a24") and cleaned in {"06", "90"}:
+            cleaned = "90"
         chunks.append(cleaned)
+        previous_chunk = cleaned
     if not chunks:
         return None
     joined = ""
@@ -403,19 +426,26 @@ def _extract_terminal_id_from_hex_concat(text: str) -> str | None:
         terminal_id = normalize_settlement_terminal_id(format_terminal_id_from_hex32(raw[:32]))
         if terminal_id:
             return terminal_id
+    return _extract_terminal_id_from_hex_permutation(tokens)
 
 
-def _repair_terminal_id_suffix_90(text: str, terminal_id: str | None) -> str | None:
-    """UUID末尾が別行の `90` になっている折返しを結合する。"""
+def _repair_terminal_id_split_suffix(text: str, terminal_id: str | None) -> str | None:
+    """UUID末尾が `5bb5733a24` + 別行2桁（90/06）に折り返された場合を修復する。"""
     if not terminal_id:
         return None
-    if re.search(r"5733a24[^\n]{0,8}\n\s*90\b", text, re.IGNORECASE):
+    if not _SPLIT_UUID_SUFFIX_RE.search(text):
+        return terminal_id
+    parts = terminal_id.split("-")
+    if len(parts) != 5:
+        return terminal_id
+    if parts[4] == "5bb5733a2490":
+        return terminal_id
+    if parts[4].startswith("5bb5733a24"):
         prefix = terminal_id.rsplit("-", 1)[0]
         candidate = normalize_settlement_terminal_id(f"{prefix}-5bb5733a2490")
         if candidate:
             return candidate
     return terminal_id
-    return _extract_terminal_id_from_hex_permutation(tokens)
 
 
 def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | None:
@@ -447,24 +477,12 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
             section_candidates,
             key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint),
         )
-        return _repair_terminal_id_suffix_90(text, best)
+        return _repair_terminal_id_split_suffix(text, best)
 
     concat_candidate = _extract_terminal_id_from_hex_concat(text)
     if concat_candidate:
-        return _repair_terminal_id_suffix_90(text, concat_candidate)
+        return _repair_terminal_id_split_suffix(text, concat_candidate)
     return None
-
-
-def _repair_terminal_id_suffix_90(text: str, terminal_id: str | None) -> str | None:
-    """UUID末尾が別行の `90` になっている折返しを結合する。"""
-    if not terminal_id:
-        return None
-    if re.search(r"5733a24[^\n]{0,8}\n\s*90\b", text, re.IGNORECASE):
-        prefix = terminal_id.rsplit("-", 1)[0]
-        candidate = normalize_settlement_terminal_id(f"{prefix}-5bb5733a2490")
-        if candidate:
-            return candidate
-    return terminal_id
 
 
 def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
