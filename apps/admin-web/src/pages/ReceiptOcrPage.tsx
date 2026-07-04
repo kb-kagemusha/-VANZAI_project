@@ -40,7 +40,7 @@ import {
 import { formatRequestError } from "../lib/formatRequestError";
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
-import { formatOcrValidationMessages } from "../lib/ocr/validationMessages";
+import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
   nextSortDirection,
@@ -855,7 +855,9 @@ function OcrUploadedImageItem({
             </span>
           ) : null}
         </div>
-        {image.error_message ? <p className="ocr-image-error">{image.error_message}</p> : null}
+        {image.error_message ? (
+          <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
+        ) : null}
         <button
           type="button"
           className="ghost-button ocr-inline-delete"
@@ -893,7 +895,9 @@ function OcrUploadedImageItem({
             {image.reused_existing ? "同一画像（再アップロード）" : "同名ファイルあり"}
           </p>
         ) : null}
-        {image.error_message ? <p className="ocr-image-error">{image.error_message}</p> : null}
+        {image.error_message ? (
+          <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
+        ) : null}
         <button
           type="button"
           className="ghost-button ocr-inline-delete"
@@ -1721,7 +1725,7 @@ export function ReceiptOcrPage() {
       render: (row: OcrExtractedRowItem) => {
         if (row.source_type !== "paygate_settlement") return "-";
         if (row.cash_unit_count == null && row.pos_unit_count == null) {
-          return row.unit_breakdown_status ? `未確定 (${row.unit_breakdown_status})` : "-";
+          return row.unit_breakdown_status ? `未確定（${formatUnitBreakdownStatus(row.unit_breakdown_status)}）` : "-";
         }
         return `現金${row.cash_unit_count ?? "?"} / POS${row.pos_unit_count ?? "?"}`;
       },

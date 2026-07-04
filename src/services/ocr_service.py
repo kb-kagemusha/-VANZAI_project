@@ -658,7 +658,7 @@ class OcrService:
                     parsed_rows = parser.parse(ocr_result)
                 if not parsed_rows:
                     image.parse_status = "failed"
-                    image.error_message = "No structured rows extracted"
+                    image.error_message = "レシートから有効なデータを抽出できませんでした"
                     image.last_job_id = job.id
                     failed_count += 1
                     continue
