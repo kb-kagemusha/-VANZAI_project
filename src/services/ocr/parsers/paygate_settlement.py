@@ -121,7 +121,7 @@ _OCR_HEX_FIXES = str.maketrans(
 
 _AMOUNT_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("subtotal", ("小計",)),
-    ("total", ("合計", "会計")),
+    ("total", ("合計", "会計", "今計")),
     ("cash", ("現金売上", "現会売上")),
     ("credit", ("クレジット売上", "クレヅット売上")),
     ("pos", ("PAYGATE POS",)),
@@ -171,6 +171,10 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"(?<![0-9a-f])[23]d32", re.IGNORECASE), "ed32"),
         (re.compile(r"5\u3058b", re.IGNORECASE), "5bb"),
         (re.compile(r"9ce\?", re.IGNORECASE), "9ce2"),
+        (re.compile(r"4280(?=-9ce)", re.IGNORECASE), "428c"),
+        (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
+        (re.compile(r"pu?s\?-47be", re.IGNORECASE), ""),
+        (re.compile(r"sbos7rsa\?", re.IGNORECASE), ""),
     )
     for pattern, replacement in replacements:
         normalized = pattern.sub(replacement, normalized)
@@ -230,8 +234,12 @@ def _terminal_uuid_prefix_section(text: str) -> str | None:
 
 
 _HEX_TOKEN_NOISE = frozenset(
-    {"2026", "0701", "2301", "2302", "5923", "3000", "0102", "0104", "1056", "6927", "8402"}
+    {
+        "2026", "0701", "2301", "2302", "5923", "3000", "0102", "0104", "1056", "6927",
+        "8402", "b07a", "47be", "9ce0", "6105", "6927", "4280",
+    }
 )
+_UUID_GARBAGE_LINE_RE = re.compile(r"\?|47be|b07a|sbos7rsa|pu?s", re.IGNORECASE)
 
 
 def _is_noise_hex_token(token: str) -> bool:
@@ -256,11 +264,43 @@ def _hex_tokens_from_section(section: str) -> list[str]:
     return tokens
 
 
+def _is_garbage_uuid_line(cleaned: str) -> bool:
+    if not cleaned:
+        return True
+    if _UUID_GARBAGE_LINE_RE.search(cleaned):
+        return True
+    if cleaned in {"06", "20"} and "-" not in cleaned:
+        return True
+    return False
+
+
+def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) -> int:
+    parts = terminal_id.split("-")
+    if len(parts) != 5:
+        return -1000
+    score = 0
+    if short_id and parts[0].startswith(short_id):
+        score += 100
+    if parts[0] == "84e2772f":
+        score += 40
+    for index, expected in enumerate(("ed32", "428c", "9ce2"), start=1):
+        if parts[index] == expected:
+            score += 35
+    if parts[4].startswith("5bb5733a249"):
+        score += 50
+    for part in parts:
+        if part in _HEX_TOKEN_NOISE:
+            score -= 80
+    return score
+
+
 def _join_terminal_chunks_from_section(section: str) -> str | None:
     chunks: list[str] = []
     for line in section.splitlines():
         cleaned = _clean_hex_line(line).strip("-")
         if len(cleaned) < 2:
+            continue
+        if _is_garbage_uuid_line(cleaned):
             continue
         if not re.fullmatch(r"[0-9a-fA-F-]+", cleaned):
             continue
@@ -350,7 +390,7 @@ def _extract_terminal_id_from_hex_concat(text: str) -> str | None:
     return _extract_terminal_id_from_hex_permutation(tokens)
 
 
-def _extract_terminal_id(text: str) -> str | None:
+def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | None:
     split_match = _TERMINAL_SPLIT_RE.search(text)
     if split_match:
         candidate = normalize_settlement_terminal_id(f"{split_match.group(1)}{split_match.group(2)}")
@@ -369,19 +409,21 @@ def _extract_terminal_id(text: str) -> str | None:
         if candidate:
             return candidate
 
-    section = _terminal_number_section(text)
-    if section is None:
-        return _extract_terminal_id_from_hex_concat(text)
-
     section_candidates: list[str] = []
-    for terminal_section in reversed(_terminal_number_sections(text)):
+    for terminal_section in _terminal_number_sections(text):
         candidate = _join_terminal_chunks_from_section(terminal_section)
         if candidate and candidate not in section_candidates:
             section_candidates.append(candidate)
     if section_candidates:
-        return section_candidates[0]
+        return max(
+            section_candidates,
+            key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint),
+        )
 
-    return _extract_terminal_id_from_hex_concat(text)
+    concat_candidate = _extract_terminal_id_from_hex_concat(text)
+    if concat_candidate:
+        return concat_candidate
+    return None
 
 
 def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
@@ -520,6 +562,33 @@ def _extract_labeled_amount(
     return None, None
 
 
+_GARBLED_AMOUNT_PATTERNS: tuple[tuple[re.Pattern[str], str, bool], ...] = (
+    (re.compile(r"小[計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "subtotal", False),
+    (re.compile(r"[今会][計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "total", False),
+    (re.compile(r"現金売[丁上][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "cash", True),
+)
+
+
+def _extract_garbled_label_amounts(
+    text: str,
+) -> tuple[dict[str, Decimal | None], dict[str, str]]:
+    amounts: dict[str, Decimal | None] = {}
+    corrections: dict[str, str] = {}
+    for pattern, key, sales_field in _GARBLED_AMOUNT_PATTERNS:
+        if key in amounts and amounts[key] is not None:
+            continue
+        match = pattern.search(text)
+        if not match:
+            continue
+        sanitize = sanitize_settlement_sales_amount if sales_field else sanitize_settlement_amount
+        amount, corrected_from = sanitize(match.group(1))
+        if amount is not None:
+            amounts[key] = amount
+        if corrected_from:
+            corrections[key] = corrected_from
+    return amounts, corrections
+
+
 def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], dict[str, str]]:
     amounts: dict[str, Decimal | None] = {}
     corrections: dict[str, str] = {}
@@ -534,6 +603,11 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
             amounts[key] = amount
         if corrected_from:
             corrections[key] = corrected_from
+    garbled_amounts, garbled_corrections = _extract_garbled_label_amounts(text)
+    for key, value in garbled_amounts.items():
+        if amounts.get(key) is None and value is not None:
+            amounts[key] = value
+    corrections.update({k: v for k, v in garbled_corrections.items() if k not in corrections})
     amounts = repair_settlement_amounts(text, amounts)
     return amounts, corrections
 
@@ -549,11 +623,13 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = text.replace("\r\n", "\n")
     normalized = normalized.replace("　", " ")
     normalized = re.sub(r"現会売上", "現金売上", normalized)
-    normalized = re.sub(r"クレンット元上", "クレジット売上", normalized)
-    normalized = re.sub(r"消責税", "消費税", normalized)
-    normalized = re.sub(r"(?:澤|矯)?末[護証]別番号", "端末識別番号", normalized)
-    normalized = re.sub(r"[澤矯瑞][末未]番号", "端末番号", normalized)
-    normalized = re.sub(r"岡条番号", "端末番号", normalized)
+    normalized = re.sub(r"現金売[丁上]", "現金売上", normalized)
+    normalized = re.sub(r"クレンット元上|クレンチE允E|クレンチE売", "クレジット売上", normalized)
+    normalized = re.sub(r"消責税|消賛稁|消費稁", "消費税", normalized)
+    normalized = re.sub(r"(?:澤|矯|携)?末[護証藤]別番号", "端末識別番号", normalized)
+    normalized = re.sub(r"[澤矯瑞市][末未]番号|末香号|末番号|岡条番号", "端末番号", normalized)
+    normalized = re.sub(r"小[計訳訁]", "小計", normalized)
+    normalized = re.sub(r"[今会][計訳訁]", "合計", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",
         "PAYGATE POS",
@@ -607,7 +683,8 @@ class PaygateSettlementParser(BaseOcrParser):
 
         record_date, record_time, parsed_datetime_source = _extract_settlement_datetime(text)
         amounts, amount_corrections = _extract_settlement_amounts(text)
-        terminal_id = _extract_terminal_id(text)
+        terminal_short_id_hint = _extract_terminal_short_id(text, None)
+        terminal_id = _extract_terminal_id(text, terminal_short_id_hint)
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         store_match = _STORE_RE.search(text)
 

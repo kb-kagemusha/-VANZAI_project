@@ -77,6 +77,10 @@ def repair_settlement_amounts(
         if value is not None and value > 0 and not is_valid_settlement_unit_sales_amount(value):
             repaired[key] = Decimal(0)
 
+    credit = repaired.get("credit")
+    if credit is not None and 0 < credit < 100 and not is_valid_settlement_unit_sales_amount(credit):
+        repaired["credit"] = Decimal(0)
+
     for index, line in enumerate(lines):
         compact = _compact(line)
         if compact in {"-その他", "その他"} or compact.startswith("-その他"):
@@ -137,6 +141,18 @@ def repair_settlement_amounts(
         break
 
     _infer_sales_from_total(repaired)
+
+    if repaired.get("total") is None:
+        cash = repaired.get("cash")
+        subtotal = repaired.get("subtotal")
+        credit = repaired.get("credit") or Decimal(0)
+        pos = repaired.get("pos") or Decimal(0)
+        other = repaired.get("other") or Decimal(0)
+        if cash is not None and _accept_sales_amount(cash):
+            if credit == 0 and pos == 0 and other == 0:
+                repaired["total"] = cash
+            elif subtotal is not None and subtotal == cash:
+                repaired["total"] = cash
 
     other = repaired.get("other")
     pos = repaired.get("pos")
