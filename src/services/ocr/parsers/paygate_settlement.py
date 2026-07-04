@@ -10,6 +10,7 @@ from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
 from src.services.ocr.parsers.settlement_amount import (
+    is_valid_settlement_unit_sales_amount,
     sanitize_settlement_amount,
     sanitize_settlement_sales_amount,
 )
@@ -522,7 +523,7 @@ def _infer_transaction_count_from_sales(
     ocr_count: int | None,
 ) -> int | None:
     cash_yen = int(cash_sales or 0)
-    pos_yen = int(pos_sales or 0)
+    pos_yen = int(pos_sales or 0) if is_valid_settlement_unit_sales_amount(pos_sales) else 0
     if cash_yen > 0 and pos_yen == 0 and cash_yen % 980 == 0:
         units = cash_yen // 980
         if 1 <= units <= 99 and ocr_count != units:
