@@ -251,7 +251,11 @@ _UUID_GARBAGE_LINE_RE = re.compile(r"\?|47be|b07a|sbos7rsa|pu?s", re.IGNORECASE)
 def _is_noise_hex_token(token: str) -> bool:
     if token in _HEX_TOKEN_NOISE:
         return True
-    return len(token) == 4 and re.fullmatch(r"\d{4}", token) is not None
+    if len(token) == 4 and re.fullmatch(r"\d{4}", token) is not None:
+        return True
+    if len(token) == 2 and re.fullmatch(r"\d{2}", token) is not None:
+        return True
+    return False
 
 
 def _hex_tokens_from_section(section: str) -> list[str]:
@@ -298,6 +302,8 @@ def _score_terminal_id_candidate(terminal_id: str, short_id: str | None = None) 
         score += 25
     if parts[4].endswith("06"):
         score -= 25
+    if re.search(r"15$", parts[4]) and not parts[4].endswith("2490"):
+        score -= 40
     for part in parts:
         if part in _HEX_TOKEN_NOISE:
             score -= 80
