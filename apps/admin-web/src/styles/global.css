@@ -1922,3 +1922,48 @@ button {
     transform: translateY(0) scale(1);
   }
 }
+
+.ocr-parse-progress {
+  margin-top: 0.85rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.96), rgba(255, 249, 238, 0.92));
+}
+
+.ocr-parse-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.ocr-parse-progress-header strong {
+  color: var(--ink);
+}
+
+.ocr-parse-progress-header span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.ocr-parse-progress-bar {
+  height: 0.65rem;
+  border-radius: 999px;
+  background: rgba(29, 39, 49, 0.08);
+  overflow: hidden;
+}
+
+.ocr-parse-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c8553d 0%, #d98f2b 100%);
+  transition: width 240ms ease;
+}
+
+.ocr-parse-progress-meta {
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}

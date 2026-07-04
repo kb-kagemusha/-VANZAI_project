@@ -7,6 +7,7 @@ import { DataTable } from "../components/DataTable";
 import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
+import { OcrParseProgress } from "../components/OcrParseProgress";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import {
@@ -39,6 +40,11 @@ import {
 } from "../lib/api/client";
 import { formatRequestError } from "../lib/formatRequestError";
 import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
+import {
+  runBatchedOcrParse,
+  type OcrBatchParseResult,
+  type OcrParseProgressState,
+} from "../lib/ocr/batchParse";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
@@ -1049,6 +1055,10 @@ export function ReceiptOcrPage() {
     const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
     return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
   });
+  const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
+  const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const isParsingRef = useRef(false);
 
   const rowsQuery = useQuery({
     queryKey: ["ocr-rows", selectedPeriodKey],
@@ -1116,6 +1126,93 @@ export function ReceiptOcrPage() {
     });
   }, []);
 
+  const listRetryTargets = useCallback(async (candidateIds: string[]) => {
+    if (!candidateIds.length) {
+      return [];
+    }
+    const candidateSet = new Set(candidateIds);
+    const [pending, failed] = await Promise.all([
+      listOcrImages({ parse_status: "pending", limit: 500 }),
+      listOcrImages({ parse_status: "failed", limit: 500 }),
+    ]);
+    const targets = new Set<string>();
+    for (const item of [...pending.items, ...failed.items]) {
+      if (candidateSet.has(item.id)) {
+        targets.add(item.id);
+      }
+    }
+    return Array.from(targets);
+  }, []);
+
+  const invalidateParseQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["ocr-rows"] }),
+      queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] }),
+      queryClient.invalidateQueries({ queryKey: ["ocr-images"] }),
+      queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] }),
+    ]);
+  }, [queryClient]);
+
+  const handleParseImages = useCallback(async () => {
+    const images = parseTargetsQuery.data ?? [];
+    if (!images.length || isParsingRef.current) {
+      return;
+    }
+
+    isParsingRef.current = true;
+    setIsParsing(true);
+    setParseResultSummary(null);
+    setFormError(null);
+
+    try {
+      const result = await runBatchedOcrParse({
+        images,
+        parseBatch: parseOcrImages,
+        listRetryTargets,
+        onProgress: setParseProgress,
+      });
+      setParseResultSummary(result);
+      await invalidateParseQueries();
+      setSelectedImageIds([]);
+
+      if (result.timedOut) {
+        const message = `10分の上限に達したため解析を中断しました。成功 ${result.successCount} 件 / 未完了・失敗 ${result.failedCount} 件。残りは再度「解析」を押してください。`;
+        setFormError(message);
+        showNotification({
+          tone: "warning",
+          title: "解析が時間上限で中断されました",
+          message,
+        });
+        return;
+      }
+
+      if (result.failedCount > 0) {
+        const message = `解析完了: 成功 ${result.successCount} 件 / 失敗 ${result.failedCount} 件。失敗した画像のエラー内容を下の一覧で確認してください。`;
+        setFormError(message);
+        showNotification({
+          tone: "warning",
+          title: "一部の画像の解析に失敗しました",
+          message,
+        });
+        return;
+      }
+
+      setFormError(null);
+    } catch (error) {
+      const formatted = formatRequestError(error, "解析に失敗しました");
+      setFormError(formatted.message);
+      showNotification({
+        tone: "error",
+        title: formatted.title,
+        message: formatted.message,
+        detail: formatted.detail,
+      });
+    } finally {
+      isParsingRef.current = false;
+      setIsParsing(false);
+    }
+  }, [invalidateParseQueries, listRetryTargets, parseTargetsQuery.data, showNotification]);
+
   const uploadMutation = useMutation({
     mutationFn: async () => {
       const images: OcrSourceImageItem[] = [];
@@ -1138,38 +1235,6 @@ export function ReceiptOcrPage() {
     },
     onError: (error) => {
       const formatted = formatRequestError(error, "画像アップロードに失敗しました");
-      setFormError(formatted.message);
-      showNotification({
-        tone: "error",
-        title: formatted.title,
-        message: formatted.message,
-        detail: formatted.detail,
-      });
-    },
-  });
-
-  const parseMutation = useMutation({
-    mutationFn: async (imageIds: string[]) => parseOcrImages(imageIds),
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
-      await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
-      await queryClient.invalidateQueries({ queryKey: ["ocr-images-parse-targets"] });
-      setSelectedImageIds([]);
-      if (result.failed_count > 0) {
-        const message = `成功 ${result.success_count} 件 / 失敗 ${result.failed_count} 件。失敗した画像のエラー内容を下の一覧で確認してください。`;
-        setFormError(message);
-        showNotification({
-          tone: "warning",
-          title: "一部の画像の解析に失敗しました",
-          message,
-        });
-        return;
-      }
-      setFormError(null);
-    },
-    onError: (error) => {
-      const formatted = formatRequestError(error, "解析に失敗しました");
       setFormError(formatted.message);
       showNotification({
         tone: "error",
@@ -1960,10 +2025,10 @@ export function ReceiptOcrPage() {
               <button
                 type="button"
                 className="primary-button"
-                disabled={!imageIdsToParse.length || parseMutation.isPending}
-                onClick={() => parseMutation.mutate(imageIdsToParse)}
+                disabled={!imageIdsToParse.length || isParsing}
+                onClick={() => void handleParseImages()}
               >
-                {parseMutation.isPending ? "解析中..." : `解析 (${imageIdsToParse.length}枚)`}
+                {isParsing ? "解析中..." : `解析 (${imageIdsToParse.length}枚)`}
               </button>
               <button
                 type="button"
@@ -1982,10 +2047,11 @@ export function ReceiptOcrPage() {
                 {deleteImagesMutation.isPending ? "削除中..." : `選択を削除 (${selectedImageIds.length})`}
               </button>
             </div>
-            {parseMutation.data ? (
+            {parseProgress ? <OcrParseProgress progress={parseProgress} /> : null}
+            {parseResultSummary && !isParsing ? (
               <p className="upload-help">
-                解析完了: 成功 {parseMutation.data.success_count} / 失敗 {parseMutation.data.failed_count} / 抽出行{" "}
-                {parseMutation.data.row_count}
+                解析完了: 成功 {parseResultSummary.successCount} / 失敗 {parseResultSummary.failedCount}
+                {parseResultSummary.timedOut ? "（時間上限で中断）" : ""}
               </p>
             ) : null}
             {imagesQuery.isLoading ? (
