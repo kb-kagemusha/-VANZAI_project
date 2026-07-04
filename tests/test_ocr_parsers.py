@@ -624,6 +624,36 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
     assert row.transaction_count == 6
 
 
+PRODUCTION_OCR_TEXT_260703_8 = """
+端末識別番号:6bfá
+精算
+2026/06/29
+23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-
+\u01119ecf7f5cb39
+小計
+13,920
+合計
+13,920
+現金売上
+13,920
+通常取引数
+4
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_8():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_8))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "6bfa"
+    assert row.terminal_id == "6bfac729-2983-40e1-8785-d9ecf7f5cb39"
+    assert row.amount == Decimal("3920")
+    assert row.transaction_count == 4
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_19))

@@ -56,7 +56,14 @@ _TXN_COUNT_PATTERNS = (
     re.compile(r"通常取引数\s*[：:]?\s*\n\s*(\d+)\s*(?:\n|$)"),
 )
 _TERMINAL_SHORT_ID_PATTERNS = (
-    re.compile(r"(?:端末|端未)\s*(?:識別|認別|職別)\s*番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
+    re.compile(
+        r"(?:端末|端未)\s*(?:識別|認別|職別)\s*番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:端末|端未)(?:識別|認別|職別)番号[：:]?([0-9a-zA-Z]{2,10})\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"(?:識別|認別|職別)\s*番号\s*[：:]?\s*([0-9a-zA-Z]{2,10})\b", re.IGNORECASE),
     re.compile(
         r"(?:端末|端未)\s*(?:識別|認別|職別)\s*番号\s*[：:]?\s*(?:\n|\r\n)\s*([0-9a-zA-Z]{2,10})\b",
@@ -87,6 +94,8 @@ _OCR_HEX_FIXES = str.maketrans(
         "l": "1",
         "G": "0",
         "g": "0",
+        "\u0111": "d",
+        "\u0110": "d",
     }
 )
 

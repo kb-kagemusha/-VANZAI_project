@@ -35,8 +35,8 @@ def _preprocess_settlement_band(
 
 
 def preprocess_settlement_header_band(image_bytes: bytes) -> np.ndarray:
-    """Header band: store name, registration, terminal short id."""
-    return _preprocess_settlement_band(image_bytes, y0=0.06, y1=0.26, scale=4.0)
+    """Header band: 端末識別番号・登録番号（画像上端ギリギリの印字向け）。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.0, y1=0.22, scale=4.0)
 
 
 def preprocess_settlement_terminal_band(image_bytes: bytes) -> np.ndarray:
@@ -45,8 +45,9 @@ def preprocess_settlement_terminal_band(image_bytes: bytes) -> np.ndarray:
 
 
 def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
-    """Run focused terminal-band OCR first, then default passes, and merge line texts."""
+    """Run focused header/terminal band OCR first, then default passes, and merge."""
     return merge_ocr_results(
+        run_ocr(preprocess_settlement_header_band(image_bytes)),
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
         run_ocr(preprocess_for_ocr(image_bytes)),
         run_ocr(preprocess_upscaled_for_ocr(image_bytes, scale=2.0, max_width=2800)),

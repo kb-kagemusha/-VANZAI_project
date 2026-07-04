@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _SETTLEMENT_TERMINAL_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -29,8 +30,15 @@ _OCR_SHORT_ID_FIXES = str.maketrans(
         "l": "1",
         "G": "0",
         "g": "0",
+        "\u0111": "d",
+        "\u0110": "d",
     }
 )
+
+
+def _fold_ocr_accents(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", value)
+    return "".join(char for char in folded if not unicodedata.combining(char))
 
 
 def format_terminal_id_from_hex32(hex_only: str) -> str:
@@ -50,7 +58,7 @@ def normalize_settlement_terminal_id(value: str | None) -> str | None:
     """Return canonical terminal_id or None if the value does not match the rules."""
     if not value:
         return None
-    cleaned = value.strip().lower().replace(" ", "")
+    cleaned = _fold_ocr_accents(value.strip().lower()).translate(_OCR_SHORT_ID_FIXES).replace(" ", "")
     if _SETTLEMENT_TERMINAL_ID_RE.fullmatch(cleaned):
         return cleaned
     hex_only = re.sub(r"[^0-9a-f]", "", cleaned)
@@ -67,7 +75,7 @@ def normalize_settlement_terminal_short_id(
     """端末識別番号を正規化する。必ず4桁16進（0-9a-f）。"""
     if not value:
         return None
-    translated = value.strip().translate(_OCR_SHORT_ID_FIXES)
+    translated = _fold_ocr_accents(value.strip()).translate(_OCR_SHORT_ID_FIXES)
     candidate = re.sub(r"[^0-9a-fA-F]", "", translated).lower()
     if from_ocr:
         if len(candidate) < 4:
