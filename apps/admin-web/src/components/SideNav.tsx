@@ -85,6 +85,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
             <NavLink
               key={item.to}
               to={item.to}
+              aria-label={collapsed ? item.label : undefined}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
             >
               {Icon ? (
