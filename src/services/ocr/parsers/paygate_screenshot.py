@@ -7,6 +7,7 @@ from src.services.ocr.confirm_metadata import metadata_from_parsed_fields
 from src.services.ocr.dedupe import dedupe_paygate_screenshot_rows
 from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
+from src.services.ocr.parsers.ocr_field_confidence import build_paygate_screenshot_field_confidence
 from src.services.ocr.parsers.paygate_amount import extract_paygate_amount
 from src.services.ocr.parsers.paygate_consensus import apply_paygate_image_consensus
 from src.services.ocr.parsers.paygate_datetime import extract_paygate_datetime, normalize_paygate_ocr_text
@@ -128,6 +129,13 @@ class PaygateScreenshotParser(BaseOcrParser):
             parsed.amount_source = meta.amount_source
             parsed.datetime_source = meta.datetime_source
             parsed.confirm_required = meta.confirm_required
+            field_confidence, field_sources = build_paygate_screenshot_field_confidence(
+                ocr_result,
+                parsed,
+                amount_meta=amount_meta,
+            )
+            parsed.raw_payload["field_confidence"] = field_confidence
+            parsed.raw_payload["field_sources"] = field_sources
             if not is_paygate_row_saveable(parsed):
                 continue
             rows.append(parsed)

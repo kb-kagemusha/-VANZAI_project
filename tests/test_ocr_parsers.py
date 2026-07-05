@@ -198,6 +198,8 @@ def test_paygate_screenshot_parser_extracts_rows():
     assert rows[0].receipt_no == "7782464677325"
     assert rows[0].amount == Decimal("980")
     assert rows[0].period_key == "202605"
+    assert rows[0].raw_payload.get("field_confidence", {}).get("amount", 0) > 0
+    assert rows[0].raw_payload.get("field_confidence", {}).get("transaction_no", 0) > 0
 
 
 def test_paygate_settlement_parser_extracts_summary():

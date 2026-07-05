@@ -28,7 +28,7 @@ from src.services.ocr.parsers.settlement_layout import (
     extract_settlement_datetime,
     merge_layout_amounts,
 )
-from src.services.ocr.parsers.settlement_field_confidence import build_settlement_field_confidence
+from src.services.ocr.parsers.ocr_field_confidence import build_settlement_field_confidence
 from src.services.ocr.parsers.settlement_transaction_count import (
     extract_transaction_count_before_cash_blank,
 )

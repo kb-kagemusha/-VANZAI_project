@@ -1905,8 +1905,8 @@ export function ReceiptOcrPage() {
       header: "操作",
       render: (row: OcrExtractedRowItem) => (
         <div className="ocr-row-actions">
-          <button type="button" className="ghost-button" onClick={() => setEditingRow(row)}>
-            編集
+          <button type="button" className="ghost-button" onClick={() => setReviewingRow(row)}>
+            確認
           </button>
           {row.source_type === "paygate_settlement" && row.status !== "confirmed" ? (
             <OcrParseProgressHover

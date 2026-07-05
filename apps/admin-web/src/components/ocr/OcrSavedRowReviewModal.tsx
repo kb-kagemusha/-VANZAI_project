@@ -110,23 +110,29 @@ const SCREENSHOT_REVIEW_FIELDS: ReviewFieldSpec[] = [
   },
   {
     key: "amount",
-    label: "金額（合計）",
+    label: "金額",
     confidenceKey: "amount",
     formatDisplay: (draft) => (draft.amount ? formatCurrency(draft.amount) : "—"),
   },
   {
     key: "transaction_no",
     label: "取引番号",
+    confidenceKey: "transaction_no",
+    inputMode: "numeric",
     formatDisplay: (draft) => draft.transaction_no || "—",
   },
   {
     key: "receipt_no",
     label: "レシート番号",
+    confidenceKey: "receipt_no",
+    inputMode: "numeric",
+    monospace: true,
     formatDisplay: (draft) => draft.receipt_no || "—",
   },
   {
     key: "payment_method",
     label: "決済方法",
+    confidenceKey: "payment_method",
     formatDisplay: (draft) => draft.payment_method || "—",
   },
 ];
@@ -377,7 +383,9 @@ export function OcrSavedRowReviewModal({
           )}
         </div>
         <div className="ocr-row-review-data-pane">
-          <h3 id="ocr-row-review-title">{isSettlement ? "精算レシートを確認" : "OCR行を確認"}</h3>
+          <h3 id="ocr-row-review-title">
+            {isSettlement ? "精算レシートを確認" : "Paygate SSを確認"}
+          </h3>
           <div className="ocr-row-review-summary">
             <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
               {row.source_image_filename || row.source_image_id}
