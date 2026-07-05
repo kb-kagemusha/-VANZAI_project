@@ -8,6 +8,7 @@ import { AppNotification, type AppNotificationState } from "../components/AppNot
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { OcrSavedRowReviewModal } from "../components/ocr/OcrSavedRowReviewModal";
+import { OcrFieldConfidenceLegend } from "../components/ocr/OcrFieldConfidence";
 import { OcrRowConfidenceCell } from "../components/ocr/OcrRowConfidenceCell";
 import { SettlementTerminalIdDisplay } from "../components/ocr/SettlementTerminalIdDisplay";
 import {
@@ -1960,7 +1961,7 @@ export function ReceiptOcrPage() {
           <button type="button" className="ghost-button" onClick={() => setReviewingRow(row)}>
             確認
           </button>
-          {row.source_type === "paygate_settlement" && row.status !== "confirmed" ? (
+          {row.status !== "confirmed" ? (
             <OcrParseProgressHover
               progress={
                 reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? reparseProgress : null
@@ -2460,6 +2461,9 @@ export function ReceiptOcrPage() {
             <ErrorState title="解析結果の取得に失敗しました" description="API 接続または権限を確認してください。" />
           ) : (
             <>
+              <div className="ocr-saved-data-confidence-legend">
+                <OcrFieldConfidenceLegend />
+              </div>
               <DataTable
                 columns={visibleRowColumns}
                 rows={paginatedSavedRows}
@@ -2520,9 +2524,7 @@ export function ReceiptOcrPage() {
           }}
           confirming={confirmMutation.isPending}
           onReparse={
-            reviewingRowLive.source_type === "paygate_settlement" && reviewingRowLive.status !== "confirmed"
-              ? () => reparseRowMutation.mutate(reviewingRowLive.id)
-              : undefined
+            reviewingRowLive.status !== "confirmed" ? () => reparseRowMutation.mutate(reviewingRowLive.id) : undefined
           }
           reparsing={reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id}
           reparseProgress={

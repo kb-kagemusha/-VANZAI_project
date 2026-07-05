@@ -31,6 +31,7 @@ export function OcrRowConfidenceCell({
       confidence={confidence}
       source={row.field_sources?.[confidenceKey]}
       className={className}
+      showPercent={false}
     />
   );
 }

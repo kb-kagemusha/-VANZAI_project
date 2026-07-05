@@ -301,7 +301,7 @@ def reparse_ocr_row(
     _ensure_ocr_permission(current_user)
     service = OcrService(db)
     try:
-        job = service.reparse_settlement_row(row_id=row_id, executed_by=current_user.username)
+        job = service.reparse_row(row_id=row_id, executed_by=current_user.username)
         db.commit()
     except ValueError as exc:
         db.rollback()

@@ -76,6 +76,8 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
         }}
         confidence={confidence}
         source={source}
+        showPercent
+        variant="review"
       />
     ),
   },
@@ -262,7 +264,7 @@ function OcrReviewFieldRow({
             {customDisplay ? (
               customDisplay
             ) : confidence != null ? (
-              <OcrFieldConfidenceValue value={displayValue} confidence={confidence} source={source} />
+              <OcrFieldConfidenceValue value={displayValue} confidence={confidence} source={source} showPercent />
             ) : (
               displayValue
             )}
@@ -477,7 +479,7 @@ export function OcrSavedRowReviewModal({
             <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
               閉じる
             </button>
-            {isSettlement && row.status !== "confirmed" && onReparse ? (
+            {row.status !== "confirmed" && onReparse ? (
               <OcrParseProgressHover progress={reparseProgress ?? null} active={Boolean(reparsing)}>
                 <button
                   type="button"

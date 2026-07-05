@@ -1,6 +1,6 @@
 import type { OcrExtractedRowItem } from "../../types/api";
-import { getOcrFieldConfidenceClassName, getOcrFieldConfidenceTone } from "../../lib/ocr/fieldConfidence";
 import { shouldShowOcrFieldConfidence } from "./OcrRowConfidenceCell";
+import { OcrFieldConfidenceValue } from "./OcrFieldConfidence";
 
 export type TerminalIdSegments = {
   eight?: string;
@@ -44,6 +44,8 @@ export function SettlementTerminalIdDisplay({
   source,
   showPartialBadge = true,
   showConfidence = true,
+  showPercent = false,
+  variant = "table",
   className,
 }: {
   row: Pick<OcrExtractedRowItem, "terminal_id" | "terminal_id_partial" | "terminal_id_segments" | "status">;
@@ -51,6 +53,8 @@ export function SettlementTerminalIdDisplay({
   source?: string | null;
   showPartialBadge?: boolean;
   showConfidence?: boolean;
+  showPercent?: boolean;
+  variant?: "table" | "review";
   className?: string;
 }) {
   const isPartial = Boolean(row.terminal_id_partial && row.terminal_id_segments);
@@ -62,7 +66,15 @@ export function SettlementTerminalIdDisplay({
       : ["—", ""];
 
   const lines = (
-    <span className={["ocr-terminal-id-display", className].filter(Boolean).join(" ")}>
+    <span
+      className={[
+        "ocr-terminal-id-display",
+        variant === "review" ? "ocr-terminal-id-display--review" : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <span className="ocr-terminal-id-display-line">{line1}</span>
       {line2 && line2 !== "—" ? <span className="ocr-terminal-id-display-line">{line2}</span> : null}
     </span>
@@ -71,12 +83,12 @@ export function SettlementTerminalIdDisplay({
   return (
     <span className="ocr-terminal-id-cell">
       {effectiveConfidence != null ? (
-        <span
-          className={getOcrFieldConfidenceClassName(getOcrFieldConfidenceTone(effectiveConfidence))}
-          title={source ? `抽出: ${source}` : undefined}
-        >
-          {lines}
-        </span>
+        <OcrFieldConfidenceValue
+          value={lines}
+          confidence={effectiveConfidence}
+          source={source}
+          showPercent={showPercent}
+        />
       ) : (
         lines
       )}

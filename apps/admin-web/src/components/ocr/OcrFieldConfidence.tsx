@@ -24,11 +24,13 @@ export function OcrFieldConfidenceValue({
   confidence,
   source,
   className,
+  showPercent = true,
 }: {
   value: ReactNode;
   confidence?: number | null;
   source?: string | null;
   className?: string;
+  showPercent?: boolean;
 }) {
   const tone = getOcrFieldConfidenceTone(confidence);
   const percent = formatOcrFieldConfidencePercent(confidence);
@@ -42,7 +44,7 @@ export function OcrFieldConfidenceValue({
   return (
     <span className={[getOcrFieldConfidenceClassName(tone), className].filter(Boolean).join(" ")} title={title || undefined}>
       {value}
-      {percent ? <span className="ocr-field-confidence-badge">{percent}</span> : null}
+      {showPercent && percent ? <span className="ocr-field-confidence-badge">{percent}</span> : null}
     </span>
   );
 }

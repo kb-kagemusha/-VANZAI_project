@@ -272,6 +272,61 @@ def _recompute_settlement_row_metadata(session: Session, row: OcrExtractedRow) -
             apply_settlement_derived_fields(other_row)
 
 
+def _find_parsed_row_for_screenshot_reparse(
+    target: OcrExtractedRow,
+    parsed_rows: list[ParsedOcrRow],
+) -> ParsedOcrRow | None:
+    """Match one parsed SS row to an existing DB row during targeted reparse."""
+    saveable = [parsed for parsed in parsed_rows if is_paygate_row_saveable(parsed)]
+    if not saveable:
+        return None
+
+    target_txn = target.transaction_no
+    target_receipt = target.receipt_no
+    target_block = (target.raw_payload or {}).get("block")
+
+    for parsed in saveable:
+        if (
+            target_txn
+            and target_receipt
+            and parsed.transaction_no == target_txn
+            and parsed.receipt_no == target_receipt
+        ):
+            return parsed
+
+    if target_block:
+        for parsed in saveable:
+            if (parsed.raw_payload or {}).get("block") == target_block:
+                return parsed
+
+    if target_txn:
+        txn_matches = [parsed for parsed in saveable if parsed.transaction_no == target_txn]
+        if len(txn_matches) == 1:
+            return txn_matches[0]
+
+    if target_receipt:
+        receipt_matches = [parsed for parsed in saveable if parsed.receipt_no == target_receipt]
+        if len(receipt_matches) == 1:
+            return receipt_matches[0]
+
+    if len(saveable) == 1:
+        return saveable[0]
+
+    return None
+
+
+def _apply_screenshot_parsed_to_extracted_row(
+    row: OcrExtractedRow,
+    parsed: ParsedOcrRow,
+    *,
+    parse_job_id: str,
+) -> None:
+    _apply_parsed_to_extracted_row(row, parsed, parse_job_id=parse_job_id)
+    row.manually_edited = False
+    row.validation_errors = parsed.validation_errors or validate_parsed_row(parsed) or None
+    _sync_metadata_from_parsed(row, parsed)
+
+
 def _apply_parsed_to_extracted_row(row: OcrExtractedRow, parsed: ParsedOcrRow, *, parse_job_id: str) -> None:
     row.parse_job_id = parse_job_id
     row.period_key = parsed.period_key
@@ -581,19 +636,23 @@ class OcrService:
             )
         return deleted
 
-    def reparse_settlement_row(self, *, row_id: str, executed_by: str) -> OcrParseJob:
+    def reparse_row(self, *, row_id: str, executed_by: str) -> OcrParseJob:
         row = self.session.get(OcrExtractedRow, row_id)
         if row is None or row.deleted_at is not None:
             raise ValueError("Row not found")
-        if row.source_type != "paygate_settlement":
-            raise ValueError("Only settlement rows support reparse")
+        if row.source_type not in {"paygate_settlement", "paygate_screenshot"}:
+            raise ValueError("Only settlement or Paygate screenshot rows support reparse")
         if row.status == "confirmed":
             raise ValueError("Confirmed rows cannot be reparsed")
         return self.parse_images(
             image_ids=[row.source_image_id],
             executed_by=executed_by,
-            settlement_target_row_ids={row.source_image_id: row_id},
+            target_row_ids={row.source_image_id: row_id},
         )
+
+    def reparse_settlement_row(self, *, row_id: str, executed_by: str) -> OcrParseJob:
+        """Backward-compatible alias for settlement-only callers."""
+        return self.reparse_row(row_id=row_id, executed_by=executed_by)
 
     def parse_images(
         self,
@@ -602,9 +661,12 @@ class OcrService:
         executed_by: str,
         ocr_text_override: dict[str, str] | None = None,
         settlement_target_row_ids: dict[str, str] | None = None,
+        target_row_ids: dict[str, str] | None = None,
     ) -> OcrParseJob:
         if not image_ids:
             raise ValueError("image_ids is required")
+
+        effective_target_row_ids = target_row_ids or settlement_target_row_ids or {}
 
         job = OcrParseJob(
             id=generate_ulid(),
@@ -665,14 +727,35 @@ class OcrService:
 
                 period_keys = {parsed.period_key for parsed in parsed_rows if parsed.period_key}
                 if image.source_type == "paygate_screenshot":
-                    for parsed in parsed_rows:
-                        if not is_paygate_row_saveable(parsed):
-                            continue
-                        paygate_entries.append((image.id, parsed))
+                    target_row_id = effective_target_row_ids.get(image.id)
+                    if target_row_id:
+                        target = self.session.get(OcrExtractedRow, target_row_id)
+                        if (
+                            target is None
+                            or target.deleted_at is not None
+                            or target.source_image_id != image.id
+                            or target.source_type != "paygate_screenshot"
+                            or target.status == "confirmed"
+                        ):
+                            raise ValueError("Reparse target row is not available")
+                        matched = _find_parsed_row_for_screenshot_reparse(target, parsed_rows)
+                        if matched is None:
+                            raise ValueError("Could not match reparse result to target row")
+                        _apply_screenshot_parsed_to_extracted_row(
+                            target,
+                            matched,
+                            parse_job_id=job.id,
+                        )
+                        row_count += 1
+                    else:
+                        for parsed in parsed_rows:
+                            if not is_paygate_row_saveable(parsed):
+                                continue
+                            paygate_entries.append((image.id, parsed))
                 else:
                     now = datetime.now(timezone.utc)
                     for parsed in parsed_rows:
-                        target_row_id = (settlement_target_row_ids or {}).get(image.id)
+                        target_row_id = effective_target_row_ids.get(image.id)
                         if target_row_id:
                             target = self.session.get(OcrExtractedRow, target_row_id)
                             if (

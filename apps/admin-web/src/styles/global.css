@@ -1890,6 +1890,15 @@ button {
   word-break: break-all;
 }
 
+.ocr-row-review-field-value .ocr-terminal-id-display--review {
+  font-size: inherit;
+  line-height: 1.45;
+}
+
+.ocr-saved-data-confidence-legend {
+  margin-bottom: 0.75rem;
+}
+
 .ocr-terminal-id-display-line {
   display: block;
 }
