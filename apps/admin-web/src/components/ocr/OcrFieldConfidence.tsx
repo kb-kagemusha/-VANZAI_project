@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   formatOcrFieldConfidencePercent,
   getOcrFieldConfidenceClassName,
@@ -24,7 +25,7 @@ export function OcrFieldConfidenceValue({
   source,
   className,
 }: {
-  value: string;
+  value: ReactNode;
   confidence?: number | null;
   source?: string | null;
   className?: string;

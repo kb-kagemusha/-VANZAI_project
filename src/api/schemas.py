@@ -2082,6 +2082,8 @@ class OcrExtractedRowItem(BaseModel):
     staff_id: Optional[str] = None
     field_confidence: Optional[dict[str, float]] = None
     field_sources: Optional[dict[str, str]] = None
+    terminal_id_partial: bool = False
+    terminal_id_segments: Optional[dict[str, str]] = None
 
 
 class OcrExtractedRowListResponse(BaseModel):

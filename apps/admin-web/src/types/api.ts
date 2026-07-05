@@ -1334,6 +1334,14 @@ export interface OcrExtractedRowItem {
   staff_id: string | null;
   field_confidence?: Record<string, number> | null;
   field_sources?: Record<string, string> | null;
+  terminal_id_partial?: boolean;
+  terminal_id_segments?: {
+    eight?: string;
+    four_1?: string;
+    four_2?: string;
+    four_3?: string;
+    twelve?: string;
+  } | null;
 }
 
 export interface OcrExtractedRowListResponse {

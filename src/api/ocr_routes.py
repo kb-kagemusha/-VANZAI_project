@@ -139,6 +139,8 @@ def _row_to_item(
         staff_id=row.staff_id,
         field_confidence=(row.raw_payload or {}).get("field_confidence"),
         field_sources=(row.raw_payload or {}).get("field_sources"),
+        terminal_id_partial=bool((row.raw_payload or {}).get("terminal_id_partial")),
+        terminal_id_segments=(row.raw_payload or {}).get("terminal_id_segments"),
     )
 
 

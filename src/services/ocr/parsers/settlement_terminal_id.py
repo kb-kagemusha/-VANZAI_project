@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from typing import Any
 
 _SETTLEMENT_TERMINAL_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -145,3 +146,147 @@ def normalize_settlement_terminal_short_id(
 
 def is_valid_settlement_terminal_short_id(value: str | None) -> bool:
     return normalize_settlement_terminal_short_id(value) is not None
+
+
+class TerminalIdSegments:
+  """UUID segments for settlement terminal_id (8-4-4-4-12)."""
+
+  __slots__ = ("eight", "four_1", "four_2", "four_3", "twelve")
+
+  def __init__(
+      self,
+      *,
+      eight: str | None = None,
+      four_1: str | None = None,
+      four_2: str | None = None,
+      four_3: str | None = None,
+      twelve: str | None = None,
+  ) -> None:
+      self.eight = eight
+      self.four_1 = four_1
+      self.four_2 = four_2
+      self.four_3 = four_3
+      self.twelve = twelve
+
+  def is_complete(self) -> bool:
+      return all((self.eight, self.four_1, self.four_2, self.four_3, self.twelve))
+
+  def is_partial(self) -> bool:
+      return any((self.eight, self.four_1, self.four_2, self.four_3, self.twelve)) and not self.is_complete()
+
+  def to_canonical(self) -> str | None:
+      if not self.is_complete():
+          return None
+      return f"{self.eight}-{self.four_1}-{self.four_2}-{self.four_3}-{self.twelve}"
+
+  def to_dict(self) -> dict[str, str]:
+      payload: dict[str, str] = {}
+      if self.eight:
+          payload["eight"] = self.eight
+      if self.four_1:
+          payload["four_1"] = self.four_1
+      if self.four_2:
+          payload["four_2"] = self.four_2
+      if self.four_3:
+          payload["four_3"] = self.four_3
+      if self.twelve:
+          payload["twelve"] = self.twelve
+      return payload
+
+  @classmethod
+  def from_dict(cls, payload: dict[str, str] | None) -> "TerminalIdSegments":
+      if not payload:
+          return cls()
+      return cls(
+          eight=payload.get("eight"),
+          four_1=payload.get("four_1"),
+          four_2=payload.get("four_2"),
+          four_3=payload.get("four_3"),
+          twelve=payload.get("twelve"),
+      )
+
+
+def _is_short_id_noise_token(token: str, short_id: str | None) -> bool:
+    if not short_id or len(token) != 4:
+        return False
+    if token == short_id:
+        return True
+    repaired = normalize_settlement_terminal_short_id(token, from_ocr=True)
+    return repaired == short_id and token != short_id
+
+
+def assemble_terminal_segments_from_hex_tokens(
+    tokens: list[str],
+    *,
+    short_id: str | None = None,
+) -> TerminalIdSegments:
+    """Pick best-available UUID segments from OCR hex tokens."""
+    eight_chars = [
+        token
+        for token in tokens
+        if len(token) == 8 and (not short_id or token.startswith(short_id))
+    ]
+    four_chars = [
+        token
+        for token in tokens
+        if len(token) == 4 and not _is_short_id_noise_token(token, short_id)
+    ]
+    twelve_chars = [token for token in tokens if len(token) == 12 and not token.startswith("af4c")]
+    if not twelve_chars:
+        twelve_chars = [token for token in tokens if len(token) == 12]
+
+    ordered_fours: list[str] = []
+    for token in tokens:
+        if token in eight_chars:
+            continue
+        if len(token) == 4 and token not in ordered_fours and not _is_short_id_noise_token(token, short_id):
+            ordered_fours.append(token)
+        if len(ordered_fours) == 3:
+            break
+    if len(ordered_fours) < 3:
+        ordered_fours = []
+        for token in four_chars:
+            if eight_chars and token == eight_chars[0][:4]:
+                continue
+            if token not in ordered_fours:
+                ordered_fours.append(token)
+            if len(ordered_fours) == 3:
+                break
+
+    return TerminalIdSegments(
+        eight=eight_chars[0] if eight_chars else None,
+        four_1=ordered_fours[0] if len(ordered_fours) > 0 else None,
+        four_2=ordered_fours[1] if len(ordered_fours) > 1 else None,
+        four_3=ordered_fours[2] if len(ordered_fours) > 2 else None,
+        twelve=twelve_chars[-1] if twelve_chars else None,
+    )
+
+
+def format_terminal_id_display_lines(value: str | None) -> tuple[str, str] | None:
+    if not value or not is_valid_settlement_terminal_id(value):
+        return None
+    parts = value.split("-")
+    if len(parts) != 5:
+        return None
+    return f"{parts[0]}-{parts[1]}-{parts[2]}", f"{parts[3]}-{parts[4]}"
+
+
+def format_terminal_segments_display_lines(segments: TerminalIdSegments) -> tuple[str, str]:
+    line1_parts = [segments.eight, segments.four_1, segments.four_2]
+    line1 = "-".join(part for part in line1_parts if part)
+    line2_parts = [segments.four_3, segments.twelve]
+    line2 = "-".join(part for part in line2_parts if part)
+    return line1 or "—", line2 or "—"
+
+
+def terminal_id_is_partial_from_payload(raw_payload: dict[str, Any] | None) -> bool:
+    if not raw_payload:
+        return False
+    if raw_payload.get("terminal_id_partial"):
+        return True
+    segments = TerminalIdSegments.from_dict(raw_payload.get("terminal_id_segments"))
+    return segments.is_partial()
+
+
+def terminal_id_segments_from_payload(raw_payload: dict[str, Any] | None) -> TerminalIdSegments:
+    return TerminalIdSegments.from_dict((raw_payload or {}).get("terminal_id_segments"))

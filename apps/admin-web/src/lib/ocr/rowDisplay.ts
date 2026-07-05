@@ -17,6 +17,8 @@ export function getOcrRowDisplayLabels(row: Pick<
   | "duplicate_receipt_candidate"
   | "unit_breakdown_status"
   | "reconciliation_eligible"
+  | "terminal_id_partial"
+  | "terminal_id_segments"
   | "voided_at"
 >): OcrRowDisplayLabel[] {
   const labels: OcrRowDisplayLabel[] = [];
@@ -41,6 +43,10 @@ export function getOcrRowDisplayLabels(row: Pick<
     labels.push({ key: "confirm-required", text: "要確認", tone: "info" });
   }
 
+  if (row.terminal_id_partial) {
+    labels.push({ key: "terminal-id-partial", text: "端末番号: 部分抽出", tone: "warning" });
+  }
+
   if (row.source_type === "paygate_settlement") {
     if (row.duplicate_receipt_candidate) {
       labels.push({ key: "duplicate-candidate", text: "重複候補", tone: "warning" });
@@ -51,8 +57,10 @@ export function getOcrRowDisplayLabels(row: Pick<
 }
 
 /** 確定操作に使える行か（要確認・確定済みは不可）。 */
-export function isOcrRowConfirmable(row: Pick<OcrExtractedRowItem, "confirm_required" | "status">) {
-  return row.status !== "confirmed" && !row.confirm_required;
+export function isOcrRowConfirmable(
+  row: Pick<OcrExtractedRowItem, "confirm_required" | "status" | "terminal_id_partial">,
+) {
+  return row.status !== "confirmed" && !row.confirm_required && !row.terminal_id_partial;
 }
 
 /** @deprecated use isOcrRowConfirmable */

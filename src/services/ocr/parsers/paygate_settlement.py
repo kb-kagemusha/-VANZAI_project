@@ -18,6 +18,7 @@ from src.services.ocr.parsers.settlement_amount import (
 )
 from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
 from src.services.ocr.parsers.settlement_terminal_id import (
+    assemble_terminal_segments_from_hex_tokens,
     format_terminal_id_from_hex32,
     is_valid_settlement_terminal_short_id,
     normalize_settlement_terminal_id,
@@ -1296,6 +1297,14 @@ class PaygateSettlementParser(BaseOcrParser):
         amounts, amount_corrections = _extract_settlement_amounts(text)
         terminal_short_id_hint = _extract_terminal_short_id_hint(text)
         terminal_id, terminal_meta = _extract_terminal_id_with_meta(ocr_result, text, terminal_short_id_hint)
+        if not terminal_id:
+            partial_tokens = _collect_terminal_hex_tokens(text, short_id=terminal_short_id_hint)
+            partial_segments = assemble_terminal_segments_from_hex_tokens(
+                partial_tokens,
+                short_id=terminal_short_id_hint,
+            )
+            if partial_segments.is_partial():
+                terminal_meta["partial_segments"] = partial_segments.to_dict()
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         short_from_terminal = _short_id_from_terminal_id(terminal_id)
         if terminal_short_id_hint and _explicit_terminal_short_id_in_text(text, terminal_short_id_hint):
@@ -1359,6 +1368,10 @@ class PaygateSettlementParser(BaseOcrParser):
         )
         parsed.raw_payload["field_confidence"] = field_confidence
         parsed.raw_payload["field_sources"] = field_sources
+        partial_segments = terminal_meta.get("partial_segments")
+        if partial_segments and not terminal_id:
+            parsed.raw_payload["terminal_id_segments"] = partial_segments
+            parsed.raw_payload["terminal_id_partial"] = True
         parsed.validation_errors = parsed.validation_errors or []
         meta = metadata_from_parsed_fields(
             record_date=parsed.record_date,

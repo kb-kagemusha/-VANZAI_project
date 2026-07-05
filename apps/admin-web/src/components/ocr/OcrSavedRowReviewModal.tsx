@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState, type HTMLAttributes } from "react";
+import { useEffect, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { ApiError, fetchOcrImageBlobUrl, updateOcrRow } from "../../lib/api/client";
 import { formatCurrency } from "../../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
+import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatOcrValidationMessages } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
+import { OcrParseProgressHover } from "../OcrParseProgressHover";
 import { StatusBadge } from "../StatusBadge";
 import { OcrFieldConfidenceLegend, OcrFieldConfidenceValue } from "./OcrFieldConfidence";
 import {
@@ -14,6 +16,7 @@ import {
   createOcrRowEditDraft,
   type OcrRowEditDraft,
 } from "./OcrRowEditForm";
+import { formatTerminalIdDraftLines, SettlementTerminalIdDisplay } from "./SettlementTerminalIdDisplay";
 
 type EditableFieldKey = keyof OcrRowEditDraft;
 
@@ -28,6 +31,12 @@ type ReviewFieldSpec = {
   placeholder?: string;
   formatDisplay: (draft: OcrRowEditDraft) => string;
   normalizeInput?: (value: string) => string;
+  renderDisplay?: (args: {
+    draft: OcrRowEditDraft;
+    row: OcrExtractedRowItem;
+    confidence?: number;
+    source?: string | null;
+  }) => ReactNode;
 };
 
 const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
@@ -59,6 +68,16 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     confidenceKey: "terminal_id",
     monospace: true,
     formatDisplay: (draft) => draft.terminal_id || "—",
+    renderDisplay: ({ draft, row, confidence, source }) => (
+      <SettlementTerminalIdDisplay
+        row={{
+          ...row,
+          terminal_id: draft.terminal_id || row.terminal_id,
+        }}
+        confidence={confidence}
+        source={source}
+      />
+    ),
   },
   {
     key: "subtotal",
@@ -167,6 +186,7 @@ function useOcrImageBlobUrl(imageId: string) {
 function OcrReviewFieldRow({
   spec,
   draft,
+  row,
   confidence,
   source,
   editing,
@@ -178,6 +198,7 @@ function OcrReviewFieldRow({
 }: {
   spec: ReviewFieldSpec;
   draft: OcrRowEditDraft;
+  row: OcrExtractedRowItem;
   confidence?: number | null;
   source?: string | null;
   editing: boolean;
@@ -189,12 +210,29 @@ function OcrReviewFieldRow({
 }) {
   const value = draft[spec.key];
   const displayValue = spec.formatDisplay(draft);
+  const customDisplay = spec.renderDisplay?.({
+    draft,
+    row,
+    confidence: confidence ?? undefined,
+    source,
+  });
 
   return (
     <div className={`ocr-row-review-field-row${editing ? " ocr-row-review-field-row--editing" : ""}`}>
       <span className="ocr-row-review-field-label">{spec.label}</span>
       {editing ? (
         <>
+          {spec.key === "terminal_id" ? (
+            <div className="ocr-terminal-id-edit-preview" aria-hidden="true">
+              {formatTerminalIdDraftLines(value, row.terminal_id_segments, row.terminal_id_partial).map((line, index) =>
+                line && line !== "—" ? (
+                  <span key={index} className="ocr-terminal-id-display-line">
+                    {line}
+                  </span>
+                ) : null,
+              )}
+            </div>
+          ) : null}
           <input
             type={spec.inputType || "text"}
             className={`ocr-row-review-field-input${spec.monospace ? " ocr-row-review-field-input--mono" : ""}`}
@@ -221,7 +259,9 @@ function OcrReviewFieldRow({
       ) : (
         <>
           <span className={`ocr-row-review-field-value${spec.monospace ? " ocr-row-review-field-value--mono" : ""}`}>
-            {confidence != null ? (
+            {customDisplay ? (
+              customDisplay
+            ) : confidence != null ? (
               <OcrFieldConfidenceValue value={displayValue} confidence={confidence} source={source} />
             ) : (
               displayValue
@@ -250,6 +290,7 @@ export function OcrSavedRowReviewModal({
   confirming,
   onReparse,
   reparsing,
+  reparseProgress,
 }: {
   row: OcrExtractedRowItem;
   onClose: () => void;
@@ -258,6 +299,7 @@ export function OcrSavedRowReviewModal({
   confirming: boolean;
   onReparse?: () => void;
   reparsing?: boolean;
+  reparseProgress?: OcrParseProgressState | null;
 }) {
   const isSettlement = row.source_type === "paygate_settlement";
   const { url, failed } = useOcrImageBlobUrl(row.source_image_id);
@@ -344,7 +386,7 @@ export function OcrSavedRowReviewModal({
       setError("変更を保存してから確定してください。");
       return;
     }
-    if (!confirmable) {
+    if (!confirmable || row.terminal_id_partial) {
       setError("要確認の項目があります。内容を修正して保存してから確定してください。");
       return;
     }
@@ -367,11 +409,17 @@ export function OcrSavedRowReviewModal({
       aria-labelledby="ocr-row-review-title"
       onClick={onClose}
     >
-      <div className="ocr-row-review-panel" onClick={(event) => event.stopPropagation()}>
+      <div className={`ocr-row-review-panel${reparsing ? " ocr-row-review-panel--reparsing" : ""}`} onClick={(event) => event.stopPropagation()}>
         <button type="button" className="ocr-row-review-close" onClick={onClose} aria-label="閉じる">
           ×
         </button>
         <div className="ocr-row-review-image-pane">
+          {reparsing ? (
+            <div className="ocr-row-review-reparse-overlay" aria-live="polite">
+              <span className="ocr-row-review-reparse-spinner" aria-hidden="true" />
+              <span>再解析中...</span>
+            </div>
+          ) : null}
           {failed ? (
             <div className="ocr-row-review-image-fallback">画像を読み込めませんでした</div>
           ) : url ? (
@@ -411,6 +459,7 @@ export function OcrSavedRowReviewModal({
                 key={spec.key}
                 spec={spec}
                 draft={draft}
+                row={row}
                 confidence={spec.confidenceKey ? fieldConfidence[spec.confidenceKey] : undefined}
                 source={spec.confidenceKey ? fieldSources[spec.confidenceKey] : undefined}
                 editing={editingField === spec.key}
@@ -429,9 +478,16 @@ export function OcrSavedRowReviewModal({
               閉じる
             </button>
             {isSettlement && row.status !== "confirmed" && onReparse ? (
-              <button type="button" className="secondary-button" onClick={onReparse} disabled={busy}>
-                {reparsing ? "再解析中..." : "再解析"}
-              </button>
+              <OcrParseProgressHover progress={reparseProgress ?? null} active={Boolean(reparsing)}>
+                <button
+                  type="button"
+                  className={`secondary-button${reparsing ? " ocr-reparse-button--active" : ""}`}
+                  onClick={onReparse}
+                  disabled={busy}
+                >
+                  {reparsing ? "再解析中..." : "再解析"}
+                </button>
+              </OcrParseProgressHover>
             ) : null}
             <button type="button" className="secondary-button" onClick={handleSave} disabled={busy || !isDirty}>
               {saving ? "保存中..." : "保存"}
@@ -441,8 +497,14 @@ export function OcrSavedRowReviewModal({
                 type="button"
                 className="primary-button"
                 onClick={handleConfirm}
-                disabled={busy || !confirmable || isDirty}
-                title={confirmable ? "問題なしとして確定します" : "要確認項目を解消してから確定できます"}
+                disabled={busy || !confirmable || isDirty || row.terminal_id_partial}
+                title={
+                  row.terminal_id_partial
+                    ? "端末番号が部分抽出のため確定できません"
+                    : confirmable
+                      ? "問題なしとして確定します"
+                      : "要確認項目を解消してから確定できます"
+                }
               >
                 {confirming ? "確定中..." : "問題なしで確定"}
               </button>

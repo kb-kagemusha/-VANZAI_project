@@ -1645,6 +1645,7 @@ button {
 }
 
 .ocr-row-review-image-pane {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1870,6 +1871,88 @@ button {
   font-size: 0.72rem;
   font-weight: 500;
   opacity: 0.85;
+}
+
+.ocr-terminal-id-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.ocr-terminal-id-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.ocr-terminal-id-display-line {
+  display: block;
+}
+
+.ocr-terminal-id-edit-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.ocr-partial-extract-badge {
+  border: 1px solid #ea580c;
+  border-radius: 999px;
+  background: rgba(234, 88, 12, 0.08);
+  color: #c2410c;
+  cursor: default;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.15rem 0.55rem;
+}
+
+.ocr-row-review-panel--reparsing .ocr-row-review-image {
+  opacity: 0.55;
+  filter: grayscale(0.15);
+}
+
+.ocr-row-review-reparse-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.ocr-row-review-reparse-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid rgba(200, 85, 61, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ocr-reparse-spin 0.9s linear infinite;
+}
+
+.ocr-reparse-button--active {
+  animation: ocr-parse-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ocr-reparse-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 900px) {

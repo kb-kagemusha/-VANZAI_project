@@ -8,6 +8,8 @@ import { AppNotification, type AppNotificationState } from "../components/AppNot
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { OcrSavedRowReviewModal } from "../components/ocr/OcrSavedRowReviewModal";
+import { OcrRowConfidenceCell } from "../components/ocr/OcrRowConfidenceCell";
+import { SettlementTerminalIdDisplay } from "../components/ocr/SettlementTerminalIdDisplay";
 import {
   OcrRowEditForm,
   buildOcrRowUpdateBody,
@@ -1791,55 +1793,105 @@ export function ReceiptOcrPage() {
     {
       key: "record_date",
       header: renderSortableHeader("record_date", "日付"),
-      render: (row: OcrExtractedRowItem) => `${row.record_date || "-"} ${row.record_time || ""}`.trim(),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="record_datetime"
+          value={`${row.record_date || "-"} ${row.record_time || ""}`.trim()}
+        />
+      ),
     },
     {
       key: "settlement_date",
       header: renderSortableHeader("record_date", "精算日"),
-      render: (row: OcrExtractedRowItem) => row.record_date || "-",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="record_datetime" value={row.record_date || "-"} />
+      ),
     },
     {
       key: "settlement_time",
       header: "精算時間",
-      render: (row: OcrExtractedRowItem) => row.record_time || "-",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="record_datetime" value={row.record_time || "-"} />
+      ),
     },
-    { key: "amount", header: renderSortableHeader("amount", "合計"), render: (row: OcrExtractedRowItem) => formatCurrency(row.amount) },
+    {
+      key: "amount",
+      header: renderSortableHeader("amount", "合計"),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="amount" value={formatCurrency(row.amount)} />
+      ),
+    },
     {
       key: "subtotal",
       header: "小計",
-      render: (row: OcrExtractedRowItem) => formatCurrency(row.subtotal),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="subtotal" value={formatCurrency(row.subtotal)} />
+      ),
     },
     {
       key: "cash_sales",
       header: "現金売上",
-      render: (row: OcrExtractedRowItem) => formatCurrency(row.cash_sales),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="cash_sales" value={formatCurrency(row.cash_sales)} />
+      ),
     },
     {
       key: "pos_sales",
       header: "PAYGATE POS",
-      render: (row: OcrExtractedRowItem) => formatCurrency(row.pos_sales),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="pos_sales" value={formatCurrency(row.pos_sales)} />
+      ),
     },
     {
       key: "transaction_no",
       header: renderSortableHeader("transaction_no", "取引番号"),
-      render: (row: OcrExtractedRowItem) => row.transaction_no || "-",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="transaction_no" value={row.transaction_no || "-"} />
+      ),
     },
     {
       key: "receipt_no",
       header: renderSortableHeader("receipt_no", "レシート番号"),
-      render: (row: OcrExtractedRowItem) => row.receipt_no || "-",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell row={row} confidenceKey="receipt_no" value={row.receipt_no || "-"} />
+      ),
     },
     {
       key: "transaction_count",
       header: "通常取引数",
-      render: (row: OcrExtractedRowItem) => (row.transaction_count != null ? String(row.transaction_count) : "-"),
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="transaction_count"
+          value={row.transaction_count != null ? String(row.transaction_count) : "-"}
+        />
+      ),
     },
-    { key: "terminal_id", header: "端末番号", render: (row: OcrExtractedRowItem) => row.terminal_id || "-" },
+    {
+      key: "terminal_id",
+      header: "端末番号",
+      render: (row: OcrExtractedRowItem) => (
+        <SettlementTerminalIdDisplay
+          row={row}
+          confidence={row.field_confidence?.terminal_id}
+          source={row.field_sources?.terminal_id}
+        />
+      ),
+    },
     {
       key: "terminal_short_id",
       header: "端末識別番号",
       render: (row: OcrExtractedRowItem) =>
-        row.source_type === "paygate_settlement" ? row.terminal_short_id || "-" : "-",
+        row.source_type === "paygate_settlement" ? (
+          <OcrRowConfidenceCell
+            row={row}
+            confidenceKey="terminal_short_id"
+            value={row.terminal_short_id || "-"}
+          />
+        ) : (
+          "-"
+        ),
     },
     {
       key: "work_date",
@@ -2473,6 +2525,11 @@ export function ReceiptOcrPage() {
               : undefined
           }
           reparsing={reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id}
+          reparseProgress={
+            reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id
+              ? reparseProgress
+              : null
+          }
         />
       ) : null}
 

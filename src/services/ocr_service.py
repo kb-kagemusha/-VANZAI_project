@@ -850,6 +850,11 @@ class OcrService:
         if row.source_type == "paygate_settlement":
             if "terminal_id" in updates:
                 row.terminal_id = normalize_settlement_terminal_id(row.terminal_id)
+                payload = dict(row.raw_payload or {})
+                if row.terminal_id:
+                    payload.pop("terminal_id_partial", None)
+                    payload.pop("terminal_id_segments", None)
+                    row.raw_payload = payload or None
             if "terminal_short_id" in updates:
                 raw_short_id = updates.get("terminal_short_id")
                 if raw_short_id in (None, ""):

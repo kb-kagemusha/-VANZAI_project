@@ -41,6 +41,7 @@ const OCR_VALIDATION_MESSAGE_JA: Record<string, string> = {
   deleted: "削除済みの行です",
   already_confirmed: "確定済みの行です",
   invalid_terminal_short_id: "端末識別番号は4桁の16進（0-9a-f）で入力してください",
+  terminal_id_partial: "端末番号が一部のみ読み取れています。再解析または手入力で完全な値にしてください",
 };
 
 const OCR_IMAGE_ERROR_JA: Record<string, string> = {
