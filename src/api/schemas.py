@@ -2080,6 +2080,8 @@ class OcrExtractedRowItem(BaseModel):
     void_reason: Optional[str] = None
     branch_id: Optional[str] = None
     staff_id: Optional[str] = None
+    field_confidence: Optional[dict[str, float]] = None
+    field_sources: Optional[dict[str, str]] = None
 
 
 class OcrExtractedRowListResponse(BaseModel):

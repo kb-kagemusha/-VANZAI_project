@@ -1600,6 +1600,223 @@ button {
   background: rgba(15, 23, 42, 0.14);
 }
 
+.ocr-row-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.ocr-row-review-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 0;
+  width: min(96vw, 1320px);
+  max-height: 92vh;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.ocr-row-review-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ocr-row-review-close:hover {
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.ocr-row-review-image-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  padding: 1rem;
+  background: #f8fafc;
+  overflow: auto;
+}
+
+.ocr-row-review-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(92vh - 2rem);
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.ocr-row-review-image-fallback {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.ocr-row-review-data-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1rem 1.25rem;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+}
+
+.ocr-row-review-data-pane h3 {
+  margin: 0;
+  padding-right: 2rem;
+  font-size: 1.05rem;
+}
+
+.ocr-row-review-edit-heading {
+  margin: 0.25rem 0 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.ocr-row-review-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ocr-row-review-filename {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.ocr-row-review-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ocr-row-review-validation {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.ocr-row-review-validation--ok {
+  color: var(--positive);
+}
+
+.ocr-row-review-readonly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+}
+
+.ocr-row-review-readonly div {
+  min-width: 0;
+}
+
+.ocr-row-review-readonly dt {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.ocr-row-review-readonly dd {
+  margin: 0.1rem 0 0;
+  word-break: break-word;
+}
+
+.ocr-row-review-uuid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.ocr-row-review-actions {
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.ocr-row-review-confirmed-note {
+  align-self: center;
+  color: var(--positive);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ocr-row-review-readonly-wide {
+  grid-column: 1 / -1;
+}
+
+.ocr-field-confidence-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.ocr-field-confidence-legend-title {
+  color: var(--muted);
+}
+
+.ocr-field-confidence {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.ocr-field-confidence--high {
+  color: var(--text);
+}
+
+.ocr-field-confidence--medium {
+  color: #2563eb;
+}
+
+.ocr-field-confidence--low {
+  color: #ea580c;
+}
+
+.ocr-field-confidence-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+@media (max-width: 900px) {
+  .ocr-row-review-panel {
+    grid-template-columns: 1fr;
+    max-height: 96vh;
+    overflow: auto;
+  }
+
+  .ocr-row-review-data-pane {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .ocr-row-review-image {
+    max-height: 42vh;
+  }
+}
+
 .ocr-filename-edit {
   font-size: 0.78rem;
   padding: 0.1rem 0.35rem;

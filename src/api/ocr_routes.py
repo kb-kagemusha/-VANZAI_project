@@ -137,6 +137,8 @@ def _row_to_item(
         void_reason=row.void_reason,
         branch_id=row.branch_id,
         staff_id=row.staff_id,
+        field_confidence=(row.raw_payload or {}).get("field_confidence"),
+        field_sources=(row.raw_payload or {}).get("field_sources"),
     )
 
 

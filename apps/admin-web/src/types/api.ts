@@ -1332,6 +1332,8 @@ export interface OcrExtractedRowItem {
   void_reason: string | null;
   branch_id: string | null;
   staff_id: string | null;
+  field_confidence?: Record<string, number> | null;
+  field_sources?: Record<string, string> | null;
 }
 
 export interface OcrExtractedRowListResponse {

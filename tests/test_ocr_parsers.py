@@ -1131,3 +1131,38 @@ def test_paygate_screenshot_dedupe_by_receipt_no():
     kept = next(row for row in deduped if row.transaction_no == "1154100")
     assert kept.receipt_no == "7782464677325"
     assert kept.payment_method == "現金"
+
+
+PRODUCTION_OCR_TEXT_244637_GARBLED = """
+日本たはこ産業株式会社
+端末識別番号: 98f0
+精算
+2026/06/10 23:01:01
+端末番号
+98f0eC2f-fC54-4e00-
+1501登ec66659古D2
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+9810e22目ぞ54監4E04
+1810e22目fc54監4E01
+20260610
+23:01:01
+"""
+
+
+def test_paygate_settlement_parser_handles_garbled_98f0_production_ocr():
+    parser = PaygateSettlementParser()
+    ocr = run_ocr_from_text(PRODUCTION_OCR_TEXT_244637_GARBLED)
+    rows = parser.parse(ocr)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_id == "98f0ec2f-fc54-4e00-a503-2ecb6659c7be"
+    assert row.terminal_short_id == "98f0"
+    assert row.raw_payload.get("field_confidence", {}).get("terminal_id", 0) > 0
+

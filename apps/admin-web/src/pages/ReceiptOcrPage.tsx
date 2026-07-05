@@ -7,6 +7,12 @@ import { DataTable } from "../components/DataTable";
 import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
+import { OcrSavedRowReviewModal } from "../components/ocr/OcrSavedRowReviewModal";
+import {
+  OcrRowEditForm,
+  buildOcrRowUpdateBody,
+  createOcrRowEditDraft,
+} from "../components/ocr/OcrRowEditForm";
 import {
   createSingleImageParseProgress,
   OcrParseProgressHover,
@@ -42,7 +48,7 @@ import {
   voidOcrRow,
 } from "../lib/api/client";
 import { formatRequestError } from "../lib/formatRequestError";
-import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
+import { formatCurrency, formatDateTime } from "../lib/formatters";
 import {
   runBatchedOcrParse,
   type OcrBatchParseResult,
@@ -128,8 +134,10 @@ type SavedRowPageSize = (typeof SAVED_ROW_PAGE_SIZES)[number];
 type ImageViewMode = "thumbnail" | "compact";
 
 const IMAGE_VIEW_MODE_KEY = "vanzai.ocr.imageViewMode";
+const IMAGE_PAGE_SIZE_KEY = "vanzai.ocr.imagePageSize";
 const SAVED_DATA_TAB_KEY = "vanzai.ocr.savedDataTab";
 const SAVED_ROW_PAGE_SIZE_KEY = "vanzai.ocr.savedRowPageSize";
+const SAVED_ROW_UI_KEY_PREFIX = "vanzai.ocr.savedRowUi";
 type SavedDataTab = OcrSourceType;
 
 type SavedRowValidationFilter = "" | "ok" | "error";
@@ -140,6 +148,75 @@ type SavedRowFilters = {
   validation: SavedRowValidationFilter;
   keyword: string;
 };
+
+const DEFAULT_SAVED_ROW_FILTERS: SavedRowFilters = {
+  terminalShortId: "",
+  status: "",
+  validation: "",
+  keyword: "",
+};
+
+function readInitialSavedDataTab(): SavedDataTab {
+  const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
+  return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
+}
+
+function readStoredPageSize(key: string, allowed: readonly number[], fallback: number) {
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
+      return fallback;
+    }
+    const parsed = Number(stored);
+    return allowed.includes(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredPageSize(key: string, size: number) {
+  try {
+    window.localStorage.setItem(key, String(size));
+  } catch {
+    // private browsing 等
+  }
+}
+
+type SavedRowUiPersist = {
+  page: number;
+  filters: SavedRowFilters;
+};
+
+function savedRowUiKey(tab: SavedDataTab) {
+  return `${SAVED_ROW_UI_KEY_PREFIX}.${tab}`;
+}
+
+function readSavedRowUi(tab: SavedDataTab): SavedRowUiPersist | null {
+  try {
+    const raw = window.sessionStorage.getItem(savedRowUiKey(tab));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<SavedRowUiPersist>;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return {
+      page: typeof parsed.page === "number" && parsed.page >= 0 ? parsed.page : 0,
+      filters: { ...DEFAULT_SAVED_ROW_FILTERS, ...(parsed.filters || {}) },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedRowUi(tab: SavedDataTab, state: SavedRowUiPersist) {
+  try {
+    window.sessionStorage.setItem(savedRowUiKey(tab), JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
 
 const OCR_PARSE_STATUS_LABELS: Record<string, string> = {
   pending: "解析待ち",
@@ -176,21 +253,6 @@ function OcrRowQualityBadges({ row }: { row: OcrExtractedRowItem }) {
   );
 }
 
-type OcrRowEditDraft = {
-  record_date: string;
-  record_time: string;
-  amount: string;
-  transaction_no: string;
-  receipt_no: string;
-  payment_method: string;
-  terminal_id: string;
-  terminal_short_id: string;
-  subtotal: string;
-  cash_sales: string;
-  pos_sales: string;
-  transaction_count: string;
-};
-
 function OcrRowEditModal({
   row,
   onClose,
@@ -201,20 +263,7 @@ function OcrRowEditModal({
   onSaved: () => void;
 }) {
   const isSettlement = row.source_type === "paygate_settlement";
-  const [draft, setDraft] = useState<OcrRowEditDraft>({
-    record_date: row.record_date || "",
-    record_time: row.record_time || "",
-    amount: formatYenAmountPlain(row.amount),
-    transaction_no: row.transaction_no || "",
-    receipt_no: row.receipt_no || "",
-    payment_method: row.payment_method || "",
-    terminal_id: row.terminal_id || "",
-    terminal_short_id: row.terminal_short_id || "",
-    subtotal: formatYenAmountPlain(row.subtotal),
-    cash_sales: formatYenAmountPlain(row.cash_sales),
-    pos_sales: formatYenAmountPlain(row.pos_sales),
-    transaction_count: row.transaction_count != null ? String(row.transaction_count) : "",
-  });
+  const [draft, setDraft] = useState(() => createOcrRowEditDraft(row));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -222,23 +271,7 @@ function OcrRowEditModal({
     setSaving(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = {
-        record_date: draft.record_date || null,
-        record_time: draft.record_time || null,
-        amount: draft.amount || null,
-        transaction_no: draft.transaction_no || null,
-        receipt_no: draft.receipt_no || null,
-        payment_method: draft.payment_method || null,
-      };
-      if (isSettlement) {
-        body.terminal_id = draft.terminal_id || null;
-        body.terminal_short_id = draft.terminal_short_id || null;
-        body.subtotal = draft.subtotal || null;
-        body.cash_sales = draft.cash_sales || null;
-        body.pos_sales = draft.pos_sales || null;
-        body.transaction_count = draft.transaction_count ? Number(draft.transaction_count) : null;
-      }
-      await updateOcrRow(row.id, body);
+      await updateOcrRow(row.id, buildOcrRowUpdateBody(row, draft));
       onSaved();
       onClose();
     } catch (err) {
@@ -258,125 +291,7 @@ function OcrRowEditModal({
         onClick={(event) => event.stopPropagation()}
       >
         <h3 id="ocr-row-edit-title">{isSettlement ? "精算レシート行を編集" : "OCR行を編集"}</h3>
-        <div className="ocr-edit-grid">
-          <label>
-            {isSettlement ? "精算日" : "日付"}
-            <input
-              type="date"
-              value={draft.record_date}
-              onChange={(event) => setDraft((current) => ({ ...current, record_date: event.target.value }))}
-            />
-          </label>
-          <label>
-            {isSettlement ? "精算時間 (HH:MM:SS)" : "時刻 (HH:MM:SS)"}
-            <input
-              type="text"
-              value={draft.record_time}
-              placeholder="20:52:59"
-              onChange={(event) => setDraft((current) => ({ ...current, record_time: event.target.value }))}
-            />
-          </label>
-          <label>
-            {isSettlement ? "合計" : "金額（合計）"}
-            <input
-              type="text"
-              value={draft.amount}
-              onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
-            />
-          </label>
-          {isSettlement ? (
-            <>
-              <label>
-                端末識別番号
-                <input
-                  type="text"
-                  value={draft.terminal_short_id}
-                  placeholder="f353"
-                  maxLength={4}
-                  inputMode="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      terminal_short_id: normalizeTerminalShortIdInput(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                端末番号
-                <input
-                  type="text"
-                  value={draft.terminal_id}
-                  placeholder="UUID"
-                  onChange={(event) => setDraft((current) => ({ ...current, terminal_id: event.target.value }))}
-                />
-              </label>
-              <label>
-                小計
-                <input
-                  type="text"
-                  value={draft.subtotal}
-                  onChange={(event) => setDraft((current) => ({ ...current, subtotal: event.target.value }))}
-                />
-              </label>
-              <label>
-                現金売上
-                <input
-                  type="text"
-                  value={draft.cash_sales}
-                  onChange={(event) => setDraft((current) => ({ ...current, cash_sales: event.target.value }))}
-                />
-              </label>
-              <label>
-                PAYGATE POS
-                <input
-                  type="text"
-                  value={draft.pos_sales}
-                  onChange={(event) => setDraft((current) => ({ ...current, pos_sales: event.target.value }))}
-                />
-              </label>
-              <label>
-                通常取引数
-                <input
-                  type="text"
-                  value={draft.transaction_count}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, transaction_count: event.target.value }))
-                  }
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <label>
-                取引番号
-                <input
-                  type="text"
-                  value={draft.transaction_no}
-                  onChange={(event) => setDraft((current) => ({ ...current, transaction_no: event.target.value }))}
-                />
-              </label>
-              <label>
-                レシート番号
-                <input
-                  type="text"
-                  value={draft.receipt_no}
-                  onChange={(event) => setDraft((current) => ({ ...current, receipt_no: event.target.value }))}
-                />
-              </label>
-              <label>
-                決済方法
-                <input
-                  type="text"
-                  value={draft.payment_method}
-                  onChange={(event) => setDraft((current) => ({ ...current, payment_method: event.target.value }))}
-                />
-              </label>
-            </>
-          )}
-        </div>
+        <OcrRowEditForm row={row} draft={draft} onDraftChange={setDraft} />
         {error ? <p className="ocr-warning-text">{error}</p> : null}
         <div className="ocr-modal-actions">
           <button type="button" className="ghost-button" onClick={onClose} disabled={saving}>
@@ -639,11 +554,13 @@ function OcrImagePreview({
   previewUrl,
   children,
   className,
+  onClickPreview,
 }: {
   alt: string;
   previewUrl: string | null;
   children: ReactNode;
   className?: string;
+  onClickPreview?: () => void;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [hovering, setHovering] = useState(false);
@@ -678,9 +595,14 @@ function OcrImagePreview({
           disabled={!previewUrl}
           onClick={(event) => {
             event.stopPropagation();
-            if (previewUrl) {
-              setLightboxOpen(true);
+            if (!previewUrl) {
+              return;
             }
+            if (onClickPreview) {
+              onClickPreview();
+              return;
+            }
+            setLightboxOpen(true);
           }}
         >
           {children}
@@ -727,17 +649,24 @@ function OcrFilenamePreviewLink({
   filename,
   hideExtension = false,
   clampLines = false,
+  onClickPreview,
 }: {
   imageId: string;
   filename: string;
   hideExtension?: boolean;
   clampLines?: boolean;
+  onClickPreview?: () => void;
 }) {
   const displayName = hideExtension ? stripOcrFilenameExtension(filename) : filename;
   const { url } = useOcrImageBlobUrl(imageId);
 
   return (
-    <OcrImagePreview previewUrl={url} alt={filename} className="ocr-image-preview-trigger--filename">
+    <OcrImagePreview
+      previewUrl={url}
+      alt={filename}
+      className="ocr-image-preview-trigger--filename"
+      onClickPreview={onClickPreview}
+    >
       <span
         className={`ocr-filename-preview-link${clampLines ? " ocr-filename-clamp-2" : ""}`}
         title={displayName}
@@ -1035,6 +964,7 @@ export function ReceiptOcrPage() {
   const [selectedPeriodKey, setSelectedPeriodKey] = useState("");
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [editingRow, setEditingRow] = useState<OcrExtractedRowItem | null>(null);
+  const [reviewingRow, setReviewingRow] = useState<OcrExtractedRowItem | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notification, setNotification] = useState<AppNotificationState & { open: boolean }>({
     open: false,
@@ -1062,30 +992,33 @@ export function ReceiptOcrPage() {
     const stored = window.localStorage.getItem(IMAGE_VIEW_MODE_KEY);
     return stored === "compact" ? "compact" : "thumbnail";
   });
-  const [imagePageSize, setImagePageSize] = useState<ImagePageSize>(20);
+  const [imagePageSize, setImagePageSize] = useState<ImagePageSize>(() =>
+    readStoredPageSize(IMAGE_PAGE_SIZE_KEY, IMAGE_PAGE_SIZES, 20) as ImagePageSize,
+  );
   const [imagePage, setImagePage] = useState(0);
   const [rowSortKey, setRowSortKey] = useState<OcrRowSortKey>("record_date");
   const [rowSortDirection, setRowSortDirection] = useState<SortDirection>("desc");
-  const [savedDataTab, setSavedDataTab] = useState<SavedDataTab>(() => {
-    const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
-    return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
-  });
-  const [savedRowPageSize, setSavedRowPageSize] = useState<SavedRowPageSize>(() => {
-    const stored = Number(window.localStorage.getItem(SAVED_ROW_PAGE_SIZE_KEY));
-    return stored === 10 || stored === 50 ? stored : 20;
-  });
-  const [savedRowPage, setSavedRowPage] = useState(0);
-  const [savedRowFilters, setSavedRowFilters] = useState<SavedRowFilters>({
-    terminalShortId: "",
-    status: "",
-    validation: "",
-    keyword: "",
-  });
+  const [savedDataTab, setSavedDataTab] = useState<SavedDataTab>(readInitialSavedDataTab);
+  const [savedRowPageSize, setSavedRowPageSize] = useState<SavedRowPageSize>(() =>
+    readStoredPageSize(SAVED_ROW_PAGE_SIZE_KEY, SAVED_ROW_PAGE_SIZES, 20) as SavedRowPageSize,
+  );
+  const [savedRowPage, setSavedRowPage] = useState(() => readSavedRowUi(readInitialSavedDataTab())?.page ?? 0);
+  const [savedRowFilters, setSavedRowFilters] = useState<SavedRowFilters>(
+    () => readSavedRowUi(readInitialSavedDataTab())?.filters ?? DEFAULT_SAVED_ROW_FILTERS,
+  );
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
   const [reparseProgress, setReparseProgress] = useState<OcrParseProgressState | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const isParsingRef = useRef(false);
+
+  useEffect(() => {
+    writeSavedRowUi(savedDataTab, { page: savedRowPage, filters: savedRowFilters });
+  }, [savedDataTab, savedRowPage, savedRowFilters]);
+
+  useEffect(() => {
+    writeStoredPageSize(SAVED_ROW_PAGE_SIZE_KEY, savedRowPageSize);
+  }, [savedRowPageSize]);
 
   const rowsQuery = useQuery({
     queryKey: ["ocr-rows", selectedPeriodKey],
@@ -1609,6 +1542,12 @@ export function ReceiptOcrPage() {
     uploadedImages.length > 0 && uploadedImages.every((image) => selectedImageIds.includes(image.id));
 
   const savedRows = rowsQuery.data?.items ?? [];
+  const reviewingRowLive = useMemo(() => {
+    if (!reviewingRow) {
+      return null;
+    }
+    return savedRows.find((row) => row.id === reviewingRow.id) ?? reviewingRow;
+  }, [reviewingRow, savedRows]);
   const paygateSavedRows = useMemo(
     () => savedRows.filter((row) => row.source_type === "paygate_screenshot"),
     [savedRows],
@@ -1773,6 +1712,7 @@ export function ReceiptOcrPage() {
     setImagePageSize(size);
     setImagePage(0);
     setSelectedImageIds([]);
+    writeStoredPageSize(IMAGE_PAGE_SIZE_KEY, size);
   };
 
   const handleRowSort = (sortKey: OcrRowSortKey) => {
@@ -1781,17 +1721,20 @@ export function ReceiptOcrPage() {
   };
 
   const handleSavedDataTabChange = (tab: SavedDataTab) => {
+    writeSavedRowUi(savedDataTab, { page: savedRowPage, filters: savedRowFilters });
     setSavedDataTab(tab);
     setSelectedRowIds([]);
-    setSavedRowPage(0);
     window.localStorage.setItem(SAVED_DATA_TAB_KEY, tab);
+    const loaded = readSavedRowUi(tab);
+    setSavedRowFilters(loaded?.filters ?? DEFAULT_SAVED_ROW_FILTERS);
+    setSavedRowPage(loaded?.page ?? 0);
   };
 
   const handleSavedRowPageSizeChange = (size: SavedRowPageSize) => {
     setSavedRowPageSize(size);
     setSavedRowPage(0);
     setSelectedRowIds([]);
-    window.localStorage.setItem(SAVED_ROW_PAGE_SIZE_KEY, String(size));
+    writeStoredPageSize(SAVED_ROW_PAGE_SIZE_KEY, size);
   };
 
   const handleSavedRowFilterChange = (patch: Partial<SavedRowFilters>) => {
@@ -1840,6 +1783,7 @@ export function ReceiptOcrPage() {
             filename={name}
             hideExtension
             clampLines={savedDataTab === "paygate_settlement"}
+            onClickPreview={() => setReviewingRow(row)}
           />
         );
       },
@@ -2508,6 +2452,29 @@ export function ReceiptOcrPage() {
           )}
         </div>
       </section>
+
+      {reviewingRowLive ? (
+        <OcrSavedRowReviewModal
+          row={reviewingRowLive}
+          onClose={() => setReviewingRow(null)}
+          onSaved={async () => {
+            await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+          }}
+          onConfirm={async () => {
+            await confirmOcrRows([reviewingRowLive.id]);
+            setReviewingRow(null);
+            setFormError(null);
+            await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+          }}
+          confirming={confirmMutation.isPending}
+          onReparse={
+            reviewingRowLive.source_type === "paygate_settlement" && reviewingRowLive.status !== "confirmed"
+              ? () => reparseRowMutation.mutate(reviewingRowLive.id)
+              : undefined
+          }
+          reparsing={reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id}
+        />
+      ) : null}
 
       {editingRow ? (
         <OcrRowEditModal

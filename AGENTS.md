@@ -68,6 +68,10 @@
   - 両ファイルは常に同一バージョンを保つ
 - 機能実装が完了したら必ずバージョンを上げ、`CHANGELOG.md` に記録する
   - 変更ログの正本: `CHANGELOG.md`（プロジェクトルート）
+- **バグ修正・UI改善・表示調整など、ユーザー向けの変更を完了した時点でも必ずバージョンを上げる**（「機能追加」だけが対象ではない）
+  - バグ修正・軽微な表示調整 → **Z** を上げる（例: `0.9.2` → `0.9.3`）
+  - 既存画面への機能追加・新API → **Y** を上げる
+  - デプロイ・本番反映の前に `package.json`（admin-web / staff-mobile 両方）と `CHANGELOG.md` を更新済みであること
 - バージョン表示は admin-web ヘッダー左上・staff-mobile ヘッダーに `Ver.X.Y.Z` として自動反映される
   （`vite-plugin-version-check.ts` が package.json の version を `window.__APP_VERSION__` に埋め込む）
 
@@ -77,3 +81,11 @@
 - 参照優先順位: 現行コード → 既存 DB/migration → 設計書 → 公式ドキュメント → Context7
 - Context7 由来のコードは叩き台としてのみ使用し、そのまま本番へ入れない
 - MCP 経由利用時は読み取り中心・本番 secrets 不接触・返却コンテンツを無検証で中継しない
+
+## 11. 更新後のデプロイ（デフォルト）
+- 本番反映が必要なコード変更を完了したら、ユーザーが別途「デプロイしない」「コミットしない」等と指定しない限り、**コミット → push → VPSデプロイ → API再起動 → 動作確認** まで完了させる（毎回の明示指示は不要）
+- 手順の正本: `scripts/deploy/DEPLOY_STEPS.md`、実行スクリプト: `scripts/deploy/02_app_deploy.sh`
+- VPS: `vanzai@220.158.28.35`（SSH鍵 `~/.ssh/vanzai_vps`、設定済みなら `ssh vanzai-vps`）
+- `systemctl restart vanzai-api` が sudo 権限で失敗する場合は `bash /var/www/vanzai/restart_uvicorn.sh` で API を再起動する
+- デプロイしない例外: 質問のみ・レビューのみ（コード未変更）、ユーザーがローカル作業のみを明示した場合
+- 完了報告にはコミット hash・反映バージョン・再起動の成否を含める

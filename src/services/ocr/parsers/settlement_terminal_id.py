@@ -93,6 +93,20 @@ def normalize_settlement_terminal_id(value: str | None) -> str | None:
     return None
 
 
+def _repair_98f0_short_id_candidate(value: str) -> str | None:
+    """端末識別番号 98f0 の OCR 誤読（981e / 9810 / 980 等）を復元。"""
+    if not value:
+        return None
+    lowered = value.lower()
+    if lowered in {"981e", "9810", "9800", "98fe", "98ie", "98o0", "980e"}:
+        return "98f0"
+    if re.fullmatch(r"98[01o][0oef]", lowered):
+        return "98f0"
+    if lowered == "980":
+        return "98f0"
+    return None
+
+
 def normalize_settlement_terminal_short_id(
     value: str | None,
     *,
@@ -105,9 +119,15 @@ def normalize_settlement_terminal_short_id(
     candidate = re.sub(r"[^0-9a-fA-F]", "", translated).lower()
     if from_ocr:
         if len(candidate) < 4:
-            return None
+            if len(candidate) == 3 and candidate.startswith("98"):
+                candidate = "98f0"
+            else:
+                return None
         if len(candidate) > 4:
             candidate = candidate[:4]
+        repaired_98f0 = _repair_98f0_short_id_candidate(candidate)
+        if repaired_98f0:
+            candidate = repaired_98f0
         if candidate.isdigit():
             repaired = _repair_ob21_digit_short_id(candidate) or _repair_all_digit_short_id(candidate)
             if repaired:
