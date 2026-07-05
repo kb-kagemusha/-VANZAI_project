@@ -1671,10 +1671,37 @@ button {
 .ocr-row-review-data-pane {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1rem 1.25rem;
-  overflow: auto;
+  gap: 0;
+  min-height: 0;
+  max-height: 92vh;
+  padding: 0;
+  overflow: hidden;
   border-left: 1px solid var(--border);
+}
+
+.ocr-row-review-data-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.5rem;
+}
+
+.ocr-row-review-data-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1rem;
+}
+
+.ocr-row-review-data-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: #fff;
 }
 
 .ocr-row-review-data-pane h3 {
@@ -1711,6 +1738,9 @@ button {
 .ocr-row-review-validation {
   margin: 0;
   font-size: 0.88rem;
+  max-height: 3.2em;
+  overflow-y: auto;
+  line-height: 1.45;
 }
 
 .ocr-row-review-validation--ok {
@@ -1754,6 +1784,22 @@ button {
 
 .ocr-row-review-field-row--editing {
   grid-template-columns: minmax(6.5rem, 7.5rem) minmax(0, 1fr) auto;
+}
+
+.ocr-row-review-field-row--terminal-id-edit {
+  grid-template-columns: minmax(6.5rem, 7.5rem) minmax(0, 1fr);
+  align-items: start;
+}
+
+.ocr-row-review-field-row--terminal-id-edit .ocr-row-review-field-actions {
+  grid-column: 2;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
+.ocr-row-review-field-editor {
+  grid-column: 2 / -1;
+  min-width: 0;
 }
 
 .ocr-row-review-field-label {
@@ -1821,8 +1867,59 @@ button {
 }
 
 .ocr-row-review-actions {
-  margin-top: auto;
+  margin-top: 0;
   flex-wrap: wrap;
+}
+
+.ocr-terminal-id-segment-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.ocr-terminal-id-segment-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.ocr-terminal-id-segment-input-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.ocr-terminal-id-segment-input-field {
+  width: 3.1rem;
+  padding: 0.28rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  text-transform: lowercase;
+}
+
+.ocr-terminal-id-segment-input-row:first-child .ocr-terminal-id-segment-input-group:first-child .ocr-terminal-id-segment-input-field {
+  width: 4.6rem;
+}
+
+.ocr-terminal-id-segment-input-row:last-child .ocr-terminal-id-segment-input-group:last-child .ocr-terminal-id-segment-input-field {
+  width: 6.8rem;
+}
+
+.ocr-terminal-id-segment-input-sep {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  user-select: none;
+}
+
+.ocr-terminal-id-segment-input-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .ocr-row-review-confirmed-note {

@@ -16,7 +16,8 @@ import {
   createOcrRowEditDraft,
   type OcrRowEditDraft,
 } from "./OcrRowEditForm";
-import { formatTerminalIdDraftLines, SettlementTerminalIdDisplay } from "./SettlementTerminalIdDisplay";
+import { TerminalIdSegmentInput } from "./TerminalIdSegmentInput";
+import { SettlementTerminalIdDisplay } from "./SettlementTerminalIdDisplay";
 
 type EditableFieldKey = keyof OcrRowEditDraft;
 
@@ -219,44 +220,53 @@ function OcrReviewFieldRow({
   });
 
   return (
-    <div className={`ocr-row-review-field-row${editing ? " ocr-row-review-field-row--editing" : ""}`}>
+    <div
+      className={`ocr-row-review-field-row${editing ? " ocr-row-review-field-row--editing" : ""}${
+        spec.key === "terminal_id" && editing ? " ocr-row-review-field-row--terminal-id-edit" : ""
+      }`}
+    >
       <span className="ocr-row-review-field-label">{spec.label}</span>
       {editing ? (
-        <>
-          {spec.key === "terminal_id" ? (
-            <div className="ocr-terminal-id-edit-preview" aria-hidden="true">
-              {formatTerminalIdDraftLines(value, row.terminal_id_segments, row.terminal_id_partial).map((line, index) =>
-                line && line !== "—" ? (
-                  <span key={index} className="ocr-terminal-id-display-line">
-                    {line}
-                  </span>
-                ) : null,
-              )}
+        spec.key === "terminal_id" ? (
+          <>
+            <div className="ocr-row-review-field-editor">
+              <TerminalIdSegmentInput value={value} onChange={onDraftChange} disabled={disabled} />
             </div>
-          ) : null}
-          <input
-            type={spec.inputType || "text"}
-            className={`ocr-row-review-field-input${spec.monospace ? " ocr-row-review-field-input--mono" : ""}`}
-            value={value}
-            maxLength={spec.maxLength}
-            inputMode={spec.inputMode}
-            placeholder={spec.placeholder}
-            autoFocus
-            disabled={disabled}
-            onChange={(event) => {
-              const next = spec.normalizeInput ? spec.normalizeInput(event.target.value) : event.target.value;
-              onDraftChange(next);
-            }}
-          />
-          <div className="ocr-row-review-field-actions">
-            <button type="button" className="ghost-button" onClick={onApply} disabled={disabled}>
-              適用
-            </button>
-            <button type="button" className="ghost-button" onClick={onCancel} disabled={disabled}>
-              取消
-            </button>
-          </div>
-        </>
+            <div className="ocr-row-review-field-actions">
+              <button type="button" className="ghost-button" onClick={onApply} disabled={disabled}>
+                適用
+              </button>
+              <button type="button" className="ghost-button" onClick={onCancel} disabled={disabled}>
+                取消
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <input
+              type={spec.inputType || "text"}
+              className={`ocr-row-review-field-input${spec.monospace ? " ocr-row-review-field-input--mono" : ""}`}
+              value={value}
+              maxLength={spec.maxLength}
+              inputMode={spec.inputMode}
+              placeholder={spec.placeholder}
+              autoFocus
+              disabled={disabled}
+              onChange={(event) => {
+                const next = spec.normalizeInput ? spec.normalizeInput(event.target.value) : event.target.value;
+                onDraftChange(next);
+              }}
+            />
+            <div className="ocr-row-review-field-actions">
+              <button type="button" className="ghost-button" onClick={onApply} disabled={disabled}>
+                適用
+              </button>
+              <button type="button" className="ghost-button" onClick={onCancel} disabled={disabled}>
+                取消
+              </button>
+            </div>
+          </>
+        )
       ) : (
         <>
           <span className={`ocr-row-review-field-value${spec.monospace ? " ocr-row-review-field-value--mono" : ""}`}>
@@ -432,49 +442,54 @@ export function OcrSavedRowReviewModal({
           )}
         </div>
         <div className="ocr-row-review-data-pane">
-          <h3 id="ocr-row-review-title">
-            {isSettlement ? "精算レシートを確認" : "Paygate SSを確認"}
-          </h3>
-          <div className="ocr-row-review-summary">
-            <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
-              {row.source_image_filename || row.source_image_id}
-            </p>
-            <div className="ocr-row-review-badges">
-              <StatusBadge value={row.status} />
-              {labels.map((label) => (
-                <span key={label.key} className={`ocr-quality-badge ocr-quality-badge--${label.tone}`}>
-                  {label.text}
-                </span>
+          <div className="ocr-row-review-data-header">
+            <h3 id="ocr-row-review-title">
+              {isSettlement ? "精算レシートを確認" : "Paygate SSを確認"}
+            </h3>
+            <div className="ocr-row-review-summary">
+              <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
+                {row.source_image_filename || row.source_image_id}
+              </p>
+              <div className="ocr-row-review-badges">
+                <StatusBadge value={row.status} />
+                {labels.map((label) => (
+                  <span key={label.key} className={`ocr-quality-badge ocr-quality-badge--${label.tone}`}>
+                    {label.text}
+                  </span>
+                ))}
+              </div>
+              {validationMessages.length ? (
+                <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>
+              ) : (
+                <p className="ocr-row-review-validation ocr-row-review-validation--ok">検証: OK</p>
+              )}
+              <OcrFieldConfidenceLegend />
+            </div>
+          </div>
+          <div className="ocr-row-review-data-body">
+            <div className="ocr-row-review-fields" role="list">
+              {fieldSpecs.map((spec) => (
+                <OcrReviewFieldRow
+                  key={spec.key}
+                  spec={spec}
+                  draft={draft}
+                  row={row}
+                  confidence={spec.confidenceKey ? fieldConfidence[spec.confidenceKey] : undefined}
+                  source={spec.confidenceKey ? fieldSources[spec.confidenceKey] : undefined}
+                  editing={editingField === spec.key}
+                  disabled={busy}
+                  onStartEdit={() => startEdit(spec.key)}
+                  onApply={applyEdit}
+                  onCancel={() => cancelEdit(spec.key)}
+                  onDraftChange={(value) => setDraft((current) => ({ ...current, [spec.key]: value }))}
+                />
               ))}
             </div>
-            {validationMessages.length ? (
-              <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>
-            ) : (
-              <p className="ocr-row-review-validation ocr-row-review-validation--ok">検証: OK</p>
-            )}
-            <OcrFieldConfidenceLegend />
           </div>
-          <div className="ocr-row-review-fields" role="list">
-            {fieldSpecs.map((spec) => (
-              <OcrReviewFieldRow
-                key={spec.key}
-                spec={spec}
-                draft={draft}
-                row={row}
-                confidence={spec.confidenceKey ? fieldConfidence[spec.confidenceKey] : undefined}
-                source={spec.confidenceKey ? fieldSources[spec.confidenceKey] : undefined}
-                editing={editingField === spec.key}
-                disabled={busy}
-                onStartEdit={() => startEdit(spec.key)}
-                onApply={applyEdit}
-                onCancel={() => cancelEdit(spec.key)}
-                onDraftChange={(value) => setDraft((current) => ({ ...current, [spec.key]: value }))}
-              />
-            ))}
-          </div>
-          {error ? <p className="ocr-warning-text">{error}</p> : null}
-          {isDirty ? <p className="ocr-row-review-dirty-note">未保存の変更があります</p> : null}
-          <div className="ocr-modal-actions ocr-row-review-actions">
+          <div className="ocr-row-review-data-footer">
+            {error ? <p className="ocr-warning-text">{error}</p> : null}
+            {isDirty ? <p className="ocr-row-review-dirty-note">未保存の変更があります</p> : null}
+            <div className="ocr-modal-actions ocr-row-review-actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
               閉じる
             </button>
@@ -512,6 +527,7 @@ export function OcrSavedRowReviewModal({
             ) : (
               <span className="ocr-row-review-confirmed-note">確定済み</span>
             )}
+            </div>
           </div>
         </div>
       </div>

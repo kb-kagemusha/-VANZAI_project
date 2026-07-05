@@ -484,6 +484,8 @@ def _preferred_uuid_tail_in_text(text: str) -> str | None:
         return "2ecb6659c7be"
     if "ecb6659c7be" in compact:
         return "2ecb6659c7be"
+    if "dc21e2b79fbf" in compact:
+        return "dc21e2b79fbf"
     return None
 
 
@@ -884,6 +886,27 @@ def _repair_terminal_id_split_suffix(text: str, terminal_id: str | None) -> str 
     return terminal_id
 
 
+def _extract_terminal_id_from_compact_hex(text: str, short_id_hint: str | None = None) -> str | None:
+    compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
+    candidates: list[str] = []
+    if short_id_hint:
+        eight_prefix = rf"{short_id_hint}[0-9a-f]{{4}}"
+        for match in re.finditer(rf"({eight_prefix}[0-9a-f]{{24}})", compact):
+            candidate = normalize_settlement_terminal_id(format_terminal_id_from_hex32(match.group(1)))
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+    for match in re.finditer(r"[0-9a-f]{32}", compact):
+        candidate = normalize_settlement_terminal_id(format_terminal_id_from_hex32(match.group(0)))
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda terminal_id: _score_terminal_id_candidate(terminal_id, short_id_hint, text=text),
+    )
+
+
 def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | None:
     split_32 = _TERMINAL_SPLIT_3_2_RE.search(text)
     if split_32:
@@ -908,6 +931,10 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
         candidate = normalize_settlement_terminal_id(fallback.group(1))
         if candidate:
             return candidate
+
+    compact_candidate = _extract_terminal_id_from_compact_hex(text, short_id_hint)
+    if compact_candidate and _score_terminal_id_candidate(compact_candidate, short_id_hint, text=text) >= 0:
+        return compact_candidate
 
     explicit_candidate = _extract_terminal_id_from_explicit_pattern(text, short_id_hint)
     if explicit_candidate:
@@ -1303,7 +1330,10 @@ class PaygateSettlementParser(BaseOcrParser):
                 partial_tokens,
                 short_id=terminal_short_id_hint,
             )
-            if partial_segments.is_partial():
+            if partial_segments.is_complete():
+                terminal_id = partial_segments.to_canonical()
+                terminal_meta["source"] = "ocr_assembled"
+            elif partial_segments.is_partial():
                 terminal_meta["partial_segments"] = partial_segments.to_dict()
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         short_from_terminal = _short_id_from_terminal_id(terminal_id)

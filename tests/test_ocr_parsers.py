@@ -507,6 +507,39 @@ dc21e2b79fbf
 """
 
 
+PRODUCTION_OCR_TEXT_260703_10 = """
+端末識別番号:e9c0
+精算
+2026/07/01 23:04:46
+端末番号
+e9c01785-7f8d-4b74-aa67-dc21e2b79fbf
+小計
+4,900
+合計
+4,900
+現金売上
+2,940
+クレジット売上
+1,960
+-PAYGATE POS
+445
+消費税
+通常取引数
+5
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_10_single_line_terminal_id():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_10))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    assert row.terminal_id == "e9c01785-7f8d-4b74-aa67-dc21e2b79fbf"
+    assert not row.raw_payload.get("terminal_id_partial")
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_17():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_17))

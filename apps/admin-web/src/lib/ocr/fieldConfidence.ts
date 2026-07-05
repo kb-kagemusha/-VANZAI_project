@@ -4,10 +4,11 @@ export function getOcrFieldConfidenceTone(value: number | null | undefined): Ocr
   if (value == null || Number.isNaN(value)) {
     return "unknown";
   }
-  if (value >= 0.97) {
+  const percent = Math.round(value * 100);
+  if (percent >= 97) {
     return "high";
   }
-  if (value >= 0.85) {
+  if (percent >= 85) {
     return "medium";
   }
   return "low";

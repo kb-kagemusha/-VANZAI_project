@@ -25,9 +25,10 @@ def clamp_confidence(value: float) -> float:
 def confidence_tone(value: float | None) -> "high" | "medium" | "low" | "unknown":
     if value is None:
         return "unknown"
-    if value >= 0.97:
+    percent = round(value * 100)
+    if percent >= 97:
         return "high"
-    if value >= 0.85:
+    if percent >= 85:
         return "medium"
     return "low"
 
