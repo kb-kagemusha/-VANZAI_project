@@ -15,12 +15,14 @@ function linesFromCanonical(terminalId: string): [string, string] {
   if (parts.length !== 5) {
     return [terminalId, ""];
   }
-  return [`${parts[0]}-${parts[1]}-${parts[2]}`, `${parts[3]}-${parts[4]}`];
+  return [`${parts[0]}-${parts[1]}-${parts[2]}-`, `${parts[3]}-${parts[4]}`];
 }
 
 function linesFromSegments(segments: TerminalIdSegments): [string, string] {
-  const line1 = [segments.eight, segments.four_1, segments.four_2].filter(Boolean).join("-") || "—";
-  const line2 = [segments.four_3, segments.twelve].filter(Boolean).join("-") || "—";
+  const line1Parts = [segments.eight, segments.four_1, segments.four_2].filter(Boolean);
+  const line1 = line1Parts.length ? `${line1Parts.join("-")}-` : "—";
+  const line2Parts = [segments.four_3, segments.twelve].filter(Boolean);
+  const line2 = line2Parts.length ? line2Parts.join("-") : "—";
   return [line1, line2];
 }
 

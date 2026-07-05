@@ -66,7 +66,6 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     key: "terminal_id",
     label: "端末番号",
     confidenceKey: "terminal_id",
-    monospace: true,
     formatDisplay: (draft) => draft.terminal_id || "—",
     renderDisplay: ({ draft, row, confidence, source }) => (
       <SettlementTerminalIdDisplay

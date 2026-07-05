@@ -1883,24 +1883,26 @@ button {
 .ocr-terminal-id-display {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.12rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  word-break: break-all;
-}
-
-.ocr-row-review-field-value .ocr-terminal-id-display--review {
   font-size: inherit;
-  line-height: 1.45;
-}
-
-.ocr-saved-data-confidence-legend {
-  margin-bottom: 0.75rem;
+  font-weight: inherit;
+  line-height: 1.4;
+  word-break: normal;
 }
 
 .ocr-terminal-id-display-line {
   display: block;
+  white-space: nowrap;
+}
+
+.ocr-field-confidence:has(.ocr-terminal-id-display) {
+  align-items: flex-start;
+  gap: 0.35rem 0.5rem;
+}
+
+.ocr-saved-data-confidence-legend {
+  margin-bottom: 0.75rem;
 }
 
 .ocr-terminal-id-edit-preview {
@@ -1910,7 +1912,7 @@ button {
   margin-bottom: 0.35rem;
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
+  font-size: inherit;
 }
 
 .ocr-partial-extract-badge {

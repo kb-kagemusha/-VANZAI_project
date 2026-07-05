@@ -268,15 +268,16 @@ def format_terminal_id_display_lines(value: str | None) -> tuple[str, str] | Non
     parts = value.split("-")
     if len(parts) != 5:
         return None
-    return f"{parts[0]}-{parts[1]}-{parts[2]}", f"{parts[3]}-{parts[4]}"
+    return f"{parts[0]}-{parts[1]}-{parts[2]}-", f"{parts[3]}-{parts[4]}"
 
 
 def format_terminal_segments_display_lines(segments: TerminalIdSegments) -> tuple[str, str]:
     line1_parts = [segments.eight, segments.four_1, segments.four_2]
-    line1 = "-".join(part for part in line1_parts if part)
+    line1_joined = "-".join(part for part in line1_parts if part)
+    line1 = f"{line1_joined}-" if line1_joined else "—"
     line2_parts = [segments.four_3, segments.twelve]
-    line2 = "-".join(part for part in line2_parts if part)
-    return line1 or "—", line2 or "—"
+    line2 = "-".join(part for part in line2_parts if part) or "—"
+    return line1, line2
 
 
 def terminal_id_is_partial_from_payload(raw_payload: dict[str, Any] | None) -> bool:

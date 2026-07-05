@@ -48,7 +48,7 @@ def test_normalize_uppercase_to_lowercase():
 
 def test_format_terminal_id_display_lines_splits_uuid():
     lines = format_terminal_id_display_lines("98f0ec2f-fc54-4e00-a503-2ecb6659c7be")
-    assert lines == ("98f0ec2f-fc54-4e00", "a503-2ecb6659c7be")
+    assert lines == ("98f0ec2f-fc54-4e00-", "a503-2ecb6659c7be")
 
 
 def test_assemble_terminal_segments_partial():
@@ -59,7 +59,7 @@ def test_assemble_terminal_segments_partial():
     assert segments.is_partial()
     assert segments.eight == "98f0ec2f"
     assert segments.twelve == "2ecb6659c7be"
-    assert format_terminal_segments_display_lines(segments) == ("98f0ec2f-fc54-4e00", "2ecb6659c7be")
+    assert format_terminal_segments_display_lines(segments) == ("98f0ec2f-fc54-4e00-", "2ecb6659c7be")
 
 
 def test_terminal_segments_complete():
