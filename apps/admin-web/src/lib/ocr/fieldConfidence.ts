@@ -4,10 +4,10 @@ export function getOcrFieldConfidenceTone(value: number | null | undefined): Ocr
   if (value == null || Number.isNaN(value)) {
     return "unknown";
   }
-  if (value >= 0.99) {
+  if (value >= 0.97) {
     return "high";
   }
-  if (value >= 0.9) {
+  if (value >= 0.85) {
     return "medium";
   }
   return "low";
@@ -34,7 +34,7 @@ export function getOcrFieldConfidenceClassName(tone: OcrFieldConfidenceTone): st
 }
 
 export const OCR_FIELD_CONFIDENCE_LEGEND = [
-  { tone: "high" as const, label: "99%以上（黒）" },
-  { tone: "medium" as const, label: "90–98%（青）" },
-  { tone: "low" as const, label: "90%未満（オレンジ）" },
+  { tone: "high" as const, label: "97%以上（黒）" },
+  { tone: "medium" as const, label: "85–96%（青）" },
+  { tone: "low" as const, label: "85%未満（オレンジ）" },
 ];

@@ -5,7 +5,7 @@ from typing import Any
 
 from src.services.ocr.models import OcrEngineResult, OcrTextLine, ParsedOcrRow
 
-# Display tiers (UI): >=0.99 black, 0.90-0.989 blue, <0.90 orange
+# Display tiers (UI): >=0.97 black, 0.85-0.969 blue, <0.85 orange
 CONFIDENCE_SOURCE_WEIGHTS: dict[str, float] = {
     "ocr_line_direct": 1.0,
     "ocr_line_pair": 0.96,
@@ -25,9 +25,9 @@ def clamp_confidence(value: float) -> float:
 def confidence_tone(value: float | None) -> "high" | "medium" | "low" | "unknown":
     if value is None:
         return "unknown"
-    if value >= 0.99:
+    if value >= 0.97:
         return "high"
-    if value >= 0.90:
+    if value >= 0.85:
         return "medium"
     return "low"
 
