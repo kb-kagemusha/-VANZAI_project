@@ -39,6 +39,15 @@ def _is_settlement_amount_plausible(amount: Decimal) -> bool:
     return bool(solve_unit_combinations(int(amount)))
 
 
+def is_weak_settlement_header_amount(amount: Decimal | None) -> bool:
+    """小計・合計として採用しない小さすぎる／単価組み合わせ不成立の金額。"""
+    if amount is None:
+        return True
+    if amount < Decimal("980"):
+        return True
+    return not _is_settlement_amount_plausible(amount)
+
+
 def is_valid_settlement_unit_sales_amount(amount: Decimal | None) -> bool:
     """現金売上・PAYGATE POS は 980/1480/2980 の組み合わせ（または 0）のみ。"""
     if amount is None or amount == 0:

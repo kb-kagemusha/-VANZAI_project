@@ -123,11 +123,23 @@ function formatOcrFilenameDisplay(filename: string, hideExtension = false) {
 
 const IMAGE_PAGE_SIZES = [10, 20, 50] as const;
 type ImagePageSize = (typeof IMAGE_PAGE_SIZES)[number];
+const SAVED_ROW_PAGE_SIZES = [10, 20, 50] as const;
+type SavedRowPageSize = (typeof SAVED_ROW_PAGE_SIZES)[number];
 type ImageViewMode = "thumbnail" | "compact";
 
 const IMAGE_VIEW_MODE_KEY = "vanzai.ocr.imageViewMode";
 const SAVED_DATA_TAB_KEY = "vanzai.ocr.savedDataTab";
+const SAVED_ROW_PAGE_SIZE_KEY = "vanzai.ocr.savedRowPageSize";
 type SavedDataTab = OcrSourceType;
+
+type SavedRowValidationFilter = "" | "ok" | "error";
+
+type SavedRowFilters = {
+  terminalShortId: string;
+  status: string;
+  validation: SavedRowValidationFilter;
+  keyword: string;
+};
 
 const OCR_PARSE_STATUS_LABELS: Record<string, string> = {
   pending: "解析待ち",
@@ -1058,6 +1070,17 @@ export function ReceiptOcrPage() {
     const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
     return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
   });
+  const [savedRowPageSize, setSavedRowPageSize] = useState<SavedRowPageSize>(() => {
+    const stored = Number(window.localStorage.getItem(SAVED_ROW_PAGE_SIZE_KEY));
+    return stored === 10 || stored === 50 ? stored : 20;
+  });
+  const [savedRowPage, setSavedRowPage] = useState(0);
+  const [savedRowFilters, setSavedRowFilters] = useState<SavedRowFilters>({
+    terminalShortId: "",
+    status: "",
+    validation: "",
+    keyword: "",
+  });
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
   const [reparseProgress, setReparseProgress] = useState<OcrParseProgressState | null>(null);
@@ -1595,12 +1618,70 @@ export function ReceiptOcrPage() {
     [savedRows],
   );
   const tabSavedRows = savedDataTab === "paygate_screenshot" ? paygateSavedRows : settlementSavedRows;
+  const filteredSavedRows = useMemo(() => {
+    const terminalFilter = savedRowFilters.terminalShortId.trim().toLowerCase();
+    const keyword = savedRowFilters.keyword.trim().toLowerCase();
+    return tabSavedRows.filter((row) => {
+      if (terminalFilter) {
+        const shortId = (row.terminal_short_id || "").toLowerCase();
+        if (shortId !== terminalFilter) {
+          return false;
+        }
+      }
+      if (savedRowFilters.status && row.status !== savedRowFilters.status) {
+        return false;
+      }
+      if (savedRowFilters.validation === "ok") {
+        const messages = [
+          ...(row.blocking_errors || []),
+          ...(row.warnings || []),
+          ...(row.validation_errors || []),
+        ];
+        if (messages.length > 0 || row.confirm_required) {
+          return false;
+        }
+      }
+      if (savedRowFilters.validation === "error") {
+        const messages = [
+          ...(row.blocking_errors || []),
+          ...(row.warnings || []),
+          ...(row.validation_errors || []),
+        ];
+        if (messages.length === 0 && !row.confirm_required) {
+          return false;
+        }
+      }
+      if (keyword) {
+        const haystack = [
+          row.source_image_filename,
+          row.terminal_short_id,
+          row.terminal_id,
+          row.transaction_no,
+          row.receipt_no,
+          row.store_name,
+          row.period_key,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(keyword)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [savedRowFilters, tabSavedRows]);
   const sortedSavedRows = useMemo(
-    () => sortOcrRows(tabSavedRows, rowSortKey, rowSortDirection),
-    [tabSavedRows, rowSortDirection, rowSortKey],
+    () => sortOcrRows(filteredSavedRows, rowSortKey, rowSortDirection),
+    [filteredSavedRows, rowSortDirection, rowSortKey],
   );
-  const confirmableRows = tabSavedRows.filter((row) => isOcrRowConfirmable(row));
-  const deletableRows = tabSavedRows.filter((row) => isOcrRowDeletable(row));
+  const totalSavedRowPages = Math.max(1, Math.ceil(sortedSavedRows.length / savedRowPageSize));
+  const paginatedSavedRows = useMemo(() => {
+    const start = savedRowPage * savedRowPageSize;
+    return sortedSavedRows.slice(start, start + savedRowPageSize);
+  }, [savedRowPage, savedRowPageSize, sortedSavedRows]);
+  const confirmableRows = filteredSavedRows.filter((row) => isOcrRowConfirmable(row));
+  const deletableRows = filteredSavedRows.filter((row) => isOcrRowDeletable(row));
   const allSavedRowsSelected =
     deletableRows.length > 0 && deletableRows.every((row) => selectedRowIds.includes(row.id));
   const allConfirmableRowsSelected =
@@ -1702,7 +1783,21 @@ export function ReceiptOcrPage() {
   const handleSavedDataTabChange = (tab: SavedDataTab) => {
     setSavedDataTab(tab);
     setSelectedRowIds([]);
+    setSavedRowPage(0);
     window.localStorage.setItem(SAVED_DATA_TAB_KEY, tab);
+  };
+
+  const handleSavedRowPageSizeChange = (size: SavedRowPageSize) => {
+    setSavedRowPageSize(size);
+    setSavedRowPage(0);
+    setSelectedRowIds([]);
+    window.localStorage.setItem(SAVED_ROW_PAGE_SIZE_KEY, String(size));
+  };
+
+  const handleSavedRowFilterChange = (patch: Partial<SavedRowFilters>) => {
+    setSavedRowFilters((current) => ({ ...current, ...patch }));
+    setSavedRowPage(0);
+    setSelectedRowIds([]);
   };
 
   const renderSortableHeader = (sortKey: OcrRowSortKey, label: string) => (
@@ -2174,11 +2269,76 @@ export function ReceiptOcrPage() {
         <div className="filter-row">
           <label>
             対象月
-            <select value={selectedPeriodKey} onChange={(event) => setSelectedPeriodKey(event.target.value)}>
+            <select
+              value={selectedPeriodKey}
+              onChange={(event) => {
+                setSelectedPeriodKey(event.target.value);
+                setSavedRowPage(0);
+                setSelectedRowIds([]);
+              }}
+            >
               <option value="">すべて</option>
               {periodOptions.map((periodKey) => (
                 <option key={periodKey} value={periodKey}>
                   {formatPeriodKey(periodKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            端末識別番号
+            <input
+              value={savedRowFilters.terminalShortId}
+              placeholder="例: 2c0e"
+              maxLength={4}
+              onChange={(event) =>
+                handleSavedRowFilterChange({
+                  terminalShortId: normalizeTerminalShortIdInput(event.target.value),
+                })
+              }
+            />
+          </label>
+          <label>
+            ステータス
+            <select
+              value={savedRowFilters.status}
+              onChange={(event) => handleSavedRowFilterChange({ status: event.target.value })}
+            >
+              <option value="">すべて</option>
+              <option value="pending_review">未確定</option>
+              <option value="confirmed">確定済み</option>
+            </select>
+          </label>
+          <label>
+            検証
+            <select
+              value={savedRowFilters.validation}
+              onChange={(event) =>
+                handleSavedRowFilterChange({ validation: event.target.value as SavedRowValidationFilter })
+              }
+            >
+              <option value="">すべて</option>
+              <option value="ok">OKのみ</option>
+              <option value="error">要確認・エラー</option>
+            </select>
+          </label>
+          <label>
+            キーワード
+            <input
+              value={savedRowFilters.keyword}
+              placeholder="ファイル名・端末番号など"
+              onChange={(event) => handleSavedRowFilterChange({ keyword: event.target.value })}
+            />
+          </label>
+          <label>
+            表示件数
+            <select
+              value={savedRowPageSize}
+              onChange={(event) => handleSavedRowPageSizeChange(Number(event.target.value) as SavedRowPageSize)}
+            >
+              {SAVED_ROW_PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}件
                 </option>
               ))}
             </select>
@@ -2285,27 +2445,66 @@ export function ReceiptOcrPage() {
           </div>
         ) : null}
 
+        <p className="ocr-image-toolbar-summary">
+          {filteredSavedRows.length
+            ? `全 ${filteredSavedRows.length} 件中 ${savedRowPage * savedRowPageSize + 1}–${Math.min(
+                (savedRowPage + 1) * savedRowPageSize,
+                filteredSavedRows.length,
+              )} 件を表示`
+            : "該当する保存データはありません"}
+          {filteredSavedRows.length !== tabSavedRows.length
+            ? `（タブ内 ${tabSavedRows.length} 件から絞り込み）`
+            : null}
+        </p>
+
         <div id="ocr-saved-data-panel" role="tabpanel" aria-labelledby={savedDataTab === "paygate_screenshot" ? "ocr-saved-tab-paygate" : "ocr-saved-tab-settlement"}>
           {rowsQuery.isPending ? (
             <LoadingOverlay label="解析結果を読み込み中..." />
           ) : rowsQuery.isError ? (
             <ErrorState title="解析結果の取得に失敗しました" description="API 接続または権限を確認してください。" />
           ) : (
-            <DataTable
-              columns={visibleRowColumns}
-              rows={sortedSavedRows}
-              getRowKey={(row) => row.id}
-              emptyTitle={
-                savedDataTab === "paygate_screenshot"
-                  ? "Paygateの保存データがありません"
-                  : "精算レシートの保存データがありません"
-              }
-              emptyDescription={
-                savedDataTab === "paygate_screenshot"
-                  ? "Paygateスクリーンショットをアップロードして解析を実行してください。"
-                  : "精算レシートをアップロードして解析を実行してください。"
-              }
-            />
+            <>
+              <DataTable
+                columns={visibleRowColumns}
+                rows={paginatedSavedRows}
+                getRowKey={(row) => row.id}
+                emptyTitle={
+                  savedDataTab === "paygate_screenshot"
+                    ? "Paygateの保存データがありません"
+                    : "精算レシートの保存データがありません"
+                }
+                emptyDescription={
+                  filteredSavedRows.length !== tabSavedRows.length
+                    ? "絞り込み条件を変更するか、フィルタをクリアしてください。"
+                    : savedDataTab === "paygate_screenshot"
+                      ? "Paygateスクリーンショットをアップロードして解析を実行してください。"
+                      : "精算レシートをアップロードして解析を実行してください。"
+                }
+              />
+              {totalSavedRowPages > 1 ? (
+                <div className="ocr-image-pagination">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={savedRowPage === 0}
+                    onClick={() => setSavedRowPage((current) => Math.max(0, current - 1))}
+                  >
+                    前へ
+                  </button>
+                  <span>
+                    {savedRowPage + 1} / {totalSavedRowPages} ページ
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={savedRowPage >= totalSavedRowPages - 1}
+                    onClick={() => setSavedRowPage((current) => Math.min(totalSavedRowPages - 1, current + 1))}
+                  >
+                    次へ
+                  </button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </section>

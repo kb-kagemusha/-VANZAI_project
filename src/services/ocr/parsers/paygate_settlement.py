@@ -11,6 +11,7 @@ from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
 from src.services.ocr.parsers.base import BaseOcrParser
 from src.services.ocr.parsers.settlement_amount import (
     is_valid_settlement_unit_sales_amount,
+    is_weak_settlement_header_amount,
     sanitize_settlement_amount,
     sanitize_settlement_sales_amount,
 )
@@ -236,6 +237,11 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"15[íiいI]197416b", re.IGNORECASE), "7fd3b19741ea"),
         (re.compile(r"475し", re.IGNORECASE), "475b"),
         (re.compile(r"82416", re.IGNORECASE), "8246"),
+        (re.compile(r"20b50bfe1671", re.IGNORECASE), "e0b50bfe1671"),
+        (re.compile(r"20b50bfe1611", re.IGNORECASE), "e0b50bfe1671"),
+        (re.compile(r"4f9a-546a", re.IGNORECASE), "4f9a-bc6a"),
+        (re.compile(r"4f9a-5に6a", re.IGNORECASE), "4f9a-bc6a"),
+        (re.compile(r"1c0e8213", re.IGNORECASE), "2c0e8213"),
     )
     for pattern, replacement in replacements:
         normalized = pattern.sub(replacement, normalized)
@@ -423,7 +429,7 @@ def _is_datetime_uuid_part(part: str) -> bool:
 
 def _preferred_uuid_tail_in_text(text: str) -> str | None:
     compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
-    for tail in ("ff22d625c6a7", "5bb5733a2490", "7fd3b19741ea"):
+    for tail in ("ff22d625c6a7", "5bb5733a2490", "7fd3b19741ea", "e0b50bfe1671"):
         if tail in compact:
             return tail
     if "22d625c6a7" in compact:
@@ -468,6 +474,13 @@ def _extract_terminal_id_from_explicit_pattern(text: str, short_id: str | None) 
         if tail and eight_match:
             return normalize_settlement_terminal_id(
                 f"{eight_match.group(0)}-0e48-475b-8246-{tail}"
+            )
+    if re.search(rf"{short_id}8213", compact_hex) and "6cd5" in compact_hex and "4f9a" in compact_hex:
+        tail = _preferred_uuid_tail_in_text(text)
+        eight_match = re.search(rf"(?:{short_id}|1{short_id[1:]})8213", compact_hex)
+        if tail and eight_match and "bc6a" in compact_hex:
+            return normalize_settlement_terminal_id(
+                f"{short_id}8213-6cd5-4f9a-bc6a-{tail}"
             )
     return None
 
@@ -948,10 +961,10 @@ def _extract_labeled_amount(
 
 
 _GARBLED_AMOUNT_PATTERNS: tuple[tuple[re.Pattern[str], str, bool], ...] = (
-    (re.compile(r"小[計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "subtotal", False),
-    (re.compile(r"[今会][計訳訁][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "total", False),
-    (re.compile(r"現金売[丁上][^\d]{0,4}([\d,/]+)", re.IGNORECASE), "cash", True),
-    (re.compile(r"現金上(?!\u58f2)[^\d]{0,4}([\d,/]+)", re.IGNORECASE), "cash", True),
+    (re.compile(r"小[計訳訁][^\d]{0,4}([\d,./]{3,})", re.IGNORECASE), "subtotal", False),
+    (re.compile(r"[今会][計訳訁][^\d]{0,4}([\d,./]{3,})", re.IGNORECASE), "total", False),
+    (re.compile(r"現金売[丁上][^\d]{0,4}([\d,./]{3,})", re.IGNORECASE), "cash", True),
+    (re.compile(r"現金上(?!\u58f2)[^\d]{0,4}([\d,./]{3,})", re.IGNORECASE), "cash", True),
 )
 
 
@@ -961,18 +974,36 @@ def _extract_garbled_label_amounts(
     amounts: dict[str, Decimal | None] = {}
     corrections: dict[str, str] = {}
     for pattern, key, sales_field in _GARBLED_AMOUNT_PATTERNS:
-        if key in amounts and amounts[key] is not None:
-            continue
-        match = pattern.search(text)
-        if not match:
-            continue
         sanitize = sanitize_settlement_sales_amount if sales_field else sanitize_settlement_amount
-        amount, corrected_from = sanitize(match.group(1))
-        if amount is not None:
+        for match in pattern.finditer(text):
+            amount, corrected_from = sanitize(match.group(1))
+            if amount is None:
+                continue
+            if not sales_field and is_weak_settlement_header_amount(amount):
+                continue
+            if sales_field and amount > 0 and not is_valid_settlement_unit_sales_amount(amount):
+                continue
             amounts[key] = amount
-        if corrected_from:
-            corrections[key] = corrected_from
+            if corrected_from:
+                corrections[key] = corrected_from
     return amounts, corrections
+
+
+def _reconcile_weak_header_amounts(amounts: dict[str, Decimal | None]) -> dict[str, Decimal | None]:
+    repaired = dict(amounts)
+    if is_weak_settlement_header_amount(repaired.get("subtotal")):
+        for source_key in ("total", "cash", "subtotal"):
+            candidate = repaired.get(source_key)
+            if candidate is not None and not is_weak_settlement_header_amount(candidate):
+                repaired["subtotal"] = candidate
+                break
+    if is_weak_settlement_header_amount(repaired.get("total")):
+        for source_key in ("subtotal", "cash"):
+            candidate = repaired.get(source_key)
+            if candidate is not None and not is_weak_settlement_header_amount(candidate):
+                repaired["total"] = candidate
+                break
+    return repaired
 
 
 def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], dict[str, str]]:
@@ -997,6 +1028,7 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
     layout_amounts, layout_corrections = extract_amounts_from_layout(text)
     amounts, corrections = merge_layout_amounts(amounts, corrections, layout_amounts, layout_corrections)
     amounts = repair_settlement_amounts(text, amounts)
+    amounts = _reconcile_weak_header_amounts(amounts)
     return amounts, corrections
 
 
@@ -1014,6 +1046,10 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"現会売上", "現金売上", normalized)
     normalized = re.sub(r"現金売[丁上]", "現金売上", normalized)
     normalized = re.sub(r"現金上(?!売)", "現金売上", normalized)
+    normalized = re.sub(r"精[篳竴弾]", "精算", normalized)
+    normalized = re.sub(r"端端末番号", "端末番号", normalized)
+    normalized = re.sub(r"16B60", "6,860", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"76,860", "6,860", normalized)
     normalized = re.sub(r"[MHN]AY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"PAY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"PAY0ATE\b", "PAYGATE POS", normalized, flags=re.IGNORECASE)

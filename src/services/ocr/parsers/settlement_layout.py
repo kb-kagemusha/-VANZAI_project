@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from src.services.ocr.parsers.settlement_amount import (
     _is_settlement_amount_plausible,
+    is_weak_settlement_header_amount,
     sanitize_settlement_amount,
     sanitize_settlement_sales_amount,
 )
@@ -40,11 +41,7 @@ _LAYOUT_LINE_SPECS: tuple[tuple[str, re.Pattern[str], bool], ...] = (
 
 
 def _is_weak_total(amount: Decimal | None) -> bool:
-    if amount is None:
-        return True
-    if amount < Decimal("980"):
-        return True
-    return not _is_settlement_amount_plausible(amount)
+    return is_weak_settlement_header_amount(amount)
 
 
 def _amount_from_lines(line: str, next_line: str | None, *, sales_field: bool) -> tuple[Decimal | None, str | None]:
@@ -287,7 +284,9 @@ def merge_layout_amounts(
         if value is None:
             continue
         current = merged.get(key)
-        if current is None or (key == "total" and _is_weak_total(current)):
+        if current is None or (
+            key in {"total", "subtotal"} and is_weak_settlement_header_amount(current)
+        ):
             merged[key] = value
             if key in layout_corrections:
                 merged_corrections[key] = layout_corrections[key]
