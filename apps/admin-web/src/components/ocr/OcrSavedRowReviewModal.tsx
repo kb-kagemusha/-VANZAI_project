@@ -1,19 +1,135 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type HTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 
 import { ApiError, fetchOcrImageBlobUrl, updateOcrRow } from "../../lib/api/client";
 import { formatCurrency } from "../../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
+import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatOcrValidationMessages } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
 import { StatusBadge } from "../StatusBadge";
 import { OcrFieldConfidenceLegend, OcrFieldConfidenceValue } from "./OcrFieldConfidence";
 import {
-  OcrRowEditForm,
   buildOcrRowUpdateBody,
   createOcrRowEditDraft,
   type OcrRowEditDraft,
 } from "./OcrRowEditForm";
+
+type EditableFieldKey = keyof OcrRowEditDraft;
+
+type ReviewFieldSpec = {
+  key: EditableFieldKey;
+  label: string;
+  confidenceKey?: string;
+  monospace?: boolean;
+  inputType?: string;
+  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
+  placeholder?: string;
+  formatDisplay: (draft: OcrRowEditDraft) => string;
+  normalizeInput?: (value: string) => string;
+};
+
+const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
+  {
+    key: "terminal_short_id",
+    label: "端末識別番号",
+    confidenceKey: "terminal_short_id",
+    maxLength: 4,
+    formatDisplay: (draft) => draft.terminal_short_id || "—",
+    normalizeInput: normalizeTerminalShortIdInput,
+  },
+  {
+    key: "record_date",
+    label: "精算日",
+    confidenceKey: "record_datetime",
+    inputType: "date",
+    formatDisplay: (draft) => draft.record_date || "—",
+  },
+  {
+    key: "record_time",
+    label: "精算時間",
+    confidenceKey: "record_datetime",
+    placeholder: "20:52:59",
+    formatDisplay: (draft) => draft.record_time || "—",
+  },
+  {
+    key: "terminal_id",
+    label: "端末番号",
+    confidenceKey: "terminal_id",
+    monospace: true,
+    formatDisplay: (draft) => draft.terminal_id || "—",
+  },
+  {
+    key: "subtotal",
+    label: "小計",
+    confidenceKey: "subtotal",
+    formatDisplay: (draft) => (draft.subtotal ? formatCurrency(draft.subtotal) : "—"),
+  },
+  {
+    key: "amount",
+    label: "合計",
+    confidenceKey: "amount",
+    formatDisplay: (draft) => (draft.amount ? formatCurrency(draft.amount) : "—"),
+  },
+  {
+    key: "cash_sales",
+    label: "現金売上",
+    confidenceKey: "cash_sales",
+    formatDisplay: (draft) => (draft.cash_sales ? formatCurrency(draft.cash_sales) : "—"),
+  },
+  {
+    key: "pos_sales",
+    label: "PAYGATE POS",
+    confidenceKey: "pos_sales",
+    formatDisplay: (draft) => (draft.pos_sales ? formatCurrency(draft.pos_sales) : "—"),
+  },
+  {
+    key: "transaction_count",
+    label: "通常取引数",
+    confidenceKey: "transaction_count",
+    inputMode: "numeric",
+    formatDisplay: (draft) => draft.transaction_count || "—",
+  },
+];
+
+const SCREENSHOT_REVIEW_FIELDS: ReviewFieldSpec[] = [
+  {
+    key: "record_date",
+    label: "日付",
+    confidenceKey: "record_datetime",
+    inputType: "date",
+    formatDisplay: (draft) => draft.record_date || "—",
+  },
+  {
+    key: "record_time",
+    label: "時刻",
+    confidenceKey: "record_datetime",
+    placeholder: "20:52:59",
+    formatDisplay: (draft) => draft.record_time || "—",
+  },
+  {
+    key: "amount",
+    label: "金額（合計）",
+    confidenceKey: "amount",
+    formatDisplay: (draft) => (draft.amount ? formatCurrency(draft.amount) : "—"),
+  },
+  {
+    key: "transaction_no",
+    label: "取引番号",
+    formatDisplay: (draft) => draft.transaction_no || "—",
+  },
+  {
+    key: "receipt_no",
+    label: "レシート番号",
+    formatDisplay: (draft) => draft.receipt_no || "—",
+  },
+  {
+    key: "payment_method",
+    label: "決済方法",
+    formatDisplay: (draft) => draft.payment_method || "—",
+  },
+];
 
 function useOcrImageBlobUrl(imageId: string) {
   const [url, setUrl] = useState<string | null>(null);
@@ -42,128 +158,80 @@ function useOcrImageBlobUrl(imageId: string) {
   return { url, failed };
 }
 
-function OcrRowReviewSummary({ row }: { row: OcrExtractedRowItem }) {
-  const isSettlement = row.source_type === "paygate_settlement";
-  const labels = getOcrRowDisplayLabels(row);
-  const fieldConfidence = row.field_confidence ?? {};
-  const fieldSources = row.field_sources ?? {};
-  const validationMessages =
-    row.source_type === "paygate_settlement"
-      ? [...(row.blocking_errors || []), ...(row.warnings || [])]
-      : row.validation_errors || [];
+function OcrReviewFieldRow({
+  spec,
+  draft,
+  confidence,
+  source,
+  editing,
+  disabled,
+  onStartEdit,
+  onApply,
+  onCancel,
+  onDraftChange,
+}: {
+  spec: ReviewFieldSpec;
+  draft: OcrRowEditDraft;
+  confidence?: number | null;
+  source?: string | null;
+  editing: boolean;
+  disabled?: boolean;
+  onStartEdit: () => void;
+  onApply: () => void;
+  onCancel: () => void;
+  onDraftChange: (value: string) => void;
+}) {
+  const value = draft[spec.key];
+  const displayValue = spec.formatDisplay(draft);
 
   return (
-    <div className="ocr-row-review-summary">
-      <div className="ocr-row-review-meta">
-        <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
-          {row.source_image_filename || row.source_image_id}
-        </p>
-        <div className="ocr-row-review-badges">
-          <StatusBadge value={row.status} />
-          {labels.map((label) => (
-            <span key={label.key} className={`ocr-quality-badge ocr-quality-badge--${label.tone}`}>
-              {label.text}
-            </span>
-          ))}
-        </div>
-      </div>
-      {validationMessages.length ? (
-        <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>
+    <div className={`ocr-row-review-field-row${editing ? " ocr-row-review-field-row--editing" : ""}`}>
+      <span className="ocr-row-review-field-label">{spec.label}</span>
+      {editing ? (
+        <>
+          <input
+            type={spec.inputType || "text"}
+            className={`ocr-row-review-field-input${spec.monospace ? " ocr-row-review-field-input--mono" : ""}`}
+            value={value}
+            maxLength={spec.maxLength}
+            inputMode={spec.inputMode}
+            placeholder={spec.placeholder}
+            autoFocus
+            disabled={disabled}
+            onChange={(event) => {
+              const next = spec.normalizeInput ? spec.normalizeInput(event.target.value) : event.target.value;
+              onDraftChange(next);
+            }}
+          />
+          <div className="ocr-row-review-field-actions">
+            <button type="button" className="ghost-button" onClick={onApply} disabled={disabled}>
+              適用
+            </button>
+            <button type="button" className="ghost-button" onClick={onCancel} disabled={disabled}>
+              取消
+            </button>
+          </div>
+        </>
       ) : (
-        <p className="ocr-row-review-validation ocr-row-review-validation--ok">検証: OK</p>
+        <>
+          <span className={`ocr-row-review-field-value${spec.monospace ? " ocr-row-review-field-value--mono" : ""}`}>
+            {confidence != null ? (
+              <OcrFieldConfidenceValue value={displayValue} confidence={confidence} source={source} />
+            ) : (
+              displayValue
+            )}
+          </span>
+          <button
+            type="button"
+            className="ghost-button ocr-row-review-field-edit"
+            onClick={onStartEdit}
+            disabled={disabled}
+            aria-label={`${spec.label}を編集`}
+          >
+            編集
+          </button>
+        </>
       )}
-      <OcrFieldConfidenceLegend />
-      <dl className="ocr-row-review-readonly">
-        <div>
-          <dt>{isSettlement ? "精算日時" : "日時"}</dt>
-          <dd>
-            <OcrFieldConfidenceValue
-              value={`${row.record_date || "—"} ${row.record_time || ""}`.trim()}
-              confidence={fieldConfidence.record_datetime}
-              source={fieldSources.record_datetime}
-            />
-          </dd>
-        </div>
-        <div>
-          <dt>合計</dt>
-          <dd>
-            <OcrFieldConfidenceValue
-              value={formatCurrency(row.amount)}
-              confidence={fieldConfidence.amount}
-              source={fieldSources.amount}
-            />
-          </dd>
-        </div>
-        {isSettlement ? (
-          <>
-            <div>
-              <dt>小計</dt>
-              <dd>
-                <OcrFieldConfidenceValue
-                  value={formatCurrency(row.subtotal)}
-                  confidence={fieldConfidence.subtotal}
-                  source={fieldSources.subtotal}
-                />
-              </dd>
-            </div>
-            <div>
-              <dt>現金売上</dt>
-              <dd>
-                <OcrFieldConfidenceValue
-                  value={formatCurrency(row.cash_sales)}
-                  confidence={fieldConfidence.cash_sales}
-                  source={fieldSources.cash_sales}
-                />
-              </dd>
-            </div>
-            <div>
-              <dt>PAYGATE POS</dt>
-              <dd>
-                <OcrFieldConfidenceValue
-                  value={formatCurrency(row.pos_sales)}
-                  confidence={fieldConfidence.pos_sales}
-                  source={fieldSources.pos_sales}
-                />
-              </dd>
-            </div>
-            <div>
-              <dt>端末識別番号</dt>
-              <dd>
-                <OcrFieldConfidenceValue
-                  value={row.terminal_short_id || "—"}
-                  confidence={fieldConfidence.terminal_short_id}
-                  source={fieldSources.terminal_short_id}
-                />
-              </dd>
-            </div>
-            <div className="ocr-row-review-readonly-wide">
-              <dt>端末番号</dt>
-              <dd className="ocr-row-review-uuid">
-                <OcrFieldConfidenceValue
-                  value={row.terminal_id || "—"}
-                  confidence={fieldConfidence.terminal_id}
-                  source={fieldSources.terminal_id}
-                />
-              </dd>
-            </div>
-          </>
-        ) : (
-          <>
-            <div>
-              <dt>取引番号</dt>
-              <dd>{row.transaction_no || "—"}</dd>
-            </div>
-            <div>
-              <dt>レシート番号</dt>
-              <dd>{row.receipt_no || "—"}</dd>
-            </div>
-            <div>
-              <dt>決済方法</dt>
-              <dd>{row.payment_method || "—"}</dd>
-            </div>
-          </>
-        )}
-      </dl>
     </div>
   );
 }
@@ -187,31 +255,72 @@ export function OcrSavedRowReviewModal({
 }) {
   const isSettlement = row.source_type === "paygate_settlement";
   const { url, failed } = useOcrImageBlobUrl(row.source_image_id);
+  const [savedDraft, setSavedDraft] = useState<OcrRowEditDraft>(() => createOcrRowEditDraft(row));
   const [draft, setDraft] = useState<OcrRowEditDraft>(() => createOcrRowEditDraft(row));
+  const [editingField, setEditingField] = useState<EditableFieldKey | null>(null);
+  const [editSnapshot, setEditSnapshot] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
 
+  const fieldSpecs = isSettlement ? SETTLEMENT_REVIEW_FIELDS : SCREENSHOT_REVIEW_FIELDS;
+  const fieldConfidence = row.field_confidence ?? {};
+  const fieldSources = row.field_sources ?? {};
+  const labels = getOcrRowDisplayLabels(row);
+  const validationMessages =
+    row.source_type === "paygate_settlement"
+      ? [...(row.blocking_errors || []), ...(row.warnings || [])]
+      : row.validation_errors || [];
+
+  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(savedDraft), [draft, savedDraft]);
+
   useEffect(() => {
-    setDraft(createOcrRowEditDraft(row));
+    const next = createOcrRowEditDraft(row);
+    setSavedDraft(next);
+    setDraft(next);
+    setEditingField(null);
     setError(null);
   }, [row]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (editingField) {
+          setDraft((current) => ({ ...current, [editingField]: editSnapshot }));
+          setEditingField(null);
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [editSnapshot, editingField, onClose]);
+
+  const startEdit = (key: EditableFieldKey) => {
+    setEditingField(key);
+    setEditSnapshot(draft[key]);
+  };
+
+  const applyEdit = () => {
+    setEditingField(null);
+  };
+
+  const cancelEdit = (key: EditableFieldKey) => {
+    setDraft((current) => ({ ...current, [key]: editSnapshot }));
+    setEditingField(null);
+  };
 
   const handleSave = async () => {
+    if (editingField) {
+      setError("編集中の項目を適用または取消してから保存してください。");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await updateOcrRow(row.id, buildOcrRowUpdateBody(row, draft));
+      setSavedDraft(draft);
       await onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "保存に失敗しました");
@@ -221,6 +330,14 @@ export function OcrSavedRowReviewModal({
   };
 
   const handleConfirm = async () => {
+    if (editingField) {
+      setError("編集中の項目を適用または取消してから確定してください。");
+      return;
+    }
+    if (isDirty) {
+      setError("変更を保存してから確定してください。");
+      return;
+    }
     if (!confirmable) {
       setError("要確認の項目があります。内容を修正して保存してから確定してください。");
       return;
@@ -234,6 +351,7 @@ export function OcrSavedRowReviewModal({
   };
 
   const alt = row.source_image_filename || row.source_image_id;
+  const busy = saving || confirming || reparsing;
 
   return createPortal(
     <div
@@ -260,20 +378,54 @@ export function OcrSavedRowReviewModal({
         </div>
         <div className="ocr-row-review-data-pane">
           <h3 id="ocr-row-review-title">{isSettlement ? "精算レシートを確認" : "OCR行を確認"}</h3>
-          <OcrRowReviewSummary row={row} />
-          <h4 className="ocr-row-review-edit-heading">読取データの編集</h4>
-          <OcrRowEditForm row={row} draft={draft} onDraftChange={setDraft} />
+          <div className="ocr-row-review-summary">
+            <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
+              {row.source_image_filename || row.source_image_id}
+            </p>
+            <div className="ocr-row-review-badges">
+              <StatusBadge value={row.status} />
+              {labels.map((label) => (
+                <span key={label.key} className={`ocr-quality-badge ocr-quality-badge--${label.tone}`}>
+                  {label.text}
+                </span>
+              ))}
+            </div>
+            {validationMessages.length ? (
+              <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>
+            ) : (
+              <p className="ocr-row-review-validation ocr-row-review-validation--ok">検証: OK</p>
+            )}
+            <OcrFieldConfidenceLegend />
+          </div>
+          <div className="ocr-row-review-fields" role="list">
+            {fieldSpecs.map((spec) => (
+              <OcrReviewFieldRow
+                key={spec.key}
+                spec={spec}
+                draft={draft}
+                confidence={spec.confidenceKey ? fieldConfidence[spec.confidenceKey] : undefined}
+                source={spec.confidenceKey ? fieldSources[spec.confidenceKey] : undefined}
+                editing={editingField === spec.key}
+                disabled={busy}
+                onStartEdit={() => startEdit(spec.key)}
+                onApply={applyEdit}
+                onCancel={() => cancelEdit(spec.key)}
+                onDraftChange={(value) => setDraft((current) => ({ ...current, [spec.key]: value }))}
+              />
+            ))}
+          </div>
           {error ? <p className="ocr-warning-text">{error}</p> : null}
+          {isDirty ? <p className="ocr-row-review-dirty-note">未保存の変更があります</p> : null}
           <div className="ocr-modal-actions ocr-row-review-actions">
-            <button type="button" className="ghost-button" onClick={onClose} disabled={saving || confirming}>
+            <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
               閉じる
             </button>
             {isSettlement && row.status !== "confirmed" && onReparse ? (
-              <button type="button" className="secondary-button" onClick={onReparse} disabled={reparsing || saving}>
+              <button type="button" className="secondary-button" onClick={onReparse} disabled={busy}>
                 {reparsing ? "再解析中..." : "再解析"}
               </button>
             ) : null}
-            <button type="button" className="secondary-button" onClick={handleSave} disabled={saving || confirming}>
+            <button type="button" className="secondary-button" onClick={handleSave} disabled={busy || !isDirty}>
               {saving ? "保存中..." : "保存"}
             </button>
             {row.status !== "confirmed" ? (
@@ -281,7 +433,7 @@ export function OcrSavedRowReviewModal({
                 type="button"
                 className="primary-button"
                 onClick={handleConfirm}
-                disabled={saving || confirming || !confirmable}
+                disabled={busy || !confirmable || isDirty}
                 title={confirmable ? "問題なしとして確定します" : "要確認項目を解消してから確定できます"}
               >
                 {confirming ? "確定中..." : "問題なしで確定"}
