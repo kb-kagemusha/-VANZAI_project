@@ -36,6 +36,10 @@ from src.api.schemas import (
     OcrSourceImageUpdateRequest,
     OcrSourceImageItem,
     OcrSourceImageListResponse,
+    OcrUploadLinkCreateRequest,
+    OcrUploadLinkCreateResponse,
+    OcrUploadLinkItem,
+    OcrUploadLinkListResponse,
 )
 from src.models.master import User
 from src.models.ocr import OcrExtractedRow, OcrParseJob, OcrReconciliationResult, OcrSourceImage
@@ -75,6 +79,9 @@ def _image_to_item(
         created_at=image.created_at,
         reused_existing=reused_existing,
         has_filename_duplicate=has_filename_duplicate,
+        upload_origin=getattr(image, "upload_origin", None),
+        public_uploader_name=getattr(image, "public_uploader_name", None),
+        upload_link_id=getattr(image, "upload_link_id", None),
     )
 
 
@@ -691,6 +698,103 @@ def link_ocr_row(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
     return _row_to_item(row, source_image_filename=filename)
+
+
+@router.post("/upload-links", response_model=OcrUploadLinkCreateResponse)
+def create_ocr_upload_link(
+    body: OcrUploadLinkCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    from src.services.ocr_upload_link_service import OcrUploadLinkService
+
+    service = OcrUploadLinkService(db)
+    try:
+        link, token = service.create_link(
+            created_by=current_user.username,
+            label=body.label,
+            expires_in_days=body.expires_in_days,
+            public_memo=body.public_memo,
+            internal_memo=body.internal_memo,
+            default_source_type=body.default_source_type,
+            period_key=body.period_key,
+            max_upload_count=body.max_upload_count,
+        )
+        db.commit()
+        db.refresh(link)
+    except Exception:
+        db.rollback()
+        raise
+    item = _upload_link_to_item(service, link)
+    return OcrUploadLinkCreateResponse(
+        **item.model_dump(),
+        public_upload_url=f"/public/ocr-upload?token={token}",
+        public_token=token,
+    )
+
+
+@router.get("/upload-links", response_model=OcrUploadLinkListResponse)
+def list_ocr_upload_links(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    from src.services.ocr_upload_link_service import OcrUploadLinkService
+
+    service = OcrUploadLinkService(db)
+    items, total = service.list_links(limit=limit, offset=offset)
+    return OcrUploadLinkListResponse(
+        items=[_upload_link_to_item(service, link) for link in items],
+        total=total,
+    )
+
+
+@router.post("/upload-links/{link_id}/revoke", response_model=OcrUploadLinkItem)
+def revoke_ocr_upload_link(
+    link_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_ocr_permission(current_user)
+    from src.services.ocr_upload_link_service import OcrUploadLinkService
+
+    service = OcrUploadLinkService(db)
+    try:
+        link = service.revoke_link(link_id, actor=current_user.username)
+        db.commit()
+        db.refresh(link)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _upload_link_to_item(service, link)
+
+
+def _upload_link_to_item(service, link) -> "OcrUploadLinkItem":
+    from src.api.schemas import OcrUploadLinkItem
+
+    return OcrUploadLinkItem(
+        id=link.id,
+        label=link.label,
+        status=link.status,
+        expires_at=link.expires_at,
+        token_suffix=link.token_suffix,
+        default_source_type=link.default_source_type,
+        public_memo=link.public_memo,
+        internal_memo=link.internal_memo,
+        period_key=link.period_key,
+        max_upload_count=link.max_upload_count,
+        upload_count=link.upload_count,
+        upload_count_paygate=link.upload_count_paygate,
+        upload_count_receipt=link.upload_count_receipt,
+        last_used_at=link.last_used_at,
+        last_upload_at=link.last_upload_at,
+        recent_hour_attempt_count=service.recent_hour_attempt_count(link.id),
+        created_at=link.created_at,
+        created_by=link.created_by,
+    )
 
 
 @router.get("/compare/self-report", response_model=OcrSelfReportCompareResponse)

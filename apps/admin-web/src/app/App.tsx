@@ -22,6 +22,7 @@ import { WorkersPage } from "../pages/WorkersPage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
+import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
 import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
 import { OcrPaygateScreenshotPage, OcrSettlementReceiptPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
@@ -32,6 +33,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
+      <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/403" element={<ForbiddenPage />} />

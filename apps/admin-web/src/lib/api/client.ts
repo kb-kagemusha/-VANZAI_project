@@ -104,6 +104,12 @@ import type {
   OcrReconciliationBatchResponse,
   OcrSelfReportCompareResponse,
   OcrSourceType,
+  OcrUploadLinkCreateRequest,
+  OcrUploadLinkCreateResponse,
+  OcrUploadLinkItem,
+  OcrUploadLinkListResponse,
+  OcrPublicUploadAccessResponse,
+  OcrPublicUploadResponse,
   InventorySnapshotItem,
   InventorySnapshotListResponse,
   InventorySnapshotCreateRequest,
@@ -1257,6 +1263,46 @@ export function downloadSettlementCsv(periodKey?: string) {
     `ocr_settlement_${periodKey || "all"}.csv`,
     periodKey ? { period_key: periodKey } : undefined,
   );
+}
+
+export function createOcrUploadLink(body: OcrUploadLinkCreateRequest) {
+  return apiFetch<OcrUploadLinkCreateResponse>("/api/ocr/upload-links", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listOcrUploadLinks(params?: Record<string, string | number | boolean | undefined>) {
+  return apiFetch<OcrUploadLinkListResponse>("/api/ocr/upload-links", undefined, params);
+}
+
+export function revokeOcrUploadLink(linkId: string) {
+  return apiFetch<OcrUploadLinkItem>(`/api/ocr/upload-links/${linkId}/revoke`, {
+    method: "POST",
+  });
+}
+
+export function accessPublicOcrUpload(token: string) {
+  return publicApiFetch<OcrPublicUploadAccessResponse>("/public/ocr-upload", undefined, { token });
+}
+
+export function uploadPublicOcrImage(params: {
+  sessionToken: string;
+  sourceType: OcrSourceType;
+  file: File;
+  publicUploaderName?: string | null;
+}) {
+  const formData = new FormData();
+  formData.set("source_type", params.sourceType);
+  formData.set("file", params.file);
+  if (params.publicUploaderName) {
+    formData.set("public_uploader_name", params.publicUploaderName);
+  }
+  return publicApiFetch<OcrPublicUploadResponse>("/public/ocr-upload/images", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${params.sessionToken}` },
+    body: formData,
+  });
 }
 
 // ===========================

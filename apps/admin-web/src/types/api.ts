@@ -1259,6 +1259,65 @@ export interface OcrSourceImageItem {
   created_at: string;
   reused_existing?: boolean;
   has_filename_duplicate?: boolean;
+  upload_origin?: string | null;
+  public_uploader_name?: string | null;
+  upload_link_id?: string | null;
+}
+
+export interface OcrUploadLinkCreateRequest {
+  label?: string | null;
+  expires_in_days?: number;
+  public_memo?: string | null;
+  internal_memo?: string | null;
+  default_source_type?: "paygate_screenshot" | "paygate_settlement" | "required";
+  period_key?: string | null;
+  max_upload_count?: number | null;
+}
+
+export interface OcrUploadLinkItem {
+  id: string;
+  label: string | null;
+  status: string;
+  expires_at: string;
+  token_suffix: string;
+  default_source_type: string;
+  public_memo: string | null;
+  internal_memo: string | null;
+  period_key: string | null;
+  max_upload_count: number | null;
+  upload_count: number;
+  upload_count_paygate: number;
+  upload_count_receipt: number;
+  last_used_at: string | null;
+  last_upload_at: string | null;
+  recent_hour_attempt_count: number;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface OcrUploadLinkCreateResponse extends OcrUploadLinkItem {
+  public_upload_url: string;
+  public_token: string;
+}
+
+export interface OcrUploadLinkListResponse {
+  items: OcrUploadLinkItem[];
+  total: number;
+}
+
+export interface OcrPublicUploadAccessResponse {
+  link_id: string;
+  label: string | null;
+  expires_at: string;
+  public_memo: string | null;
+  default_source_type: string;
+  session_token: string;
+  session_expires_at: string;
+}
+
+export interface OcrPublicUploadResponse {
+  message: string;
+  reused_existing: boolean;
 }
 
 export interface OcrSourceImageListResponse {

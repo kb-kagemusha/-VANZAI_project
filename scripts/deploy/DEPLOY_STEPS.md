@@ -178,14 +178,16 @@ bash /var/www/vanzai/scripts/deploy/03_ssl_setup.sh
 
 ```bash
 # APIヘルスチェック
-curl https://api.vanzai-portal.com/health
+curl https://api.vanzai-portal.com/api/health
 
 # サービス状態
 sudo systemctl status vanzai-api
+sudo systemctl status vanzai-ocr-worker
 sudo systemctl status nginx
 
 # ログ確認
 tail -f /var/www/vanzai/logs/api.log
+tail -f /var/www/vanzai/logs/ocr-worker.log
 ```
 
 ブラウザで確認：
@@ -198,16 +200,31 @@ tail -f /var/www/vanzai/logs/api.log
 ## 更新デプロイ（2回目以降）
 
 ```powershell
-# Windows側でコードをpush
+# Windows: push のみ
 cd C:\VANZAI_project
-git push origin main
+git push origin <ブランチ名>
 ```
 
 ```bash
-# VPS側で更新
-ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35
-bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh
+# VPS: デプロイスクリプトのみ（git pull / stash は不要）
+ssh -i ~/.ssh/vanzai_vps vanzai@220.158.28.35 "bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh"
 ```
+
+`02_app_deploy.sh` が内部で `git fetch` + `reset --hard`、依存インストール、ビルド、API 再起動、**OCR ジョブワーカー**（`vanzai-ocr-worker`）の有効化・再起動まで行う。
+VPS 上でファイルを直接編集（scp 等）しないこと。
+
+### OCR 外部アップロード用 .env（初回または機能追加時）
+
+VPS の `/var/www/vanzai/.env` に以下を追加（未設定時は JWT_SECRET_KEY 等からフォールバックするが、本番では個別に設定推奨）:
+
+```
+OCR_UPLOAD_TOKEN_SECRET=<openssl rand -hex 32>
+OCR_UPLOAD_SESSION_SECRET=<openssl rand -hex 32>
+OCR_UPLOAD_IP_SECRET=<openssl rand -hex 32>
+OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED=true
+```
+
+公開アップロード URL の `token` が Referer に載らないよう、nginx で `Referrer-Policy: no-referrer` を `/public/ocr-upload` に設定すること（API レスポンスヘッダでも付与済み）。
 
 ---
 

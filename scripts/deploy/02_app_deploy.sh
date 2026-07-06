@@ -22,7 +22,7 @@ CURRENT_BRANCH=""
 # ----------------------------------------
 # 1. コード取得（初回: clone / 更新: pull）
 # ----------------------------------------
-echo "[1/6] コード取得..."
+echo "[1/7] コード取得..."
 if [ -d "${APP_DIR}/.git" ]; then
     echo "  git pull (更新)..."
     cd ${APP_DIR}
@@ -52,7 +52,7 @@ echo "  コード取得完了: $(git log --oneline -1)"
 # ----------------------------------------
 # 2. Python 仮想環境・依存パッケージ
 # ----------------------------------------
-echo "[2/6] Python 環境セットアップ..."
+echo "[2/7] Python 環境セットアップ..."
 cd ${APP_DIR}
 
 if [ ! -d "${VENV_DIR}" ]; then
@@ -84,7 +84,7 @@ echo "  Python パッケージインストール完了"
 # ----------------------------------------
 # 3. .env ファイル確認
 # ----------------------------------------
-echo "[3/6] .env ファイル確認..."
+echo "[3/7] .env ファイル確認..."
 if [ ! -f "${APP_DIR}/.env" ]; then
     echo ""
     echo "  !! .env ファイルがありません !!"
@@ -102,6 +102,10 @@ if [ ! -f "${APP_DIR}/.env" ]; then
   EMAIL_DRY_RUN=true
   KINTONE_SUBDOMAIN=xtf5wpxp3gk2
   KINTONE_GUEST_SPACE_ID=3
+  OCR_UPLOAD_TOKEN_SECRET=<openssl rand -hex 32 で生成>
+  OCR_UPLOAD_SESSION_SECRET=<openssl rand -hex 32 で生成>
+  OCR_UPLOAD_IP_SECRET=<openssl rand -hex 32 で生成>
+  OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED=true
 EOF
     echo ""
     echo "  .env 作成後、このスクリプトを再実行してください"
@@ -117,7 +121,7 @@ set +a
 # ----------------------------------------
 # 4. DBマイグレーション
 # ----------------------------------------
-echo "[4/6] DBマイグレーション..."
+echo "[4/7] DBマイグレーション..."
 cd ${APP_DIR}
 set -a
 source "${APP_DIR}/.env"
@@ -128,7 +132,7 @@ echo "  マイグレーション完了"
 # ----------------------------------------
 # 5. フロントエンドビルド（旧アセット保持付き）
 # ----------------------------------------
-echo "[5/6] フロントエンドビルド..."
+echo "[5/7] フロントエンドビルド..."
 
 # 旧 JS/CSS を RETAIN_DAYS 日間保持する関数
 # - ブラウザキャッシュに旧 index.html を持つユーザーが旧 JS を参照しても 404 にならない
@@ -178,7 +182,7 @@ echo "  フロントエンドビルド完了"
 # ----------------------------------------
 # 6. systemd サービス再起動
 # ----------------------------------------
-echo "[6/6] API サービス再起動..."
+echo "[6/7] API サービス再起動..."
 if sudo -n true 2>/dev/null; then
     sudo systemctl daemon-reload
     sudo systemctl enable vanzai-api
@@ -191,11 +195,29 @@ else
     echo "    bash ${APP_DIR}/restart_uvicorn.sh"
 fi
 
+# ----------------------------------------
+# 7. OCR ジョブワーカー
+# ----------------------------------------
+echo "[7/7] OCR ジョブワーカー..."
+mkdir -p "${APP_DIR}/logs"
+if sudo -n true 2>/dev/null; then
+    sudo cp "${APP_DIR}/scripts/deploy/systemd/vanzai-ocr-worker.service" /etc/systemd/system/vanzai-ocr-worker.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable vanzai-ocr-worker
+    sudo systemctl restart vanzai-ocr-worker
+    sleep 1
+    sudo systemctl status vanzai-ocr-worker --no-pager || true
+else
+    echo "  sudo 不可のため OCR ワーカーの systemd 設定はスキップしました"
+    echo "  手動で scripts/deploy/systemd/vanzai-ocr-worker.service を配置してください"
+fi
+
 echo ""
 echo "=============================="
 echo "  デプロイ完了!"
 echo "=============================="
 echo ""
 echo "動作確認:"
-echo "  curl http://localhost:8000/health"
-echo "  curl https://api.vanzai-portal.com/health"
+echo "  curl http://localhost:8000/api/health"
+echo "  curl https://api.vanzai-portal.com/api/health"
+echo "  sudo systemctl status vanzai-ocr-worker"

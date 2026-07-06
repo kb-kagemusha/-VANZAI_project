@@ -1451,6 +1451,12 @@ button {
   font-weight: 600;
 }
 
+.ocr-external-badge-inline {
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .ocr-filename-display {
   display: flex;
   flex-wrap: wrap;

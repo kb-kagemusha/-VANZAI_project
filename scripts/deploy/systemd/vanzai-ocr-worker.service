@@ -1,0 +1,20 @@
+[Unit]
+Description=VANZAI OCR Parse Job Worker
+After=network.target postgresql.service vanzai-api.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=vanzai
+Group=vanzai
+WorkingDirectory=/var/www/vanzai
+EnvironmentFile=/var/www/vanzai/.env
+ExecStart=/var/www/vanzai/.venv/bin/python /var/www/vanzai/scripts/ocr/run_job_worker.py
+Restart=always
+RestartSec=5
+
+StandardOutput=append:/var/www/vanzai/logs/ocr-worker.log
+StandardError=append:/var/www/vanzai/logs/ocr-worker-error.log
+
+[Install]
+WantedBy=multi-user.target

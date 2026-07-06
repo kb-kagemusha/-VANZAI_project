@@ -26,6 +26,9 @@ class OcrSourceImage(Base, TimestampMixin, SoftDeleteMixin):
     uploaded_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_job_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("ocr_parse_jobs.id"), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upload_link_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("ocr_upload_links.id"), nullable=True)
+    upload_origin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    public_uploader_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("sha256", name="uq_ocr_source_images_sha256"),
@@ -48,6 +51,88 @@ class OcrParseJob(Base, TimestampMixin):
     raw_ocr_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_channel: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    upload_attempt_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    image_ids_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+
+
+class OcrUploadLink(Base, TimestampMixin):
+    __tablename__ = "ocr_upload_links"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_suffix: Mapped[str] = mapped_column(String(8), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    public_memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_source_type: Mapped[str] = mapped_column(String(30), nullable=False, default="required")
+    period_key: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    max_upload_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    upload_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    upload_count_paygate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    upload_count_receipt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_upload_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ocr_upload_links_status", "status"),
+        Index("ix_ocr_upload_links_expires_at", "expires_at"),
+        Index("uq_ocr_upload_links_token_hash", "token_hash", unique=True),
+    )
+
+
+class OcrUploadSession(Base, TimestampMixin):
+    __tablename__ = "ocr_upload_sessions"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    upload_link_id: Mapped[str] = mapped_column(String(26), ForeignKey("ocr_upload_links.id"), nullable=False)
+    session_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ocr_upload_sessions_link_id", "upload_link_id"),
+        Index("uq_ocr_upload_sessions_token_hash", "session_token_hash", unique=True),
+    )
+
+
+class OcrUploadAttempt(Base, TimestampMixin):
+    __tablename__ = "ocr_upload_attempts"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    upload_link_id: Mapped[str] = mapped_column(String(26), ForeignKey("ocr_upload_links.id"), nullable=False)
+    source_image_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("ocr_source_images.id"), nullable=True)
+    reused_existing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    public_uploader_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    parse_job_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("ocr_parse_jobs.id"), nullable=True)
+    attempt_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    client_ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quarantine_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    gate_skipped_reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    gate_payment_method_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index("ix_ocr_upload_attempts_link_id", "upload_link_id"),
+        Index("ix_ocr_upload_attempts_status", "attempt_status"),
+    )
+
+
+class OcrUploadRateLimit(Base):
+    __tablename__ = "ocr_upload_rate_limits"
+
+    scope: Mapped[str] = mapped_column(String(100), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class OcrExtractedRow(Base, TimestampMixin, SoftDeleteMixin):

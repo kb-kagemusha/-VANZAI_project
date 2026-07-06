@@ -1991,6 +1991,9 @@ class OcrSourceImageItem(BaseModel):
     created_at: datetime
     reused_existing: bool = False
     has_filename_duplicate: bool = False
+    upload_origin: Optional[str] = None
+    public_uploader_name: Optional[str] = None
+    upload_link_id: Optional[str] = None
 
 
 class OcrSourceImageListResponse(BaseModel):
@@ -2211,6 +2214,66 @@ class OcrSelfReportCompareResponse(BaseModel):
     linked_count: int
     self_report_available: bool
     message: str
+
+
+# ===========================
+# OCR Public Upload Schemas
+# ===========================
+
+class OcrUploadLinkCreateRequest(BaseModel):
+    label: Optional[str] = None
+    expires_in_days: int = Field(default=30, ge=1, le=365)
+    public_memo: Optional[str] = None
+    internal_memo: Optional[str] = None
+    default_source_type: str = Field(default="required")
+    period_key: Optional[str] = None
+    max_upload_count: Optional[int] = Field(default=None, ge=1)
+
+
+class OcrUploadLinkItem(BaseModel):
+    id: str
+    label: Optional[str] = None
+    status: str
+    expires_at: datetime
+    token_suffix: str
+    default_source_type: str
+    public_memo: Optional[str] = None
+    internal_memo: Optional[str] = None
+    period_key: Optional[str] = None
+    max_upload_count: Optional[int] = None
+    upload_count: int
+    upload_count_paygate: int
+    upload_count_receipt: int
+    last_used_at: Optional[datetime] = None
+    last_upload_at: Optional[datetime] = None
+    recent_hour_attempt_count: int = 0
+    created_at: datetime
+    created_by: Optional[str] = None
+
+
+class OcrUploadLinkCreateResponse(OcrUploadLinkItem):
+    public_upload_url: str
+    public_token: str
+
+
+class OcrUploadLinkListResponse(BaseModel):
+    items: List[OcrUploadLinkItem]
+    total: int
+
+
+class OcrPublicUploadAccessResponse(BaseModel):
+    link_id: str
+    label: Optional[str] = None
+    expires_at: datetime
+    public_memo: Optional[str] = None
+    default_source_type: str
+    session_token: str
+    session_expires_at: datetime
+
+
+class OcrPublicUploadResponse(BaseModel):
+    message: str
+    reused_existing: bool = False
 
 
 # ===========================

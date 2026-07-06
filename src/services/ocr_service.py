@@ -702,19 +702,28 @@ class OcrService:
         ocr_text_override: dict[str, str] | None = None,
         settlement_target_row_ids: dict[str, str] | None = None,
         target_row_ids: dict[str, str] | None = None,
+        job_id: str | None = None,
     ) -> OcrParseJob:
         if not image_ids:
             raise ValueError("image_ids is required")
 
         effective_target_row_ids = target_row_ids or settlement_target_row_ids or {}
 
-        job = OcrParseJob(
-            id=generate_ulid(),
-            status="processing",
-            image_count=len(image_ids),
-            executed_by=executed_by,
-        )
-        self.session.add(job)
+        if job_id:
+            job = self.session.get(OcrParseJob, job_id)
+            if job is None:
+                raise ValueError("Parse job not found")
+            job.status = "processing"
+            job.image_count = len(image_ids)
+            job.executed_by = executed_by
+        else:
+            job = OcrParseJob(
+                id=generate_ulid(),
+                status="processing",
+                image_count=len(image_ids),
+                executed_by=executed_by,
+            )
+            self.session.add(job)
         self.session.flush()
 
         success_count = 0

@@ -7,6 +7,7 @@ import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDi
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
+import { formatSettlementRecordDate } from "../../lib/ocr/settlementDateFormat";
 import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
 import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
@@ -57,7 +58,7 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     label: "精算日",
     confidenceKey: "record_datetime",
     inputType: "date",
-    formatDisplay: (draft) => draft.record_date || "—",
+    formatDisplay: (draft) => formatSettlementRecordDate(draft.record_date),
   },
   {
     key: "record_time",
@@ -580,7 +581,7 @@ export function OcrSavedRowReviewModal({
                   <span className="ocr-quality-badge ocr-quality-badge--positive">確定</span>
                   {validationMessages.length
                     ? ` / ${formatOcrValidationMessages(validationMessages)}`
-                    : " / 検証: OK"}
+                    : " / 検証: 確定済"}
                 </p>
               ) : validationMessages.length ? (
                 <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>

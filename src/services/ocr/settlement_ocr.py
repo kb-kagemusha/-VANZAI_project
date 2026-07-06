@@ -44,6 +44,11 @@ def preprocess_settlement_id_line_band(image_bytes: bytes) -> np.ndarray:
     return _preprocess_settlement_band(image_bytes, y0=0.08, y1=0.30, scale=5.0, max_width=3600)
 
 
+def preprocess_settlement_datetime_band(image_bytes: bytes) -> np.ndarray:
+    """精算タイトル直下の日時行（スラッシュ・コロン欠落しやすい帯）向け。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.14, y1=0.34, scale=5.5, max_width=3600)
+
+
 def preprocess_settlement_terminal_band(image_bytes: bytes) -> np.ndarray:
     """Terminal UUID band: often missed on a single full-image pass."""
     return _preprocess_settlement_band(image_bytes, y0=0.18, y1=0.40, scale=4.0)
@@ -64,6 +69,7 @@ def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
     return merge_ocr_results(
         run_ocr(preprocess_settlement_header_band(image_bytes)),
         run_ocr(preprocess_settlement_id_line_band(image_bytes)),
+        run_ocr(preprocess_settlement_datetime_band(image_bytes)),
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
         run_ocr(preprocess_settlement_uuid_mid_band(image_bytes)),
         run_ocr(preprocess_settlement_uuid_wide_band(image_bytes)),

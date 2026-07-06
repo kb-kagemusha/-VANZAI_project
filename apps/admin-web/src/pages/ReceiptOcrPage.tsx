@@ -9,6 +9,7 @@ import { AppNotification, type AppNotificationState } from "../components/AppNot
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { OcrSavedRowReviewModal } from "../components/ocr/OcrSavedRowReviewModal";
+import { OcrUploadLinkPanel } from "../components/ocr/OcrUploadLinkPanel";
 import { OcrFieldConfidenceLegend } from "../components/ocr/OcrFieldConfidence";
 import { OcrRowConfidenceCell } from "../components/ocr/OcrRowConfidenceCell";
 import { SettlementTerminalIdDisplay } from "../components/ocr/SettlementTerminalIdDisplay";
@@ -695,6 +696,16 @@ function OcrParseStatusBadge({ value }: { value: string }) {
   return <span className={`status-badge ${tone}`}>{formatOcrParseStatus(value)}</span>;
 }
 
+function OcrUploadOriginBadge({ image }: { image: OcrSourceImageItem }) {
+  if (image.upload_origin !== "public_link") {
+    return null;
+  }
+  const label = image.public_uploader_name?.trim()
+    ? `外部（${image.public_uploader_name.trim()}）`
+    : "外部";
+  return <span className="ocr-external-badge-inline">{label}</span>;
+}
+
 function OcrImageFilenameEditor({
   image,
   onRename,
@@ -812,6 +823,7 @@ function OcrUploadedImageItem({
         </div>
         <div className="ocr-image-row-status">
           <OcrParseStatusBadge value={image.parse_status} />
+          <OcrUploadOriginBadge image={image} />
           {isDuplicate ? (
             <span className="ocr-duplicate-badge-inline">
               {image.reused_existing ? "同一画像" : "同名"}
@@ -865,6 +877,7 @@ function OcrUploadedImageItem({
         <div className="ocr-image-source">{sourceLabel}</div>
         <div className="ocr-image-status-row">
           <OcrParseStatusBadge value={image.parse_status} />
+          <OcrUploadOriginBadge image={image} />
           <span className="ocr-image-meta">{formatDateTime(image.created_at)}</span>
         </div>
         {isDuplicate ? (
@@ -2315,6 +2328,8 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   return (
     <div className="page-stack">
       <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
+
+      <OcrUploadLinkPanel />
 
       <section className="panel-card ocr-upload-grid">
         <DropZone
