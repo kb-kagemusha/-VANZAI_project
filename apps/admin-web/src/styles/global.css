@@ -1748,7 +1748,7 @@ button {
 }
 
 .ocr-confirmed-text {
-  color: var(--positive);
+  color: #14532d;
   font-weight: 600;
 }
 
