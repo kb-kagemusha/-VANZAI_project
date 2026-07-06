@@ -60,7 +60,6 @@ import {
   type OcrParseProgressState,
 } from "../lib/ocr/batchParse";
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
-import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
@@ -1911,7 +1910,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         <OcrRowConfidenceCell
           row={row}
           confidenceKey="record_datetime"
-          value={formatSettlementRecordDate(row.record_date)}
+          value={row.record_date || "-"}
         />
       ),
     },

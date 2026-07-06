@@ -7,7 +7,6 @@ import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDi
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
-import { formatSettlementRecordDate } from "../../lib/ocr/settlementDateFormat";
 import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
 import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
@@ -58,7 +57,7 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     label: "精算日",
     confidenceKey: "record_datetime",
     inputType: "date",
-    formatDisplay: (draft) => formatSettlementRecordDate(draft.record_date),
+    formatDisplay: (draft) => draft.record_date || "—",
   },
   {
     key: "record_time",
