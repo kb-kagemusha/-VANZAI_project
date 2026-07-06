@@ -114,6 +114,22 @@ else
     echo "  .env ファイル確認OK"
 fi
 
+# OCR 外部アップロード用シークレット（未設定時のみ追記）
+if [ -f "${APP_DIR}/.env" ]; then
+    append_env_if_missing() {
+        local key="$1"
+        local value="$2"
+        if ! grep -q "^${key}=" "${APP_DIR}/.env"; then
+            echo "${key}=${value}" >> "${APP_DIR}/.env"
+            echo "  .env に ${key} を追加しました"
+        fi
+    }
+    append_env_if_missing "OCR_UPLOAD_TOKEN_SECRET" "$(openssl rand -hex 32)"
+    append_env_if_missing "OCR_UPLOAD_SESSION_SECRET" "$(openssl rand -hex 32)"
+    append_env_if_missing "OCR_UPLOAD_IP_SECRET" "$(openssl rand -hex 32)"
+    append_env_if_missing "OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED" "true"
+fi
+
 set -a
 source "${APP_DIR}/.env"
 set +a
@@ -190,9 +206,8 @@ if sudo -n true 2>/dev/null; then
     sleep 2
     sudo systemctl status vanzai-api --no-pager
 else
-    echo "  sudo にパスワードが必要なため、サービス再起動はスキップしました"
-    echo "  以下を実行してください:"
-    echo "    bash ${APP_DIR}/restart_uvicorn.sh"
+    echo "  sudo にパスワードが必要なため、restart_uvicorn.sh で再起動します"
+    bash "${APP_DIR}/restart_uvicorn.sh"
 fi
 
 # ----------------------------------------
@@ -200,6 +215,7 @@ fi
 # ----------------------------------------
 echo "[7/7] OCR ジョブワーカー..."
 mkdir -p "${APP_DIR}/logs"
+OCR_WORKER_STARTED=0
 if sudo -n true 2>/dev/null; then
     sudo cp "${APP_DIR}/scripts/deploy/systemd/vanzai-ocr-worker.service" /etc/systemd/system/vanzai-ocr-worker.service
     sudo systemctl daemon-reload
@@ -207,9 +223,22 @@ if sudo -n true 2>/dev/null; then
     sudo systemctl restart vanzai-ocr-worker
     sleep 1
     sudo systemctl status vanzai-ocr-worker --no-pager || true
+    OCR_WORKER_STARTED=1
 else
-    echo "  sudo 不可のため OCR ワーカーの systemd 設定はスキップしました"
-    echo "  手動で scripts/deploy/systemd/vanzai-ocr-worker.service を配置してください"
+    echo "  sudo 不可 — crontab でワーカー常駐を設定します"
+    CRON_MARKER="# vanzai-ocr-worker"
+    CRON_BOOT="${CRON_MARKER} @reboot sleep 30 && cd ${APP_DIR} && ${VENV_DIR}/bin/python ${APP_DIR}/scripts/ocr/run_job_worker.py >> ${APP_DIR}/logs/ocr-worker.log 2>> ${APP_DIR}/logs/ocr-worker-error.log"
+    CRON_WATCH="${CRON_MARKER} */5 * * * * pgrep -f run_job_worker >/dev/null || (cd ${APP_DIR} && nohup ${VENV_DIR}/bin/python ${APP_DIR}/scripts/ocr/run_job_worker.py >> ${APP_DIR}/logs/ocr-worker.log 2>> ${APP_DIR}/logs/ocr-worker-error.log &)"
+    (crontab -l 2>/dev/null | grep -v "${CRON_MARKER}" || true
+     echo "${CRON_BOOT}"
+     echo "${CRON_WATCH}") | crontab -
+    if ! pgrep -f run_job_worker >/dev/null; then
+        nohup "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/ocr/run_job_worker.py" \
+            >> "${APP_DIR}/logs/ocr-worker.log" 2>> "${APP_DIR}/logs/ocr-worker-error.log" &
+        sleep 1
+    fi
+    pgrep -af run_job_worker || echo "  !! OCR ワーカー起動に失敗しました"
+    OCR_WORKER_STARTED=1
 fi
 
 echo ""
@@ -220,4 +249,8 @@ echo ""
 echo "動作確認:"
 echo "  curl http://localhost:8000/api/health"
 echo "  curl https://api.vanzai-portal.com/api/health"
-echo "  sudo systemctl status vanzai-ocr-worker"
+if [ "${OCR_WORKER_STARTED:-0}" = "1" ]; then
+    echo "  pgrep -af run_job_worker"
+else
+    echo "  sudo systemctl status vanzai-ocr-worker"
+fi

@@ -36,7 +36,7 @@ sudo systemctl status vanzai-ocr-worker
 
 ログ: `/var/www/vanzai/logs/ocr-worker.log`, `ocr-worker-error.log`
 
-**暫定対応（systemd 不可時）** — サーバー再起動で消えるため本番では非推奨:
+**暫定対応（systemd 不可時）** — デプロイスクリプトが crontab（5分監視 + @reboot）を自動設定。手動の場合:
 
 ```bash
 cd /var/www/vanzai
