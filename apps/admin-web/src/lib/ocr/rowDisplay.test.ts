@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable, isOcrRowSelectable } from "./rowDisplay";
+import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable, isOcrRowSelectable } from "./rowDisplay";
 
 const BASE_SCREENSHOT_ROW = {
   amount_inferred: false,
@@ -80,5 +80,27 @@ describe("isOcrRowDeletable", () => {
   it("allows deleting confirm-required rows", () => {
     expect(isOcrRowDeletable({ confirm_required: true, status: "pending_review" })).toBe(true);
     expect(isOcrRowDeletable({ confirm_required: false, status: "confirmed" })).toBe(true);
+  });
+});
+
+describe("formatOcrRowValidationCell", () => {
+  const translate = (codes: string[]) => codes.join(" / ");
+
+  it("shows 確定 for confirmed rows", () => {
+    expect(
+      formatOcrRowValidationCell(
+        { status: "confirmed", source_type: "paygate_settlement", validation_errors: [], blocking_errors: [], warnings: [] },
+        translate,
+      ),
+    ).toBe("確定");
+  });
+
+  it("shows OK for pending settlement rows without warnings", () => {
+    expect(
+      formatOcrRowValidationCell(
+        { status: "pending_review", source_type: "paygate_settlement", validation_errors: [], blocking_errors: [], warnings: [] },
+        translate,
+      ),
+    ).toBe("OK");
   });
 });

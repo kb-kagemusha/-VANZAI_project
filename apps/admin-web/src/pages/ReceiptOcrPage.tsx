@@ -60,7 +60,8 @@ import {
   type OcrParseProgressState,
 } from "../lib/ocr/batchParse";
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
-import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
+import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
+import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
@@ -1910,7 +1911,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         <OcrRowConfidenceCell
           row={row}
           confidenceKey="record_datetime"
-          value={row.record_date || "-"}
+          value={formatSettlementRecordDate(row.record_date)}
         />
       ),
     },
@@ -2062,19 +2063,14 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       key: "validation_errors",
       header: "検証",
       render: (row: OcrExtractedRowItem) => {
-        if (row.source_type === "paygate_settlement") {
-          const messages = [...(row.blocking_errors || []), ...(row.warnings || [])];
-          return messages.length ? (
-            <span className="ocr-warning-text">{formatOcrValidationMessages(messages)}</span>
-          ) : (
-            "OK"
-          );
+        const label = formatOcrRowValidationCell(row, formatOcrValidationMessages);
+        if (row.status === "confirmed") {
+          return <span className="ocr-confirmed-text">{label}</span>;
         }
-        return row.validation_errors?.length ? (
-          <span className="ocr-warning-text">{formatOcrValidationMessages(row.validation_errors)}</span>
-        ) : (
-          "OK"
-        );
+        if (label === "OK") {
+          return label;
+        }
+        return <span className="ocr-warning-text">{label}</span>;
       },
     },
     {

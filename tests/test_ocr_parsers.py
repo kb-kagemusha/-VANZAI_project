@@ -1299,3 +1299,65 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_garbl
     assert row.amount == Decimal("7840")
     assert row.transaction_count == 8
 
+
+PRODUCTION_OCR_TEXT_260706_98F0_COMPACT = """
+端末識別番号: 98f0
+精算
+202607104
+2310434
+端末番号:
+98f0ec2f-fc54-4e00-
+a503-2ecb6659c7be
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_compact_datetime():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_COMPACT))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.terminal_short_id == "98f0"
+
+
+PRODUCTION_OCR_TEXT_260706_98F0_LINE_ALBUM = """
+端末識別番号:9S10
+精算
+2026/070423:04:34
+端末号
+9sf0ec2f-fc54-4e00-
+a503-2ecb6659c7be
+清算
+23:04:34
+2026107104
+23:043日
+2026107104
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_line_album():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_LINE_ALBUM))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.terminal_short_id == "98f0"
+

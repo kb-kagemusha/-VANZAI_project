@@ -1327,6 +1327,7 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"末織別会号", "端末識別番号:", normalized)
     normalized = re.sub(r"焼末普[号清]|瑞末普号|瑞末号", "端末番号", normalized)
     normalized = re.sub(r"端端末番号", "端末番号", normalized)
+    normalized = re.sub(r"端末号(?!番)", "端末番号", normalized)
     normalized = re.sub(r"16B60", "6,860", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"76,860", "6,860", normalized)
     normalized = re.sub(r"[MHN]AY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
@@ -1342,6 +1343,11 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"20(\d{2})(\d{2})/(\d{2})", r"20\1/\2/\3", normalized)
     normalized = re.sub(r"20(\d{2})(\d{2})／(\d{2})", r"20\1/\2/\3", normalized)
     normalized = re.sub(r"(\d{4}/\d{2}/\d{2})(\d{2}:\d{2}:\d{2})", r"\1 \2", normalized)
+    normalized = re.sub(
+        r"(20\d{2})/(\d{2})(\d{2})(\d{2}:\d{2}:\d{2})",
+        r"\1/\2/\3 \4",
+        normalized,
+    )
     normalized = re.sub(r"(\d{4})-(\d{2})-(\d{2})", r"\1/\2/\3", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",

@@ -1747,6 +1747,11 @@ button {
   color: var(--positive);
 }
 
+.ocr-confirmed-text {
+  color: var(--positive);
+  font-weight: 600;
+}
+
 .ocr-row-review-readonly {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

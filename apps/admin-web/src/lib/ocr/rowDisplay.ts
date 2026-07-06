@@ -56,6 +56,26 @@ export function getOcrRowDisplayLabels(row: Pick<
   return labels;
 }
 
+type OcrRowValidationInput = Pick<
+  OcrExtractedRowItem,
+  "status" | "source_type" | "validation_errors" | "blocking_errors" | "warnings"
+>;
+
+/** 保存データ一覧の「検証」列表示。確定済みは OK ではなく確定。 */
+export function formatOcrRowValidationCell(
+  row: OcrRowValidationInput,
+  translateMessages: (codes: string[]) => string,
+): string {
+  if (row.status === "confirmed") {
+    return "確定";
+  }
+  if (row.source_type === "paygate_settlement") {
+    const messages = [...(row.blocking_errors || []), ...(row.warnings || [])];
+    return messages.length ? translateMessages(messages) : "OK";
+  }
+  return row.validation_errors?.length ? translateMessages(row.validation_errors) : "OK";
+}
+
 /** 確定操作に使える行か（要確認・確定済みは不可）。 */
 export function isOcrRowConfirmable(
   row: Pick<OcrExtractedRowItem, "confirm_required" | "status" | "terminal_id_partial">,

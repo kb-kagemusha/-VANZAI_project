@@ -23,7 +23,7 @@ _DATE_COMPACT8_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
 _TIME_COLON_RE = re.compile(r"(\d{2}):(\d{2}):(\d{2})")
 _TIME_PARTIAL_COLON_RE = re.compile(r"(\d{2}):(\d{4})\b")
 _SETTLEMENT_TITLE_RE = re.compile(r"精算")
-_TERMINAL_LABEL_RE = re.compile(r"端末\s*番号")
+_TERMINAL_LABEL_RE = re.compile(r"端末\s*番?号")
 _TERMINAL_SHORT_ID_ZONE_RE = re.compile(
     r"(?:端末|境末|末|携末|備末|市末)[識議護鉄証藤鉄]?[別][番]?号",
     re.IGNORECASE,
@@ -102,6 +102,12 @@ def _valid_settlement_time(hour: int, minute: int, second: int) -> str | None:
 def _normalize_datetime_line(line: str) -> str:
     cleaned = line.replace("O", "0").replace("o", "0").replace("　", " ").strip()
     cleaned = cleaned.replace("：", ":").replace("／", "/")
+    cleaned = re.sub(r"(\d{2}):(\d{3,4})日", lambda m: f"{m.group(1)}:{m.group(2)[:2]}:{m.group(2)[2:4]}", cleaned)
+    cleaned = re.sub(
+        r"(20\d{2})/(\d{2})(\d{2})(\d{2}:\d{2}:\d{2})",
+        r"\1/\2/\3 \4",
+        cleaned,
+    )
     cleaned = re.sub(r"(\d{4})-(\d{2})-(\d{2})", r"\1/\2/\3", cleaned)
     cleaned = re.sub(r"[\]】|｜]", "/", cleaned)
     cleaned = re.sub(r"(?<=\d{2})[円元](?=\d{2})", ":", cleaned)
@@ -145,6 +151,43 @@ def _join_split_date_lines(lines: list[str]) -> list[str]:
     return joined
 
 
+def _parse_compact_date_from_digits(digits: str) -> date | None:
+    """8桁 YYYYMMDD、または OCR ノイズ1〜2桁入りの9〜10桁から日付を復元する。"""
+    if len(digits) == 8 and digits.startswith("20"):
+        return _valid_settlement_date(int(digits[0:4]), int(digits[4:6]), int(digits[6:8]))
+    if len(digits) == 10 and digits.startswith("20"):
+        candidates: list[tuple[int, date]] = []
+        for skip in range(10):
+            trial = digits[:skip] + digits[skip + 1 :]
+            parsed = _parse_compact_date_from_digits(trial)
+            if parsed:
+                candidates.append((skip, parsed))
+        if not candidates:
+            return None
+        for preferred in (4, 3, 5, 6, 2, 7, 8, 1, 0, 9):
+            for skip, parsed in candidates:
+                if skip == preferred:
+                    return parsed
+        return candidates[0][1]
+    if len(digits) == 9 and digits.startswith("20"):
+        candidates: list[tuple[int, date]] = []
+        for skip in range(9):
+            trial = digits[:skip] + digits[skip + 1 :]
+            if len(trial) != 8:
+                continue
+            parsed = _valid_settlement_date(int(trial[0:4]), int(trial[4:6]), int(trial[6:8]))
+            if parsed:
+                candidates.append((skip, parsed))
+        if not candidates:
+            return None
+        for preferred in (6, 5, 7, 4, 8, 3, 2, 1, 0):
+            for skip, parsed in candidates:
+                if skip == preferred:
+                    return parsed
+        return candidates[0][1]
+    return None
+
+
 def _parse_settlement_date_from_text(line: str) -> date | None:
     cleaned = _normalize_datetime_line(line)
     match = _DATE_STANDARD_RE.search(cleaned)
@@ -168,6 +211,11 @@ def _parse_settlement_date_from_text(line: str) -> date | None:
             int(match.group(2)),
             int(match.group(3)),
         )
+    compact = re.sub(r"[^\d]", "", cleaned)
+    if compact.startswith("20") and 8 <= len(compact) <= 10:
+        parsed = _parse_compact_date_from_digits(compact)
+        if parsed:
+            return parsed
     return None
 
 

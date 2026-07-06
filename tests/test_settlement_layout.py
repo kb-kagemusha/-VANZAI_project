@@ -115,3 +115,41 @@ def test_extract_settlement_datetime_handles_compact_date_without_slashes():
     record_date, record_time = extract_settlement_datetime(text)
     assert record_date == date(2026, 6, 29)
     assert record_time == "23:04:47"
+
+
+def test_extract_settlement_datetime_handles_ten_digit_compact_date():
+    text = """
+精算
+23:04:34
+2026107104
+端末番号
+"""
+    record_date, record_time = extract_settlement_datetime(text)
+    assert record_date == date(2026, 7, 4)
+    assert record_time == "23:04:34"
+
+
+def test_extract_settlement_datetime_handles_merged_slash_date_and_time():
+    text = """
+精算
+2026/070423:04:34
+端末番号
+"""
+    record_date, record_time = extract_settlement_datetime(text)
+    assert record_date == date(2026, 7, 4)
+    assert record_time == "23:04:34"
+
+
+def test_extract_settlement_datetime_handles_nine_digit_compact_date_and_seven_digit_time():
+    """OCR が 2026/07/04 を 202607104、23:04:34 を 2310434 と読む典型パターン。"""
+    text = """
+端末識別番号: 98f0
+精算
+202607104
+2310434
+端末番号:
+98f0ec2f-fc54-4e00-a503-2ecb6659c7be
+"""
+    record_date, record_time = extract_settlement_datetime(text)
+    assert record_date == date(2026, 7, 4)
+    assert record_time == "23:04:34"
