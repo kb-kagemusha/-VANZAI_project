@@ -2577,3 +2577,88 @@ button {
   margin-top: 0;
   box-shadow: 0 12px 32px rgba(29, 39, 49, 0.16);
 }
+
+.ocr-parse-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ocr-parse-actions-hover {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ocr-parse-actions-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: help;
+}
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.confirm-dialog-panel {
+  width: min(92vw, 420px);
+  padding: 1.25rem;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+}
+
+.confirm-dialog-panel h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.confirm-dialog-message {
+  margin: 0 0 1rem;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.confirm-dialog-danger {
+  background: #c8553d;
+  border-color: #c8553d;
+}
+
+.ocr-row-review-filename-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ocr-row-review-filename-input {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.ocr-row-review-filename-edit {
+  align-self: flex-start;
+  padding-inline: 0;
+  font-size: 0.82rem;
+}
+
+.ocr-row-review-filename-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}

@@ -529,6 +529,34 @@ e9c01785-7f8d-4b74-aa67-dc21e2b79fbf
 """
 
 
+PRODUCTION_OCR_TEXT_260703_10_DASH_PREFIX = """
+端末識別番号:e9c0
+精算
+2026/07/01 23:04:46
+端末番号
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計
+4,900
+"""
+
+
+def test_paygate_settlement_parser_recovers_terminal_id_from_dash_prefix_lines():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_10_DASH_PREFIX))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    if row.terminal_id:
+        assert row.terminal_id.startswith("e9c0")
+        assert row.terminal_id.endswith("dc21e2b79fbf")
+    else:
+        segments = row.raw_payload.get("terminal_id_segments") or {}
+        assert segments.get("twelve") == "dc21e2b79fbf"
+        assert segments.get("four_1") == "7f8d"
+
+
 def test_paygate_settlement_parser_handles_production_ocr_text_260703_10_single_line_terminal_id():
     parser = PaygateSettlementParser()
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_10))

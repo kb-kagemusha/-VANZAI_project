@@ -123,6 +123,7 @@ const STATUS_LABELS: Record<string, string> = {
   sent: "送信済み",
   tentative: "仮確定",
   confirmed: "確定",
+  pending_review: "未確定",
   pending: "保留",
   link_issued: "リンク発行済み",
   canceled: "取消",

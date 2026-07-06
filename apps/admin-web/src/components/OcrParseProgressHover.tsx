@@ -145,7 +145,9 @@ export function OcrParseProgressHover({ progress, active, children, className }:
       {popover ? createPortal(popover, document.body) : null}
       {active && isProgressActive ? (
         <span className="ocr-parse-progress-trigger-hint" aria-hidden="true">
-          進捗
+          {progress
+            ? `${progress.processedImages}/${progress.totalImages}枚 · ホバーで詳細`
+            : "進捗"}
         </span>
       ) : null}
     </span>

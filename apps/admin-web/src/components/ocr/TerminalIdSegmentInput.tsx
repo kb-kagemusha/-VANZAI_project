@@ -17,20 +17,28 @@ export function TerminalIdSegmentInput({
   value,
   onChange,
   disabled,
+  segmentHints,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  segmentHints?: {
+    eight?: string;
+    four_1?: string;
+    four_2?: string;
+    four_3?: string;
+    twelve?: string;
+  } | null;
 }) {
-  const [segments, setSegments] = useState(() => parseTerminalIdSegments(value));
+  const [segments, setSegments] = useState(() => parseTerminalIdSegments(value, segmentHints));
   const lastEmitted = useRef(value);
 
   useEffect(() => {
     if (value !== lastEmitted.current) {
-      setSegments(parseTerminalIdSegments(value));
+      setSegments(parseTerminalIdSegments(value, segmentHints));
       lastEmitted.current = value;
     }
-  }, [value]);
+  }, [value, segmentHints]);
 
   const emit = (nextSegments: string[]) => {
     setSegments(nextSegments);

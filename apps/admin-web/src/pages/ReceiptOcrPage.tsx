@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { createPortal } from "react-dom";
 import { Navigate } from "react-router-dom";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DataTable } from "../components/DataTable";
 import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
@@ -138,10 +139,8 @@ type ImageViewMode = "thumbnail" | "compact";
 
 const IMAGE_VIEW_MODE_KEY = "vanzai.ocr.imageViewMode";
 const IMAGE_PAGE_SIZE_KEY = "vanzai.ocr.imagePageSize";
-const SAVED_DATA_TAB_KEY = "vanzai.ocr.savedDataTab";
 const SAVED_ROW_PAGE_SIZE_KEY = "vanzai.ocr.savedRowPageSize";
 const SAVED_ROW_UI_KEY_PREFIX = "vanzai.ocr.savedRowUi";
-type SavedDataTab = OcrSourceType;
 
 type SavedRowValidationFilter = "" | "ok" | "error";
 
@@ -159,9 +158,8 @@ const DEFAULT_SAVED_ROW_FILTERS: SavedRowFilters = {
   keyword: "",
 };
 
-function readInitialSavedDataTab(): SavedDataTab {
-  const stored = window.localStorage.getItem(SAVED_DATA_TAB_KEY);
-  return stored === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
+function savedRowUiKey(sourceType: OcrSourceType) {
+  return `${SAVED_ROW_UI_KEY_PREFIX}.${sourceType}`;
 }
 
 function readStoredPageSize(key: string, allowed: readonly number[], fallback: number) {
@@ -190,13 +188,9 @@ type SavedRowUiPersist = {
   filters: SavedRowFilters;
 };
 
-function savedRowUiKey(tab: SavedDataTab) {
-  return `${SAVED_ROW_UI_KEY_PREFIX}.${tab}`;
-}
-
-function readSavedRowUi(tab: SavedDataTab): SavedRowUiPersist | null {
+function readSavedRowUi(sourceType: OcrSourceType): SavedRowUiPersist | null {
   try {
-    const raw = window.sessionStorage.getItem(savedRowUiKey(tab));
+    const raw = window.sessionStorage.getItem(savedRowUiKey(sourceType));
     if (!raw) {
       return null;
     }
@@ -213,9 +207,9 @@ function readSavedRowUi(tab: SavedDataTab): SavedRowUiPersist | null {
   }
 }
 
-function writeSavedRowUi(tab: SavedDataTab, state: SavedRowUiPersist) {
+function writeSavedRowUi(sourceType: OcrSourceType, state: SavedRowUiPersist) {
   try {
-    window.sessionStorage.setItem(savedRowUiKey(tab), JSON.stringify(state));
+    window.sessionStorage.setItem(savedRowUiKey(sourceType), JSON.stringify(state));
   } catch {
     // ignore
   }
@@ -231,9 +225,12 @@ function formatOcrParseStatus(value: string) {
   return OCR_PARSE_STATUS_LABELS[value] || value;
 }
 
-function confirmOcrDeletion(message: string) {
-  return window.confirm(message);
-}
+
+type PendingConfirm = {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+};
 
 function formatPeriodKey(periodKey: string) {
   if (periodKey.length !== 6) return periodKey;
@@ -960,7 +957,7 @@ function InventorySnapshotEditForm({
   );
 }
 
-export function ReceiptOcrPage() {
+export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   const queryClient = useQueryClient();
   const [pendingFiles, setPendingFiles] = useState<PendingUpload[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -1001,14 +998,14 @@ export function ReceiptOcrPage() {
   const [imagePage, setImagePage] = useState(0);
   const [rowSortKey, setRowSortKey] = useState<OcrRowSortKey>("record_date");
   const [rowSortDirection, setRowSortDirection] = useState<SortDirection>("desc");
-  const [savedDataTab, setSavedDataTab] = useState<SavedDataTab>(readInitialSavedDataTab);
   const [savedRowPageSize, setSavedRowPageSize] = useState<SavedRowPageSize>(() =>
     readStoredPageSize(SAVED_ROW_PAGE_SIZE_KEY, SAVED_ROW_PAGE_SIZES, 20) as SavedRowPageSize,
   );
-  const [savedRowPage, setSavedRowPage] = useState(() => readSavedRowUi(readInitialSavedDataTab())?.page ?? 0);
+  const [savedRowPage, setSavedRowPage] = useState(() => readSavedRowUi(sourceType)?.page ?? 0);
   const [savedRowFilters, setSavedRowFilters] = useState<SavedRowFilters>(
-    () => readSavedRowUi(readInitialSavedDataTab())?.filters ?? DEFAULT_SAVED_ROW_FILTERS,
+    () => readSavedRowUi(sourceType)?.filters ?? DEFAULT_SAVED_ROW_FILTERS,
   );
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
   const [reparseProgress, setReparseProgress] = useState<OcrParseProgressState | null>(null);
@@ -1016,8 +1013,8 @@ export function ReceiptOcrPage() {
   const isParsingRef = useRef(false);
 
   useEffect(() => {
-    writeSavedRowUi(savedDataTab, { page: savedRowPage, filters: savedRowFilters });
-  }, [savedDataTab, savedRowPage, savedRowFilters]);
+    writeSavedRowUi(sourceType, { page: savedRowPage, filters: savedRowFilters });
+  }, [sourceType, savedRowPage, savedRowFilters]);
 
   useEffect(() => {
     writeStoredPageSize(SAVED_ROW_PAGE_SIZE_KEY, savedRowPageSize);
@@ -1039,20 +1036,21 @@ export function ReceiptOcrPage() {
   });
 
   const imagesQuery = useQuery({
-    queryKey: ["ocr-images", imagePageSize, imagePage],
+    queryKey: ["ocr-images", sourceType, imagePageSize, imagePage],
     queryFn: () =>
       listOcrImages({
+        source_type: sourceType,
         limit: imagePageSize,
         offset: imagePage * imagePageSize,
       }),
   });
 
   const parseTargetsQuery = useQuery({
-    queryKey: ["ocr-images-parse-targets"],
+    queryKey: ["ocr-images-parse-targets", sourceType],
     queryFn: async () => {
       const [pending, failed] = await Promise.all([
-        listOcrImages({ parse_status: "pending", limit: 500 }),
-        listOcrImages({ parse_status: "failed", limit: 500 }),
+        listOcrImages({ source_type: sourceType, parse_status: "pending", limit: 500 }),
+        listOcrImages({ source_type: sourceType, parse_status: "failed", limit: 500 }),
       ]);
       const byId = new Map<string, OcrSourceImageItem>();
       for (const item of [...pending.items, ...failed.items]) {
@@ -1179,7 +1177,7 @@ export function ReceiptOcrPage() {
   const uploadMutation = useMutation({
     mutationFn: async () => {
       const images: OcrSourceImageItem[] = [];
-      for (const item of pendingFiles) {
+      for (const item of pendingFiles.filter((file) => file.sourceType === sourceType)) {
         const uploaded = await uploadOcrImage(item.file, item.sourceType);
         images.push(uploaded);
       }
@@ -1551,15 +1549,10 @@ export function ReceiptOcrPage() {
     }
     return savedRows.find((row) => row.id === reviewingRow.id) ?? reviewingRow;
   }, [reviewingRow, savedRows]);
-  const paygateSavedRows = useMemo(
-    () => savedRows.filter((row) => row.source_type === "paygate_screenshot"),
-    [savedRows],
+  const tabSavedRows = useMemo(
+    () => savedRows.filter((row) => row.source_type === sourceType),
+    [savedRows, sourceType],
   );
-  const settlementSavedRows = useMemo(
-    () => savedRows.filter((row) => row.source_type === "paygate_settlement"),
-    [savedRows],
-  );
-  const tabSavedRows = savedDataTab === "paygate_screenshot" ? paygateSavedRows : settlementSavedRows;
   const filteredSavedRows = useMemo(() => {
     const terminalFilter = savedRowFilters.terminalShortId.trim().toLowerCase();
     const keyword = savedRowFilters.keyword.trim().toLowerCase();
@@ -1635,8 +1628,11 @@ export function ReceiptOcrPage() {
       imageIds.length === 1
         ? "この画像を削除しますか？\n関連する保存データ（解析行）もあわせて削除されます。"
         : `選択した ${imageIds.length} 件の画像を削除しますか？\n関連する保存データ（解析行）もあわせて削除されます。`;
-    if (!confirmOcrDeletion(message)) return;
-    deleteImagesMutation.mutate(imageIds);
+    setPendingConfirm({
+      title: "画像を削除",
+      message,
+      onConfirm: () => deleteImagesMutation.mutate(imageIds),
+    });
   };
 
   const handleDeleteRows = (rowIds: string[]) => {
@@ -1645,8 +1641,11 @@ export function ReceiptOcrPage() {
       rowIds.length === 1
         ? "この保存データを削除しますか？"
         : `選択した ${rowIds.length} 件の保存データを削除しますか？`;
-    if (!confirmOcrDeletion(message)) return;
-    deleteRowsMutation.mutate(rowIds);
+    setPendingConfirm({
+      title: "保存データを削除",
+      message,
+      onConfirm: () => deleteRowsMutation.mutate(rowIds),
+    });
   };
 
   const periodOptions = useMemo(() => {
@@ -1660,8 +1659,8 @@ export function ReceiptOcrPage() {
 
   const tabSummaryItems = useMemo(() => {
     if (!summaryQuery.data?.items.length) return [];
-    return summaryQuery.data.items.filter((item) => item.source_type === savedDataTab);
-  }, [savedDataTab, summaryQuery.data]);
+    return summaryQuery.data.items.filter((item) => item.source_type === sourceType);
+  }, [sourceType, summaryQuery.data]);
 
   if (rowsQuery.error instanceof ApiError && rowsQuery.error.status === 403) {
     return <Navigate to="/403" replace />;
@@ -1723,16 +1722,6 @@ export function ReceiptOcrPage() {
     setRowSortKey(sortKey);
   };
 
-  const handleSavedDataTabChange = (tab: SavedDataTab) => {
-    writeSavedRowUi(savedDataTab, { page: savedRowPage, filters: savedRowFilters });
-    setSavedDataTab(tab);
-    setSelectedRowIds([]);
-    window.localStorage.setItem(SAVED_DATA_TAB_KEY, tab);
-    const loaded = readSavedRowUi(tab);
-    setSavedRowFilters(loaded?.filters ?? DEFAULT_SAVED_ROW_FILTERS);
-    setSavedRowPage(loaded?.page ?? 0);
-  };
-
   const handleSavedRowPageSizeChange = (size: SavedRowPageSize) => {
     setSavedRowPageSize(size);
     setSavedRowPage(0);
@@ -1785,7 +1774,7 @@ export function ReceiptOcrPage() {
             imageId={row.source_image_id}
             filename={name}
             hideExtension
-            clampLines={savedDataTab === "paygate_settlement"}
+            clampLines={sourceType === "paygate_settlement"}
             onClickPreview={() => setReviewingRow(row)}
           />
         );
@@ -2035,7 +2024,7 @@ export function ReceiptOcrPage() {
   ];
   const visibleRowColumns = rowColumns
     .filter((column) => {
-      if (savedDataTab === "paygate_screenshot") {
+      if (sourceType === "paygate_screenshot") {
         return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
       }
       return (
@@ -2044,35 +2033,37 @@ export function ReceiptOcrPage() {
       );
     })
     .sort((left, right) => {
-      if (savedDataTab !== "paygate_settlement") {
+      if (sourceType !== "paygate_settlement") {
         return 0;
       }
       const order = new Map(SETTLEMENT_COLUMN_ORDER.map((key, index) => [key, index]));
       return (order.get(left.key) ?? 999) - (order.get(right.key) ?? 999);
     });
 
+  const pendingFilesForPage = useMemo(
+    () => pendingFiles.filter((file) => file.sourceType === sourceType),
+    [pendingFiles, sourceType],
+  );
+
+  const isPaygate = sourceType === "paygate_screenshot";
+  const isSettlement = sourceType === "paygate_settlement";
+  const pageTitle = isPaygate ? "Paygateスクリーンショット" : "精算レシート";
+  const pageDescription = isPaygate
+    ? "Paygate画面のスクリーンショットをアップロード・解析し、取引データを保存します。"
+    : "感熱紙の精算レシートをアップロード・解析し、端末別の精算データを保存します。";
+
   return (
     <div className="page-stack">
-      <PageHeader
-        eyebrow="運用"
-        title="OCR・レシート解析"
-        description="Paygateスクリーンショットと精算レシートを解析し、年月別に保存・CSV出力します。"
-      />
+      <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
 
       <section className="panel-card ocr-upload-grid">
         <DropZone
-          label="Paygateスクリーンショット"
-          description="取引履歴の画面キャプチャを追加"
-          sourceType="paygate_screenshot"
-          files={pendingFiles}
-          onAddFiles={addFiles}
-          onRemove={removeFile}
-        />
-        <DropZone
-          label="精算レシート"
-          description="感熱紙の精算レシート写真を追加"
-          sourceType="paygate_settlement"
-          files={pendingFiles}
+          label={isPaygate ? "Paygateスクリーンショット" : "精算レシート"}
+          description={
+            isPaygate ? "取引履歴の画面キャプチャを追加" : "感熱紙の精算レシート写真を追加"
+          }
+          sourceType={sourceType}
+          files={pendingFilesForPage}
           onAddFiles={addFiles}
           onRemove={removeFile}
         />
@@ -2083,7 +2074,7 @@ export function ReceiptOcrPage() {
           <button
             type="button"
             className="secondary-button"
-            disabled={!pendingFiles.length || uploadMutation.isPending}
+            disabled={!pendingFilesForPage.length || uploadMutation.isPending}
             onClick={() => uploadMutation.mutate()}
           >
             {uploadMutation.isPending ? "アップロード中..." : "画像をアップロード"}
@@ -2143,17 +2134,26 @@ export function ReceiptOcrPage() {
                 {imagePage * imagePageSize + uploadedImages.length} 件を表示
               </span>
             </div>
-            <div className="upload-actions">
-              <OcrParseProgressHover progress={parseProgress} active={isParsing}>
+            <div className="upload-actions ocr-parse-actions">
+              <OcrParseProgressHover progress={parseProgress} active={isParsing} className="ocr-parse-actions-hover">
                 <button
                   type="button"
                   className="primary-button"
                   disabled={!imageIdsToParse.length || isParsing}
                   onClick={() => void handleParseImages()}
                 >
-                  {isParsing ? "解析中..." : `解析 (${imageIdsToParse.length}枚)`}
+                  {isParsing && parseProgress
+                    ? `解析中 (${parseProgress.processedImages}/${parseProgress.totalImages})`
+                    : `解析 (${imageIdsToParse.length}枚)`}
                 </button>
               </OcrParseProgressHover>
+              {isParsing && parseProgress ? (
+                <span className="ocr-parse-actions-hint" title="ボタンまたは進捗表示にマウスオーバーで詳細">
+                  {parseProgress.phase === "retrying"
+                    ? `再試行 ${parseProgress.retryImageIndex}/${parseProgress.retryImageTotal}`
+                    : `バッチ ${parseProgress.currentBatch}/${parseProgress.totalBatches} · 成功 ${parseProgress.successCount} / 失敗 ${parseProgress.failedCount}`}
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="secondary-button"
@@ -2235,34 +2235,8 @@ export function ReceiptOcrPage() {
         <PageHeader
           eyebrow="年月別"
           title="保存データ"
-          description="レシート日付から自動で YYYYMM に分類されます。Paygate と精算レシートはタブで切り替えて表示します。"
+          description={`${pageTitle}の解析結果を年月別に表示します（${tabSavedRows.length}件）。`}
         />
-        <div className="ocr-saved-data-tabs" role="tablist" aria-label="保存データの種別">
-          <button
-            type="button"
-            role="tab"
-            id="ocr-saved-tab-paygate"
-            aria-selected={savedDataTab === "paygate_screenshot"}
-            aria-controls="ocr-saved-data-panel"
-            className={`ocr-saved-data-tab${savedDataTab === "paygate_screenshot" ? " is-active" : ""}`}
-            onClick={() => handleSavedDataTabChange("paygate_screenshot")}
-          >
-            Paygate
-            <span className="ocr-saved-data-tab-count">{paygateSavedRows.length}件</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="ocr-saved-tab-settlement"
-            aria-selected={savedDataTab === "paygate_settlement"}
-            aria-controls="ocr-saved-data-panel"
-            className={`ocr-saved-data-tab${savedDataTab === "paygate_settlement" ? " is-active" : ""}`}
-            onClick={() => handleSavedDataTabChange("paygate_settlement")}
-          >
-            精算レシート
-            <span className="ocr-saved-data-tab-count">{settlementSavedRows.length}件</span>
-          </button>
-        </div>
         <div className="filter-row">
           <label>
             対象月
@@ -2282,19 +2256,21 @@ export function ReceiptOcrPage() {
               ))}
             </select>
           </label>
-          <label>
-            端末識別番号
-            <input
-              value={savedRowFilters.terminalShortId}
-              placeholder="例: 2c0e"
-              maxLength={4}
-              onChange={(event) =>
-                handleSavedRowFilterChange({
-                  terminalShortId: normalizeTerminalShortIdInput(event.target.value),
-                })
-              }
-            />
-          </label>
+          {isSettlement ? (
+            <label>
+              端末識別番号
+              <input
+                value={savedRowFilters.terminalShortId}
+                placeholder="例: 2c0e"
+                maxLength={4}
+                onChange={(event) =>
+                  handleSavedRowFilterChange({
+                    terminalShortId: normalizeTerminalShortIdInput(event.target.value),
+                  })
+                }
+              />
+            </label>
+          ) : null}
           <label>
             ステータス
             <select
@@ -2375,13 +2351,15 @@ export function ReceiptOcrPage() {
           <button type="button" className="secondary-button" onClick={() => downloadAllOcrCsv()}>
             全件CSV
           </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => downloadSettlementCsv(selectedPeriodKey || undefined)}
-          >
-            精算レシートCSV（拡張）
-          </button>
+          {isSettlement ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => downloadSettlementCsv(selectedPeriodKey || undefined)}
+            >
+              精算レシートCSV（拡張）
+            </button>
+          ) : null}
           <button
             type="button"
             className="secondary-button"
@@ -2454,7 +2432,7 @@ export function ReceiptOcrPage() {
             : null}
         </p>
 
-        <div id="ocr-saved-data-panel" role="tabpanel" aria-labelledby={savedDataTab === "paygate_screenshot" ? "ocr-saved-tab-paygate" : "ocr-saved-tab-settlement"}>
+        <div id="ocr-saved-data-panel">
           {rowsQuery.isPending ? (
             <LoadingOverlay label="解析結果を読み込み中..." />
           ) : rowsQuery.isError ? (
@@ -2469,14 +2447,12 @@ export function ReceiptOcrPage() {
                 rows={paginatedSavedRows}
                 getRowKey={(row) => row.id}
                 emptyTitle={
-                  savedDataTab === "paygate_screenshot"
-                    ? "Paygateの保存データがありません"
-                    : "精算レシートの保存データがありません"
+                  isPaygate ? "Paygateの保存データがありません" : "精算レシートの保存データがありません"
                 }
                 emptyDescription={
                   filteredSavedRows.length !== tabSavedRows.length
                     ? "絞り込み条件を変更するか、フィルタをクリアしてください。"
-                    : savedDataTab === "paygate_screenshot"
+                    : isPaygate
                       ? "Paygateスクリーンショットをアップロードして解析を実行してください。"
                       : "精算レシートをアップロードして解析を実行してください。"
                 }
@@ -2545,6 +2521,8 @@ export function ReceiptOcrPage() {
         />
       ) : null}
 
+      {isSettlement ? (
+      <>
       <section className="panel-card page-stack">
         <PageHeader
           eyebrow="精算レシート"
@@ -2839,7 +2817,11 @@ export function ReceiptOcrPage() {
           </>
         ) : null}
       </section>
+      </>
+      ) : null}
 
+      {isPaygate ? (
+      <>
       <section className="panel-card page-stack">
         <PageHeader
           eyebrow="突合"
@@ -2932,6 +2914,8 @@ export function ReceiptOcrPage() {
         ) : null}
         {compareQuery.data?.message ? <p className="upload-help">{compareQuery.data.message}</p> : null}
       </section>
+      </>
+      ) : null}
 
       <AppNotification
         open={notification.open}
@@ -2942,6 +2926,27 @@ export function ReceiptOcrPage() {
         confirmLabel={notification.confirmLabel}
         onClose={closeNotification}
       />
+      <ConfirmDialog
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? ""}
+        message={pendingConfirm?.message ?? ""}
+        confirmLabel="削除"
+        busy={deleteImagesMutation.isPending || deleteRowsMutation.isPending}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          const action = pendingConfirm?.onConfirm;
+          setPendingConfirm(null);
+          action?.();
+        }}
+      />
     </div>
   );
+}
+
+export function OcrPaygateScreenshotPage() {
+  return <ReceiptOcrPage sourceType="paygate_screenshot" />;
+}
+
+export function OcrSettlementReceiptPage() {
+  return <ReceiptOcrPage sourceType="paygate_settlement" />;
 }

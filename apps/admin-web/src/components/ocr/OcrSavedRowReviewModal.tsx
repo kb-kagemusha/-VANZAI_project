@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { ApiError, fetchOcrImageBlobUrl, updateOcrRow } from "../../lib/api/client";
+import { ApiError, fetchOcrImageBlobUrl, renameOcrImage, updateOcrRow } from "../../lib/api/client";
 import { formatCurrency } from "../../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
+import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { formatOcrValidationMessages } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
 import { OcrParseProgressHover } from "../OcrParseProgressHover";
@@ -230,7 +231,12 @@ function OcrReviewFieldRow({
         spec.key === "terminal_id" ? (
           <>
             <div className="ocr-row-review-field-editor">
-              <TerminalIdSegmentInput value={value} onChange={onDraftChange} disabled={disabled} />
+              <TerminalIdSegmentInput
+                value={value}
+                onChange={onDraftChange}
+                disabled={disabled}
+                segmentHints={row.terminal_id_segments}
+              />
             </div>
             <div className="ocr-row-review-field-actions">
               <button type="button" className="ghost-button" onClick={onApply} disabled={disabled}>
@@ -306,7 +312,7 @@ export function OcrSavedRowReviewModal({
   row: OcrExtractedRowItem;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: (options?: { imageFilename?: string }) => Promise<void> | void;
   confirming: boolean;
   onReparse?: () => void;
   reparsing?: boolean;
@@ -320,7 +326,19 @@ export function OcrSavedRowReviewModal({
   const [editSnapshot, setEditSnapshot] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imageFilename, setImageFilename] = useState(
+    () => row.source_image_filename || row.source_image_id,
+  );
+  const [editingFilename, setEditingFilename] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
+
+  const suggestedFilename = useMemo(
+    () =>
+      isSettlement
+        ? buildSettlementReceiptFilename(draft, row.source_image_filename)
+        : row.source_image_filename || row.source_image_id,
+    [draft, isSettlement, row.source_image_filename, row.source_image_id],
+  );
 
   const fieldSpecs = isSettlement ? SETTLEMENT_REVIEW_FIELDS : SCREENSHOT_REVIEW_FIELDS;
   const fieldConfidence = row.field_confidence ?? {};
@@ -339,6 +357,12 @@ export function OcrSavedRowReviewModal({
     setDraft(next);
     setEditingField(null);
     setError(null);
+    setImageFilename(
+      isSettlement && row.status !== "confirmed"
+        ? buildSettlementReceiptFilename(createOcrRowEditDraft(row), row.source_image_filename)
+        : row.source_image_filename || row.source_image_id,
+    );
+    setEditingFilename(false);
   }, [row]);
 
   useEffect(() => {
@@ -403,7 +427,12 @@ export function OcrSavedRowReviewModal({
     }
     setError(null);
     try {
-      await onConfirm();
+      const filenameToApply =
+        isSettlement && row.status !== "confirmed" ? imageFilename.trim() || suggestedFilename : undefined;
+      if (filenameToApply && filenameToApply !== row.source_image_filename) {
+        await renameOcrImage(row.source_image_id, filenameToApply);
+      }
+      await onConfirm(filenameToApply ? { imageFilename: filenameToApply } : undefined);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "確定に失敗しました");
     }
@@ -447,9 +476,62 @@ export function OcrSavedRowReviewModal({
               {isSettlement ? "精算レシートを確認" : "Paygate SSを確認"}
             </h3>
             <div className="ocr-row-review-summary">
-              <p className="ocr-row-review-filename" title={row.source_image_filename || row.source_image_id}>
-                {row.source_image_filename || row.source_image_id}
-              </p>
+            <div className="ocr-row-review-filename-row">
+              {editingFilename && row.status !== "confirmed" ? (
+                <>
+                  <input
+                    type="text"
+                    className="ocr-row-review-filename-input"
+                    value={imageFilename}
+                    disabled={busy}
+                    onChange={(event) => setImageFilename(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busy}
+                    onClick={() => {
+                      setImageFilename(suggestedFilename);
+                      setEditingFilename(false);
+                    }}
+                  >
+                    適用
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={busy}
+                    onClick={() => {
+                      setImageFilename(row.source_image_filename || suggestedFilename);
+                      setEditingFilename(false);
+                    }}
+                  >
+                    取消
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="ocr-row-review-filename" title={imageFilename}>
+                    {imageFilename}
+                  </p>
+                  {row.status !== "confirmed" ? (
+                    <button
+                      type="button"
+                      className="ghost-button ocr-row-review-filename-edit"
+                      disabled={busy}
+                      onClick={() => setEditingFilename(true)}
+                    >
+                      名前変更
+                    </button>
+                  ) : null}
+                </>
+              )}
+              {isSettlement && row.status !== "confirmed" && !editingFilename ? (
+                <p className="ocr-row-review-filename-hint">
+                  確定時の推奨名: {suggestedFilename}
+                </p>
+              ) : null}
+            </div>
               <div className="ocr-row-review-badges">
                 <StatusBadge value={row.status} />
                 {labels.map((label) => (
@@ -458,7 +540,14 @@ export function OcrSavedRowReviewModal({
                   </span>
                 ))}
               </div>
-              {validationMessages.length ? (
+              {row.status === "confirmed" ? (
+                <p className="ocr-row-review-validation ocr-row-review-validation--ok">
+                  <span className="ocr-quality-badge ocr-quality-badge--positive">確定</span>
+                  {validationMessages.length
+                    ? ` / ${formatOcrValidationMessages(validationMessages)}`
+                    : " / 検証: OK"}
+                </p>
+              ) : validationMessages.length ? (
                 <p className="ocr-warning-text ocr-row-review-validation">{formatOcrValidationMessages(validationMessages)}</p>
               ) : (
                 <p className="ocr-row-review-validation ocr-row-review-validation--ok">検証: OK</p>

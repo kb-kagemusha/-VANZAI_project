@@ -18,7 +18,9 @@ from src.services.ocr.parsers.settlement_amount import (
 )
 from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
 from src.services.ocr.parsers.settlement_terminal_id import (
+    TerminalIdSegments,
     assemble_terminal_segments_from_hex_tokens,
+    recover_terminal_id_from_partial_segments,
     format_terminal_id_from_hex32,
     is_valid_settlement_terminal_short_id,
     normalize_settlement_terminal_id,
@@ -791,6 +793,11 @@ def _continuation_from_garbled_line(other_cleaned: str) -> str | None:
     tail_match = re.search(r"([0-9a-f]{4}-[0-9a-f]{12})", other_cleaned, re.IGNORECASE)
     if tail_match:
         return tail_match.group(1).lower()
+    if re.match(r"^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}", other_cleaned, re.IGNORECASE):
+        return None
+    twelve_only = re.fullmatch(r"[0-9a-f]{12}", compact)
+    if twelve_only:
+        return twelve_only.group(0)
     return None
 
 
@@ -814,9 +821,35 @@ def _extract_terminal_id_from_confident_ocr_lines(
                 candidates.append((terminal_id, score, line.confidence, "ocr_line_direct"))
 
         prefix_match = _TERMINAL_UUID_PREFIX_LINE_RE.match(cleaned)
-        if not prefix_match or line.confidence < 0.75:
+        if prefix_match and line.confidence >= 0.75:
+            prefix_text = prefix_match.group(1).lower()
+            for other_index, other in enumerate(lines):
+                if other_index == index:
+                    continue
+                other_cleaned = _clean_hex_line(_normalize_uuid_ocr_line(other.text))
+                if not other_cleaned or _line_looks_like_datetime_uuid_noise(other_cleaned):
+                    continue
+                continuation = _continuation_from_garbled_line(other_cleaned)
+                if not continuation:
+                    continue
+                terminal_id = normalize_settlement_terminal_id(f"{prefix_text}{continuation}")
+                if not terminal_id:
+                    continue
+                score = _score_terminal_id_candidate(terminal_id, short_id_hint)
+                avg_conf = (line.confidence + other.confidence) / 2
+                candidates.append((terminal_id, score, avg_conf, "ocr_line_pair"))
             continue
-        prefix_text = prefix_match.group(1).lower()
+
+        suffix_prefix_match = re.match(
+            r"^-?([0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-?)$",
+            cleaned,
+            re.IGNORECASE,
+        )
+        if not suffix_prefix_match or line.confidence < 0.7 or not short_id_hint:
+            continue
+        parts = [part for part in suffix_prefix_match.group(1).lower().split("-") if part]
+        if len(parts) != 3:
+            continue
         for other_index, other in enumerate(lines):
             if other_index == index:
                 continue
@@ -826,12 +859,21 @@ def _extract_terminal_id_from_confident_ocr_lines(
             continuation = _continuation_from_garbled_line(other_cleaned)
             if not continuation:
                 continue
-            terminal_id = normalize_settlement_terminal_id(f"{prefix_text}{continuation}")
+            twelve = continuation.split("-")[-1]
+            if len(twelve) != 12:
+                continue
+            partial = TerminalIdSegments(four_1=parts[0], four_2=parts[1], four_3=parts[2], twelve=twelve)
+            terminal_id = recover_terminal_id_from_partial_segments(
+                text="\n".join(line.text for line in lines),
+                short_id=short_id_hint,
+                segments=partial,
+                ocr_line_texts=[line.text for line in lines],
+            )
             if not terminal_id:
                 continue
             score = _score_terminal_id_candidate(terminal_id, short_id_hint)
             avg_conf = (line.confidence + other.confidence) / 2
-            candidates.append((terminal_id, score, avg_conf, "ocr_line_pair"))
+            candidates.append((terminal_id, score, avg_conf, "ocr_line_pair_suffix"))
 
     if not candidates:
         return None
@@ -1334,7 +1376,17 @@ class PaygateSettlementParser(BaseOcrParser):
                 terminal_id = partial_segments.to_canonical()
                 terminal_meta["source"] = "ocr_assembled"
             elif partial_segments.is_partial():
-                terminal_meta["partial_segments"] = partial_segments.to_dict()
+                recovered = recover_terminal_id_from_partial_segments(
+                    text=text,
+                    short_id=terminal_short_id_hint,
+                    segments=partial_segments,
+                    ocr_line_texts=[line.text for line in ocr_result.lines],
+                )
+                if recovered:
+                    terminal_id = recovered
+                    terminal_meta["source"] = "ocr_recovered"
+                else:
+                    terminal_meta["partial_segments"] = partial_segments.to_dict()
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         short_from_terminal = _short_id_from_terminal_id(terminal_id)
         if terminal_short_id_hint and _explicit_terminal_short_id_in_text(text, terminal_short_id_hint):

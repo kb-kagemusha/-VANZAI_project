@@ -215,6 +215,63 @@ def _is_short_id_noise_token(token: str, short_id: str | None) -> bool:
     return repaired == short_id and token != short_id
 
 
+def recover_terminal_id_from_partial_segments(
+    *,
+    text: str,
+    short_id: str | None,
+    segments: TerminalIdSegments,
+    ocr_line_texts: list[str] | None = None,
+) -> str | None:
+    """Recover full terminal_id when only middle/tail UUID segments were OCR-read."""
+    if segments.is_complete():
+        return segments.to_canonical()
+    if not all((segments.four_1, segments.four_2, segments.four_3, segments.twelve)):
+        return None
+
+    body = f"{segments.four_1}{segments.four_2}{segments.four_3}{segments.twelve}"
+    eight = segments.eight
+    merged_text = text
+    if ocr_line_texts:
+        merged_text = f"{text}\n" + "\n".join(ocr_line_texts)
+
+    section = re.split(r"(?:^|\n)\s*小計", merged_text, maxsplit=1, flags=re.IGNORECASE)[0]
+    section_compact = re.sub(r"[^0-9a-f]", "", section.lower())
+
+    if not eight and short_id:
+        idx = section_compact.find(body)
+        if idx >= 4:
+            eight_suffix = section_compact[idx - 4 : idx]
+            if re.fullmatch(r"[0-9a-f]{4}", eight_suffix):
+                eight = f"{short_id}{eight_suffix}"
+
+        if not eight:
+            compact = re.sub(r"[^0-9a-f]", "", merged_text.lower())
+            for match in re.finditer(rf"{re.escape(short_id)}([0-9a-f]{{4}}){re.escape(segments.four_1)}", compact):
+                eight = f"{short_id}{match.group(1)}"
+
+        if not eight and ocr_line_texts:
+            for index, line_text in enumerate(ocr_line_texts):
+                cleaned = re.sub(r"[^0-9a-f]", "", line_text.lower())
+                if len(cleaned) >= 8 and cleaned.startswith(short_id):
+                    eight = cleaned[:8]
+                    break
+                if cleaned.startswith(short_id) and len(cleaned) < 8:
+                    for other in ocr_line_texts[index + 1 : index + 3]:
+                        next_cleaned = re.sub(r"[^0-9a-f]", "", other.lower())
+                        combined = (cleaned + next_cleaned)[:8]
+                        if len(combined) == 8 and combined.startswith(short_id):
+                            eight = combined
+                            break
+                if eight:
+                    break
+
+    if eight:
+        return normalize_settlement_terminal_id(
+            f"{eight}-{segments.four_1}-{segments.four_2}-{segments.four_3}-{segments.twelve}"
+        )
+    return None
+
+
 def assemble_terminal_segments_from_hex_tokens(
     tokens: list[str],
     *,

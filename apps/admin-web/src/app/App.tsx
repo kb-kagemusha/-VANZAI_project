@@ -23,7 +23,7 @@ import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
-import { ReceiptOcrPage } from "../pages/ReceiptOcrPage";
+import { OcrPaygateScreenshotPage, OcrSettlementReceiptPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -54,13 +54,22 @@ export function App() {
             }
           />
           <Route
-            path="/operations/ocr-receipt"
+            path="/operations/ocr-paygate"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
-                <ReceiptOcrPage />
+                <OcrPaygateScreenshotPage />
               </PermissionRoute>
             }
           />
+          <Route
+            path="/operations/ocr-settlement"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <OcrSettlementReceiptPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr-paygate" replace />} />
           <Route
             path="/operations/availability-calendar"
             element={
