@@ -198,6 +198,29 @@ def test_paygate_screenshot_parser_extracts_rows():
     assert rows[0].receipt_no == "7782464677325"
     assert rows[0].amount == Decimal("980")
     assert rows[0].period_key == "202605"
+
+
+def test_paygate_screenshot_parser_accepts_782_receipt_prefix():
+    """782始まりのレシート番号（取引一覧スクショ）を保存可能とする。"""
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/27 22:06:09
+980
+取引番号 1272464
+レシート番号 7825655697319
+2026/06/27 22:05:46
+980
+取引番号 1272463
+レシート番号 7825655467319
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 2
+    assert rows[0].transaction_no == "1272464"
+    assert rows[0].receipt_no == "7825655697319"
+    assert rows[0].record_date == date(2026, 6, 27)
+    assert rows[0].record_time == "22:06:09"
+    assert rows[0].amount == Decimal("980")
+    assert is_paygate_row_saveable(rows[0]) is True
     assert rows[0].raw_payload.get("field_confidence", {}).get("amount", 0) > 0
     assert rows[0].raw_payload.get("field_confidence", {}).get("transaction_no", 0) > 0
 

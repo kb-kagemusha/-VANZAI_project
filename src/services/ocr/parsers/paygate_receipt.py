@@ -49,14 +49,18 @@ def extract_paygate_receipt_no(block: str) -> str | None:
             digits = correct_paygate_receipt_digits(normalize_receipt_digits(raw))
             if len(digits) < 10:
                 continue
-            if len(digits) >= _PAYGATE_RECEIPT_LENGTH and digits.startswith("781"):
+            if len(digits) >= _PAYGATE_RECEIPT_LENGTH and re.fullmatch(
+                r"7[78]\d{11}", digits[:_PAYGATE_RECEIPT_LENGTH]
+            ):
                 return digits[:_PAYGATE_RECEIPT_LENGTH]
             if 10 <= len(digits) <= 15:
                 return digits
 
     for raw in re.findall(r"[107][0-9０-９]{12,16}", block):
         digits = correct_paygate_receipt_digits(normalize_receipt_digits(raw))
-        if len(digits) >= _PAYGATE_RECEIPT_LENGTH and digits.startswith("781"):
+        if len(digits) >= _PAYGATE_RECEIPT_LENGTH and re.fullmatch(
+            r"7[78]\d{11}", digits[:_PAYGATE_RECEIPT_LENGTH]
+        ):
             return digits[:_PAYGATE_RECEIPT_LENGTH]
 
     return None

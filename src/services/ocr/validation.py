@@ -13,7 +13,7 @@ from src.services.ocr.parsers.settlement_terminal_id import (
 )
 
 _PAYGATE_TXN_RE = re.compile(r"^1\d{6}$")
-_PAYGATE_RECEIPT_RE = re.compile(r"^(77\d{11}|781\d{10})$")
+_PAYGATE_RECEIPT_RE = re.compile(r"^(77\d{11}|78\d{11})$")
 
 
 def is_paygate_row_saveable(row: ParsedOcrRow) -> bool:
