@@ -186,3 +186,31 @@ def repair_settlement_amounts(
         repaired["other"] = Decimal(0)
 
     return repaired
+
+
+def reconcile_subtotal_total_consistency(
+    text: str,
+    amounts: dict[str, Decimal | None],
+) -> tuple[dict[str, Decimal | None], str | None]:
+    """小計 > 合計は実レシートでは成立しない。合計の誤読（現金売上の拾い違え等）を補正する。"""
+    from src.services.ocr.parsers.settlement_amount import is_weak_settlement_header_amount
+
+    repaired = dict(amounts)
+    subtotal = repaired.get("subtotal")
+    total = repaired.get("total")
+    if (
+        subtotal is None
+        or total is None
+        or subtotal <= total
+        or is_weak_settlement_header_amount(subtotal)
+    ):
+        return repaired, None
+
+    repaired["total"] = subtotal
+    _infer_sales_from_total(repaired)
+    if repaired.get("pos") in (None, Decimal(0)):
+        repaired = repair_settlement_amounts(text, repaired)
+        if repaired.get("total") != subtotal:
+            repaired["total"] = subtotal
+            _infer_sales_from_total(repaired)
+    return repaired, "subtotal_exceeds_total"

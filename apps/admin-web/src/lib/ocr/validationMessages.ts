@@ -2,6 +2,7 @@
 const OCR_VALIDATION_MESSAGE_JA: Record<string, string> = {
   amount_breakdown_mismatch:
     "金額の内訳（現金・クレジット・PAYGATE POS等）が合計と一致しません",
+  subtotal_exceeds_total: "小計が合計を上回っています（合計の読み取り誤りの可能性）",
   settlement_amount_missing: "合計金額が読み取れません",
   transaction_count_invalid: "通常取引数が不正です",
   missing_terminal_short_id: "端末識別番号が未入力または読み取れません（4桁）",

@@ -1361,3 +1361,49 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_line_
     assert row.record_time == "23:04:34"
     assert row.terminal_short_id == "98f0"
 
+
+PRODUCTION_OCR_TEXT_260706_0B21_15680 = """
+端末識別番号0b21
+精算
+2026/07/0422:57:57
+端末番号
+0b21ee3e-0e48-475b-8246-7
+fd3b19741ea
+15,680
+小計
+15,680
+合計
+15/880
+現金売上
+クレヅット売上
+その他支払い
+-PAYGATE
+POS
+9/800
+-その他
+10
+消費税
+1,424
+通常取引数
+16
+15,680
+小計
+115,680
+今計
+45,880
+現金売上
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_0b21_subtotal_exceeds_total():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_0B21_15680))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.subtotal == Decimal("15680")
+    assert row.amount == Decimal("15680")
+    assert row.cash_sales == Decimal("5880")
+    assert row.pos_sales == Decimal("9800")
+    assert row.transaction_count == 16
+

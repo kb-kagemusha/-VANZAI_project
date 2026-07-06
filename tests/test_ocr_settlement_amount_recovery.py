@@ -1,7 +1,10 @@
 """Tests for misaligned settlement amount recovery."""
 from decimal import Decimal
 
-from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
+from src.services.ocr.parsers.settlement_amount_recovery import (
+    reconcile_subtotal_total_consistency,
+    repair_settlement_amounts,
+)
 
 
 def test_repair_cash_amount_on_line_before_label():
@@ -81,3 +84,32 @@ def test_other_payment_ignores_misaligned_tax_amount():
         },
     )
     assert amounts["other"] == Decimal(0)
+
+
+def test_reconcile_subtotal_greater_than_total_uses_subtotal_and_infers_pos():
+    text = """
+小計
+15,680
+合計
+15/880
+現金売上
+5,880
+-PAYGATE POS
+9,800
+通常取引数
+16
+"""
+    amounts = repair_settlement_amounts(
+        text,
+        {
+            "subtotal": Decimal("15680"),
+            "total": Decimal("5880"),
+            "cash": Decimal("5880"),
+            "pos": Decimal(0),
+        },
+    )
+    amounts, reason = reconcile_subtotal_total_consistency(text, amounts)
+    assert reason == "subtotal_exceeds_total"
+    assert amounts["total"] == Decimal("15680")
+    assert amounts["cash"] == Decimal("5880")
+    assert amounts["pos"] == Decimal("9800")

@@ -16,7 +16,10 @@ from src.services.ocr.parsers.settlement_amount import (
     sanitize_settlement_amount,
     sanitize_settlement_sales_amount,
 )
-from src.services.ocr.parsers.settlement_amount_recovery import repair_settlement_amounts
+from src.services.ocr.parsers.settlement_amount_recovery import (
+    reconcile_subtotal_total_consistency,
+    repair_settlement_amounts,
+)
 from src.services.ocr.parsers.settlement_terminal_id import (
     TerminalIdSegments,
     assemble_terminal_segments_from_hex_tokens,
@@ -1299,6 +1302,9 @@ def _extract_settlement_amounts(text: str) -> tuple[dict[str, Decimal | None], d
     amounts, corrections = merge_layout_amounts(amounts, corrections, layout_amounts, layout_corrections)
     amounts = repair_settlement_amounts(text, amounts)
     amounts = _reconcile_weak_header_amounts(amounts)
+    amounts, subtotal_repair = reconcile_subtotal_total_consistency(text, amounts)
+    if subtotal_repair:
+        corrections["total"] = subtotal_repair
     return amounts, corrections
 
 

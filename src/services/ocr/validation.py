@@ -137,6 +137,11 @@ def compute_settlement_blocking_errors(row) -> list[str]:
     if getattr(row, "amount", None) is None:
         errors.append("settlement_amount_missing")
 
+    subtotal = getattr(row, "subtotal", None)
+    amount = getattr(row, "amount", None)
+    if subtotal is not None and amount is not None and subtotal > amount:
+        errors.append("subtotal_exceeds_total")
+
     short_id = getattr(row, "terminal_short_id", None)
     if not short_id:
         errors.append("missing_terminal_short_id")
