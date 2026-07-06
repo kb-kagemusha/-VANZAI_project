@@ -1635,6 +1635,20 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     }
     return savedRows.find((row) => row.id === reviewingRow.id) ?? reviewingRow;
   }, [reviewingRow, savedRows]);
+
+  const reviewingRowSiblings = useMemo(() => {
+    if (!reviewingRowLive) {
+      return [];
+    }
+    return savedRows.filter((row) => row.source_image_id === reviewingRowLive.source_image_id);
+  }, [reviewingRowLive, savedRows]);
+
+  const invalidateSavedRowQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["ocr-rows"] }),
+      queryClient.invalidateQueries({ queryKey: ["ocr-images"] }),
+    ]);
+  }, [queryClient]);
   const tabSavedRows = useMemo(
     () => savedRows.filter((row) => row.source_type === sourceType),
     [savedRows, sourceType],
@@ -2630,15 +2644,14 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       {reviewingRowLive ? (
         <OcrSavedRowReviewModal
           row={reviewingRowLive}
+          imageSiblingRows={reviewingRowSiblings}
           onClose={() => setReviewingRow(null)}
-          onSaved={async () => {
-            await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
-          }}
+          onSaved={invalidateSavedRowQueries}
           onConfirm={async () => {
             await confirmOcrRows([reviewingRowLive.id]);
             setReviewingRow(null);
             setFormError(null);
-            await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
+            await invalidateSavedRowQueries();
           }}
           confirming={confirmMutation.isPending}
           onReparse={

@@ -7,6 +7,7 @@ import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDi
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
+import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
 import { formatOcrValidationMessages } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
 import { OcrParseProgressHover } from "../OcrParseProgressHover";
@@ -148,7 +149,6 @@ const SCREENSHOT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     label: "レシート番号",
     confidenceKey: "receipt_no",
     inputMode: "numeric",
-    monospace: true,
     formatDisplay: (draft) => draft.receipt_no || "—",
   },
   {
@@ -301,6 +301,7 @@ function OcrReviewFieldRow({
 
 export function OcrSavedRowReviewModal({
   row,
+  imageSiblingRows = [],
   onClose,
   onSaved,
   onConfirm,
@@ -310,6 +311,7 @@ export function OcrSavedRowReviewModal({
   reparseProgress,
 }: {
   row: OcrExtractedRowItem;
+  imageSiblingRows?: OcrExtractedRowItem[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
   onConfirm: (options?: { imageFilename?: string }) => Promise<void> | void;
@@ -332,13 +334,25 @@ export function OcrSavedRowReviewModal({
   const [editingFilename, setEditingFilename] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
 
-  const suggestedFilename = useMemo(
+  const filenameRows = useMemo(
     () =>
-      isSettlement
-        ? buildSettlementReceiptFilename(draft, row.source_image_filename)
-        : row.source_image_filename || row.source_image_id,
-    [draft, isSettlement, row.source_image_filename, row.source_image_id],
+      imageSiblingRows.map((sibling) =>
+        sibling.id === row.id
+          ? { record_date: draft.record_date, transaction_no: draft.transaction_no }
+          : { record_date: sibling.record_date, transaction_no: sibling.transaction_no },
+      ),
+    [draft.record_date, draft.transaction_no, imageSiblingRows, row.id],
   );
+
+  const suggestedFilename = useMemo(() => {
+    if (isSettlement) {
+      return buildSettlementReceiptFilename(draft, row.source_image_filename);
+    }
+    const siblings = imageSiblingRows.length
+      ? filenameRows
+      : [{ record_date: draft.record_date, transaction_no: draft.transaction_no }];
+    return buildPaygateScreenshotFilename(siblings, row.source_image_filename);
+  }, [draft, filenameRows, imageSiblingRows.length, isSettlement, row.source_image_filename]);
 
   const fieldSpecs = isSettlement ? SETTLEMENT_REVIEW_FIELDS : SCREENSHOT_REVIEW_FIELDS;
   const fieldConfidence = row.field_confidence ?? {};
@@ -358,12 +372,22 @@ export function OcrSavedRowReviewModal({
     setEditingField(null);
     setError(null);
     setImageFilename(
-      isSettlement && row.status !== "confirmed"
-        ? buildSettlementReceiptFilename(createOcrRowEditDraft(row), row.source_image_filename)
+      row.status !== "confirmed"
+        ? isSettlement
+          ? buildSettlementReceiptFilename(createOcrRowEditDraft(row), row.source_image_filename)
+          : buildPaygateScreenshotFilename(
+              imageSiblingRows.length
+                ? imageSiblingRows.map((sibling) => ({
+                    record_date: sibling.record_date,
+                    transaction_no: sibling.transaction_no,
+                  }))
+                : [{ record_date: row.record_date, transaction_no: row.transaction_no }],
+              row.source_image_filename,
+            )
         : row.source_image_filename || row.source_image_id,
     );
     setEditingFilename(false);
-  }, [row]);
+  }, [imageSiblingRows, row]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -412,6 +436,27 @@ export function OcrSavedRowReviewModal({
     }
   };
 
+  const applyImageFilename = async (filename: string) => {
+    const nextName = filename.trim();
+    if (!nextName || nextName === row.source_image_filename) {
+      setImageFilename(nextName || suggestedFilename);
+      setEditingFilename(false);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await renameOcrImage(row.source_image_id, nextName);
+      setImageFilename(nextName);
+      setEditingFilename(false);
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "ファイル名の変更に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleConfirm = async () => {
     if (editingField) {
       setError("編集中の項目を適用または取消してから確定してください。");
@@ -427,8 +472,7 @@ export function OcrSavedRowReviewModal({
     }
     setError(null);
     try {
-      const filenameToApply =
-        isSettlement && row.status !== "confirmed" ? imageFilename.trim() || suggestedFilename : undefined;
+      const filenameToApply = row.status !== "confirmed" ? imageFilename.trim() || suggestedFilename : undefined;
       if (filenameToApply && filenameToApply !== row.source_image_filename) {
         await renameOcrImage(row.source_image_id, filenameToApply);
       }
@@ -490,10 +534,7 @@ export function OcrSavedRowReviewModal({
                     type="button"
                     className="ghost-button"
                     disabled={busy}
-                    onClick={() => {
-                      setImageFilename(suggestedFilename);
-                      setEditingFilename(false);
-                    }}
+                    onClick={() => void applyImageFilename(imageFilename)}
                   >
                     適用
                   </button>
@@ -526,7 +567,7 @@ export function OcrSavedRowReviewModal({
                   ) : null}
                 </>
               )}
-              {isSettlement && row.status !== "confirmed" && !editingFilename ? (
+              {row.status !== "confirmed" && !editingFilename ? (
                 <p className="ocr-row-review-filename-hint">
                   確定時の推奨名: {suggestedFilename}
                 </p>
