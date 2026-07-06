@@ -224,7 +224,7 @@ OCR_UPLOAD_IP_SECRET=<openssl rand -hex 32>
 OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED=true
 ```
 
-公開アップロード URL の `token` が Referer に載らないよう、nginx で `Referrer-Policy: no-referrer` を `/public/ocr-upload` に設定すること（API レスポンスヘッダでも付与済み）。
+正本は `docs/ops/OCR_PUBLIC_UPLOAD_RUNBOOK.md` を参照。
 
 ---
 

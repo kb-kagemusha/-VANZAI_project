@@ -18,6 +18,12 @@ htmlcov/
 *.db
 storage/bank_transfers/
 storage/pdfs/
+storage/ocr/
+
+# Sync / debug artifacts (OneDrive 等)
+.tmp/
+.tmp_*
+Backup/
 
 # Frontend build artifacts
 node_modules/
