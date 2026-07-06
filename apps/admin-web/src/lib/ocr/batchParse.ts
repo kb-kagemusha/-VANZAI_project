@@ -18,6 +18,7 @@ export type OcrParseProgressState = {
   retryImageIndex: number;
   retryImageTotal: number;
   timedOut: boolean;
+  failureMessages?: string[];
 };
 
 export type OcrBatchParseResult = {
@@ -25,6 +26,7 @@ export type OcrBatchParseResult = {
   failedCount: number;
   rowCount: number;
   timedOut: boolean;
+  failureMessages?: string[];
 };
 
 function chunkIds(ids: string[], size: number): string[][] {

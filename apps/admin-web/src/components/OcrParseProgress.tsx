@@ -48,6 +48,13 @@ export function OcrParseProgress({ progress }: { progress: OcrParseProgressState
           : null}
         {progress.timedOut ? " / 10分の上限に達しました" : null}
       </p>
+      {progress.phase === "done" && progress.failureMessages?.length ? (
+        <ul className="ocr-parse-progress-errors">
+          {progress.failureMessages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

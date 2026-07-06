@@ -2552,6 +2552,19 @@ button {
   font-size: 0.88rem;
 }
 
+.ocr-parse-progress-errors,
+.ocr-parse-result-errors {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  color: #b42318;
+  font-size: 0.88rem;
+}
+
+.ocr-parse-progress-errors li + li,
+.ocr-parse-result-errors li + li {
+  margin-top: 0.35rem;
+}
+
 .ocr-parse-progress-trigger {
   position: relative;
   display: inline-flex;

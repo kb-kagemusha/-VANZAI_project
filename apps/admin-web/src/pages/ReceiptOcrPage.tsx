@@ -59,6 +59,11 @@ import {
   type OcrBatchParseResult,
   type OcrParseProgressState,
 } from "../lib/ocr/batchParse";
+import {
+  buildParseFailureNotification,
+  collectOcrImageFailureMessage,
+  collectOcrParseFailureMessages,
+} from "../lib/ocr/parseFailureMessages";
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
 import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
 import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
@@ -1185,12 +1190,24 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       }
 
       if (result.failedCount > 0) {
-        const message = `解析完了: 成功 ${result.successCount} 件 / 失敗 ${result.failedCount} 件。失敗した画像のエラー内容を下の一覧で確認してください。`;
-        setFormError(message);
+        const failureMessages = await collectOcrParseFailureMessages(images.map((image) => image.id));
+        const enrichedResult = { ...result, failureMessages };
+        setParseResultSummary(enrichedResult);
+        setParseProgress((current) =>
+          current ? { ...current, phase: "done", failureMessages } : current,
+        );
+        const notification = buildParseFailureNotification(failureMessages, {
+          successCount: result.successCount,
+          failedCount: result.failedCount,
+        });
+        setFormError(
+          notification.detail ? `${notification.message}\n${notification.detail}` : notification.message,
+        );
         showNotification({
           tone: "warning",
-          title: "一部の画像の解析に失敗しました",
-          message,
+          title: notification.title,
+          message: notification.message,
+          detail: notification.detail,
         });
         return;
       }
@@ -1244,21 +1261,30 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   });
 
   const reparseRowMutation = useMutation({
-    mutationFn: async (rowId: string) => reparseOcrRow(rowId),
+    mutationFn: async ({ rowId }: { rowId: string; sourceImageId: string }) => reparseOcrRow(rowId),
     onMutate: () => {
       setReparseProgress(createSingleImageParseProgress());
     },
-    onSuccess: async (result) => {
+    onSuccess: async (result, { sourceImageId }) => {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-monthly-summary"] });
       await queryClient.invalidateQueries({ queryKey: ["ocr-images"] });
       if (result.failed_count > 0) {
-        const message = "再解析の結果、必要な項目を読み取れませんでした。画像一覧のエラー内容を確認してください。";
-        setFormError(message);
+        const failureMessage = await collectOcrImageFailureMessage(sourceImageId);
+        const failureMessages = failureMessage ? [failureMessage] : [];
+        const notification = buildParseFailureNotification(
+          failureMessages,
+          { successCount: 0, failedCount: 1 },
+          { reparse: true },
+        );
+        setFormError(
+          notification.detail ? `${notification.message}\n${notification.detail}` : notification.message,
+        );
         showNotification({
           tone: "warning",
-          title: "再解析に失敗しました",
-          message,
+          title: notification.title,
+          message: notification.message,
+          detail: notification.detail,
         });
         return;
       }
@@ -1274,8 +1300,9 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         detail: formatted.detail,
       });
     },
-    onSettled: (result, error) => {
+    onSettled: async (result, error, { sourceImageId }) => {
       const failed = Boolean(error) || (result?.failed_count ?? 0) > 0;
+      const failureMessage = failed ? await collectOcrImageFailureMessage(sourceImageId) : null;
       setReparseProgress((current) => {
         if (!current) {
           return null;
@@ -1286,6 +1313,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
           processedImages: 1,
           successCount: failed ? 0 : 1,
           failedCount: failed ? 1 : 0,
+          failureMessages: failureMessage ? [failureMessage] : undefined,
         };
       });
       window.setTimeout(() => setReparseProgress(null), 2500);
@@ -1297,15 +1325,24 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     onMutate: () => {
       setReparseProgress(createSingleImageParseProgress());
     },
-    onSuccess: async (result) => {
+    onSuccess: async (result, imageId) => {
       await invalidateParseQueries();
       if (result.failed_count > 0) {
-        const message = "再解析の結果、必要な項目を読み取れませんでした。画像のエラー内容を確認してください。";
-        setFormError(message);
+        const failureMessage = await collectOcrImageFailureMessage(imageId);
+        const failureMessages = failureMessage ? [failureMessage] : [];
+        const notification = buildParseFailureNotification(
+          failureMessages,
+          { successCount: 0, failedCount: 1 },
+          { reparseImage: true },
+        );
+        setFormError(
+          notification.detail ? `${notification.message}\n${notification.detail}` : notification.message,
+        );
         showNotification({
           tone: "warning",
-          title: "画像の再解析に失敗しました",
-          message,
+          title: notification.title,
+          message: notification.message,
+          detail: notification.detail,
         });
         return;
       }
@@ -1326,8 +1363,9 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         detail: formatted.detail,
       });
     },
-    onSettled: (result, error) => {
+    onSettled: async (result, error, imageId) => {
       const failed = Boolean(error) || (result?.failed_count ?? 0) > 0;
+      const failureMessage = failed ? await collectOcrImageFailureMessage(imageId) : null;
       setReparseProgress((current) => {
         if (!current) {
           return null;
@@ -1338,6 +1376,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
           processedImages: 1,
           successCount: failed ? 0 : 1,
           failedCount: failed ? 1 : 0,
+          failureMessages: failureMessage ? [failureMessage] : undefined,
         };
       });
       window.setTimeout(() => setReparseProgress(null), 2500);
@@ -2137,17 +2176,19 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
           {row.status !== "confirmed" ? (
             <OcrParseProgressHover
               progress={
-                reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? reparseProgress : null
+                reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === row.id ? reparseProgress : null
               }
-              active={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
+              active={reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === row.id}
             >
               <button
                 type="button"
                 className="ghost-button"
-                disabled={reparseRowMutation.isPending && reparseRowMutation.variables === row.id}
-                onClick={() => reparseRowMutation.mutate(row.id)}
+                disabled={reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === row.id}
+                onClick={() =>
+                  reparseRowMutation.mutate({ rowId: row.id, sourceImageId: row.source_image_id })
+                }
               >
-                {reparseRowMutation.isPending && reparseRowMutation.variables === row.id ? "解析中..." : "再解析"}
+                {reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === row.id ? "解析中..." : "再解析"}
               </button>
             </OcrParseProgressHover>
           ) : null}
@@ -2391,10 +2432,19 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
               </button>
             </div>
             {parseResultSummary && !isParsing ? (
-              <p className="upload-help">
-                解析完了: 成功 {parseResultSummary.successCount} / 失敗 {parseResultSummary.failedCount}
-                {parseResultSummary.timedOut ? "（時間上限で中断）" : ""}
-              </p>
+              <div className="upload-help">
+                <p>
+                  解析完了: 成功 {parseResultSummary.successCount} / 失敗 {parseResultSummary.failedCount}
+                  {parseResultSummary.timedOut ? "（時間上限で中断）" : ""}
+                </p>
+                {parseResultSummary.failureMessages?.length ? (
+                  <ul className="ocr-parse-result-errors">
+                    {parseResultSummary.failureMessages.map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             ) : null}
             {imagesQuery.isLoading ? (
               <LoadingOverlay label="画像一覧を読み込み中..." />
@@ -2728,11 +2778,17 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
           }}
           confirming={confirmMutation.isPending}
           onReparse={
-            reviewingRowLive.status !== "confirmed" ? () => reparseRowMutation.mutate(reviewingRowLive.id) : undefined
+            reviewingRowLive.status !== "confirmed"
+              ? () =>
+                  reparseRowMutation.mutate({
+                    rowId: reviewingRowLive.id,
+                    sourceImageId: reviewingRowLive.source_image_id,
+                  })
+              : undefined
           }
-          reparsing={reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id}
+          reparsing={reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === reviewingRowLive.id}
           reparseProgress={
-            reparseRowMutation.isPending && reparseRowMutation.variables === reviewingRowLive.id
+            reparseRowMutation.isPending && reparseRowMutation.variables?.rowId === reviewingRowLive.id
               ? reparseProgress
               : null
           }
