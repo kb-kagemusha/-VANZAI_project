@@ -1252,3 +1252,50 @@ def test_paygate_settlement_parser_handles_garbled_98f0_production_ocr():
     assert row.terminal_short_id == "98f0"
     assert row.raw_payload.get("field_confidence", {}).get("terminal_id", 0) > 0
 
+
+PRODUCTION_OCR_TEXT_260706_98F0_GARBLED = """
+1105-6927
+登録耆号
+1410104-0102-3000
+瑞末症別番一9810
+岩末城別番=980
+清算
+2310434
+202607104
+瑞末普号
+2026/07104
+9810e2信e4-4e00
+3502-ec566592762
+23:0434
+焼末普号
+9810ec+e54-4e00
+98f0ectes4-4e001
+17840
+末織別会号S10
+清尊
+2026/0710-23:0-:3-
+9sf0ec2ffe54-4e00-
+a503-2ecb6659c7be
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "98f0"
+    assert row.terminal_id == "98f0ec2f-fc54-4e00-a503-2ecb6659c7be"
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.amount == Decimal("7840")
+    assert row.transaction_count == 8
+

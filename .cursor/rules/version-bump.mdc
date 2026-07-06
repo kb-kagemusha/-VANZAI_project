@@ -1,11 +1,13 @@
 ---
-description: コード修正完了時は必ずバージョンとCHANGELOGを更新する
+description: コード修正完了時は必ずバージョンとCHANGELOGを更新する（リリースワークフロー ステップ1・2）
 alwaysApply: true
 ---
 
 # バージョン更新（修正完了時も必須）
 
-ユーザー向けのコード変更（機能追加・バグ修正・UI改善・表示調整）を完了したら、**デプロイ前に必ず**次を行う。
+**全体手順の正本: `.cursor/rules/release-workflow.mdc`**（1.バージョン → 2.CHANGELOG → 3.コミット・push・デプロイ）
+
+ユーザー向けのコード変更を完了したら、**デプロイ前に必ず**次を行う。
 
 1. `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` を同一値に更新
 2. `CHANGELOG.md` に当該バージョンの変更内容を記録

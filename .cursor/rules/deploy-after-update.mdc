@@ -1,11 +1,13 @@
 ---
-description: コード更新後は特に指定がなければVPSデプロイまで完了する
+description: コード更新後はコミット・push・VPSデプロイまで実行（リリースワークフロー ステップ3）
 alwaysApply: true
 ---
 
 # 更新後のデプロイ（デフォルト）
 
-本番反映が必要なコード変更を完了したら、ユーザーが別途指示しない限り **コミット → push → VPSデプロイ → API再起動 → 動作確認** まで行う（毎回の明示指示は不要）。
+**全体手順の正本: `.cursor/rules/release-workflow.mdc`**（1.バージョン → 2.CHANGELOG → 3.コミット・push・デプロイ）
+
+本番反映が必要なコード変更を完了したら、ユーザーが別途指示しない限り **ステップ 1・2（バージョン・CHANGELOG）の後に、コミット → push → VPSデプロイ → API再起動 → 動作確認** まで行う。毎回の明示指示は不要。
 
 ## デプロイしない例外
 
@@ -16,7 +18,7 @@ alwaysApply: true
 ## 手順（正本: `scripts/deploy/DEPLOY_STEPS.md`）
 
 1. テスト実行（変更範囲に応じた最小セット）
-2. **ユーザー向けの変更（修正・UI改善含む）完了時は必ず**バージョン・`CHANGELOG.md` を更新（AGENTS.md セクション9、`.cursor/rules/version-bump.mdc`）
+2. **バージョン・`CHANGELOG.md` 更新済みであること**（ステップ 1・2）
 3. コミット → `git push origin <現在ブランチ>`
 4. VPS: `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh`
    - SSH: `ssh -i ~/.ssh/vanzai_vps vanzai@220.158.28.35`（または `Host vanzai-vps`）

@@ -83,8 +83,14 @@
 - MCP 経由利用時は読み取り中心・本番 secrets 不接触・返却コンテンツを無検証で中継しない
 
 ## 11. 更新後のデプロイ（デフォルト）
-- 本番反映が必要なコード変更を完了したら、ユーザーが別途「デプロイしない」「コミットしない」等と指定しない限り、**コミット → push → VPSデプロイ → API再起動 → 動作確認** まで完了させる（毎回の明示指示は不要）
-- 手順の正本: `scripts/deploy/DEPLOY_STEPS.md`、実行スクリプト: `scripts/deploy/02_app_deploy.sh`
+
+修正・機能追加などユーザー向けのコード変更を完了したら、**毎回必ず次の順で実行する**（ユーザーが「コミットしない」「デプロイしない」等と明示しない限り。毎回の口頭指示は不要）。
+
+1. **バージョンアップ** — `apps/admin-web/package.json` と `apps/staff-mobile/package.json` を同一版に（セクション9）
+2. **CHANGELOG 追記** — ルート `CHANGELOG.md`
+3. **コミット・Push・デプロイ** — テスト → commit → push → VPS デプロイ → API 再起動 → 動作確認
+
+- 手順の正本: `.cursor/rules/release-workflow.mdc`、`scripts/deploy/DEPLOY_STEPS.md`、実行スクリプト: `scripts/deploy/02_app_deploy.sh`
 - VPS: `vanzai@220.158.28.35`（SSH鍵 `~/.ssh/vanzai_vps`、設定済みなら `ssh vanzai-vps`）
 - `systemctl restart vanzai-api` が sudo 権限で失敗する場合は `bash /var/www/vanzai/restart_uvicorn.sh` で API を再起動する
 - デプロイしない例外: 質問のみ・レビューのみ（コード未変更）、ユーザーがローカル作業のみを明示した場合

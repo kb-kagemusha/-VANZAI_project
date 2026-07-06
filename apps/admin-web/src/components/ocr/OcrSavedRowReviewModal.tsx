@@ -6,7 +6,8 @@ import { formatCurrency, formatYenAmountPlain } from "../../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
-import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
+import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
+import { formatSettlementRecordDate } from "../../lib/ocr/settlementDateFormat";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
 import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
@@ -56,7 +57,7 @@ const SETTLEMENT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     label: "精算日",
     confidenceKey: "record_datetime",
     inputType: "date",
-    formatDisplay: (draft) => draft.record_date || "—",
+    formatDisplay: (draft) => formatSettlementRecordDate(draft.record_date),
   },
   {
     key: "record_time",
@@ -155,7 +156,7 @@ const SCREENSHOT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     key: "payment_method",
     label: "決済方法",
     confidenceKey: "payment_method",
-    formatDisplay: (draft) => draft.payment_method || "—",
+    formatDisplay: (draft) => formatPaygatePaymentMethodDisplay(draft.payment_method),
   },
 ];
 
@@ -328,9 +329,9 @@ export function OcrSavedRowReviewModal({
   const [editSnapshot, setEditSnapshot] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [imageFilename, setImageFilename] = useState(
-    () => row.source_image_filename || row.source_image_id,
-  );
+  const currentImageFilename = row.source_image_filename || row.source_image_id;
+  const [imageFilename, setImageFilename] = useState(() => currentImageFilename);
+  const [customFilename, setCustomFilename] = useState<string | null>(null);
   const [editingFilename, setEditingFilename] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
 
@@ -371,21 +372,8 @@ export function OcrSavedRowReviewModal({
     setDraft(next);
     setEditingField(null);
     setError(null);
-    setImageFilename(
-      row.status !== "confirmed"
-        ? isSettlement
-          ? buildSettlementReceiptFilename(createOcrRowEditDraft(row), row.source_image_filename)
-          : buildPaygateScreenshotFilename(
-              imageSiblingRows.length
-                ? imageSiblingRows.map((sibling) => ({
-                    record_date: sibling.record_date,
-                    transaction_no: sibling.transaction_no,
-                  }))
-                : [{ record_date: row.record_date, transaction_no: row.transaction_no }],
-              row.source_image_filename,
-            )
-        : row.source_image_filename || row.source_image_id,
-    );
+    setImageFilename(row.source_image_filename || row.source_image_id);
+    setCustomFilename(null);
     setEditingFilename(false);
   }, [imageSiblingRows, row]);
 
@@ -447,6 +435,7 @@ export function OcrSavedRowReviewModal({
     setError(null);
     try {
       await renameOcrImage(row.source_image_id, nextName);
+      setCustomFilename(nextName);
       setImageFilename(nextName);
       setEditingFilename(false);
       await onSaved();
@@ -472,7 +461,8 @@ export function OcrSavedRowReviewModal({
     }
     setError(null);
     try {
-      const filenameToApply = row.status !== "confirmed" ? imageFilename.trim() || suggestedFilename : undefined;
+      const filenameToApply =
+        row.status !== "confirmed" ? (customFilename ?? suggestedFilename).trim() || suggestedFilename : undefined;
       if (filenameToApply && filenameToApply !== row.source_image_filename) {
         await renameOcrImage(row.source_image_id, filenameToApply);
       }
@@ -482,7 +472,8 @@ export function OcrSavedRowReviewModal({
     }
   };
 
-  const alt = row.source_image_filename || row.source_image_id;
+  const displayImageFilename = currentImageFilename;
+  const alt = displayImageFilename;
   const busy = saving || confirming || reparsing;
 
   return createPortal(
@@ -543,7 +534,7 @@ export function OcrSavedRowReviewModal({
                     className="ghost-button"
                     disabled={busy}
                     onClick={() => {
-                      setImageFilename(row.source_image_filename || suggestedFilename);
+                      setImageFilename(currentImageFilename);
                       setEditingFilename(false);
                     }}
                   >
@@ -552,15 +543,18 @@ export function OcrSavedRowReviewModal({
                 </>
               ) : (
                 <>
-                  <p className="ocr-row-review-filename" title={imageFilename}>
-                    {imageFilename}
+                  <p className="ocr-row-review-filename" title={displayImageFilename}>
+                    {displayImageFilename}
                   </p>
                   {row.status !== "confirmed" ? (
                     <button
                       type="button"
                       className="ghost-button ocr-row-review-filename-edit"
                       disabled={busy}
-                      onClick={() => setEditingFilename(true)}
+                      onClick={() => {
+                        setImageFilename(suggestedFilename);
+                        setEditingFilename(true);
+                      }}
                     >
                       名前変更
                     </button>

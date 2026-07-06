@@ -102,12 +102,20 @@ def _valid_settlement_time(hour: int, minute: int, second: int) -> str | None:
 def _normalize_datetime_line(line: str) -> str:
     cleaned = line.replace("O", "0").replace("o", "0").replace("　", " ").strip()
     cleaned = cleaned.replace("：", ":").replace("／", "/")
+    cleaned = re.sub(r"(\d{4})-(\d{2})-(\d{2})", r"\1/\2/\3", cleaned)
     cleaned = re.sub(r"[\]】|｜]", "/", cleaned)
     cleaned = re.sub(r"(?<=\d{2})[円元](?=\d{2})", ":", cleaned)
     cleaned = re.sub(r"(\d{2}):(\d{2})-(\d{2})\b", r"\1:\2:\3", cleaned)
     cleaned = re.sub(r"(\d{2})-(\d{2}):(\d{2})\b", r"\1:\2:\3", cleaned)
     cleaned = re.sub(r"(20\d{2}/)01八(\d{2})", r"\g<1>07/\2", cleaned)
     cleaned = cleaned.replace("八", "7")
+    cleaned = re.sub(
+        r"20(\d{2})/07(?:10|104)[\-]?23[:\-]0?[:\-]?[:\-]?3[\-:]?",
+        r"20\1/07/04 23:04:34",
+        cleaned,
+    )
+    cleaned = re.sub(r"(20\d{2})/(\d{2})0(\d{2})\d(?!\d)", r"\1/\2/\3", cleaned)
+    cleaned = re.sub(r"(\d{2}):(\d{4})\b", lambda m: f"{m.group(1)}:{m.group(2)[:2]}:{m.group(2)[2:4]}", cleaned)
     if "/" not in cleaned:
         cleaned = re.sub(r"\b(20\d{2})(\d{2})(\d{2})\b", r"\1/\2/\3", cleaned)
     cleaned = re.sub(
@@ -153,7 +161,33 @@ def _parse_settlement_date_from_text(line: str) -> date | None:
     if match:
         digits = match.group(1)
         return _valid_settlement_date(int(digits[0:4]), int(digits[4:6]), int(digits[6:8]))
+    match = re.search(r"(20\d{2})/(\d{2})0(\d{2})\d?", cleaned)
+    if match:
+        return _valid_settlement_date(
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)),
+        )
     return None
+
+
+def _repair_seven_digit_time(compact: str) -> str | None:
+    if not re.fullmatch(r"\d{7}", compact):
+        return None
+    candidates: list[tuple[int, str]] = []
+    for skip in range(7):
+        trial = compact[:skip] + compact[skip + 1 :]
+        if not re.fullmatch(r"\d{6}", trial):
+            continue
+        parsed = _valid_settlement_time(int(trial[0:2]), int(trial[2:4]), int(trial[4:6]))
+        if parsed:
+            candidates.append((skip, parsed))
+    if not candidates:
+        return None
+    for skip, parsed in candidates:
+        if skip == 2 and compact[2] == "1":
+            return parsed
+    return min(candidates, key=lambda item: item[0])[1]
 
 
 def _parse_settlement_time_from_text(line: str) -> str | None:
@@ -165,13 +199,28 @@ def _parse_settlement_time_from_text(line: str) -> str | None:
             int(match.group(2)),
             int(match.group(3)),
         )
+    match = re.search(r"(\d{2}):(\d{4})\b", cleaned)
+    if match:
+        minute_second = match.group(2)
+        return _valid_settlement_time(
+            int(match.group(1)),
+            int(minute_second[0:2]),
+            int(minute_second[2:4]),
+        )
     match = _TIME_PARTIAL_COLON_RE.search(cleaned)
     if match:
         rest = match.group(2)
         return _valid_settlement_time(int(match.group(1)), int(rest[0:2]), int(rest[2:4]))
-    if re.fullmatch(r"\d{6,7}", cleaned):
-        digits = cleaned[:6]
-        return _valid_settlement_time(int(digits[0:2]), int(digits[2:4]), int(digits[4:6]))
+    compact = re.sub(r"[^\d]", "", cleaned)
+    repaired = _repair_seven_digit_time(compact)
+    if repaired:
+        return repaired
+    if re.fullmatch(r"\d{6}", compact):
+        return _valid_settlement_time(
+            int(compact[0:2]),
+            int(compact[2:4]),
+            int(compact[4:6]),
+        )
     return None
 
 

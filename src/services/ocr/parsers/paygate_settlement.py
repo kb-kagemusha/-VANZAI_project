@@ -189,13 +189,16 @@ def _canonical_label(label: str) -> str:
 _POSTAL_SHORT_ID_NOISE = frozenset(
     {"f105", "1056", "6927", "0102", "0104", "3000", "6927", "1056", "6927"}
 )
+_AMOUNT_SHORT_ID_NOISE = frozenset(
+    {"7840", "1784", "1184", "1840", "784e", "118e", "178e", "8402", "8400"}
+)
 
 
 def _is_postal_noise_short_id(value: str | None) -> bool:
     if not value:
         return False
     lowered = value.lower()
-    if lowered in _POSTAL_SHORT_ID_NOISE:
+    if lowered in _POSTAL_SHORT_ID_NOISE or lowered in _AMOUNT_SHORT_ID_NOISE:
         return True
     if re.fullmatch(r"f?105\d?", lowered):
         return True
@@ -266,6 +269,10 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"1810e22", re.IGNORECASE), "98f0ec2f"),
         (re.compile(r"18f0e2", re.IGNORECASE), "98f0ec2"),
         (re.compile(r"98f0eC2f", re.IGNORECASE), "98f0ec2f"),
+        (re.compile(r"9sf0", re.IGNORECASE), "98f0"),
+        (re.compile(r"ffe54", re.IGNORECASE), "fc54"),
+        (re.compile(r"ec\+e54", re.IGNORECASE), "ec2f-fc54"),
+        (re.compile(r"2ecb6659c7be+c7be", re.IGNORECASE), "2ecb6659c7be"),
         (re.compile(r"fぞ54", re.IGNORECASE), "fc54"),
         (re.compile(r"ぞ54", re.IGNORECASE), "c54"),
         (re.compile(r"高254", re.IGNORECASE), "fc54"),
@@ -1036,34 +1043,57 @@ def _short_id_from_leading_dash_hex_line(stripped: str) -> str | None:
     return _normalize_terminal_short_id_candidate(compact)
 
 
+def _is_amount_noise_hex_line(line: str) -> bool:
+    if re.search(r"[¥￥,]", line):
+        return True
+    cleaned = _clean_hex_line(line)
+    if not cleaned:
+        return False
+    if cleaned.lower() in _AMOUNT_SHORT_ID_NOISE:
+        return True
+    if re.fullmatch(r"\d{4,5}", cleaned):
+        return True
+    return False
+
+
 def _short_id_from_terminal_number_section(text: str) -> str | None:
     section = _terminal_number_section(text)
     if section is None:
         return None
+    preferred: str | None = None
+    fallback: str | None = None
     for line in section.splitlines():
         stripped = line.strip()
+        if not stripped or _is_amount_noise_hex_line(line):
+            continue
         if stripped.startswith(("-", "－")):
             if _is_uuid_middle_fragment_line(stripped):
                 continue
             candidate = _short_id_from_leading_dash_hex_line(stripped)
             if candidate and _is_plausible_terminal_short_id(candidate):
-                return candidate
+                fallback = fallback or candidate
             continue
         cleaned = _clean_hex_line(line).strip("-")
         if len(cleaned) < 4:
             continue
         if len(cleaned) > 8 and "-" not in cleaned:
-            # UUID 折返しの途中・末尾断片（d131c08d6e76 等）は端末識別番号にしない。
             continue
         if len(cleaned) == 8:
             candidate = _normalize_terminal_short_id_candidate(cleaned[:4])
         elif len(cleaned) == 4:
             candidate = _normalize_terminal_short_id_candidate(cleaned)
         else:
+            prefix = _normalize_terminal_short_id_candidate(cleaned[:4])
+            if prefix and prefix.startswith("98") and _is_plausible_terminal_short_id(prefix):
+                preferred = prefix
             continue
-        if candidate and _is_plausible_terminal_short_id(candidate):
-            return candidate
-    return None
+        if not candidate or not _is_plausible_terminal_short_id(candidate):
+            continue
+        if candidate.startswith("98"):
+            preferred = candidate
+            break
+        fallback = fallback or candidate
+    return preferred or fallback
 
 
 def _short_id_from_line_before_settlement(text: str) -> str | None:
@@ -1291,6 +1321,11 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"現金売[丁上]", "現金売上", normalized)
     normalized = re.sub(r"現金上(?!売)", "現金売上", normalized)
     normalized = re.sub(r"精[篳竴弾]", "精算", normalized)
+    normalized = re.sub(r"清算|清尊", "精算", normalized)
+    normalized = re.sub(r"瑞末症別番[一=:]?", "端末識別番号:", normalized)
+    normalized = re.sub(r"岩末城別番[一=:]?", "端末識別番号:", normalized)
+    normalized = re.sub(r"末織別会号", "端末識別番号:", normalized)
+    normalized = re.sub(r"焼末普[号清]|瑞末普号|瑞末号", "端末番号", normalized)
     normalized = re.sub(r"端端末番号", "端末番号", normalized)
     normalized = re.sub(r"16B60", "6,860", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"76,860", "6,860", normalized)
@@ -1307,6 +1342,7 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"20(\d{2})(\d{2})/(\d{2})", r"20\1/\2/\3", normalized)
     normalized = re.sub(r"20(\d{2})(\d{2})／(\d{2})", r"20\1/\2/\3", normalized)
     normalized = re.sub(r"(\d{4}/\d{2}/\d{2})(\d{2}:\d{2}:\d{2})", r"\1 \2", normalized)
+    normalized = re.sub(r"(\d{4})-(\d{2})-(\d{2})", r"\1/\2/\3", normalized)
     normalized = re.sub(
         r"[-－]\s*PAYGATE\s*\n\s*POS",
         "PAYGATE POS",

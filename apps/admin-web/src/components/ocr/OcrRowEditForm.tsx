@@ -1,4 +1,4 @@
-import { formatYenAmountPlain } from "../../lib/formatters";
+import { normalizePaygatePaymentMethod, ALLOWED_PAYGATE_PAYMENT_METHODS } from "../../lib/ocr/paymentMethod";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import type { OcrExtractedRowItem } from "../../types/api";
 
@@ -24,7 +24,7 @@ export function createOcrRowEditDraft(row: OcrExtractedRowItem): OcrRowEditDraft
     amount: formatYenAmountPlain(row.amount),
     transaction_no: row.transaction_no || "",
     receipt_no: row.receipt_no || "",
-    payment_method: row.payment_method || "",
+    payment_method: normalizePaygatePaymentMethod(row.payment_method) ?? "",
     terminal_id: row.terminal_id || "",
     terminal_short_id: row.terminal_short_id || "",
     subtotal: formatYenAmountPlain(row.subtotal),
@@ -45,7 +45,7 @@ export function buildOcrRowUpdateBody(
     amount: draft.amount || null,
     transaction_no: draft.transaction_no || null,
     receipt_no: draft.receipt_no || null,
-    payment_method: draft.payment_method || null,
+    payment_method: normalizePaygatePaymentMethod(draft.payment_method),
   };
   if (isSettlement) {
     body.terminal_id = draft.terminal_id || null;
@@ -164,11 +164,17 @@ export function OcrRowEditForm({
           </label>
           <label>
             決済方法
-            <input
-              type="text"
+            <select
               value={draft.payment_method}
               onChange={(event) => setDraft({ payment_method: event.target.value })}
-            />
+            >
+              <option value="">ー</option>
+              {ALLOWED_PAYGATE_PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </select>
           </label>
         </>
       )}

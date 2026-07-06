@@ -59,7 +59,8 @@ import {
   type OcrBatchParseResult,
   type OcrParseProgressState,
 } from "../lib/ocr/batchParse";
-import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
+import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
+import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
@@ -1906,7 +1907,11 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       key: "settlement_date",
       header: renderSortableHeader("record_date", "精算日"),
       render: (row: OcrExtractedRowItem) => (
-        <OcrRowConfidenceCell row={row} confidenceKey="record_datetime" value={row.record_date || "-"} />
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="record_datetime"
+          value={formatSettlementRecordDate(row.record_date)}
+        />
       ),
     },
     {
@@ -1964,6 +1969,17 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       header: renderSortableHeader("receipt_no", "レシート番号"),
       render: (row: OcrExtractedRowItem) => (
         <OcrRowConfidenceCell row={row} confidenceKey="receipt_no" value={row.receipt_no || "-"} />
+      ),
+    },
+    {
+      key: "payment_method",
+      header: "決済方法",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="payment_method"
+          value={formatPaygatePaymentMethodDisplay(row.payment_method)}
+        />
       ),
     },
     {
@@ -2112,6 +2128,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   const PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS = new Set([
     "transaction_no",
     "receipt_no",
+    "payment_method",
     "record_date",
     "record_time",
   ]);
@@ -2129,6 +2146,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     "record_time",
     "transaction_no",
     "receipt_no",
+    "payment_method",
     "amount",
     "status",
     "validation_errors",
