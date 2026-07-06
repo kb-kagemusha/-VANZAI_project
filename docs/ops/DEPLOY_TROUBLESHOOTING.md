@@ -38,7 +38,7 @@ curl -sf https://api.vanzai-portal.com/api/health
 
 ## 2. 2026-07-02 セッションで実際に起きたこと
 
-### 2.1 Windows ローカル: OneDrive 同期競合
+### 2.1 Windows ローカル: ファイル欠落・`[conflicted]` 大量発生
 
 **症状**
 
@@ -46,17 +46,29 @@ curl -sf https://api.vanzai-portal.com/api/health
 - `npm run build` が `ENOENT package.json` で即失敗
 - コミット時に `index.html` が **削除としてステージ** され、本番に HTML が無い状態になる
 
-**原因**
+**調査結果（2026-07-07）**
 
-- クラウド同期がエージェントの書き込みと競合し、ファイルが一時的に欠落
+| 項目 | 状態 |
+|------|------|
+| プロジェクトパス | `C:\VANZAI_project`（**OneDrive フォルダ外**） |
+| OneDrive 設定 | **あり** — デスクトップ・ドキュメントは `C:\Users\bunya\OneDrive` / `C:\OneDrive\OneDrive - OKS…` へリダイレクト（Microsoft 365 組織アカウント） |
+| OneDrive プロセス | 調査時点では **未稼働**（常時同期しているわけではない可能性） |
+| `[conflicted N]` の意味 | **OneDrive 固有**の競合ファイル名。別マシン／別同期コピーと同時編集した痕跡 |
+| git 履歴 | `package.json` の **delete がコミットに含まれた** 記録が複数回あり（Cursor エージェント作業時）。その後 `package.jsonを復元` コミットが繰り返されている |
+
+**結論（想定される複合原因）**
+
+1. **主因**: Cursor エージェントの git 操作で正本ファイルが削除コミットされる
+2. **副因**: OneDrive が PC に設定済みのため、同期対象に入っていたコピーや過去の同期状態で `[conflicted]` が発生
 
 **対処**
 
 1. 正本は git。`git show HEAD:apps/admin-web/package.json` で内容確認
 2. 復元: `git checkout HEAD -- <path>`
 3. **BOM なし UTF-8** で書き戻す（PowerShell `Set-Content` は BOM 付きになり vite が落ちる）
-4. コミット前に `git status` で `D index.html` が無いか必ず確認
-5. 可能なら `C:\VANZAI_project` を OneDrive 同期対象外にする
+4. コミット前に `git status` で `D index.html` / `D package.json` が無いか必ず確認
+5. リポジトリは **OneDrive 配下に置かない**（現状 `C:\VANZAI_project` で OK）。ドキュメント配下に clone しない
+6. OneDrive の「バックアップ」設定は [OneDrive 設定] → [同期とバックアップ] で確認し、開発フォルダを含めない
 
 ### 2.2 package.json の UTF-8 BOM
 

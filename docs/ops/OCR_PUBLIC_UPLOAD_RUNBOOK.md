@@ -24,24 +24,17 @@ OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED=true
 
 ### 1-2. OCR ジョブワーカー（systemd）
 
-`vanzai` ユーザーにパスワードなし sudo が無い場合、root で一度だけ実行:
+**root で一度だけ**（SSH 鍵が無い場合は VPS プロバイダの Web コンソールから root ログイン）:
 
 ```bash
-sudo cp /var/www/vanzai/scripts/deploy/systemd/vanzai-ocr-worker.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable vanzai-ocr-worker
-sudo systemctl start vanzai-ocr-worker
-sudo systemctl status vanzai-ocr-worker
+bash /var/www/vanzai/scripts/deploy/04_root_setup_systemd.sh
 ```
 
-ログ: `/var/www/vanzai/logs/ocr-worker.log`, `ocr-worker-error.log`
+- `vanzai-ocr-worker` の systemd 有効化・起動
+- `vanzai-api` の systemd 再起動
+- `vanzai` ユーザー向け **パスワードなし sudo**（デプロイスクリプト用）
 
-**暫定対応（systemd 不可時）** — デプロイスクリプトが crontab（5分監視 + @reboot）を自動設定。手動の場合:
-
-```bash
-cd /var/www/vanzai
-nohup .venv/bin/python scripts/ocr/run_job_worker.py >> logs/ocr-worker.log 2>> logs/ocr-worker-error.log &
-```
+`vanzai` にパスワードなし sudo が無い場合の代替: デプロイスクリプトが **crontab**（@reboot + 5分監視）を自動設定済み（Ver.0.11.1〜）。
 
 ### 1-3. nginx（任意・推奨）
 
