@@ -52,7 +52,7 @@ import {
   voidOcrRow,
 } from "../lib/api/client";
 import { formatRequestError } from "../lib/formatRequestError";
-import { formatCurrency, formatDateTime } from "../lib/formatters";
+import { formatCurrency, formatDateTime, formatYenAmountPlain } from "../lib/formatters";
 import {
   runBatchedOcrParse,
   type OcrBatchParseResult,
@@ -1787,7 +1787,18 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         <OcrRowConfidenceCell
           row={row}
           confidenceKey="record_datetime"
-          value={`${row.record_date || "-"} ${row.record_time || ""}`.trim()}
+          value={row.record_date || "-"}
+        />
+      ),
+    },
+    {
+      key: "record_time",
+      header: "時刻",
+      render: (row: OcrExtractedRowItem) => (
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="record_datetime"
+          value={row.record_time || "-"}
         />
       ),
     },
@@ -1807,9 +1818,17 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     },
     {
       key: "amount",
-      header: renderSortableHeader("amount", "合計"),
+      header: renderSortableHeader("amount", sourceType === "paygate_screenshot" ? "金額" : "合計"),
       render: (row: OcrExtractedRowItem) => (
-        <OcrRowConfidenceCell row={row} confidenceKey="amount" value={formatCurrency(row.amount)} />
+        <OcrRowConfidenceCell
+          row={row}
+          confidenceKey="amount"
+          value={
+            sourceType === "paygate_screenshot"
+              ? formatYenAmountPlain(row.amount) || "-"
+              : formatCurrency(row.amount)
+          }
+        />
       ),
     },
     {
@@ -1990,7 +2009,31 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     },
   ];
 
-  const PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS = new Set(["transaction_no", "receipt_no", "record_date"]);
+  const PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS = new Set([
+    "transaction_no",
+    "receipt_no",
+    "record_date",
+    "record_time",
+  ]);
+  const PAYGATE_SCREENSHOT_HIDDEN_COLUMN_KEYS = new Set([
+    "transaction_count",
+    "work_date",
+    "unit_breakdown",
+    "reconciliation_eligible",
+  ]);
+  const PAYGATE_SCREENSHOT_COLUMN_ORDER = [
+    "select",
+    "quality",
+    "source_image_filename",
+    "record_date",
+    "record_time",
+    "transaction_no",
+    "receipt_no",
+    "amount",
+    "status",
+    "validation_errors",
+    "edit",
+  ];
   const SETTLEMENT_ONLY_COLUMN_KEYS = new Set([
     "terminal_short_id",
     "terminal_id",
@@ -2025,7 +2068,10 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   const visibleRowColumns = rowColumns
     .filter((column) => {
       if (sourceType === "paygate_screenshot") {
-        return !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key);
+        return (
+          !SETTLEMENT_ONLY_COLUMN_KEYS.has(column.key) &&
+          !PAYGATE_SCREENSHOT_HIDDEN_COLUMN_KEYS.has(column.key)
+        );
       }
       return (
         !PAYGATE_SCREENSHOT_ONLY_COLUMN_KEYS.has(column.key) &&
@@ -2033,10 +2079,16 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       );
     })
     .sort((left, right) => {
-      if (sourceType !== "paygate_settlement") {
+      const orderSource =
+        sourceType === "paygate_settlement"
+          ? SETTLEMENT_COLUMN_ORDER
+          : sourceType === "paygate_screenshot"
+            ? PAYGATE_SCREENSHOT_COLUMN_ORDER
+            : null;
+      if (!orderSource) {
         return 0;
       }
-      const order = new Map(SETTLEMENT_COLUMN_ORDER.map((key, index) => [key, index]));
+      const order = new Map(orderSource.map((key, index) => [key, index]));
       return (order.get(left.key) ?? 999) - (order.get(right.key) ?? 999);
     });
 

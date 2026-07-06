@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type HTMLAttributes, type ReactNode } fro
 import { createPortal } from "react-dom";
 
 import { ApiError, fetchOcrImageBlobUrl, renameOcrImage, updateOcrRow } from "../../lib/api/client";
-import { formatCurrency } from "../../lib/formatters";
+import { formatCurrency, formatYenAmountPlain } from "../../lib/formatters";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
@@ -134,7 +134,7 @@ const SCREENSHOT_REVIEW_FIELDS: ReviewFieldSpec[] = [
     key: "amount",
     label: "金額",
     confidenceKey: "amount",
-    formatDisplay: (draft) => (draft.amount ? formatCurrency(draft.amount) : "—"),
+    formatDisplay: (draft) => (draft.amount ? formatYenAmountPlain(draft.amount) : "—"),
   },
   {
     key: "transaction_no",
