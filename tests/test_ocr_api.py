@@ -9,6 +9,7 @@ from src.api.jwt_auth import create_access_token, create_user_with_hashed_passwo
 from src.models.base import generate_ulid
 from src.models.enums import UserRole
 from src.models.ocr import OcrExtractedRow, OcrSourceImage
+from src.services.ocr.parsers.paygate_payment import PAYGATE_SCREENSHOT_MISSING_PAYMENT_METHOD_MESSAGE
 from src.services.ocr.parsers.paygate_screenshot import PaygateScreenshotParser
 from src.services.ocr.paddle_engine import run_ocr_from_text
 
@@ -81,6 +82,56 @@ def test_ocr_upload_and_parse_with_mock(api_client, db_session, accounting_user)
                     assert rows.status_code == 200
                     assert rows.json()["total"] == 1
                     assert rows.json()["items"][0]["transaction_no"] == "1154100"
+
+
+SETTLEMENT_LIKE_TEXT_WITHOUT_PAYMENT = """
+2026/05/08 22:21:07
+¥980
+取引番号 1154100
+レシート番号 7782464677325
+小計 980
+合計 980
+"""
+
+
+def test_ocr_parse_paygate_screenshot_rejects_missing_payment_method_label(
+    api_client,
+    db_session,
+    accounting_user,
+):
+    with patch("src.services.ocr_service.preprocess_for_ocr", return_value=object()):
+        with patch("src.services.ocr_service.preprocess_blue_amount_channel", return_value=object()):
+            with patch("src.services.ocr_service.preprocess_upscaled_for_ocr", return_value=object()):
+                with patch(
+                    "src.services.ocr_service.run_ocr",
+                    return_value=run_ocr_from_text(SETTLEMENT_LIKE_TEXT_WITHOUT_PAYMENT),
+                ):
+                    upload = api_client.post(
+                        "/api/ocr/images",
+                        data={"source_type": "paygate_screenshot"},
+                        files={"file": ("wrong.png", b"fake-image-bytes", "image/png")},
+                        headers=_auth_header(accounting_user.username),
+                    )
+                    assert upload.status_code == 200
+                    image_id = upload.json()["id"]
+
+                    parse = api_client.post(
+                        "/api/ocr/jobs/parse",
+                        json={"image_ids": [image_id]},
+                        headers=_auth_header(accounting_user.username),
+                    )
+                    assert parse.status_code == 200
+                    assert parse.json()["row_count"] == 0
+                    assert parse.json()["failed_count"] == 1
+
+                    images = api_client.get(
+                        "/api/ocr/images",
+                        headers=_auth_header(accounting_user.username),
+                    )
+                    assert images.status_code == 200
+                    image = next(item for item in images.json()["items"] if item["id"] == image_id)
+                    assert image["parse_status"] == "failed"
+                    assert image["error_message"] == PAYGATE_SCREENSHOT_MISSING_PAYMENT_METHOD_MESSAGE
 
 
 def test_ocr_parse_dedupes_overlapping_paygate_screenshots(api_client, db_session, accounting_user):

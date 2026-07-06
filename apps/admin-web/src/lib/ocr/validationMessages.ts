@@ -74,6 +74,8 @@ const OCR_IMAGE_ERROR_JA: Record<string, string> = {
     "端末識別番号は4桁の16進（0-9a-f）で入力してください",
   "OCR engine is not available": "OCRエンジンが利用できません。しばらく待ってから再試行してください。",
   "Unsupported image format": "非対応の画像形式です",
+  "正しいPaygateの画像ではありません。決済方法の記載があるスクリーンショットの画像をアップロードし直してください。":
+    "正しいPaygateの画像ではありません。決済方法の記載があるスクリーンショットの画像をアップロードし直してください。",
 };
 
 function isLikelyEnglishTechnicalMessage(message: string): boolean {

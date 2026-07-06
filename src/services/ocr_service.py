@@ -36,6 +36,10 @@ from src.services.ocr.merge_results import merge_ocr_results
 from src.services.ocr.models import ParsedOcrRow
 from src.services.ocr.paddle_engine import run_ocr, run_ocr_from_text
 from src.services.ocr.settlement_ocr import run_settlement_ocr
+from src.services.ocr.parsers.paygate_payment import (
+    PAYGATE_SCREENSHOT_MISSING_PAYMENT_METHOD_MESSAGE,
+    paygate_screenshot_has_payment_method_label,
+)
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES, get_parser
 from src.services.ocr.reconciliation import parse_hq_csv, reconcile_rows, summarize_matches
 from src.services.ocr.confirm_metadata import (
@@ -754,6 +758,15 @@ class OcrService:
                         run_ocr(preprocess_upscaled_for_ocr(image_bytes)),
                     )
                     parsed_rows = parser.parse(ocr_result)
+                if (
+                    image.source_type == "paygate_screenshot"
+                    and not paygate_screenshot_has_payment_method_label(ocr_result.full_text)
+                ):
+                    image.parse_status = "failed"
+                    image.error_message = PAYGATE_SCREENSHOT_MISSING_PAYMENT_METHOD_MESSAGE
+                    image.last_job_id = job.id
+                    failed_count += 1
+                    continue
                 if not parsed_rows:
                     image.parse_status = "failed"
                     image.error_message = "レシートから有効なデータを抽出できませんでした"
