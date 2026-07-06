@@ -1148,6 +1148,12 @@ export function reparseOcrRow(rowId: string) {
   });
 }
 
+export function reparseOcrImage(imageId: string) {
+  return apiFetch<OcrParseJobResponse>(`/api/ocr/images/${imageId}/reparse`, {
+    method: "POST",
+  });
+}
+
 export function listOcrRows(params?: Record<string, string | number | boolean | undefined>) {
   return apiFetch<OcrExtractedRowListResponse>("/api/ocr/rows", undefined, params);
 }

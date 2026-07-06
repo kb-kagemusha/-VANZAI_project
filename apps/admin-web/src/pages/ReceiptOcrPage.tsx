@@ -41,6 +41,7 @@ import {
   listOcrRows,
   parseOcrImages,
   reparseOcrRow,
+  reparseOcrImage,
   renameOcrImage,
   runInventoryReconciliation,
   runOcrReconciliation,
@@ -766,8 +767,10 @@ function OcrUploadedImageItem({
   onToggle,
   onRename,
   onDelete,
+  onReparse,
   isRenaming,
   isDeleting,
+  isReparsing,
 }: {
   image: OcrSourceImageItem;
   viewMode: ImageViewMode;
@@ -775,12 +778,15 @@ function OcrUploadedImageItem({
   onToggle: () => void;
   onRename: (imageId: string, filename: string) => Promise<void>;
   onDelete: (imageId: string) => void;
+  onReparse?: (imageId: string) => void;
   isRenaming: boolean;
   isDeleting: boolean;
+  isReparsing: boolean;
 }) {
   const isDuplicate = Boolean(image.reused_existing || image.has_filename_duplicate);
   const fileName = image.original_filename || image.id;
   const sourceLabel = SOURCE_LABELS[image.source_type as OcrSourceType] || image.source_type;
+  const canReparse = image.parse_status === "completed" || image.parse_status === "failed";
 
   if (viewMode === "compact") {
     return (
@@ -808,14 +814,28 @@ function OcrUploadedImageItem({
         {image.error_message ? (
           <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
         ) : null}
-        <button
-          type="button"
-          className="ghost-button ocr-inline-delete"
-          disabled={isDeleting}
-          onClick={() => onDelete(image.id)}
-        >
-          削除
-        </button>
+        <div className="ocr-image-row-actions">
+          {canReparse && onReparse ? (
+            <OcrParseProgressHover progress={null} active={isReparsing}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isReparsing || isDeleting}
+                onClick={() => onReparse(image.id)}
+              >
+                {isReparsing ? "再解析中..." : "再解析"}
+              </button>
+            </OcrParseProgressHover>
+          ) : null}
+          <button
+            type="button"
+            className="ghost-button ocr-inline-delete"
+            disabled={isDeleting || isReparsing}
+            onClick={() => onDelete(image.id)}
+          >
+            削除
+          </button>
+        </div>
       </li>
     );
   }
@@ -848,14 +868,28 @@ function OcrUploadedImageItem({
         {image.error_message ? (
           <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
         ) : null}
-        <button
-          type="button"
-          className="ghost-button ocr-inline-delete"
-          disabled={isDeleting}
-          onClick={() => onDelete(image.id)}
-        >
-          削除
-        </button>
+        <div className="ocr-image-row-actions">
+          {canReparse && onReparse ? (
+            <OcrParseProgressHover progress={null} active={isReparsing}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isReparsing || isDeleting}
+                onClick={() => onReparse(image.id)}
+              >
+                {isReparsing ? "再解析中..." : "再解析"}
+              </button>
+            </OcrParseProgressHover>
+          ) : null}
+          <button
+            type="button"
+            className="ghost-button ocr-inline-delete"
+            disabled={isDeleting || isReparsing}
+            onClick={() => onDelete(image.id)}
+          >
+            削除
+          </button>
+        </div>
       </div>
     </li>
   );
@@ -1229,6 +1263,58 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
     },
     onError: (error) => {
       const formatted = formatRequestError(error, "再解析に失敗しました");
+      setFormError(formatted.message);
+      showNotification({
+        tone: "error",
+        title: formatted.title,
+        message: formatted.message,
+        detail: formatted.detail,
+      });
+    },
+    onSettled: (result, error) => {
+      const failed = Boolean(error) || (result?.failed_count ?? 0) > 0;
+      setReparseProgress((current) => {
+        if (!current) {
+          return null;
+        }
+        return {
+          ...current,
+          phase: "done",
+          processedImages: 1,
+          successCount: failed ? 0 : 1,
+          failedCount: failed ? 1 : 0,
+        };
+      });
+      window.setTimeout(() => setReparseProgress(null), 2500);
+    },
+  });
+
+  const reparseImageMutation = useMutation({
+    mutationFn: async (imageId: string) => reparseOcrImage(imageId),
+    onMutate: () => {
+      setReparseProgress(createSingleImageParseProgress());
+    },
+    onSuccess: async (result) => {
+      await invalidateParseQueries();
+      if (result.failed_count > 0) {
+        const message = "再解析の結果、必要な項目を読み取れませんでした。画像のエラー内容を確認してください。";
+        setFormError(message);
+        showNotification({
+          tone: "warning",
+          title: "画像の再解析に失敗しました",
+          message,
+        });
+        return;
+      }
+      setFormError(null);
+      showNotification({
+        tone: "success",
+        title: "画像を再解析しました",
+        message: `${result.row_count} 件のデータを読み込みました。`,
+      });
+    },
+    onError: (error) => {
+      const formatted = formatRequestError(error, "画像の再解析に失敗しました");
       setFormError(formatted.message);
       showNotification({
         tone: "error",
@@ -2247,8 +2333,12 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
                         await renameImageMutation.mutateAsync({ imageId, filename });
                       }}
                       onDelete={(imageId) => handleDeleteImages([imageId])}
+                      onReparse={(imageId) => reparseImageMutation.mutate(imageId)}
                       isRenaming={renameImageMutation.isPending}
                       isDeleting={deleteImagesMutation.isPending}
+                      isReparsing={
+                        reparseImageMutation.isPending && reparseImageMutation.variables === image.id
+                      }
                     />
                   ))}
                 </ul>

@@ -650,6 +650,42 @@ class OcrService:
             target_row_ids={row.source_image_id: row_id},
         )
 
+    def reparse_image(self, *, image_id: str, executed_by: str) -> OcrParseJob:
+        """Re-run OCR on one image and replace all non-confirmed rows extracted from it."""
+        image = self.session.get(OcrSourceImage, image_id)
+        if image is None or image.deleted_at is not None:
+            raise ValueError("Image not found")
+
+        existing_rows = self.session.execute(
+            select(OcrExtractedRow).where(
+                OcrExtractedRow.source_image_id == image_id,
+                OcrExtractedRow.deleted_at.is_(None),
+            )
+        ).scalars().all()
+        if any(row.status == "confirmed" for row in existing_rows):
+            raise ValueError("Confirmed rows prevent image reparse")
+
+        now = datetime.now(timezone.utc)
+        cleared_row_ids: list[str] = []
+        for row in existing_rows:
+            row.deleted_at = now
+            cleared_row_ids.append(row.id)
+
+        if cleared_row_ids:
+            self.audit.log(
+                "ocr_rows_deleted",
+                target_type="ocr_extracted_row",
+                target_id=cleared_row_ids[0],
+                actor=executed_by,
+                after_value={
+                    "count": len(cleared_row_ids),
+                    "row_ids": cleared_row_ids,
+                    "cascade_from_image_reparse": image_id,
+                },
+            )
+
+        return self.parse_images(image_ids=[image_id], executed_by=executed_by)
+
     def reparse_settlement_row(self, *, row_id: str, executed_by: str) -> OcrParseJob:
         """Backward-compatible alias for settlement-only callers."""
         return self.reparse_row(row_id=row_id, executed_by=executed_by)

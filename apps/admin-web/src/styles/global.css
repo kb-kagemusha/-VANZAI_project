@@ -2208,10 +2208,12 @@ button {
   opacity: 0.75;
 }
 
-.ocr-row-actions {
+.ocr-row-actions,
+.ocr-image-row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  align-items: center;
 }
 
 .ocr-inline-delete {

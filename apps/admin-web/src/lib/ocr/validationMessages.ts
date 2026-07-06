@@ -51,6 +51,7 @@ const OCR_IMAGE_ERROR_JA: Record<string, string> = {
   "Image not found": "画像が見つかりません",
   "image_ids is required": "解析対象の画像が指定されていません",
   "Confirmed rows cannot be reparsed": "確定済みの行は再解析できません",
+  "Confirmed rows prevent image reparse": "確定済みの行があるため、この画像は再解析できません",
   "Only settlement rows support reparse": "精算レシート以外は再解析できません",
   "Only settlement or Paygate screenshot rows support reparse": "精算レシートまたはPaygate SSのみ再解析できます",
   "Could not match reparse result to target row": "再解析結果を対象行に一致させられませんでした",
