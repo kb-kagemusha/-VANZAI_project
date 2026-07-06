@@ -1002,6 +1002,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   const [editingRow, setEditingRow] = useState<OcrExtractedRowItem | null>(null);
   const [reviewingRow, setReviewingRow] = useState<OcrExtractedRowItem | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [csvDownloading, setCsvDownloading] = useState<"monthly" | "all" | "settlement" | null>(null);
   const [notification, setNotification] = useState<AppNotificationState & { open: boolean }>({
     open: false,
     tone: "info",
@@ -1412,6 +1413,58 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "ファイル名の変更に失敗しました"));
     },
   });
+
+  const handleDownloadMonthlyCsv = useCallback(async () => {
+    if (!selectedPeriodKey) return;
+    setCsvDownloading("monthly");
+    setFormError(null);
+    try {
+      await downloadOcrCsv(selectedPeriodKey, sourceType);
+    } catch (error) {
+      setFormError(
+        formatLocalizedErrorMessage(
+          error instanceof ApiError ? error.message : null,
+          "月次CSVのダウンロードに失敗しました",
+        ),
+      );
+    } finally {
+      setCsvDownloading(null);
+    }
+  }, [selectedPeriodKey, sourceType]);
+
+  const handleDownloadAllCsv = useCallback(async () => {
+    setCsvDownloading("all");
+    setFormError(null);
+    try {
+      await downloadAllOcrCsv(sourceType);
+    } catch (error) {
+      setFormError(
+        formatLocalizedErrorMessage(
+          error instanceof ApiError ? error.message : null,
+          "全件CSVのダウンロードに失敗しました",
+        ),
+      );
+    } finally {
+      setCsvDownloading(null);
+    }
+  }, [sourceType]);
+
+  const handleDownloadSettlementCsv = useCallback(async () => {
+    setCsvDownloading("settlement");
+    setFormError(null);
+    try {
+      await downloadSettlementCsv(selectedPeriodKey || undefined);
+    } catch (error) {
+      setFormError(
+        formatLocalizedErrorMessage(
+          error instanceof ApiError ? error.message : null,
+          "精算レシートCSVのダウンロードに失敗しました",
+        ),
+      );
+    } finally {
+      setCsvDownloading(null);
+    }
+  }, [selectedPeriodKey]);
 
   const reconcileMutation = useMutation({
     mutationFn: async () => {
@@ -2513,21 +2566,27 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
           <button
             type="button"
             className="secondary-button"
-            disabled={!selectedPeriodKey}
-            onClick={() => selectedPeriodKey && downloadOcrCsv(selectedPeriodKey)}
+            disabled={!selectedPeriodKey || csvDownloading === "monthly"}
+            onClick={() => void handleDownloadMonthlyCsv()}
           >
-            月次CSV
+            {csvDownloading === "monthly" ? "月次CSV…" : "月次CSV"}
           </button>
-          <button type="button" className="secondary-button" onClick={() => downloadAllOcrCsv()}>
-            全件CSV
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={csvDownloading === "all"}
+            onClick={() => void handleDownloadAllCsv()}
+          >
+            {csvDownloading === "all" ? "全件CSV…" : "全件CSV"}
           </button>
           {isSettlement ? (
             <button
               type="button"
               className="secondary-button"
-              onClick={() => downloadSettlementCsv(selectedPeriodKey || undefined)}
+              disabled={csvDownloading === "settlement"}
+              onClick={() => void handleDownloadSettlementCsv()}
             >
-              精算レシートCSV（拡張）
+              {csvDownloading === "settlement" ? "精算レシートCSV…" : "精算レシートCSV（拡張）"}
             </button>
           ) : null}
           <button

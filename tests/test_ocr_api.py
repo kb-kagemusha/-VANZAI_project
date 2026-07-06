@@ -336,6 +336,82 @@ def test_ocr_export_csv(api_client, db_session, accounting_user):
     assert "transaction_no" in response.text
 
 
+def test_ocr_export_all_csv_route(api_client, db_session, accounting_user):
+    """/exports/all.csv が {period_key}.csv に誤マッチしないこと。"""
+    image = OcrSourceImage(
+        id=generate_ulid(),
+        source_type="paygate_settlement",
+        original_filename="settlement.jpg",
+        storage_key="images/settlement.jpg",
+        sha256="settlement1",
+        size_bytes=10,
+        parse_status="completed",
+        uploaded_by=accounting_user.username,
+    )
+    row = OcrExtractedRow(
+        id=generate_ulid(),
+        source_image_id=image.id,
+        source_type="paygate_settlement",
+        period_key="202607",
+        record_date=date(2026, 7, 4),
+        record_time="22:57:57",
+        amount=Decimal("15680"),
+        subtotal=Decimal("15680"),
+        cash_sales=Decimal("5880"),
+        pos_sales=Decimal("9800"),
+        terminal_short_id="0b21",
+        status="confirmed",
+    )
+    db_session.add(image)
+    db_session.add(row)
+    db_session.commit()
+
+    response = api_client.get(
+        "/api/ocr/exports/all.csv",
+        params={"source_type": "paygate_settlement"},
+        headers=_auth_header(accounting_user.username),
+    )
+    assert response.status_code == 200
+    assert "paygate_settlement" in response.text
+    assert "15680" in response.text
+    assert 'filename="ocr_all_paygate_settlement.csv"' in response.headers.get("content-disposition", "")
+
+
+def test_ocr_export_settlement_csv_route(api_client, db_session, accounting_user):
+    image = OcrSourceImage(
+        id=generate_ulid(),
+        source_type="paygate_settlement",
+        original_filename="settlement2.jpg",
+        storage_key="images/settlement2.jpg",
+        sha256="settlement2",
+        size_bytes=10,
+        parse_status="completed",
+        uploaded_by=accounting_user.username,
+    )
+    row = OcrExtractedRow(
+        id=generate_ulid(),
+        source_image_id=image.id,
+        source_type="paygate_settlement",
+        period_key="202607",
+        record_date=date(2026, 7, 4),
+        record_time="22:57:57",
+        amount=Decimal("15680"),
+        terminal_short_id="0b21",
+        status="confirmed",
+    )
+    db_session.add(image)
+    db_session.add(row)
+    db_session.commit()
+
+    response = api_client.get(
+        "/api/ocr/exports/settlement.csv",
+        headers=_auth_header(accounting_user.username),
+    )
+    assert response.status_code == 200
+    assert "terminal_short_id" in response.text
+    assert "0b21" in response.text
+
+
 def test_ocr_reconciliation_endpoint(api_client, db_session, accounting_user):
     image = OcrSourceImage(
         id=generate_ulid(),

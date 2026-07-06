@@ -1194,7 +1194,7 @@ export function downloadOcrCsv(periodKey: string, sourceType?: string) {
 export function downloadAllOcrCsv(sourceType?: string) {
   return downloadBinaryFileWithQuery(
     "/api/ocr/exports/all.csv",
-    "ocr_all.csv",
+    sourceType ? `ocr_all_${sourceType}.csv` : "ocr_all.csv",
     sourceType ? { source_type: sourceType } : undefined,
   );
 }

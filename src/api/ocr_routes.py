@@ -534,30 +534,21 @@ def get_ocr_monthly_summary(
     return OcrMonthlySummaryResponse(items=items)
 
 
-@router.get("/exports/{period_key}.csv")
-def download_ocr_csv(
-    period_key: str,
+@router.get("/exports/all.csv")
+def download_all_ocr_csv(
     source_type: str | None = Query(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_ocr_permission(current_user)
-    if len(period_key) != 6 or not period_key.isdigit():
-        raise HTTPException(status_code=400, detail="period_key must be YYYYMM")
-
     service = OcrService(db)
     csv_content, _ = service.export_csv(
-        period_key=period_key,
+        period_key=None,
         source_type=source_type,
         actor=current_user.username,
     )
     db.commit()
-
-    filename = f"ocr_{period_key}"
-    if source_type:
-        filename += f"_{source_type}"
-    filename += ".csv"
-
+    filename = f"ocr_all_{source_type}.csv" if source_type else "ocr_all.csv"
     return Response(
         content=csv_content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
@@ -588,24 +579,34 @@ def download_settlement_csv(
     )
 
 
-@router.get("/exports/all.csv")
-def download_all_ocr_csv(
+@router.get("/exports/{period_key}.csv")
+def download_ocr_csv(
+    period_key: str,
     source_type: str | None = Query(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     _ensure_ocr_permission(current_user)
+    if len(period_key) != 6 or not period_key.isdigit():
+        raise HTTPException(status_code=400, detail="period_key must be YYYYMM")
+
     service = OcrService(db)
     csv_content, _ = service.export_csv(
-        period_key=None,
+        period_key=period_key,
         source_type=source_type,
         actor=current_user.username,
     )
     db.commit()
+
+    filename = f"ocr_{period_key}"
+    if source_type:
+        filename += f"_{source_type}"
+    filename += ".csv"
+
     return Response(
         content=csv_content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="ocr_all.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
