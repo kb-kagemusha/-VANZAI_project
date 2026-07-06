@@ -61,6 +61,7 @@ import {
 } from "../lib/ocr/batchParse";
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
 import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
+import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {

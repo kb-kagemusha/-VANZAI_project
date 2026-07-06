@@ -8,6 +8,7 @@ import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
 import { formatSettlementRecordDate } from "../../lib/ocr/settlementDateFormat";
+import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
 import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";

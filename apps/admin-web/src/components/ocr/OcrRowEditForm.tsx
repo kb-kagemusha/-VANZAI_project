@@ -1,3 +1,4 @@
+import { formatYenAmountPlain } from "../../lib/formatters";
 import { normalizePaygatePaymentMethod, ALLOWED_PAYGATE_PAYMENT_METHODS } from "../../lib/ocr/paymentMethod";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import type { OcrExtractedRowItem } from "../../types/api";
