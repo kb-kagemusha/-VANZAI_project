@@ -34,6 +34,15 @@ describe("formatOcrImageErrorMessage", () => {
       "レシートから有効なデータを抽出できませんでした",
     );
     expect(formatOcrImageErrorMessage("Confirmed rows cannot be reparsed")).toBe("確定済みの行は再解析できません");
+    expect(formatOcrImageErrorMessage("could not execute a primitive")).toBe(
+      "画像の読み取り処理に失敗しました（OCRエンジンエラー）。画像を再アップロードするか、しばらく待ってから再解析してください。",
+    );
+    expect(formatOcrImageErrorMessage("Some unknown OpenCV failure")).toBe(
+      "画像処理エンジンでエラーが発生しました。画像を確認して再試行してください。",
+    );
+    expect(formatOcrImageErrorMessage("totally unknown xyz error")).toBe(
+      "画像の解析中にエラーが発生しました。再試行するか、別の画像でお試しください。",
+    );
   });
 });
 

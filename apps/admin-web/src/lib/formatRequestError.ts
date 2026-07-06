@@ -1,4 +1,5 @@
 import { ApiError } from "./api/client";
+import { formatLocalizedErrorMessage } from "./ocr/validationMessages";
 
 export type RequestErrorPresentation = {
   title: string;
@@ -43,7 +44,7 @@ export function formatRequestError(error: unknown, fallback: string): RequestErr
     }
     return {
       title: "処理に失敗しました",
-      message: error.message || fallback,
+      message: formatLocalizedErrorMessage(error.message, fallback),
     };
   }
 
@@ -59,7 +60,7 @@ export function formatRequestError(error: unknown, fallback: string): RequestErr
   if (error instanceof Error && error.message) {
     return {
       title: "処理に失敗しました",
-      message: error.message,
+      message: formatLocalizedErrorMessage(error.message, fallback),
     };
   }
 

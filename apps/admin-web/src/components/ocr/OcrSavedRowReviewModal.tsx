@@ -8,7 +8,7 @@ import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
-import { formatOcrValidationMessages } from "../../lib/ocr/validationMessages";
+import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
 import { OcrParseProgressHover } from "../OcrParseProgressHover";
 import { StatusBadge } from "../StatusBadge";
@@ -430,7 +430,7 @@ export function OcrSavedRowReviewModal({
       setSavedDraft(draft);
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "保存に失敗しました");
+      setError(formatLocalizedErrorMessage(err instanceof ApiError ? err.message : null, "保存に失敗しました"));
     } finally {
       setSaving(false);
     }
@@ -451,7 +451,7 @@ export function OcrSavedRowReviewModal({
       setEditingFilename(false);
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "ファイル名の変更に失敗しました");
+      setError(formatLocalizedErrorMessage(err instanceof ApiError ? err.message : null, "ファイル名の変更に失敗しました"));
     } finally {
       setSaving(false);
     }
@@ -478,7 +478,7 @@ export function OcrSavedRowReviewModal({
       }
       await onConfirm(filenameToApply ? { imageFilename: filenameToApply } : undefined);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "確定に失敗しました");
+      setError(formatLocalizedErrorMessage(err instanceof ApiError ? err.message : null, "確定に失敗しました"));
     }
   };
 

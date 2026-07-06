@@ -44,6 +44,15 @@ const OCR_VALIDATION_MESSAGE_JA: Record<string, string> = {
   terminal_id_partial: "端末番号が一部のみ読み取れています。再解析または手入力で完全な値にしてください",
 };
 
+const OCR_IMAGE_ERROR_CONTAINS_JA: Array<[pattern: RegExp, message: string]> = [
+  [/could not execute a primitive/i, "画像の読み取り処理に失敗しました（OCRエンジンエラー）。画像を再アップロードするか、しばらく待ってから再解析してください。"],
+  [/opencv|cv2::/i, "画像処理エンジンでエラーが発生しました。画像を確認して再試行してください。"],
+  [/out of memory|memory error|oom/i, "メモリ不足のため画像を処理できませんでした。同時に解析する枚数を減らして再試行してください。"],
+  [/paddleocr|paddle/i, "OCRエンジンでエラーが発生しました。画像を再アップロードして再試行してください。"],
+  [/timeout|timed out/i, "画像の解析がタイムアウトしました。枚数を減らすか、しばらく待ってから再試行してください。"],
+  [/numpy|ndarray/i, "画像データの処理に失敗しました。別の画像で再試行してください。"],
+];
+
 const OCR_IMAGE_ERROR_JA: Record<string, string> = {
   "No structured rows extracted": "レシートから有効なデータを抽出できませんでした",
   "Empty file": "空のファイルです",
@@ -62,7 +71,45 @@ const OCR_IMAGE_ERROR_JA: Record<string, string> = {
   "excluded_reason is required when eligible=False": "在庫照合対象から除外するには理由の入力が必須です",
   "terminal_short_id must be exactly 4 hexadecimal characters":
     "端末識別番号は4桁の16進（0-9a-f）で入力してください",
+  "OCR engine is not available": "OCRエンジンが利用できません。しばらく待ってから再試行してください。",
+  "Unsupported image format": "非対応の画像形式です",
 };
+
+function isLikelyEnglishTechnicalMessage(message: string): boolean {
+  if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(message)) {
+    return false;
+  }
+  return /[a-zA-Z]/.test(message);
+}
+
+function translateOcrErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const fromImage = translateKnownMessage(trimmed, OCR_IMAGE_ERROR_JA, OCR_IMAGE_ERROR_PREFIX_JA);
+  if (fromImage !== trimmed) {
+    return fromImage;
+  }
+
+  const fromValidation = translateKnownMessage(trimmed, OCR_VALIDATION_MESSAGE_JA, OCR_IMAGE_ERROR_PREFIX_JA);
+  if (fromValidation !== trimmed) {
+    return fromValidation;
+  }
+
+  for (const [pattern, translated] of OCR_IMAGE_ERROR_CONTAINS_JA) {
+    if (pattern.test(trimmed)) {
+      return translated;
+    }
+  }
+
+  if (isLikelyEnglishTechnicalMessage(trimmed)) {
+    return "画像の解析中にエラーが発生しました。再試行するか、別の画像でお試しください。";
+  }
+
+  return trimmed;
+}
 
 const OCR_IMAGE_ERROR_PREFIX_JA: Array<[prefix: string, message: string]> = [
   ["Unsupported source_type:", "非対応の画像種別です"],
@@ -97,7 +144,7 @@ function translateKnownMessage(
 }
 
 export function formatOcrValidationMessage(code: string): string {
-  return translateKnownMessage(code, OCR_VALIDATION_MESSAGE_JA, OCR_IMAGE_ERROR_PREFIX_JA);
+  return translateOcrErrorMessage(code);
 }
 
 export function formatOcrValidationMessages(codes: string[] | null | undefined): string {
@@ -111,11 +158,13 @@ export function formatOcrImageErrorMessage(message: string | null | undefined): 
   if (!message) {
     return "";
   }
-  const fromImage = translateKnownMessage(message, OCR_IMAGE_ERROR_JA, OCR_IMAGE_ERROR_PREFIX_JA);
-  if (fromImage !== message.trim()) {
-    return fromImage;
-  }
-  return formatOcrValidationMessage(message);
+  return translateOcrErrorMessage(message);
+}
+
+/** API・例外メッセージをユーザー向け日本語に変換（OCR画面共通） */
+export function formatLocalizedErrorMessage(message: string | null | undefined, fallback = ""): string {
+  const translated = formatOcrImageErrorMessage(message);
+  return translated || fallback;
 }
 
 export function formatUnitBreakdownStatus(status: string | null | undefined): string {

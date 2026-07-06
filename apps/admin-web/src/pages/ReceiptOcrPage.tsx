@@ -60,7 +60,7 @@ import {
   type OcrParseProgressState,
 } from "../lib/ocr/batchParse";
 import { getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
-import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
+import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
   nextSortDirection,
@@ -1358,7 +1358,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
         setFormError(`確定できない行が ${count} 件含まれています。要確認行を修正してから再度お試しください。`);
         return;
       }
-      setFormError(error instanceof ApiError ? error.message : "確定に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "確定に失敗しました"));
     },
   });
 
@@ -1375,7 +1375,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       }
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "保存データの削除に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "保存データの削除に失敗しました"));
     },
   });
 
@@ -1394,7 +1394,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       }
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "画像の削除に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "画像の削除に失敗しました"));
     },
   });
 
@@ -1407,7 +1407,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       setFormError(null);
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "ファイル名の変更に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "ファイル名の変更に失敗しました"));
     },
   });
 
@@ -1430,7 +1430,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       setFormError(null);
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "突合に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "突合に失敗しました"));
     },
   });
 
@@ -1441,7 +1441,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "無効化に失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "無効化に失敗しました"));
     },
   });
 
@@ -1460,7 +1460,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "在庫照合対象の切り替えに失敗しました");
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "在庫照合対象の切り替えに失敗しました"));
     },
   });
 
@@ -1550,7 +1550,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
     },
     onError: (error) => {
-      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の登録に失敗しました");
+      setInventoryFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "実在庫記録の登録に失敗しました"));
     },
   });
 
@@ -1563,7 +1563,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
     },
     onError: (error) => {
-      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の更新に失敗しました");
+      setInventoryFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "実在庫記録の更新に失敗しました"));
     },
   });
 
@@ -1573,7 +1573,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       await queryClient.invalidateQueries({ queryKey: ["inventory-snapshots"] });
     },
     onError: (error) => {
-      setInventoryFormError(error instanceof ApiError ? error.message : "実在庫記録の削除に失敗しました");
+      setInventoryFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "実在庫記録の削除に失敗しました"));
     },
   });
 
@@ -1589,7 +1589,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       setInventoryFormError(null);
     },
     onError: (error) => {
-      setInventoryFormError(error instanceof ApiError ? error.message : "在庫照合の実行に失敗しました");
+      setInventoryFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "在庫照合の実行に失敗しました"));
     },
   });
 
@@ -1612,7 +1612,7 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
       );
     },
     onError: (error) => {
-      setInventoryFormError(error instanceof ApiError ? error.message : "差異理由の更新に失敗しました");
+      setInventoryFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "差異理由の更新に失敗しました"));
     },
   });
 
