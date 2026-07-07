@@ -827,7 +827,6 @@ button {
 .ocr-upload-link-form {
   display: grid;
   gap: 1rem;
-  max-width: min(32rem, 50%);
 }
 
 .ocr-upload-link-form .form-field {
@@ -1365,10 +1364,15 @@ button {
   }
 }
 
-.ocr-upload-grid {
+.ocr-upload-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.15fr);
   gap: 1rem;
+  align-items: start;
+}
+
+.ocr-upload-main {
+  min-width: 0;
 }
 
 .ocr-drop-zone {
@@ -2491,7 +2495,7 @@ button {
 }
 
 @media (max-width: 900px) {
-  .ocr-upload-grid {
+  .ocr-upload-layout {
     grid-template-columns: 1fr;
   }
 }

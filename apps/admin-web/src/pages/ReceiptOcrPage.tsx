@@ -2343,34 +2343,38 @@ export function ReceiptOcrPage({
         <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
       ) : null}
 
-      <section className="panel-card ocr-upload-grid">
-        <DropZone
-          label={isPaygate ? "Paygateスクリーンショット" : "精算レシート"}
-          description={
-            isPaygate ? "取引履歴の画面キャプチャを追加" : "感熱紙の精算レシート写真を追加"
-          }
-          sourceType={sourceType}
-          files={pendingFilesForPage}
-          onAddFiles={addFiles}
-          onRemove={removeFile}
-        />
-      </section>
+      <div className="ocr-upload-layout">
+        <OcrUploadLinkPanel />
 
-      <section className="panel-card">
-        <div className="upload-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={!pendingFilesForPage.length || uploadMutation.isPending}
-            onClick={() => uploadMutation.mutate()}
-          >
-            {uploadMutation.isPending ? "アップロード中..." : "画像をアップロード"}
-          </button>
+        <div className="ocr-upload-main page-stack">
+          <section className="panel-card">
+            <DropZone
+              label={isPaygate ? "Paygateスクリーンショット" : "精算レシート"}
+              description={
+                isPaygate ? "取引履歴の画面キャプチャを追加" : "感熱紙の精算レシート写真を追加"
+              }
+              sourceType={sourceType}
+              files={pendingFilesForPage}
+              onAddFiles={addFiles}
+              onRemove={removeFile}
+            />
+          </section>
+
+          <section className="panel-card">
+            <div className="upload-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!pendingFilesForPage.length || uploadMutation.isPending}
+                onClick={() => uploadMutation.mutate()}
+              >
+                {uploadMutation.isPending ? "アップロード中..." : "画像をアップロード"}
+              </button>
+            </div>
+            {formError ? <p className="form-error">{formError}</p> : null}
+          </section>
         </div>
-        {formError ? <p className="form-error">{formError}</p> : null}
-      </section>
-
-      <OcrUploadLinkPanel />
+      </div>
 
       <section className="panel-card page-stack">
         <div className="ocr-section-header">
