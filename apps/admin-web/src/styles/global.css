@@ -1602,6 +1602,18 @@ button {
   align-items: center;
 }
 
+.ocr-file-list .ocr-image-preview-trigger {
+  width: 64px;
+  max-width: 64px;
+}
+
+.ocr-file-list .ocr-image-thumb-frame {
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
 .ocr-thumb {
   width: 64px;
   height: 64px;
@@ -1622,6 +1634,7 @@ button {
 .ocr-image-thumb-frame .ocr-thumb-fallback {
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 .ocr-image-thumb-uploaded-at {
@@ -1692,6 +1705,8 @@ button {
 .ocr-image-card-top .ocr-image-thumb-frame {
   width: 88px;
   height: 88px;
+  overflow: hidden;
+  border-radius: 8px;
 }
 
 .ocr-image-card-body {
