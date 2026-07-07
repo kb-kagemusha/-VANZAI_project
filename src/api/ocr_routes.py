@@ -726,6 +726,7 @@ def create_ocr_upload_link(
             created_by=current_user.username,
             label=body.label,
             expires_in_days=body.expires_in_days,
+            expires_at_date=body.expires_at_date,
             public_memo=body.public_memo,
             internal_memo=body.internal_memo,
             default_source_type=body.default_source_type,
@@ -734,6 +735,9 @@ def create_ocr_upload_link(
         )
         db.commit()
         db.refresh(link)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception:
         db.rollback()
         raise

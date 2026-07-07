@@ -4,8 +4,9 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,6 +34,26 @@ LINK_RATE_LIMIT_PER_MINUTE = 30
 IP_RATE_LIMIT_PER_MINUTE = 60
 SESSION_HOURS = 2
 QUARANTINE_DAYS = 7
+JST = ZoneInfo("Asia/Tokyo")
+
+
+def resolve_link_expires_at(
+    *,
+    expires_in_days: int | None = None,
+    expires_at_date: date | None = None,
+    now: datetime | None = None,
+) -> datetime:
+    if expires_in_days is not None and expires_at_date is not None:
+        raise ValueError("expires_in_days_and_date_conflict")
+    current = now or _utcnow()
+    if expires_at_date is not None:
+        today_jst = current.astimezone(JST).date()
+        if expires_at_date < today_jst:
+            raise ValueError("expires_at_date_in_past")
+        end_jst = datetime.combine(expires_at_date, time(23, 59, 59), tzinfo=JST)
+        return end_jst.astimezone(timezone.utc)
+    days = expires_in_days if expires_in_days is not None else 30
+    return current + timedelta(days=days)
 
 
 def _utcnow() -> datetime:
@@ -100,13 +121,18 @@ class OcrUploadLinkService:
         *,
         created_by: str,
         label: str | None,
-        expires_in_days: int,
+        expires_in_days: int | None = None,
+        expires_at_date: date | None = None,
         public_memo: str | None,
         internal_memo: str | None,
         default_source_type: str,
         period_key: str | None,
         max_upload_count: int | None,
     ) -> tuple[OcrUploadLink, str]:
+        expires_at = resolve_link_expires_at(
+            expires_in_days=expires_in_days,
+            expires_at_date=expires_at_date,
+        )
         token = secrets.token_urlsafe(32)
         link = OcrUploadLink(
             id=generate_ulid(),
@@ -114,7 +140,7 @@ class OcrUploadLinkService:
             token_suffix=token[-6:],
             label=label,
             status="active",
-            expires_at=_utcnow() + timedelta(days=expires_in_days),
+            expires_at=expires_at,
             created_by=created_by,
             public_memo=public_memo,
             internal_memo=internal_memo,
@@ -129,7 +155,12 @@ class OcrUploadLinkService:
             target_type="ocr_upload_link",
             target_id=link.id,
             actor=created_by,
-            after_value={"label": label, "expires_in_days": expires_in_days},
+            after_value={
+                "label": label,
+                "expires_in_days": expires_in_days,
+                "expires_at_date": expires_at_date.isoformat() if expires_at_date else None,
+                "expires_at": expires_at.isoformat(),
+            },
         )
         return link, token
 

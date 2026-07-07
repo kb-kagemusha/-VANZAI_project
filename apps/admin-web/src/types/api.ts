@@ -1266,7 +1266,8 @@ export interface OcrSourceImageItem {
 
 export interface OcrUploadLinkCreateRequest {
   label?: string | null;
-  expires_in_days?: number;
+  expires_in_days?: number | null;
+  expires_at_date?: string | null;
   public_memo?: string | null;
   internal_memo?: string | null;
   default_source_type?: "paygate_screenshot" | "paygate_settlement" | "required";

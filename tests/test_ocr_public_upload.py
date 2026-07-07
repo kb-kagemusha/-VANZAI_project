@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -15,6 +15,7 @@ from src.services.ocr.upload_validation import validate_upload_image_bytes
 from src.services.ocr_upload_link_service import (
     OcrUploadLinkService,
     hash_upload_token,
+    resolve_link_expires_at,
 )
 
 
@@ -49,6 +50,42 @@ def test_validate_upload_accepts_minimal_jpeg():
 def test_hash_upload_token_is_stable():
     assert hash_upload_token("abc") == hash_upload_token("abc")
     assert hash_upload_token("abc") != hash_upload_token("def")
+
+
+def test_resolve_link_expires_at_from_days():
+    now = datetime(2026, 7, 7, 3, 0, tzinfo=timezone.utc)
+    expires_at = resolve_link_expires_at(expires_in_days=7, now=now)
+    assert expires_at == now + timedelta(days=7)
+
+
+def test_resolve_link_expires_at_from_date_end_of_jst_day():
+    now = datetime(2026, 7, 7, 3, 0, tzinfo=timezone.utc)
+    expires_at = resolve_link_expires_at(expires_at_date=date(2026, 7, 10), now=now)
+    assert expires_at.hour == 14
+    assert expires_at.minute == 59
+
+
+def test_resolve_link_expires_at_rejects_past_date():
+    now = datetime(2026, 7, 7, 15, 0, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="expires_at_date_in_past"):
+        resolve_link_expires_at(expires_at_date=date(2026, 7, 6), now=now)
+
+
+def test_create_upload_link_with_expires_at_date(db_session):
+    service = OcrUploadLinkService(db_session)
+    link, token = service.create_link(
+        created_by="tester",
+        label="date-expiry",
+        expires_at_date=date(2026, 12, 31),
+        public_memo=None,
+        internal_memo=None,
+        default_source_type="required",
+        period_key=None,
+        max_upload_count=None,
+    )
+    db_session.commit()
+    assert token
+    assert link.expires_at.year == 2026
 
 
 def test_create_upload_link_returns_token(db_session):

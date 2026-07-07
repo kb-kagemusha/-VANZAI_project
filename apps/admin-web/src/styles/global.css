@@ -853,6 +853,14 @@ button {
   max-width: 6rem;
 }
 
+.ocr-upload-link-form-expiry input[type="date"] {
+  max-width: 11rem;
+}
+
+.ocr-upload-link-expiry-mode select {
+  min-width: 6.5rem;
+}
+
 .ocr-upload-link-panel.page-stack {
   gap: 0.6rem;
   padding: 0.8rem 0.95rem;

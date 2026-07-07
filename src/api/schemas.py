@@ -4,7 +4,7 @@ APIリクエスト・レスポンスのPydanticスキーマ定義
 from datetime import date, datetime
 from typing import Generic, List, Literal, Optional, TypeVar
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 from decimal import Decimal
 
 from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_short_id
@@ -2223,12 +2223,19 @@ class OcrSelfReportCompareResponse(BaseModel):
 
 class OcrUploadLinkCreateRequest(BaseModel):
     label: Optional[str] = None
-    expires_in_days: int = Field(default=30, ge=1, le=365)
+    expires_in_days: Optional[int] = Field(default=None, ge=1, le=365)
+    expires_at_date: Optional[date] = None
     public_memo: Optional[str] = None
     internal_memo: Optional[str] = None
     default_source_type: str = Field(default="required")
     period_key: Optional[str] = None
     max_upload_count: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_expiry_mode(self) -> "OcrUploadLinkCreateRequest":
+        if self.expires_in_days is not None and self.expires_at_date is not None:
+            raise ValueError("expires_in_days と expires_at_date は同時に指定できません")
+        return self
 
 
 class OcrUploadLinkItem(BaseModel):
