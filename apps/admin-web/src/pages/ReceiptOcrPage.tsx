@@ -1998,6 +1998,11 @@ export function ReceiptOcrPage({
       },
     },
     {
+      key: "source_uploader_name",
+      header: "入稿者",
+      render: (row: OcrExtractedRowItem) => row.source_uploader_name?.trim() || "-",
+    },
+    {
       key: "record_date",
       header: renderSortableHeader("record_date", "日付"),
       render: (row: OcrExtractedRowItem) => (
@@ -2255,6 +2260,7 @@ export function ReceiptOcrPage({
     "select",
     "quality",
     "source_image_filename",
+    "source_uploader_name",
     "record_date",
     "record_time",
     "transaction_no",
@@ -2284,6 +2290,7 @@ export function ReceiptOcrPage({
     "select",
     "quality",
     "source_image_filename",
+    "source_uploader_name",
     "terminal_short_id",
     "settlement_date",
     "settlement_time",

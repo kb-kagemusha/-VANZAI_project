@@ -83,13 +83,16 @@ async def upload_public_ocr_image(
         raise _permission_error_to_http(exc) from exc
 
     file_bytes = await file.read()
+    normalized_uploader_name = (public_uploader_name or "").strip()
+    if not normalized_uploader_name:
+        raise HTTPException(status_code=400, detail="お名前は必須です")
     try:
         result = service.handle_public_upload(
             link=link,
             source_type=source_type,
             file_bytes=file_bytes,
             file_name=file.filename,
-            public_uploader_name=public_uploader_name,
+            public_uploader_name=normalized_uploader_name,
             client_ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
@@ -113,6 +116,8 @@ async def upload_public_ocr_image(
             raise HTTPException(status_code=415, detail="対応していない画像形式です") from exc
         if code == "invalid_source_type":
             raise HTTPException(status_code=422, detail="画像種別が不正です") from exc
+        if code == "uploader_name_required":
+            raise HTTPException(status_code=400, detail="お名前は必須です") from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception:
         db.rollback()

@@ -96,6 +96,37 @@ def test_rate_limit_blocks_after_limit(db_session):
     assert _increment_rate_limit(db_session, "test:scope", limit=5) is False
 
 
+def test_public_upload_requires_uploader_name(db_session, monkeypatch):
+    monkeypatch.setenv("OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED", "false")
+    from io import BytesIO
+
+    from PIL import Image
+
+    service = OcrUploadLinkService(db_session)
+    link, _ = service.create_link(
+        created_by="tester",
+        label=None,
+        expires_in_days=1,
+        public_memo=None,
+        internal_memo=None,
+        default_source_type="required",
+        period_key=None,
+        max_upload_count=None,
+    )
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8), color="white").save(buffer, format="JPEG")
+    with pytest.raises(ValueError, match="uploader_name_required"):
+        service.handle_public_upload(
+            link=link,
+            source_type="paygate_settlement",
+            file_bytes=buffer.getvalue(),
+            file_name="test.jpg",
+            public_uploader_name="  ",
+            client_ip=None,
+            user_agent=None,
+        )
+
+
 def test_paygate_precheck_disabled_skips(db_session, monkeypatch):
     monkeypatch.setenv("OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED", "false")
     from src.services.ocr.paygate_screenshot_gate import (

@@ -545,15 +545,43 @@ class OcrService:
         return image
 
     def get_image_filenames(self, image_ids: set[str]) -> dict[str, str | None]:
+        return {
+            image_id: context["filename"]
+            for image_id, context in self.get_image_row_context(image_ids).items()
+        }
+
+    @staticmethod
+    def _uploader_display_name(
+        public_uploader_name: str | None,
+        uploaded_by: str | None,
+    ) -> str | None:
+        if public_uploader_name and public_uploader_name.strip():
+            return public_uploader_name.strip()
+        if uploaded_by and uploaded_by.strip() and uploaded_by.strip() != "external":
+            return uploaded_by.strip()
+        return None
+
+    def get_image_row_context(self, image_ids: set[str]) -> dict[str, dict[str, str | None]]:
         if not image_ids:
             return {}
         rows = self.session.execute(
-            select(OcrSourceImage.id, OcrSourceImage.original_filename).where(
+            select(
+                OcrSourceImage.id,
+                OcrSourceImage.original_filename,
+                OcrSourceImage.public_uploader_name,
+                OcrSourceImage.uploaded_by,
+            ).where(
                 OcrSourceImage.id.in_(image_ids),
                 OcrSourceImage.deleted_at.is_(None),
             )
         ).all()
-        return {image_id: filename for image_id, filename in rows}
+        return {
+            image_id: {
+                "filename": filename,
+                "uploader_name": self._uploader_display_name(public_uploader_name, uploaded_by),
+            }
+            for image_id, filename, public_uploader_name, uploaded_by in rows
+        }
 
     def update_image_filename(
         self,

@@ -89,11 +89,13 @@ def _row_to_item(
     row: OcrExtractedRow,
     *,
     source_image_filename: str | None = None,
+    source_uploader_name: str | None = None,
 ) -> OcrExtractedRowItem:
     return OcrExtractedRowItem(
         id=row.id,
         source_image_id=row.source_image_id,
         source_image_filename=source_image_filename,
+        source_uploader_name=source_uploader_name,
         parse_job_id=row.parse_job_id,
         source_type=row.source_type,
         period_key=row.period_key,
@@ -148,6 +150,15 @@ def _row_to_item(
         field_sources=(row.raw_payload or {}).get("field_sources"),
         terminal_id_partial=bool((row.raw_payload or {}).get("terminal_id_partial")),
         terminal_id_segments=(row.raw_payload or {}).get("terminal_id_segments"),
+    )
+
+
+def _row_to_item_with_context(service: OcrService, row: OcrExtractedRow) -> OcrExtractedRowItem:
+    context = service.get_image_row_context({row.source_image_id}).get(row.source_image_id, {})
+    return _row_to_item(
+        row,
+        source_image_filename=context.get("filename"),
+        source_uploader_name=context.get("uploader_name"),
     )
 
 
@@ -404,10 +415,14 @@ def list_ocr_rows(
         limit=limit,
         offset=offset,
     )
-    filenames = service.get_image_filenames({row.source_image_id for row in items})
+    filenames = service.get_image_row_context({row.source_image_id for row in items})
     return OcrExtractedRowListResponse(
         items=[
-            _row_to_item(row, source_image_filename=filenames.get(row.source_image_id))
+            _row_to_item(
+                row,
+                source_image_filename=filenames.get(row.source_image_id, {}).get("filename"),
+                source_uploader_name=filenames.get(row.source_image_id, {}).get("uploader_name"),
+            )
             for row in items
         ],
         total=total,
@@ -433,8 +448,7 @@ def update_ocr_row(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
-    return _row_to_item(row, source_image_filename=filename)
+    return _row_to_item_with_context(service, row)
 
 
 @router.post(
@@ -481,8 +495,7 @@ def void_ocr_row(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
-    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
-    return _row_to_item(row, source_image_filename=filename)
+    return _row_to_item_with_context(service, row)
 
 
 @router.post("/rows/{row_id}/reconciliation-eligibility", response_model=OcrExtractedRowItem)
@@ -506,8 +519,7 @@ def set_ocr_row_reconciliation_eligibility(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
-    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
-    return _row_to_item(row, source_image_filename=filename)
+    return _row_to_item_with_context(service, row)
 
 
 @router.delete("/rows", response_model=OcrRowsDeleteResponse)
@@ -696,8 +708,7 @@ def link_ocr_row(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    filename = service.get_image_filenames({row.source_image_id}).get(row.source_image_id)
-    return _row_to_item(row, source_image_filename=filename)
+    return _row_to_item_with_context(service, row)
 
 
 @router.post("/upload-links", response_model=OcrUploadLinkCreateResponse)

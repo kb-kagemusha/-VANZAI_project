@@ -2032,6 +2032,7 @@ class OcrExtractedRowItem(BaseModel):
     id: str
     source_image_id: str
     source_image_filename: Optional[str] = None
+    source_uploader_name: Optional[str] = None
     parse_job_id: Optional[str] = None
     source_type: str
     period_key: Optional[str] = None

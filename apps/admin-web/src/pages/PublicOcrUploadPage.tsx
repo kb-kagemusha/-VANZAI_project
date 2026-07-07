@@ -74,10 +74,18 @@ export function PublicOcrUploadPage() {
   const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file) {
-      uploadMutation.mutate(file);
+    if (!file) {
+      return;
     }
+    if (!uploaderName.trim()) {
+      setMessage(null);
+      setError("お名前を入力してください");
+      return;
+    }
+    uploadMutation.mutate(file);
   };
+
+  const canUpload = Boolean(uploaderName.trim() && sourceType);
 
   if (initialToken && accessMutation.isPending) {
     return (
@@ -103,8 +111,13 @@ export function PublicOcrUploadPage() {
 
       <section className="panel-card page-stack">
         <label className="form-field">
-          <span>お名前（任意）</span>
-          <input value={uploaderName} onChange={(e) => setUploaderName(e.target.value)} placeholder="例: 田中" />
+          <span>お名前（必須）</span>
+          <input
+            value={uploaderName}
+            onChange={(e) => setUploaderName(e.target.value)}
+            placeholder="例: 田中"
+            required
+          />
         </label>
 
         <label className="form-field">
@@ -137,7 +150,7 @@ export function PublicOcrUploadPage() {
             type="file"
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
-            disabled={uploadMutation.isPending}
+            disabled={uploadMutation.isPending || !canUpload}
             onChange={onFileChange}
           />
         </label>

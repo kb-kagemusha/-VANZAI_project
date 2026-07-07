@@ -1340,6 +1340,7 @@ export interface OcrExtractedRowItem {
   id: string;
   source_image_id: string;
   source_image_filename: string | null;
+  source_uploader_name?: string | null;
   parse_job_id: string | null;
   source_type: OcrSourceType;
   period_key: string | null;

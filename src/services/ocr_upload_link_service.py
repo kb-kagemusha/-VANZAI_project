@@ -235,6 +235,11 @@ class OcrUploadLinkService:
         if source_type not in VALID_SOURCE_TYPES:
             raise ValueError("invalid_source_type")
 
+        normalized_uploader_name = (public_uploader_name or "").strip()
+        if not normalized_uploader_name:
+            raise ValueError("uploader_name_required")
+        public_uploader_name = normalized_uploader_name
+
         if not _increment_rate_limit(self.session, f"link:{link.id}", limit=LINK_RATE_LIMIT_PER_MINUTE):
             raise PermissionError("rate_limit")
         ip_hash = hash_client_ip(client_ip)
