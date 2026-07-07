@@ -1316,6 +1316,13 @@ button {
   margin: 1rem 0 0;
 }
 
+.public-ocr-upload-expiry {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .public-form-lead {
   color: var(--muted);
   margin: 0 0 1rem;

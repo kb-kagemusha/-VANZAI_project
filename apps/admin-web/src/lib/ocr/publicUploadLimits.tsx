@@ -12,5 +12,6 @@ export function PublicOcrUploadLimitNote({
       ? `外部共有URLから一度にアップロードできる画像は${PUBLIC_OCR_MAX_FILES_PER_UPLOAD}枚までです。`
       : `一度にアップロードできる画像は${PUBLIC_OCR_MAX_FILES_PER_UPLOAD}枚までです。`;
 
-  return <p className={className ?? "public-form-limit-note"}>{message}</p>;
+  const noteClassName = className ? `public-form-limit-note ${className}` : "public-form-limit-note";
+  return <p className={noteClassName}>{message}</p>;
 }

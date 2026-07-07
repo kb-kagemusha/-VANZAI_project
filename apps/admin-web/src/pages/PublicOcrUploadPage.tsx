@@ -29,13 +29,18 @@ type OverlayState = {
   total: number;
 } | null;
 
-function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label"> | null {
+type PublicOcrSessionMeta = Pick<
+  OcrPublicUploadAccessResponse,
+  "default_source_type" | "public_memo" | "label" | "expires_at"
+>;
+
+function readStoredSessionMeta(): PublicOcrSessionMeta | null {
   const raw = window.sessionStorage.getItem(SESSION_META_STORAGE_KEY);
   if (!raw) {
     return null;
   }
   try {
-    return JSON.parse(raw) as Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label">;
+    return JSON.parse(raw) as PublicOcrSessionMeta;
   } catch {
     return null;
   }
@@ -53,8 +58,19 @@ function persistSession(data: OcrPublicUploadAccessResponse) {
       default_source_type: data.default_source_type,
       public_memo: data.public_memo,
       label: data.label,
-    }),
+      expires_at: data.expires_at,
+    } satisfies PublicOcrSessionMeta),
   );
+}
+
+function formatLinkExpiry(iso: string) {
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function fixedSourceTypeLabel(defaultSourceType: string | undefined): string | null {
@@ -78,9 +94,7 @@ export function PublicOcrUploadPage() {
   const [sessionToken, setSessionToken] = useState<string | null>(
     () => window.sessionStorage.getItem(SESSION_STORAGE_KEY),
   );
-  const [accessData, setAccessData] = useState<Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label"> | null>(
-    storedMeta,
-  );
+  const [accessData, setAccessData] = useState<PublicOcrSessionMeta | null>(storedMeta);
   const [uploaderName, setUploaderName] = useState(readStoredUploaderName);
   const [error, setError] = useState<string | null>(null);
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
@@ -106,6 +120,7 @@ export function PublicOcrUploadPage() {
         default_source_type: data.default_source_type,
         public_memo: data.public_memo,
         label: data.label,
+        expires_at: data.expires_at,
       });
     },
     onError: (err) => {
@@ -114,10 +129,21 @@ export function PublicOcrUploadPage() {
   });
 
   useEffect(() => {
-    if (initialToken && !sessionToken && !accessMutation.isPending && !accessData) {
-      accessMutation.mutate();
+    if (!initialToken || accessMutation.isPending) {
+      return;
     }
-  }, [initialToken, sessionToken, accessMutation, accessData]);
+    accessMutation.mutate();
+  }, [initialToken]);
+
+  useEffect(() => {
+    if (accessData || !sessionToken) {
+      return;
+    }
+    const meta = readStoredSessionMeta();
+    if (meta) {
+      setAccessData(meta);
+    }
+  }, [accessData, sessionToken]);
 
   const uploadFiles = async (files: File[]) => {
     if (!sessionToken) {
@@ -290,6 +316,10 @@ export function PublicOcrUploadPage() {
       </section>
 
       <PublicOcrUploadLimitNote className="public-ocr-upload-limit-note-bottom" />
+
+      {accessData?.expires_at ? (
+        <p className="public-ocr-upload-expiry">有効期限: {formatLinkExpiry(accessData.expires_at)}</p>
+      ) : null}
 
       {overlay ? (
         <div className="public-ocr-upload-overlay" role="alertdialog" aria-modal="true" aria-live="assertive">
