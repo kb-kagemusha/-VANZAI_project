@@ -41,15 +41,9 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "site_manager"],
   },
   {
-    to: "/operations/ocr-paygate",
-    label: "Paygateスクリーンショット",
-    description: "Paygate画面キャプチャのOCR解析",
-    allowedRoles: ["admin", "ops", "accounting"],
-  },
-  {
-    to: "/operations/ocr-settlement",
-    label: "精算レシート",
-    description: "精算レシート写真のOCR解析と在庫照合",
+    to: "/operations/ocr",
+    label: "レシートOCR",
+    description: "Paygateスクリーンショットと精算レシートのOCR解析",
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {

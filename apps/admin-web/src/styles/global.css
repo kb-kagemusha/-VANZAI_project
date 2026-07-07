@@ -829,10 +829,6 @@ button {
   width: 100%;
 }
 
-.ocr-upload-link-form-memo {
-  grid-column: 1 / -1;
-}
-
 .dashboard-action-row {
   display: flex;
   gap: 0.75rem;

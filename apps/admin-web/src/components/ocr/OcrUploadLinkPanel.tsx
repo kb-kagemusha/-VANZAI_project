@@ -27,6 +27,7 @@ export function OcrUploadLinkPanel() {
       createOcrUploadLink({
         ...form,
         label: form.label || null,
+        default_source_type: "required",
       }),
     onSuccess: (data) => {
       setCreatedUrl(`${window.location.origin}${data.public_upload_url}`);
@@ -68,24 +69,8 @@ export function OcrUploadLinkPanel() {
           />
         </label>
         <label className="form-field">
-          <span>初期表示の画像種別</span>
-          <select
-            value={form.default_source_type}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                default_source_type: e.target.value as OcrUploadLinkCreateRequest["default_source_type"],
-              }))
-            }
-          >
-            <option value="required">選択必須</option>
-            <option value="paygate_screenshot">Paygate SS</option>
-            <option value="paygate_settlement">精算レシート</option>
-          </select>
-        </label>
-        <label className="form-field ocr-upload-link-form-memo">
           <span>外部向けメモ</span>
-          <textarea
+          <input
             value={form.public_memo ?? ""}
             onChange={(e) => setForm((prev) => ({ ...prev, public_memo: e.target.value || null }))}
           />

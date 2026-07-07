@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DataTable } from "../components/DataTable";
@@ -1011,7 +1011,17 @@ function InventorySnapshotEditForm({
   );
 }
 
-export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
+function parseOcrSourceType(value: string | null): OcrSourceType {
+  return value === "paygate_settlement" ? "paygate_settlement" : "paygate_screenshot";
+}
+
+export function ReceiptOcrPage({
+  sourceType,
+  showPageHeader = true,
+}: {
+  sourceType: OcrSourceType;
+  showPageHeader?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [pendingFiles, setPendingFiles] = useState<PendingUpload[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -2327,7 +2337,9 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
 
   return (
     <div className="page-stack">
-      <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
+      {showPageHeader ? (
+        <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
+      ) : null}
 
       <OcrUploadLinkPanel />
 
@@ -3242,10 +3254,42 @@ export function ReceiptOcrPage({ sourceType }: { sourceType: OcrSourceType }) {
   );
 }
 
-export function OcrPaygateScreenshotPage() {
-  return <ReceiptOcrPage sourceType="paygate_screenshot" />;
-}
+export function OcrPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sourceType = parseOcrSourceType(searchParams.get("source"));
 
-export function OcrSettlementReceiptPage() {
-  return <ReceiptOcrPage sourceType="paygate_settlement" />;
+  const selectSourceType = (next: OcrSourceType) => {
+    setSearchParams({ source: next }, { replace: true });
+  };
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="OCR"
+        title="レシートOCR"
+        description="Paygateスクリーンショットと精算レシートをアップロード・解析します。"
+      />
+      <div className="ocr-saved-data-tabs" role="tablist" aria-label="OCR種別">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sourceType === "paygate_screenshot"}
+          className={`ocr-saved-data-tab${sourceType === "paygate_screenshot" ? " is-active" : ""}`}
+          onClick={() => selectSourceType("paygate_screenshot")}
+        >
+          Paygateスクリーンショット
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sourceType === "paygate_settlement"}
+          className={`ocr-saved-data-tab${sourceType === "paygate_settlement" ? " is-active" : ""}`}
+          onClick={() => selectSourceType("paygate_settlement")}
+        >
+          精算レシート
+        </button>
+      </div>
+      <ReceiptOcrPage key={sourceType} sourceType={sourceType} showPageHeader={false} />
+    </div>
+  );
 }

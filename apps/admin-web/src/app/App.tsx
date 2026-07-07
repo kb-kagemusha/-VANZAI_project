@@ -24,7 +24,7 @@ import { NoticesPage } from "../pages/NoticesPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
 import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
-import { OcrPaygateScreenshotPage, OcrSettlementReceiptPage } from "../pages/ReceiptOcrPage";
+import { OcrPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -56,22 +56,22 @@ export function App() {
             }
           />
           <Route
-            path="/operations/ocr-paygate"
+            path="/operations/ocr"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
-                <OcrPaygateScreenshotPage />
+                <OcrPage />
               </PermissionRoute>
             }
           />
           <Route
-            path="/operations/ocr-settlement"
-            element={
-              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
-                <OcrSettlementReceiptPage />
-              </PermissionRoute>
-            }
+            path="/operations/ocr-paygate"
+            element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />}
           />
-          <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr-paygate" replace />} />
+          <Route
+            path="/operations/ocr-settlement"
+            element={<Navigate to="/operations/ocr?source=paygate_settlement" replace />}
+          />
+          <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />} />
           <Route
             path="/operations/availability-calendar"
             element={
