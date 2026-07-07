@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { createOcrUploadLink, listOcrUploadLinks, revokeOcrUploadLink } from "../../lib/api/client";
+import { PublicOcrUploadLimitNote } from "../../lib/ocr/publicUploadLimits";
 import type { OcrUploadLinkCreateRequest } from "../../types/api";
 
 export function OcrUploadLinkPanel() {
@@ -48,6 +49,7 @@ export function OcrUploadLinkPanel() {
     <section className="panel-card page-stack">
       <h2>外部アップロードリンク</h2>
       <p className="muted-text">現場向けの共有URLを発行します。発行直後のみURLをコピーできます。</p>
+      <PublicOcrUploadLimitNote className="public-form-limit-note ocr-upload-link-limit-note" />
 
       <div className="ocr-upload-link-form">
         <label className="form-field">
@@ -90,6 +92,7 @@ export function OcrUploadLinkPanel() {
       {createdUrl ? (
         <div className="registration-link-card">
           <p>発行URL（この画面を閉じると再表示できません）:</p>
+          <PublicOcrUploadLimitNote className="public-form-limit-note" />
           <code>{createdUrl}</code>
           <div className="registration-action-row">
             <button type="button" className="secondary-button registration-action-button" onClick={() => navigator.clipboard.writeText(createdUrl)}>

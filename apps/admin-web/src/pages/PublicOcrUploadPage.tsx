@@ -4,16 +4,30 @@ import { useSearchParams } from "react-router-dom";
 
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { accessPublicOcrUpload, uploadPublicOcrImage, ApiError } from "../lib/api/client";
+import { PUBLIC_OCR_MAX_FILES_PER_UPLOAD, PublicOcrUploadLimitNote } from "../lib/ocr/publicUploadLimits";
 import type { OcrPublicUploadAccessResponse } from "../types/api";
 
 const SESSION_STORAGE_KEY = "vanzai.ocr_upload_session";
 const SESSION_META_STORAGE_KEY = "vanzai.ocr_upload_session_meta";
 const UPLOADER_NAME_STORAGE_KEY = "vanzai.ocr_upload_uploader_name";
 
-type OverlayState =
-  | { kind: "uploading" }
-  | { kind: "error"; message: string }
-  | null;
+type UploadFileResult = {
+  fileName: string;
+  status: "success" | "failure";
+  message: string;
+};
+
+type UploadSummary = {
+  results: UploadFileResult[];
+  successCount: number;
+  failureCount: number;
+};
+
+type OverlayState = {
+  kind: "uploading";
+  current: number;
+  total: number;
+} | null;
 
 function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null {
   const raw = window.sessionStorage.getItem(SESSION_META_STORAGE_KEY);
@@ -52,6 +66,10 @@ function fixedSourceTypeLabel(defaultSourceType: string | undefined): string | n
   return null;
 }
 
+function formatUploadError(error: unknown): string {
+  return error instanceof ApiError ? error.message : "アップロードに失敗しました";
+}
+
 export function PublicOcrUploadPage() {
   const [searchParams] = useSearchParams();
   const initialToken = searchParams.get("token") ?? "";
@@ -63,9 +81,10 @@ export function PublicOcrUploadPage() {
     storedMeta,
   );
   const [uploaderName, setUploaderName] = useState(readStoredUploaderName);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const trimmed = uploaderName.trim();
@@ -92,60 +111,83 @@ export function PublicOcrUploadPage() {
     },
   });
 
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => {
-      if (!sessionToken) {
-        throw new Error("セッションがありません");
-      }
-      return uploadPublicOcrImage({
-        sessionToken,
-        file,
-        publicUploaderName: uploaderName.trim() || null,
-      });
-    },
-    onMutate: () => {
-      setOverlay({ kind: "uploading" });
-      setMessage(null);
-      setError(null);
-    },
-    onSuccess: (result) => {
-      setOverlay(null);
-      setError(null);
-      if (result.reused_existing) {
-        setMessage("この画像は既に登録済みです。受付が完了しました。");
-      } else {
-        setMessage(result.message);
-      }
-    },
-    onError: (err) => {
-      const message = err instanceof ApiError ? err.message : "アップロードに失敗しました";
-      setOverlay({ kind: "error", message });
-    },
-  });
-
   useEffect(() => {
     if (initialToken && !sessionToken && !accessMutation.isPending && !accessData) {
       accessMutation.mutate();
     }
   }, [initialToken, sessionToken, accessMutation, accessData]);
 
-  const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) {
+  const uploadFiles = async (files: File[]) => {
+    if (!sessionToken) {
+      setError("セッションがありません。リンクから再度アクセスしてください。");
       return;
     }
-    if (!uploaderName.trim()) {
-      setMessage(null);
+
+    const normalizedName = uploaderName.trim();
+    if (!normalizedName) {
+      setUploadSummary(null);
       setError("お名前を入力してください");
       return;
     }
-    uploadMutation.mutate(file);
+
+    if (files.length > PUBLIC_OCR_MAX_FILES_PER_UPLOAD) {
+      setUploadSummary(null);
+      setError(`一度にアップロードできる画像は${PUBLIC_OCR_MAX_FILES_PER_UPLOAD}枚までです。`);
+      return;
+    }
+
+    setError(null);
+    setUploadSummary(null);
+    setIsUploading(true);
+
+    const results: UploadFileResult[] = [];
+
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      setOverlay({ kind: "uploading", current: index + 1, total: files.length });
+
+      try {
+        const result = await uploadPublicOcrImage({
+          sessionToken,
+          file,
+          publicUploaderName: normalizedName,
+        });
+        results.push({
+          fileName: file.name,
+          status: "success",
+          message: result.reused_existing
+            ? "この画像は既に登録済みです。受付が完了しました。"
+            : result.message,
+        });
+      } catch (uploadError) {
+        results.push({
+          fileName: file.name,
+          status: "failure",
+          message: formatUploadError(uploadError),
+        });
+      }
+    }
+
+    const successCount = results.filter((result) => result.status === "success").length;
+    const failureCount = results.length - successCount;
+    setUploadSummary({ results, successCount, failureCount });
+    setOverlay(null);
+    setIsUploading(false);
+  };
+
+  const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) {
+      return;
+    }
+    void uploadFiles(files);
   };
 
   const fixedTypeLabel = fixedSourceTypeLabel(accessData?.default_source_type);
   const autoDetect = accessData?.default_source_type === "required" || !fixedTypeLabel;
-  const canUpload = Boolean(uploaderName.trim());
+  const canUpload = Boolean(uploaderName.trim()) && !isUploading;
+  const uploadBlocked = Boolean(overlay) || isUploading;
 
   if (initialToken && accessMutation.isPending) {
     return (
@@ -168,8 +210,9 @@ export function PublicOcrUploadPage() {
     <main className="public-form-page">
       <h1>OCR 画像アップロード</h1>
       {accessData?.public_memo ? <p className="public-form-lead">{accessData.public_memo}</p> : null}
+      <PublicOcrUploadLimitNote />
 
-      <section className={`panel-card page-stack public-ocr-upload-card${overlay ? " is-uploading" : ""}`}>
+      <section className={`panel-card page-stack public-ocr-upload-card${uploadBlocked ? " is-uploading" : ""}`}>
         <label className="form-field">
           <span>お名前（必須）</span>
           <input
@@ -177,7 +220,7 @@ export function PublicOcrUploadPage() {
             onChange={(e) => setUploaderName(e.target.value)}
             placeholder="例: 田中"
             required
-            disabled={Boolean(overlay)}
+            disabled={uploadBlocked}
           />
         </label>
 
@@ -195,42 +238,64 @@ export function PublicOcrUploadPage() {
         ) : null}
 
         <label className="form-field">
-          <span>写真を選択</span>
+          <span>写真を選択（最大{PUBLIC_OCR_MAX_FILES_PER_UPLOAD}枚）</span>
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
-            disabled={Boolean(overlay) || !canUpload}
+            multiple
+            disabled={!canUpload}
             onChange={onFileChange}
           />
         </label>
 
-        {message ? <p className="form-success">{message}</p> : null}
+        {uploadSummary ? (
+          <div className="public-ocr-upload-summary" aria-live="polite">
+            <p className="public-ocr-upload-summary-headline">
+              成功 {uploadSummary.successCount}/{uploadSummary.results.length}
+              {uploadSummary.failureCount > 0 ? (
+                <>
+                  {" "}
+                  失敗 {uploadSummary.failureCount}/{uploadSummary.results.length}
+                </>
+              ) : null}
+            </p>
+            {uploadSummary.failureCount > 0 ? (
+              <ul className="public-ocr-upload-failure-list">
+                {uploadSummary.results
+                  .filter((result) => result.status === "failure")
+                  .map((result) => (
+                    <li key={result.fileName}>
+                      <strong>{result.fileName}</strong>
+                      <span>{result.message}</span>
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+            {uploadSummary.successCount > 0 && uploadSummary.failureCount === 0 ? (
+              <p className="form-success">すべての画像の受付が完了しました。内容は事務局で確認します。</p>
+            ) : null}
+            {uploadSummary.successCount > 0 && uploadSummary.failureCount > 0 ? (
+              <p className="public-form-note">受付できた画像は事務局で確認します。失敗した画像は修正して再度アップロードしてください。</p>
+            ) : null}
+            {uploadSummary.successCount === 0 ? (
+              <p className="form-error">すべての画像のアップロードに失敗しました。内容を確認して再度お試しください。</p>
+            ) : null}
+          </div>
+        ) : null}
+
         {error ? <p className="form-error">{error}</p> : null}
       </section>
 
       {overlay ? (
         <div className="public-ocr-upload-overlay" role="alertdialog" aria-modal="true" aria-live="assertive">
-          <div className={`public-ocr-upload-overlay-panel${overlay.kind === "error" ? " is-error" : ""}`}>
-            {overlay.kind === "uploading" ? (
-              <>
-                <div className="loading-spinner public-ocr-upload-spinner" aria-hidden="true" />
-                <p className="public-ocr-upload-overlay-title">アップロード中</p>
-                <p className="public-ocr-upload-overlay-note">通信が完了するまでこの画面を閉じないでください</p>
-              </>
-            ) : (
-              <>
-                <p className="public-ocr-upload-overlay-title">アップロードできませんでした</p>
-                <p className="public-ocr-upload-overlay-note public-ocr-upload-overlay-error">{overlay.message}</p>
-                <button
-                  type="button"
-                  className="primary-button registration-action-button"
-                  onClick={() => setOverlay(null)}
-                >
-                  閉じる
-                </button>
-              </>
-            )}
+          <div className="public-ocr-upload-overlay-panel">
+            <div className="loading-spinner public-ocr-upload-spinner" aria-hidden="true" />
+            <p className="public-ocr-upload-overlay-title">アップロード中</p>
+            <p className="public-ocr-upload-overlay-note">
+              {overlay.current}/{overlay.total} 枚目を送信中です
+            </p>
+            <p className="public-ocr-upload-overlay-note">通信が完了するまでこの画面を閉じないでください</p>
           </div>
         </div>
       ) : null}
