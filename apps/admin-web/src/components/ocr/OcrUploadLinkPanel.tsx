@@ -51,8 +51,7 @@ export function OcrUploadLinkPanel() {
       <p className="muted-text ocr-upload-link-intro">
         現場向けの共有URLを発行します。発行直後のみURLをコピーできます。
         <br />
-        <span className="ocr-limit-accent">管理画面からの直接アップロード</span>
-        に枚数上限はありません。
+        <span className="ocr-limit-accent">管理画面からの直接アップロードに枚数上限はありません。</span>
       </p>
       <PublicOcrUploadLimitNote className="public-form-limit-note ocr-upload-link-limit-note" variant="admin-context" />
 
