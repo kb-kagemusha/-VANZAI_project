@@ -1080,11 +1080,15 @@ button {
   line-height: 1.5;
 }
 
+.public-form-limit-note,
+.ocr-limit-accent {
+  color: #b42318;
+  font-weight: 600;
+}
+
 .public-form-limit-note {
   margin: 0 0 0.75rem;
-  color: #b42318;
   font-size: 0.92rem;
-  font-weight: 600;
   line-height: 1.5;
 }
 
