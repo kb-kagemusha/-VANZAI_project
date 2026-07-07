@@ -397,41 +397,46 @@ export function DashboardPage() {
   return (
     <div className="page-stack">
       <PageHeader title="ダッシュボード" description="未処理、差異、締め状況を月次単位で確認し、そのまま月次処理を進めます。" eyebrow="月次運用" />
-      <FilterBar>
+      <FilterBar className="dashboard-period-bar">
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
         </label>
-      </FilterBar>
-
-      <section className="upload-card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <h3 className="section-title">月次一括生成</h3>
-            <p style={{ margin: 0, color: "var(--color-muted)" }}>対象月の請求書と支払明細をまとめて生成します。</p>
-          </div>
-          <button className="btn btn-primary dashboard-action-button" onClick={() => monthlyBillingMutation.mutate()} disabled={monthlyBillingMutation.isPending}>
+        <div className="dashboard-monthly-generate">
+          <span>月次一括生成</span>
+          <button
+            type="button"
+            className="btn btn-primary dashboard-action-button"
+            onClick={() => monthlyBillingMutation.mutate()}
+            disabled={monthlyBillingMutation.isPending}
+          >
             {monthlyBillingMutation.isPending ? "実行中..." : "月次一括生成"}
           </button>
         </div>
-        {monthlyBillingMutation.isSuccess ? (
-          <p style={{ margin: 0 }}>
-            請求 {monthlyBillingMutation.data.generated_invoices} 件生成 / {monthlyBillingMutation.data.skipped_invoices} 件スキップ、
-            支払 {monthlyBillingMutation.data.generated_payouts} 件生成 / {monthlyBillingMutation.data.skipped_payouts} 件スキップ
-          </p>
-        ) : null}
-        {monthlyBillingMutation.error instanceof ApiError ? (
-          <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{monthlyBillingMutation.error.message}</p>
-        ) : null}
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
-            請求ログを見る
-          </Link>
-          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
-            支払ログを見る
-          </Link>
-        </div>
-      </section>
+      </FilterBar>
+
+      {monthlyBillingMutation.isSuccess || monthlyBillingMutation.error instanceof ApiError ? (
+        <section className="upload-card dashboard-monthly-feedback">
+          {monthlyBillingMutation.isSuccess ? (
+            <p style={{ margin: 0 }}>
+              請求 {monthlyBillingMutation.data.generated_invoices} 件生成 / {monthlyBillingMutation.data.skipped_invoices} 件スキップ、
+              支払 {monthlyBillingMutation.data.generated_payouts} 件生成 / {monthlyBillingMutation.data.skipped_payouts} 件スキップ
+            </p>
+          ) : null}
+          {monthlyBillingMutation.error instanceof ApiError ? (
+            <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{monthlyBillingMutation.error.message}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="dashboard-action-row dashboard-monthly-links">
+        <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
+          請求ログを見る
+        </Link>
+        <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
+          支払ログを見る
+        </Link>
+      </div>
 
       <section className="upload-card">
         <div>

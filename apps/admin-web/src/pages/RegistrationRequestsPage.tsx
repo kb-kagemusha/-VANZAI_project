@@ -386,7 +386,7 @@ export function RegistrationRequestsPage() {
 
       {detailQuery.isLoading ? <LoadingOverlay label="申請詳細を読み込み中..." /> : null}
       {selectedDetail ? (
-        <section className="table-card" style={{ display: "grid", gap: "1rem" }}>
+        <section className="table-card registration-request-detail" style={{ display: "grid", gap: "1rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
             <div>
               <h3 style={{ margin: 0 }}>{selectedDetail.summary_name || "申請詳細"}</h3>

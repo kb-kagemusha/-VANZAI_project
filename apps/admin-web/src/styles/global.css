@@ -231,6 +231,21 @@ button {
   transform: none;
 }
 
+.side-nav.is-collapsed .nav-link.active {
+  background: rgba(255, 249, 238, 0.2);
+  border-color: rgba(255, 249, 238, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 249, 238, 0.28),
+    0 0 0 2px rgba(200, 85, 61, 0.35);
+  color: #fff;
+}
+
+.side-nav.is-collapsed .nav-link.active .nav-link-icon {
+  opacity: 1;
+  color: #fff7ed;
+  filter: drop-shadow(0 0 6px rgba(255, 249, 238, 0.65));
+}
+
 .side-nav.is-collapsed .nav-link-text {
   position: absolute;
   left: calc(100% + 0.55rem);
@@ -428,6 +443,45 @@ button {
   border-radius: 12px;
   border: 1px solid rgba(29, 39, 49, 0.15);
   background: rgba(255, 255, 255, 0.88);
+}
+
+.dashboard-period-bar {
+  align-items: end;
+}
+
+.dashboard-monthly-generate {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.dashboard-monthly-feedback {
+  padding: 0.85rem 1.1rem;
+}
+
+.dashboard-monthly-links {
+  margin-top: -0.35rem;
+}
+
+.actuals-filter-bar label {
+  flex: 1 1 calc(50% - 0.5rem);
+  max-width: calc(50% - 0.5rem);
+  min-width: 10rem;
+}
+
+.actuals-filter-bar input,
+.actuals-filter-bar select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.registration-request-detail {
+  margin-left: 5px;
+  padding: 1.15rem 1.2rem 1.2rem;
+  overflow: visible;
 }
 
 .password-input-wrapper {
