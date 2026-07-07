@@ -14,7 +14,13 @@ export function normalizePaygatePaymentMethod(value: string | null | undefined):
   if (cleaned === "現金" || lowered === "現金") {
     return "現金";
   }
-  if (/^qr\s*コード$/i.test(cleaned) || lowered === "qr" || lowered === "qrcode") {
+  if (/^qr[\s\u3000]*(?:コード|コ\s*ー\s*ド|コ一ド|コ-ド)$/i.test(cleaned) || lowered === "qr" || lowered === "qrcode") {
+    return "QRコード";
+  }
+  if (/^[o0Ｏ０][rRＲ][\s\u3000]*(?:コード|コ\s*ー\s*ド|コ一ド|コ-ド)$/i.test(cleaned)) {
+    return "QRコード";
+  }
+  if (/^ＱＲ[\s\u3000]*(?:コード|コ\s*ー\s*ド|コ一ド|コ-ド)$/.test(cleaned)) {
     return "QRコード";
   }
   if (/^クレ[ジヂ]ット(?:カード)?$/.test(cleaned)) {

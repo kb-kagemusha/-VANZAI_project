@@ -11,7 +11,7 @@ from src.services.ocr.parsers.ocr_field_confidence import build_paygate_screensh
 from src.services.ocr.parsers.paygate_amount import extract_paygate_amount
 from src.services.ocr.parsers.paygate_consensus import apply_paygate_image_consensus
 from src.services.ocr.parsers.paygate_datetime import extract_paygate_datetime, normalize_paygate_ocr_text
-from src.services.ocr.parsers.paygate_payment import normalize_paygate_payment_method
+from src.services.ocr.parsers.paygate_payment import extract_paygate_payment_method
 from src.services.ocr.parsers.paygate_receipt import extract_paygate_receipt_no
 from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
 
@@ -21,9 +21,6 @@ _RECEIPT_ANCHOR_RE = re.compile(r"[107][0-9０-９]{12,14}")
 _DATETIME_LINE_RE = re.compile(
     r"\d{4}[/,，.\-]\d{2}[/,，.\-]\d{2}[\s\n]+\d{2}:\d{2}:\d{2}"
 )
-_PAYMENT_RE = re.compile(r"決済方法[\s\n]*(\S+)")
-
-
 def _extract_transaction_no(block: str) -> str | None:
     for line in block.splitlines():
         stripped = line.strip()
@@ -70,7 +67,7 @@ def _iter_paygate_blocks(text: str) -> list[str]:
 
     for match in _RECEIPT_ANCHOR_RE.finditer(normalized):
         start = max(0, match.start() - 220)
-        end = min(len(normalized), match.end() + 40)
+        end = min(len(normalized), match.end() + 100)
         _add_block(normalized[start:end])
 
     return blocks
@@ -96,8 +93,7 @@ class PaygateScreenshotParser(BaseOcrParser):
                 has_transaction=True,
             )
             receipt_no = extract_paygate_receipt_no(block)
-            payment_match = _PAYMENT_RE.search(block)
-            payment_raw = payment_match.group(1) if payment_match else None
+            payment_method = extract_paygate_payment_method(block, ocr_result.lines)
             confidences = [line.confidence for line in ocr_result.lines if line.confidence > 0]
             avg_conf = sum(confidences) / len(confidences) if confidences else 0.5
 
@@ -112,7 +108,7 @@ class PaygateScreenshotParser(BaseOcrParser):
                 amount=amount,
                 transaction_no=transaction_no,
                 receipt_no=receipt_no,
-                payment_method=normalize_paygate_payment_method(payment_raw),
+                payment_method=payment_method,
                 confidence=avg_conf,
                 raw_payload=raw_payload,
             )
