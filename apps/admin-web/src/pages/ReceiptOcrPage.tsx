@@ -151,6 +151,29 @@ const IMAGE_VIEW_MODE_KEY = "vanzai.ocr.imageViewMode";
 const IMAGE_PAGE_SIZE_KEY = "vanzai.ocr.imagePageSize";
 const SAVED_ROW_PAGE_SIZE_KEY = "vanzai.ocr.savedRowPageSize";
 const SAVED_ROW_UI_KEY_PREFIX = "vanzai.ocr.savedRowUi";
+const OCR_DATA_SECTION_TAB_KEY_PREFIX = "vanzai.ocr.dataSectionTab";
+
+type OcrDataSectionTab = "saved" | "hq_csv" | "self_report";
+
+function readOcrDataSectionTab(sourceType: OcrSourceType): OcrDataSectionTab {
+  try {
+    const raw = window.sessionStorage.getItem(`${OCR_DATA_SECTION_TAB_KEY_PREFIX}.${sourceType}`);
+    if (raw === "saved" || raw === "hq_csv" || raw === "self_report") {
+      return raw;
+    }
+  } catch {
+    // private browsing 等
+  }
+  return "saved";
+}
+
+function writeOcrDataSectionTab(sourceType: OcrSourceType, tab: OcrDataSectionTab) {
+  try {
+    window.sessionStorage.setItem(`${OCR_DATA_SECTION_TAB_KEY_PREFIX}.${sourceType}`, tab);
+  } catch {
+    // ignore
+  }
+}
 
 type SavedRowValidationFilter = "" | "ok" | "error";
 
@@ -1066,6 +1089,7 @@ export function ReceiptOcrPage({
     () => readSavedRowUi(sourceType)?.filters ?? DEFAULT_SAVED_ROW_FILTERS,
   );
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [dataSectionTab, setDataSectionTab] = useState<OcrDataSectionTab>(() => readOcrDataSectionTab(sourceType));
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
   const [reparseProgress, setReparseProgress] = useState<OcrParseProgressState | null>(null);
@@ -2537,7 +2561,60 @@ export function ReceiptOcrPage({
         ) : null}
       </section>
 
-      <section className="panel-card page-stack">
+      {isPaygate ? (
+        <div className="ocr-saved-data-tabs ocr-data-section-tabs" role="tablist" aria-label="保存データ・突合">
+          <button
+            type="button"
+            role="tab"
+            id="ocr-data-tab-saved"
+            aria-selected={dataSectionTab === "saved"}
+            aria-controls="ocr-data-panel-saved"
+            className={`ocr-saved-data-tab${dataSectionTab === "saved" ? " is-active" : ""}`}
+            onClick={() => {
+              setDataSectionTab("saved");
+              writeOcrDataSectionTab(sourceType, "saved");
+            }}
+          >
+            保存データ
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="ocr-data-tab-hq-csv"
+            aria-selected={dataSectionTab === "hq_csv"}
+            aria-controls="ocr-data-panel-hq-csv"
+            className={`ocr-saved-data-tab${dataSectionTab === "hq_csv" ? " is-active" : ""}`}
+            onClick={() => {
+              setDataSectionTab("hq_csv");
+              writeOcrDataSectionTab(sourceType, "hq_csv");
+            }}
+          >
+            CSVとの照合
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="ocr-data-tab-self-report"
+            aria-selected={dataSectionTab === "self_report"}
+            aria-controls="ocr-data-panel-self-report"
+            className={`ocr-saved-data-tab${dataSectionTab === "self_report" ? " is-active" : ""}`}
+            onClick={() => {
+              setDataSectionTab("self_report");
+              writeOcrDataSectionTab(sourceType, "self_report");
+            }}
+          >
+            自己申告データとの比較
+          </button>
+        </div>
+      ) : null}
+
+      {!isPaygate || dataSectionTab === "saved" ? (
+      <section
+        className="panel-card page-stack"
+        role={isPaygate ? "tabpanel" : undefined}
+        id={isPaygate ? "ocr-data-panel-saved" : undefined}
+        aria-labelledby={isPaygate ? "ocr-data-tab-saved" : undefined}
+      >
         <PageHeader
           eyebrow="年月別"
           title="保存データ"
@@ -2797,6 +2874,114 @@ export function ReceiptOcrPage({
           )}
         </div>
       </section>
+      ) : null}
+
+      {isPaygate && dataSectionTab === "hq_csv" ? (
+      <section
+        className="panel-card page-stack"
+        role="tabpanel"
+        id="ocr-data-panel-hq-csv"
+        aria-labelledby="ocr-data-tab-hq-csv"
+      >
+        <PageHeader
+          eyebrow="突合"
+          title="本部CSVとの照合"
+          description="本部から送られてきたCSVと OCR 結果を突合します。列名はサンプルに合わせて調整してください。"
+        />
+        <div className="filter-row">
+          <label className="upload-file-field">
+            本部CSV
+            <input type="file" accept=".csv,text/csv" onChange={(event) => setHqFile(event.target.files?.[0] ?? null)} />
+          </label>
+          <label>
+            取引番号列
+            <input value={hqTxnColumn} onChange={(event) => setHqTxnColumn(event.target.value)} />
+          </label>
+          <label>
+            レシート番号列
+            <input value={hqReceiptColumn} onChange={(event) => setHqReceiptColumn(event.target.value)} />
+          </label>
+          <label>
+            日付列
+            <input value={hqDateColumn} onChange={(event) => setHqDateColumn(event.target.value)} />
+          </label>
+          <label>
+            金額列
+            <input value={hqAmountColumn} onChange={(event) => setHqAmountColumn(event.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!hqFile || reconcileMutation.isPending}
+            onClick={() => reconcileMutation.mutate()}
+          >
+            {reconcileMutation.isPending ? "突合中..." : "突合実行"}
+          </button>
+        </div>
+        {reconcileResult ? (
+          <div className="upload-result-grid">
+            <div>
+              <span className="upload-result-label">一致</span>
+              <strong>{reconcileResult.matched_count}</strong>
+            </div>
+            <div>
+              <span className="upload-result-label">OCRのみ</span>
+              <strong>{reconcileResult.unmatched_ocr_count}</strong>
+            </div>
+            <div>
+              <span className="upload-result-label">本部のみ</span>
+              <strong>{reconcileResult.unmatched_hq_count}</strong>
+            </div>
+            <div>
+              <span className="upload-result-label">金額差異</span>
+              <strong>{reconcileResult.amount_diff_count}</strong>
+            </div>
+          </div>
+        ) : null}
+      </section>
+      ) : null}
+
+      {isPaygate && dataSectionTab === "self_report" ? (
+      <section
+        className="panel-card page-stack"
+        role="tabpanel"
+        id="ocr-data-panel-self-report"
+        aria-labelledby="ocr-data-tab-self-report"
+      >
+        <PageHeader
+          eyebrow="比較"
+          title="自己申告データとの比較"
+          description="将来の sales_reports 連携に向けた OCR 集計ビューです。"
+        />
+        <div className="filter-row">
+          <label>
+            対象月 (YYYYMM)
+            <input
+              value={comparePeriodKey}
+              onChange={(event) => setComparePeriodKey(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="202605"
+            />
+          </label>
+        </div>
+        {compareQuery.data ? (
+          <div className="upload-result-grid">
+            <div>
+              <span className="upload-result-label">OCR行数</span>
+              <strong>{compareQuery.data.ocr_row_count}</strong>
+            </div>
+            <div>
+              <span className="upload-result-label">OCR合計</span>
+              <strong>{formatCurrency(compareQuery.data.ocr_total_amount)}</strong>
+            </div>
+            <div>
+              <span className="upload-result-label">リンク済み</span>
+              <strong>{compareQuery.data.linked_count}</strong>
+            </div>
+          </div>
+        ) : null}
+        {compareQuery.data?.message ? <p className="upload-help">{compareQuery.data.message}</p> : null}
+      </section>
+      ) : null}
 
       {reviewingRowLive ? (
         <OcrSavedRowReviewModal
@@ -3134,103 +3319,6 @@ export function ReceiptOcrPage({
             />
           </>
         ) : null}
-      </section>
-      </>
-      ) : null}
-
-      {isPaygate ? (
-      <>
-      <section className="panel-card page-stack">
-        <PageHeader
-          eyebrow="突合"
-          title="本部CSVとの照合"
-          description="本部から送られてきたCSVと OCR 結果を突合します。列名はサンプルに合わせて調整してください。"
-        />
-        <div className="filter-row">
-          <label className="upload-file-field">
-            本部CSV
-            <input type="file" accept=".csv,text/csv" onChange={(event) => setHqFile(event.target.files?.[0] ?? null)} />
-          </label>
-          <label>
-            取引番号列
-            <input value={hqTxnColumn} onChange={(event) => setHqTxnColumn(event.target.value)} />
-          </label>
-          <label>
-            レシート番号列
-            <input value={hqReceiptColumn} onChange={(event) => setHqReceiptColumn(event.target.value)} />
-          </label>
-          <label>
-            日付列
-            <input value={hqDateColumn} onChange={(event) => setHqDateColumn(event.target.value)} />
-          </label>
-          <label>
-            金額列
-            <input value={hqAmountColumn} onChange={(event) => setHqAmountColumn(event.target.value)} />
-          </label>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!hqFile || reconcileMutation.isPending}
-            onClick={() => reconcileMutation.mutate()}
-          >
-            {reconcileMutation.isPending ? "突合中..." : "突合実行"}
-          </button>
-        </div>
-        {reconcileResult ? (
-          <div className="upload-result-grid">
-            <div>
-              <span className="upload-result-label">一致</span>
-              <strong>{reconcileResult.matched_count}</strong>
-            </div>
-            <div>
-              <span className="upload-result-label">OCRのみ</span>
-              <strong>{reconcileResult.unmatched_ocr_count}</strong>
-            </div>
-            <div>
-              <span className="upload-result-label">本部のみ</span>
-              <strong>{reconcileResult.unmatched_hq_count}</strong>
-            </div>
-            <div>
-              <span className="upload-result-label">金額差異</span>
-              <strong>{reconcileResult.amount_diff_count}</strong>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel-card page-stack">
-        <PageHeader
-          eyebrow="比較"
-          title="自己申告データとの比較"
-          description="将来の sales_reports 連携に向けた OCR 集計ビューです。"
-        />
-        <div className="filter-row">
-          <label>
-            対象月 (YYYYMM)
-            <input
-              value={comparePeriodKey}
-              onChange={(event) => setComparePeriodKey(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="202605"
-            />
-          </label>
-        </div>
-        {compareQuery.data ? (
-          <div className="upload-result-grid">
-            <div>
-              <span className="upload-result-label">OCR行数</span>
-              <strong>{compareQuery.data.ocr_row_count}</strong>
-            </div>
-            <div>
-              <span className="upload-result-label">OCR合計</span>
-              <strong>{formatCurrency(compareQuery.data.ocr_total_amount)}</strong>
-            </div>
-            <div>
-              <span className="upload-result-label">リンク済み</span>
-              <strong>{compareQuery.data.linked_count}</strong>
-            </div>
-          </div>
-        ) : null}
-        {compareQuery.data?.message ? <p className="upload-help">{compareQuery.data.message}</p> : null}
       </section>
       </>
       ) : null}

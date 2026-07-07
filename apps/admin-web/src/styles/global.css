@@ -2442,6 +2442,10 @@ button {
   padding-bottom: 0.25rem;
 }
 
+.ocr-data-section-tabs {
+  margin-top: 0.25rem;
+}
+
 .ocr-saved-data-tab {
   display: inline-flex;
   align-items: center;
