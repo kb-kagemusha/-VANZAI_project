@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from src.services.ocr.models import ParsedOcrRow
+from src.services.ocr.parsers.paygate_payment import count_payment_labels_in_block
 from src.services.ocr.validation import validate_parsed_row
 
 
@@ -33,6 +34,11 @@ def paygate_row_completeness_score(row: ParsedOcrRow) -> float:
     score -= len(validate_parsed_row(row)) * 2.0
     block = (row.raw_payload or {}).get("block", "")
     if isinstance(block, str):
+        label_count = count_payment_labels_in_block(block)
+        if label_count > 1:
+            score -= 4.0
+        if row.transaction_no and block.strip().startswith("20"):
+            score += 1.5
         score += min(len(block) / 100.0, 2.0)
     return score
 

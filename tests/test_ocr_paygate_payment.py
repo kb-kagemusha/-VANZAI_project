@@ -114,3 +114,81 @@ QRコード
     by_txn = {row.transaction_no: row for row in rows}
     assert by_txn["1281155"].payment_method == "QRコード"
     assert by_txn["1281152"].payment_method == "現金"
+
+
+def test_paygate_screenshot_parser_keeps_qr_when_prior_row_cash_bleeds_into_block():
+    """Regression: partial prior row + wide receipt block must not overwrite QR with 現金."""
+    parser = PaygateScreenshotParser()
+    text = """
+決済方法
+現金
+2026/07/02 20:44:00
+980
+取引番号 1281155
+レシート番号 7829926397319
+決済方法
+QRコード
+2026/07/02 20:38:23
+980
+取引番号 1281152
+レシート番号 7829923037319
+決済方法
+現金
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    by_txn = {row.transaction_no: row for row in rows}
+    assert by_txn["1281155"].payment_method == "QRコード"
+    assert by_txn["1281152"].payment_method == "現金"
+
+
+def test_extract_paygate_payment_method_prefers_qr_over_later_cash_in_region():
+    block = """
+2026/07/02 20:44:00
+取引番号 1281155
+決済方法
+2026/07/02 20:38:23
+QRコード
+現金
+"""
+    assert extract_paygate_payment_method(block, transaction_no="1281155") == "QRコード"
+
+
+def test_payment_method_confidence_uses_paired_value_line_not_other_rows():
+    from src.services.ocr.models import OcrEngineResult, ParsedOcrRow
+    from src.services.ocr.parsers.ocr_field_confidence import build_paygate_screenshot_field_confidence
+
+    block = """
+2026/07/02 20:44:00
+取引番号 1281155
+決済方法
+QRコード
+2026/07/02 20:38:23
+決済方法
+現金
+"""
+    lines = [
+        OcrTextLine(text="決済方法", confidence=0.99, box=[[10, 100], [90, 100], [90, 120], [10, 120]]),
+        OcrTextLine(text="QRコード", confidence=0.88, box=[[250, 100], [340, 100], [340, 120], [250, 120]]),
+        OcrTextLine(text="決済方法", confidence=0.99, box=[[10, 130], [90, 130], [90, 150], [10, 150]]),
+        OcrTextLine(text="現金", confidence=0.99, box=[[250, 130], [300, 130], [300, 150], [250, 150]]),
+    ]
+    ocr = OcrEngineResult(lines=lines, full_text="\n".join(line.text for line in lines))
+    parsed = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        transaction_no="1281155",
+        payment_method="QRコード",
+        raw_payload={"block": block},
+    )
+    field_confidence, field_sources = build_paygate_screenshot_field_confidence(ocr, parsed)
+    assert field_confidence["payment_method"] == 0.88
+    assert field_sources["payment_method"] == "ocr_line_direct"
+
+    parsed_wrong = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        transaction_no="1281155",
+        payment_method="現金",
+        raw_payload={"block": block},
+    )
+    wrong_conf, wrong_source = build_paygate_screenshot_field_confidence(ocr, parsed_wrong)
+    assert wrong_conf["payment_method"] < 0.85
+    assert wrong_source["payment_method"] == "ocr_inferred"

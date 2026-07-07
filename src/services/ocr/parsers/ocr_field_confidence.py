@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.services.ocr.models import OcrEngineResult, OcrTextLine, ParsedOcrRow
+from src.services.ocr.parsers.paygate_payment import payment_method_confidence_from_lines
 
 # Display tiers (UI): >=0.97 black, 0.85-0.969 blue, <0.85 orange
 CONFIDENCE_SOURCE_WEIGHTS: dict[str, float] = {
@@ -215,12 +216,16 @@ def build_paygate_screenshot_field_confidence(
             field_sources["receipt_no"] = "ocr_line_direct" if has_label else "ocr_inferred"
 
     if parsed.payment_method:
-        payment_lines = _lines_matching_snippets(lines, "決済方法", parsed.payment_method)
-        payment_conf = _confidence_from_lines(payment_lines)
+        payment_conf, payment_source = payment_method_confidence_from_lines(
+            lines,
+            block,
+            parsed.payment_method,
+            parsed.transaction_no,
+        )
         if payment_conf is not None:
-            has_label = any("決済方法" in line.text for line in payment_lines)
-            field_confidence["payment_method"] = payment_conf
-            field_sources["payment_method"] = "ocr_line_direct" if has_label else "ocr_inferred"
+            weight = CONFIDENCE_SOURCE_WEIGHTS.get(payment_source, CONFIDENCE_SOURCE_WEIGHTS["ocr_inferred"])
+            field_confidence["payment_method"] = clamp_confidence(payment_conf * weight)
+            field_sources["payment_method"] = payment_source
 
     if parsed.confidence:
         field_confidence.setdefault("_document_avg", clamp_confidence(float(parsed.confidence)))

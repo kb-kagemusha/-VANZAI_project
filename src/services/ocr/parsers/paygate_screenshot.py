@@ -93,7 +93,11 @@ class PaygateScreenshotParser(BaseOcrParser):
                 has_transaction=True,
             )
             receipt_no = extract_paygate_receipt_no(block)
-            payment_method = extract_paygate_payment_method(block, ocr_result.lines)
+            payment_method = extract_paygate_payment_method(
+                block,
+                ocr_result.lines,
+                transaction_no=transaction_no,
+            )
             confidences = [line.confidence for line in ocr_result.lines if line.confidence > 0]
             avg_conf = sum(confidences) / len(confidences) if confidences else 0.5
 
