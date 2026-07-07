@@ -2580,14 +2580,42 @@ button {
   margin-top: 0.25rem;
 }
 
-.ocr-source-type-tabs {
-  margin-bottom: 0.15rem;
+.ocr-data-section-shell {
+  border: 1.5px solid #475569;
+  border-radius: 0.65rem;
+  overflow: hidden;
+  background: #fff;
 }
 
-.ocr-saved-data-tabs + [role="tabpanel"].panel-card {
-  border-top-left-radius: 0;
-  border-top: 2px solid #334155;
+.ocr-data-section-shell .ocr-data-section-tabs {
   margin-top: 0;
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(180deg, #edf1f5 0%, #e2e8f0 100%);
+}
+
+.ocr-data-section-shell .ocr-saved-data-tab {
+  margin-bottom: 0;
+}
+
+.ocr-data-section-shell .ocr-saved-data-tab.is-active {
+  border-bottom-color: #fff;
+  margin-bottom: -1px;
+  padding-bottom: calc(0.52rem + 1px);
+  z-index: 1;
+}
+
+.ocr-data-section-panel {
+  background: #fff;
+  padding: 1rem 1.2rem 1.2rem;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ocr-source-type-tabs {
+  margin-bottom: 0.15rem;
 }
 
 .ocr-saved-data-tab {

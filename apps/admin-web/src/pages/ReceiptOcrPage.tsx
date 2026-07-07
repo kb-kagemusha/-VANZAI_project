@@ -2410,6 +2410,7 @@ export function ReceiptOcrPage({
         </div>
       </div>
 
+      <div className="ocr-data-section-shell">
       <div className="ocr-saved-data-tabs ocr-data-section-tabs" role="tablist" aria-label="OCRデータ">
         <button
           type="button"
@@ -2475,7 +2476,7 @@ export function ReceiptOcrPage({
 
       {dataSectionTab === "uploaded_images" ? (
       <section
-        className="panel-card page-stack"
+        className="ocr-data-section-panel page-stack"
         role="tabpanel"
         id="ocr-data-panel-uploaded-images"
         aria-labelledby="ocr-data-tab-uploaded-images"
@@ -2643,7 +2644,7 @@ export function ReceiptOcrPage({
 
       {dataSectionTab === "saved" ? (
       <section
-        className="panel-card page-stack"
+        className="ocr-data-section-panel page-stack"
         role="tabpanel"
         id="ocr-data-panel-saved"
         aria-labelledby="ocr-data-tab-saved"
@@ -2911,7 +2912,7 @@ export function ReceiptOcrPage({
 
       {isPaygate && dataSectionTab === "hq_csv" ? (
       <section
-        className="panel-card page-stack"
+        className="ocr-data-section-panel page-stack"
         role="tabpanel"
         id="ocr-data-panel-hq-csv"
         aria-labelledby="ocr-data-tab-hq-csv"
@@ -2976,7 +2977,7 @@ export function ReceiptOcrPage({
 
       {isPaygate && dataSectionTab === "self_report" ? (
       <section
-        className="panel-card page-stack"
+        className="ocr-data-section-panel page-stack"
         role="tabpanel"
         id="ocr-data-panel-self-report"
         aria-labelledby="ocr-data-tab-self-report"
@@ -3015,6 +3016,7 @@ export function ReceiptOcrPage({
         {compareQuery.data?.message ? <p className="upload-help">{compareQuery.data.message}</p> : null}
       </section>
       ) : null}
+      </div>
 
       {reviewingRowLive ? (
         <OcrSavedRowReviewModal
