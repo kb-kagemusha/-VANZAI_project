@@ -48,7 +48,7 @@ export function OcrUploadLinkPanel() {
       <h2>外部アップロードリンク</h2>
       <p className="muted-text">現場向けの共有URLを発行します。発行直後のみURLをコピーできます。</p>
 
-      <div className="form-grid">
+      <div className="upload-form-grid ocr-upload-link-form">
         <label className="form-field">
           <span>ラベル</span>
           <input
@@ -83,7 +83,7 @@ export function OcrUploadLinkPanel() {
             <option value="paygate_settlement">精算レシート</option>
           </select>
         </label>
-        <label className="form-field">
+        <label className="form-field ocr-upload-link-form-memo">
           <span>外部向けメモ</span>
           <textarea
             value={form.public_memo ?? ""}
@@ -92,22 +92,26 @@ export function OcrUploadLinkPanel() {
         </label>
       </div>
 
-      <button
-        type="button"
-        className="primary-button"
-        disabled={createMutation.isPending}
-        onClick={() => createMutation.mutate()}
-      >
-        {createMutation.isPending ? "発行中..." : "リンクを発行"}
-      </button>
+      <div className="registration-action-row">
+        <button
+          type="button"
+          className="primary-button registration-action-button"
+          disabled={createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+        >
+          {createMutation.isPending ? "発行中..." : "リンクを発行"}
+        </button>
+      </div>
 
       {createdUrl ? (
         <div className="registration-link-card">
           <p>発行URL（この画面を閉じると再表示できません）:</p>
           <code>{createdUrl}</code>
-          <button type="button" className="secondary-button" onClick={() => navigator.clipboard.writeText(createdUrl)}>
-            コピー
-          </button>
+          <div className="registration-action-row">
+            <button type="button" className="secondary-button registration-action-button" onClick={() => navigator.clipboard.writeText(createdUrl)}>
+              コピー
+            </button>
+          </div>
         </div>
       ) : null}
 
