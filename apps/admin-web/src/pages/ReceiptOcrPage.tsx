@@ -2343,8 +2343,6 @@ export function ReceiptOcrPage({
         <PageHeader eyebrow="OCR" title={pageTitle} description={pageDescription} />
       ) : null}
 
-      <OcrUploadLinkPanel />
-
       <section className="panel-card ocr-upload-grid">
         <DropZone
           label={isPaygate ? "Paygateスクリーンショット" : "精算レシート"}
@@ -2371,6 +2369,8 @@ export function ReceiptOcrPage({
         </div>
         {formError ? <p className="form-error">{formError}</p> : null}
       </section>
+
+      <OcrUploadLinkPanel />
 
       <section className="panel-card page-stack">
         <div className="ocr-section-header">

@@ -48,8 +48,10 @@ export function OcrUploadLinkPanel() {
   return (
     <section className="panel-card page-stack">
       <h2>外部アップロードリンク</h2>
-      <p className="muted-text">現場向けの共有URLを発行します。発行直後のみURLをコピーできます。</p>
-      <PublicOcrUploadLimitNote className="public-form-limit-note ocr-upload-link-limit-note" />
+      <p className="muted-text">
+        現場向けの共有URLを発行します。発行直後のみURLをコピーできます。管理画面からの直接アップロードに枚数上限はありません。
+      </p>
+      <PublicOcrUploadLimitNote className="public-form-limit-note ocr-upload-link-limit-note" variant="admin-context" />
 
       <div className="ocr-upload-link-form">
         <label className="form-field">
@@ -92,7 +94,7 @@ export function OcrUploadLinkPanel() {
       {createdUrl ? (
         <div className="registration-link-card">
           <p>発行URL（この画面を閉じると再表示できません）:</p>
-          <PublicOcrUploadLimitNote className="public-form-limit-note" />
+          <PublicOcrUploadLimitNote className="public-form-limit-note" variant="admin-context" />
           <code>{createdUrl}</code>
           <div className="registration-action-row">
             <button type="button" className="secondary-button registration-action-button" onClick={() => navigator.clipboard.writeText(createdUrl)}>
