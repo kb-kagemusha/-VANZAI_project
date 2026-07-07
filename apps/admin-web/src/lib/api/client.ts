@@ -1288,12 +1288,12 @@ export function accessPublicOcrUpload(token: string) {
 
 export function uploadPublicOcrImage(params: {
   sessionToken: string;
-  sourceType: OcrSourceType;
   file: File;
   publicUploaderName?: string | null;
+  sourceType?: OcrSourceType | "auto";
 }) {
   const formData = new FormData();
-  formData.set("source_type", params.sourceType);
+  formData.set("source_type", params.sourceType ?? "auto");
   formData.set("file", params.file);
   if (params.publicUploaderName) {
     formData.set("public_uploader_name", params.publicUploaderName);

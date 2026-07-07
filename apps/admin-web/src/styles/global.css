@@ -1073,6 +1073,57 @@ button {
   line-height: 1.5;
 }
 
+.public-ocr-upload-overlay-error {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.public-ocr-upload-overlay-panel.is-error .public-ocr-upload-overlay-title {
+  color: #b42318;
+}
+
+.public-form-page {
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 1.25rem 1rem 2rem;
+  padding-left: calc(1rem + 3px);
+}
+
+.public-form-page h1 {
+  margin: 0 0 0.75rem;
+}
+
+.public-form-lead {
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+
+.public-form-note {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.public-form-note p {
+  margin: 0 0 0.45rem;
+}
+
+.public-ocr-upload-card .form-field {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.public-ocr-upload-card .form-field input,
+.public-ocr-upload-card .form-field select {
+  width: 100%;
+  padding: 0.8rem calc(0.95rem + 3px);
+  border-radius: 12px;
+  border: 1px solid rgba(29, 39, 49, 0.15);
+  background: #fff;
+}
+
 .form-success {
   color: #027a48;
   margin: 0;

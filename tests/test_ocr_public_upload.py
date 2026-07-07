@@ -104,6 +104,17 @@ def test_uploader_display_name_rules():
     assert OcrService._uploader_display_name(None, "external", "public_link") is None
 
 
+def test_classifier_prefers_paygate_screenshot_when_payment_method_label_present():
+    from src.services.ocr.models import OcrEngineResult
+    from src.services.ocr.public_upload_classifier import classify_public_upload_source_type
+
+    ocr = OcrEngineResult(
+        full_text="2026/07/07 10:00:00 取引番号 1234567 決済方法 現金 金額 1,000",
+        lines=[],
+    )
+    assert classify_public_upload_source_type(ocr) == "paygate_screenshot"
+
+
 def test_public_upload_requires_uploader_name(db_session, monkeypatch):
     monkeypatch.setenv("OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED", "false")
     from io import BytesIO

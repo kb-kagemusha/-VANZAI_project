@@ -8,8 +8,12 @@ import type { OcrPublicUploadAccessResponse } from "../types/api";
 
 const SESSION_STORAGE_KEY = "vanzai.ocr_upload_session";
 const SESSION_META_STORAGE_KEY = "vanzai.ocr_upload_session_meta";
+const UPLOADER_NAME_STORAGE_KEY = "vanzai.ocr_upload_uploader_name";
 
-type SourceType = "paygate_screenshot" | "paygate_settlement" | "";
+type OverlayState =
+  | { kind: "uploading" }
+  | { kind: "error"; message: string }
+  | null;
 
 function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null {
   const raw = window.sessionStorage.getItem(SESSION_META_STORAGE_KEY);
@@ -23,13 +27,8 @@ function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_s
   }
 }
 
-function resolveInitialSourceType(
-  meta: Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null,
-): SourceType {
-  if (meta?.default_source_type === "paygate_screenshot" || meta?.default_source_type === "paygate_settlement") {
-    return meta.default_source_type;
-  }
-  return "";
+function readStoredUploaderName(): string {
+  return window.localStorage.getItem(UPLOADER_NAME_STORAGE_KEY) ?? "";
 }
 
 function persistSession(data: OcrPublicUploadAccessResponse) {
@@ -43,6 +42,16 @@ function persistSession(data: OcrPublicUploadAccessResponse) {
   );
 }
 
+function fixedSourceTypeLabel(defaultSourceType: string | undefined): string | null {
+  if (defaultSourceType === "paygate_screenshot") {
+    return "Paygateスクリーンショット";
+  }
+  if (defaultSourceType === "paygate_settlement") {
+    return "精算レシート";
+  }
+  return null;
+}
+
 export function PublicOcrUploadPage() {
   const [searchParams] = useSearchParams();
   const initialToken = searchParams.get("token") ?? "";
@@ -53,14 +62,19 @@ export function PublicOcrUploadPage() {
   const [accessData, setAccessData] = useState<Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null>(
     storedMeta,
   );
-  const [sourceType, setSourceType] = useState<SourceType>(() => resolveInitialSourceType(storedMeta));
-  const [uploaderName, setUploaderName] = useState("");
+  const [uploaderName, setUploaderName] = useState(readStoredUploaderName);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<OverlayState>(null);
 
-  const resetSourceTypeForLink = (meta: Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null) => {
-    setSourceType(resolveInitialSourceType(meta));
-  };
+  useEffect(() => {
+    const trimmed = uploaderName.trim();
+    if (trimmed) {
+      window.localStorage.setItem(UPLOADER_NAME_STORAGE_KEY, trimmed);
+    } else {
+      window.localStorage.removeItem(UPLOADER_NAME_STORAGE_KEY);
+    }
+  }, [uploaderName]);
 
   const accessMutation = useMutation({
     mutationFn: () => accessPublicOcrUpload(initialToken),
@@ -69,10 +83,6 @@ export function PublicOcrUploadPage() {
       persistSession(data);
       setSessionToken(data.session_token);
       setAccessData({
-        default_source_type: data.default_source_type,
-        public_memo: data.public_memo,
-      });
-      resetSourceTypeForLink({
         default_source_type: data.default_source_type,
         public_memo: data.public_memo,
       });
@@ -87,30 +97,29 @@ export function PublicOcrUploadPage() {
       if (!sessionToken) {
         throw new Error("セッションがありません");
       }
-      if (!sourceType) {
-        throw new Error("画像種別を選択してください");
-      }
       return uploadPublicOcrImage({
         sessionToken,
-        sourceType,
         file,
         publicUploaderName: uploaderName.trim() || null,
       });
     },
+    onMutate: () => {
+      setOverlay({ kind: "uploading" });
+      setMessage(null);
+      setError(null);
+    },
     onSuccess: (result) => {
+      setOverlay(null);
       setError(null);
       if (result.reused_existing) {
         setMessage("この画像は既に登録済みです。受付が完了しました。");
       } else {
         setMessage(result.message);
       }
-      if (accessData?.default_source_type === "required") {
-        setSourceType("");
-      }
     },
     onError: (err) => {
-      setMessage(null);
-      setError(err instanceof ApiError ? err.message : "アップロードに失敗しました");
+      const message = err instanceof ApiError ? err.message : "アップロードに失敗しました";
+      setOverlay({ kind: "error", message });
     },
   });
 
@@ -119,12 +128,6 @@ export function PublicOcrUploadPage() {
       accessMutation.mutate();
     }
   }, [initialToken, sessionToken, accessMutation, accessData]);
-
-  useEffect(() => {
-    if (!initialToken && sessionToken && accessData) {
-      resetSourceTypeForLink(accessData);
-    }
-  }, [initialToken, sessionToken, accessData]);
 
   const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -137,18 +140,12 @@ export function PublicOcrUploadPage() {
       setError("お名前を入力してください");
       return;
     }
-    if (!sourceType) {
-      setMessage(null);
-      setError("画像の種類を選択してください");
-      return;
-    }
     uploadMutation.mutate(file);
   };
 
-  const sourceTypeLocked =
-    accessData?.default_source_type === "paygate_screenshot" ||
-    accessData?.default_source_type === "paygate_settlement";
-  const canUpload = Boolean(uploaderName.trim() && sourceType);
+  const fixedTypeLabel = fixedSourceTypeLabel(accessData?.default_source_type);
+  const autoDetect = accessData?.default_source_type === "required" || !fixedTypeLabel;
+  const canUpload = Boolean(uploaderName.trim());
 
   if (initialToken && accessMutation.isPending) {
     return (
@@ -172,7 +169,7 @@ export function PublicOcrUploadPage() {
       <h1>OCR 画像アップロード</h1>
       {accessData?.public_memo ? <p className="public-form-lead">{accessData.public_memo}</p> : null}
 
-      <section className={`panel-card page-stack public-ocr-upload-card${uploadMutation.isPending ? " is-uploading" : ""}`}>
+      <section className={`panel-card page-stack public-ocr-upload-card${overlay ? " is-uploading" : ""}`}>
         <label className="form-field">
           <span>お名前（必須）</span>
           <input
@@ -180,28 +177,20 @@ export function PublicOcrUploadPage() {
             onChange={(e) => setUploaderName(e.target.value)}
             placeholder="例: 田中"
             required
-            disabled={uploadMutation.isPending}
+            disabled={Boolean(overlay)}
           />
         </label>
 
-        <label className="form-field">
-          <span>画像の種類</span>
-          <select
-            value={sourceType}
-            onChange={(e) => setSourceType(e.target.value as SourceType)}
-            disabled={sourceTypeLocked || uploadMutation.isPending}
-          >
-            {!sourceTypeLocked ? <option value="">選択してください</option> : null}
-            <option value="paygate_screenshot">Paygateスクリーンショット</option>
-            <option value="paygate_settlement">精算レシート</option>
-          </select>
-        </label>
+        {fixedTypeLabel ? (
+          <p className="public-form-note">
+            このリンクの画像種別: <strong>{fixedTypeLabel}</strong>
+          </p>
+        ) : null}
 
-        {sourceType === "paygate_screenshot" ? (
+        {autoDetect ? (
           <div className="public-form-note">
-            <p>
-              正しい画像の例: Paygateの取引履歴画面で、各行に「決済方法」（現金・QRコード・クレジット等）が表示されているスクリーンショット
-            </p>
+            <p>画像の種類は自動判別します。</p>
+            <p>Paygateの画面キャプチャは、各行に「決済方法」（現金・QRコード・クレジット等）が表示されている必要があります。</p>
           </div>
         ) : null}
 
@@ -211,7 +200,7 @@ export function PublicOcrUploadPage() {
             type="file"
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
-            disabled={uploadMutation.isPending || !canUpload}
+            disabled={Boolean(overlay) || !canUpload}
             onChange={onFileChange}
           />
         </label>
@@ -220,12 +209,28 @@ export function PublicOcrUploadPage() {
         {error ? <p className="form-error">{error}</p> : null}
       </section>
 
-      {uploadMutation.isPending ? (
-        <div className="public-ocr-upload-overlay" role="status" aria-live="assertive" aria-busy="true">
-          <div className="public-ocr-upload-overlay-panel">
-            <div className="loading-spinner public-ocr-upload-spinner" />
-            <p className="public-ocr-upload-overlay-title">アップロード中</p>
-            <p className="public-ocr-upload-overlay-note">通信が完了するまでこの画面を閉じないでください</p>
+      {overlay ? (
+        <div className="public-ocr-upload-overlay" role="alertdialog" aria-modal="true" aria-live="assertive">
+          <div className={`public-ocr-upload-overlay-panel${overlay.kind === "error" ? " is-error" : ""}`}>
+            {overlay.kind === "uploading" ? (
+              <>
+                <div className="loading-spinner public-ocr-upload-spinner" aria-hidden="true" />
+                <p className="public-ocr-upload-overlay-title">アップロード中</p>
+                <p className="public-ocr-upload-overlay-note">通信が完了するまでこの画面を閉じないでください</p>
+              </>
+            ) : (
+              <>
+                <p className="public-ocr-upload-overlay-title">アップロードできませんでした</p>
+                <p className="public-ocr-upload-overlay-note public-ocr-upload-overlay-error">{overlay.message}</p>
+                <button
+                  type="button"
+                  className="primary-button registration-action-button"
+                  onClick={() => setOverlay(null)}
+                >
+                  閉じる
+                </button>
+              </>
+            )}
           </div>
         </div>
       ) : null}

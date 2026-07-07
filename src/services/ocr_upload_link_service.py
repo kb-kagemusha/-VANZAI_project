@@ -21,7 +21,9 @@ from src.models.ocr import (
 )
 from src.services.audit import AuditService
 from src.services.document_storage import ObjectStorage
+from src.services.ocr.models import OcrEngineResult
 from src.services.ocr.paygate_screenshot_gate import evaluate_paygate_screenshot_gate
+from src.services.ocr.public_upload_classifier import PUBLIC_AUTO_SOURCE_TYPE, detect_public_upload_source_type
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES
 from src.services.ocr.upload_validation import validate_upload_image_bytes
 from src.services.ocr_service import OcrService, build_ocr_object_key
@@ -221,6 +223,27 @@ class OcrUploadLinkService:
             )
         ).scalar_one()
 
+    def _resolve_public_source_type(
+        self,
+        *,
+        link: OcrUploadLink,
+        client_source_type: str,
+        file_bytes: bytes,
+    ) -> tuple[str, OcrEngineResult | None, str]:
+        if link.default_source_type in ("paygate_screenshot", "paygate_settlement"):
+            return link.default_source_type, None, "link_default"
+
+        if client_source_type not in {PUBLIC_AUTO_SOURCE_TYPE, "", *VALID_SOURCE_TYPES}:
+            raise ValueError("invalid_source_type")
+
+        if link.default_source_type == "required" or client_source_type in {PUBLIC_AUTO_SOURCE_TYPE, ""}:
+            return detect_public_upload_source_type(self.session, file_bytes)
+
+        if client_source_type in VALID_SOURCE_TYPES:
+            return client_source_type, None, "client_selected"
+
+        return detect_public_upload_source_type(self.session, file_bytes)
+
     def handle_public_upload(
         self,
         *,
@@ -232,7 +255,7 @@ class OcrUploadLinkService:
         client_ip: str | None,
         user_agent: str | None,
     ) -> dict:
-        if source_type not in VALID_SOURCE_TYPES:
+        if source_type not in {*VALID_SOURCE_TYPES, PUBLIC_AUTO_SOURCE_TYPE, ""}:
             raise ValueError("invalid_source_type")
 
         normalized_uploader_name = (public_uploader_name or "").strip()
@@ -250,6 +273,12 @@ class OcrUploadLinkService:
         if not validation.ok:
             raise ValueError(validation.error_code or "invalid_file")
 
+        source_type, preview_ocr, detect_reason = self._resolve_public_source_type(
+            link=link,
+            client_source_type=source_type,
+            file_bytes=file_bytes,
+        )
+
         sha256 = hashlib.sha256(file_bytes).hexdigest()
         existing = self.session.execute(
             select(OcrSourceImage).where(OcrSourceImage.sha256 == sha256)
@@ -259,7 +288,11 @@ class OcrUploadLinkService:
         gate_payment_method_count: int | None = None
 
         if existing is None and source_type == "paygate_screenshot":
-            gate = evaluate_paygate_screenshot_gate(self.session, file_bytes)
+            gate = evaluate_paygate_screenshot_gate(
+                self.session,
+                file_bytes,
+                ocr_result=preview_ocr,
+            )
             gate_skipped_reason = gate.skip_reason
             gate_payment_method_count = gate.payment_method_count
             if gate.rejected:

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.api.deps import get_db
 from src.api.schemas import OcrPublicUploadAccessResponse, OcrPublicUploadResponse
+from src.services.ocr.public_upload_classifier import PUBLIC_AUTO_SOURCE_TYPE
 from src.services.ocr.parsers.paygate_payment import PAYGATE_SCREENSHOT_MISSING_PAYMENT_METHOD_MESSAGE
 from src.services.ocr.upload_validation import HEIC_REJECTION_MESSAGE
 from src.services.ocr_upload_link_service import OcrUploadLinkService
@@ -67,7 +68,7 @@ def access_public_ocr_upload(
 @router.post("/public/ocr-upload/images", status_code=202)
 async def upload_public_ocr_image(
     request: Request,
-    source_type: str = Form(...),
+    source_type: str = Form(PUBLIC_AUTO_SOURCE_TYPE),
     file: UploadFile = File(...),
     public_uploader_name: str | None = Form(None),
     authorization: str | None = Header(None),
