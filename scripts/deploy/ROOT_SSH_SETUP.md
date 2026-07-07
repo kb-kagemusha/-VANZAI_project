@@ -1,18 +1,33 @@
 # VPS root 初回セットアップ（SSH 鍵 + systemd）
 
-`vanzai` には SSH 鍵あり。`root` には鍵なし・パスワードログイン可、と想定。
+`vanzai` には SSH 鍵あり。`root` への **SSH パスワードログインは無効**（`Permission denied (publickey)`）のため、**vanzai で入ってから `su -`** する。
 
 ---
 
-## 方法 A: パスワードで root SSH（いちばん簡単）
+## 方法 A: vanzai 経由で root になる（推奨・今すぐできる）
 
-PowerShell で対話的に（パスワード入力が求められる）:
+### A-1. PowerShell で vanzai に接続
 
 ```powershell
-ssh root@220.158.28.35
+ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35
 ```
 
-ログイン後:
+- `-i` … 秘密鍵ファイルを指定（パスワード入力なしでログイン）
+- 初回は `Are you sure you want to continue connecting (yes/no)?` → `yes`
+
+`ssh root@...` だけだと鍵を送らないため **Permission denied (publickey)** になる。
+
+### A-2. VPS 上で root に切り替え
+
+```bash
+su -
+```
+
+ここで **root パスワード**を入力（SSH ではなくサーバー内の切り替えなのでパスワードが効く）。
+
+プロンプトが `root@...#` になれば OK。
+
+### A-3. セットアップスクリプト実行
 
 ```bash
 cd /var/www/vanzai
@@ -20,51 +35,57 @@ git fetch origin && git reset --hard origin/feature/2026-03-31-next-work
 bash scripts/deploy/04_root_setup_systemd.sh
 ```
 
+### A-4. 確認して抜ける
+
+```bash
+systemctl is-active vanzai-ocr-worker
+systemctl is-active vanzai-api
+exit          # root → vanzai
+exit          # SSH 終了
+```
+
 ---
 
-## 方法 B: root に vanzai と同じ鍵を登録（以降は自動化可）
+## 方法 B: root に SSH 鍵を登録（以降 `ssh root@...` が使える）
 
-### B-1. 公開鍵をコピー（ローカル）
+方法 A の A-2 まで進んだあと、root シェルで:
+
+```bash
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+nano /root/.ssh/authorized_keys
+```
+
+別の PowerShell ウィンドウで公開鍵を表示してコピー:
 
 ```powershell
 Get-Content "$env:USERPROFILE\.ssh\vanzai_vps.pub"
 ```
 
-表示された 1 行（`ssh-ed25519 AAAA... vanzai-vps`）をコピー。
-
-### B-2. vanzai 経由で root に登録
-
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35
-```
-
-VPS 上:
+`nano` に 1 行貼り付け → `Ctrl+O` Enter → `Ctrl+X`。
 
 ```bash
-su -
-# root パスワードを入力
-
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
-nano /root/.ssh/authorized_keys
-# 公開鍵 1 行を貼り付けて保存
-
 chmod 600 /root/.ssh/authorized_keys
-exit   # root を抜ける
-exit   # SSH を抜ける
+exit
 ```
 
-### B-3. root 鍵ログインの確認
+ローカル PowerShell で確認:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" root@220.158.28.35 "whoami"
 ```
 
-`root` と表示されれば OK。続けて:
+`root` と出れば、次回から:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" root@220.158.28.35 "bash /var/www/vanzai/scripts/deploy/04_root_setup_systemd.sh"
 ```
+
+---
+
+## 方法 C（旧・通常は不可）: パスワードだけで root SSH
+
+本 VPS はセキュリティ設定で **root の SSH パスワードログインは無効**。`ssh root@220.158.28.35` は鍵なしでは失敗する。
 
 ---
 

@@ -25,6 +25,9 @@ sleep 1
 systemctl status vanzai-ocr-worker --no-pager || true
 
 echo "[2/3] vanzai-api を systemd で再起動..."
+# 旧 nohup uvicorn が 8000 を掴んでいると systemd 起動が Address already in use で失敗する
+pkill -f 'uvicorn src.api.main' 2>/dev/null || true
+sleep 2
 systemctl enable vanzai-api
 systemctl restart vanzai-api
 sleep 2
