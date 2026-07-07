@@ -1296,6 +1296,26 @@ button {
   margin: 0 0 0.75rem;
 }
 
+.public-ocr-upload-label {
+  margin: 0 0 0.5rem;
+  color: #2563eb;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.public-ocr-upload-memo {
+  margin: 0 0 1rem;
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.public-ocr-upload-limit-note-bottom {
+  margin: 1rem 0 0;
+}
+
 .public-form-lead {
   color: var(--muted);
   margin: 0 0 1rem;

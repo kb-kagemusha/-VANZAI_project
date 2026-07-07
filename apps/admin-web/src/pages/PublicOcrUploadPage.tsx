@@ -29,13 +29,13 @@ type OverlayState = {
   total: number;
 } | null;
 
-function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null {
+function readStoredSessionMeta(): Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label"> | null {
   const raw = window.sessionStorage.getItem(SESSION_META_STORAGE_KEY);
   if (!raw) {
     return null;
   }
   try {
-    return JSON.parse(raw) as Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo">;
+    return JSON.parse(raw) as Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label">;
   } catch {
     return null;
   }
@@ -52,6 +52,7 @@ function persistSession(data: OcrPublicUploadAccessResponse) {
     JSON.stringify({
       default_source_type: data.default_source_type,
       public_memo: data.public_memo,
+      label: data.label,
     }),
   );
 }
@@ -77,7 +78,7 @@ export function PublicOcrUploadPage() {
   const [sessionToken, setSessionToken] = useState<string | null>(
     () => window.sessionStorage.getItem(SESSION_STORAGE_KEY),
   );
-  const [accessData, setAccessData] = useState<Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo"> | null>(
+  const [accessData, setAccessData] = useState<Pick<OcrPublicUploadAccessResponse, "default_source_type" | "public_memo" | "label"> | null>(
     storedMeta,
   );
   const [uploaderName, setUploaderName] = useState(readStoredUploaderName);
@@ -104,6 +105,7 @@ export function PublicOcrUploadPage() {
       setAccessData({
         default_source_type: data.default_source_type,
         public_memo: data.public_memo,
+        label: data.label,
       });
     },
     onError: (err) => {
@@ -200,7 +202,7 @@ export function PublicOcrUploadPage() {
   if (!sessionToken) {
     return (
       <main className="public-form-page">
-        <h1>OCR 画像アップロード</h1>
+        <h1>画像アップロード</h1>
         <p className="form-error">有効なアップロードリンクからアクセスしてください。</p>
       </main>
     );
@@ -208,9 +210,9 @@ export function PublicOcrUploadPage() {
 
   return (
     <main className="public-form-page">
-      <h1>OCR 画像アップロード</h1>
-      {accessData?.public_memo ? <p className="public-form-lead">{accessData.public_memo}</p> : null}
-      <PublicOcrUploadLimitNote />
+      <h1>画像アップロード</h1>
+      {accessData?.label ? <p className="public-ocr-upload-label">{accessData.label}</p> : null}
+      {accessData?.public_memo ? <p className="public-ocr-upload-memo">{accessData.public_memo}</p> : null}
 
       <section className={`panel-card page-stack public-ocr-upload-card${uploadBlocked ? " is-uploading" : ""}`}>
         <label className="form-field">
@@ -286,6 +288,8 @@ export function PublicOcrUploadPage() {
 
         {error ? <p className="form-error">{error}</p> : null}
       </section>
+
+      <PublicOcrUploadLimitNote className="public-ocr-upload-limit-note-bottom" />
 
       {overlay ? (
         <div className="public-ocr-upload-overlay" role="alertdialog" aria-modal="true" aria-live="assertive">
