@@ -49,7 +49,7 @@ export function OcrUploadLinkPanel() {
       <h2>外部アップロードリンク</h2>
       <p className="muted-text">現場向けの共有URLを発行します。発行直後のみURLをコピーできます。</p>
 
-      <div className="upload-form-grid ocr-upload-link-form">
+      <div className="ocr-upload-link-form">
         <label className="form-field">
           <span>ラベル</span>
           <input
@@ -59,33 +59,32 @@ export function OcrUploadLinkPanel() {
           />
         </label>
         <label className="form-field">
-          <span>有効期限（日）</span>
-          <input
-            type="number"
-            min={1}
-            max={365}
-            value={form.expires_in_days}
-            onChange={(e) => setForm((prev) => ({ ...prev, expires_in_days: Number(e.target.value) }))}
-          />
-        </label>
-        <label className="form-field">
           <span>外部向けメモ</span>
           <input
             value={form.public_memo ?? ""}
             onChange={(e) => setForm((prev) => ({ ...prev, public_memo: e.target.value || null }))}
           />
         </label>
-      </div>
-
-      <div className="registration-action-row">
-        <button
-          type="button"
-          className="primary-button registration-action-button"
-          disabled={createMutation.isPending}
-          onClick={() => createMutation.mutate()}
-        >
-          {createMutation.isPending ? "発行中..." : "リンクを発行"}
-        </button>
+        <div className="ocr-upload-link-form-actions">
+          <label className="form-field ocr-upload-link-form-expiry">
+            <span>有効期限（日）</span>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={form.expires_in_days}
+              onChange={(e) => setForm((prev) => ({ ...prev, expires_in_days: Number(e.target.value) }))}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary-button registration-action-button"
+            disabled={createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            {createMutation.isPending ? "発行中..." : "リンクを発行"}
+          </button>
+        </div>
       </div>
 
       {createdUrl ? (

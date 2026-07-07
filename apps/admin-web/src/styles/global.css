@@ -816,6 +816,12 @@ button {
   border-radius: 14px;
 }
 
+.ocr-upload-link-form {
+  display: grid;
+  gap: 1rem;
+  max-width: min(32rem, 50%);
+}
+
 .ocr-upload-link-form .form-field {
   display: grid;
   gap: 0.4rem;
@@ -827,6 +833,17 @@ button {
 .ocr-upload-link-form .form-field select,
 .ocr-upload-link-form .form-field textarea {
   width: 100%;
+}
+
+.ocr-upload-link-form-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ocr-upload-link-form-expiry input {
+  max-width: 6rem;
 }
 
 .dashboard-action-row {
