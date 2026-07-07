@@ -222,7 +222,31 @@ def _normalize_terminal_short_id_candidate(value: str | None) -> str | None:
     return normalize_settlement_terminal_short_id(value, from_ocr=True)
 
 
+def _normalize_paygate_pos_labels(text: str) -> str:
+    normalized = text
+    normalized = re.sub(r"[MHN]AY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"PAY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"PAY0ATE\b", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(
+        r"[-－]\s*PAYGATE\s*\n\s*POS",
+        "PAYGATE POS",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"[-－]\s*PAYGATE\s*POS",
+        "PAYGATE POS",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(r"PAYGATE\s*\n\s*POS", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"PAYGATEPOS", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    return normalized
+
+
 def _normalize_uuid_ocr_line(line: str) -> str:
+    if re.search(r"PAYGATE|PAY0ATE", line, re.IGNORECASE):
+        return line
     normalized = line.translate(_OCR_HEX_FIXES)
     replacements = (
         (re.compile(r"ged777ad", re.IGNORECASE), "0ed777ad"),
@@ -1336,9 +1360,7 @@ def _normalize_settlement_text(text: str) -> str:
     normalized = re.sub(r"端末号(?!番)", "端末番号", normalized)
     normalized = re.sub(r"16B60", "6,860", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"76,860", "6,860", normalized)
-    normalized = re.sub(r"[MHN]AY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"PAY0ATE\s*P?0S", "PAYGATE POS", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"PAY0ATE\b", "PAYGATE POS", normalized, flags=re.IGNORECASE)
+    normalized = _normalize_paygate_pos_labels(normalized)
     normalized = re.sub(r"クレンット元上|クレンチE允E|クレンチE売", "クレジット売上", normalized)
     normalized = re.sub(r"消責税|消賛稁|消費稁", "消費税", normalized)
     normalized = re.sub(r"(?:澤|矯|携)?末[護証藤]別番号", "端末識別番号", normalized)
@@ -1355,21 +1377,8 @@ def _normalize_settlement_text(text: str) -> str:
         normalized,
     )
     normalized = re.sub(r"(\d{4})-(\d{2})-(\d{2})", r"\1/\2/\3", normalized)
-    normalized = re.sub(
-        r"[-－]\s*PAYGATE\s*\n\s*POS",
-        "PAYGATE POS",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    normalized = re.sub(
-        r"[-－]\s*PAYGATE\s*POS",
-        "PAYGATE POS",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    normalized = re.sub(r"PAYGATE\s*\n\s*POS", "PAYGATE POS", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"PAYGATEPOS", "PAYGATE POS", normalized, flags=re.IGNORECASE)
     normalized = _normalize_terminal_uuid_lines(normalized)
+    normalized = _normalize_paygate_pos_labels(normalized)
     return normalized
 
 

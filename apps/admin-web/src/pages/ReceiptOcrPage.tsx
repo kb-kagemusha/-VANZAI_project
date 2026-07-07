@@ -116,6 +116,7 @@ type PendingUpload = {
   file: File;
   sourceType: OcrSourceType;
   previewUrl: string;
+  addedAt: string;
 };
 
 const SOURCE_LABELS: Record<OcrSourceType, string> = {
@@ -428,7 +429,9 @@ function DropZone({
           {zoneFiles.map((item) => (
             <li key={item.key}>
               <OcrImagePreview previewUrl={item.previewUrl} alt={item.file.name}>
-                <img src={item.previewUrl} alt={item.file.name} className="ocr-thumb" />
+                <OcrImageThumbFrame uploadedAt={item.addedAt}>
+                  <img src={item.previewUrl} alt={item.file.name} className="ocr-thumb" />
+                </OcrImageThumbFrame>
               </OcrImagePreview>
               <div>
                 <strong>{item.file.name}</strong>
@@ -659,6 +662,21 @@ function OcrImagePreview({
   );
 }
 
+function OcrImageThumbFrame({
+  uploadedAt,
+  children,
+}: {
+  uploadedAt: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ocr-image-thumb-frame">
+      {children}
+      <span className="ocr-image-thumb-uploaded-at">{formatDateTime(uploadedAt)}</span>
+    </div>
+  );
+}
+
 function OcrImageThumbnail({
   alt,
   url,
@@ -677,12 +695,22 @@ function OcrImageThumbnail({
   return <img src={url} alt={alt} className="ocr-thumb" loading="lazy" />;
 }
 
-function OcrImageThumbnailWithPreview({ imageId, alt }: { imageId: string; alt: string }) {
+function OcrImageThumbnailWithPreview({
+  imageId,
+  alt,
+  uploadedAt,
+}: {
+  imageId: string;
+  alt: string;
+  uploadedAt: string;
+}) {
   const { url, failed } = useOcrImageBlobUrl(imageId);
 
   return (
     <OcrImagePreview previewUrl={url} alt={alt}>
-      <OcrImageThumbnail alt={alt} url={url} failed={failed} />
+      <OcrImageThumbFrame uploadedAt={uploadedAt}>
+        <OcrImageThumbnail alt={alt} url={url} failed={failed} />
+      </OcrImageThumbFrame>
     </OcrImagePreview>
   );
 }
@@ -898,7 +926,11 @@ function OcrUploadedImageItem({
             aria-label={`${fileName} を選択`}
           />
         </label>
-        <OcrImageThumbnailWithPreview imageId={image.id} alt={fileName} />
+        <OcrImageThumbnailWithPreview
+          imageId={image.id}
+          alt={fileName}
+          uploadedAt={image.created_at}
+        />
       </div>
       <div className="ocr-image-card-body">
         <OcrImageFilenameEditor image={image} onRename={onRename} isSaving={isRenaming} />
@@ -906,7 +938,6 @@ function OcrUploadedImageItem({
         <div className="ocr-image-status-row">
           <OcrParseStatusBadge value={image.parse_status} />
           <OcrImageUploaderLabel image={image} />
-          <span className="ocr-image-meta">{formatDateTime(image.created_at)}</span>
         </div>
         {isDuplicate ? (
           <p className="ocr-duplicate-badge">
@@ -1166,6 +1197,7 @@ export function ReceiptOcrPage({
       file,
       sourceType,
       previewUrl: URL.createObjectURL(file),
+      addedAt: new Date().toISOString(),
     }));
     setPendingFiles((current) => {
       const existing = new Set(current.map((item) => item.key));

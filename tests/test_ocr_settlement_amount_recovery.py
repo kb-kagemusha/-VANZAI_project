@@ -113,3 +113,30 @@ def test_reconcile_subtotal_greater_than_total_uses_subtotal_and_infers_pos():
     assert amounts["total"] == Decimal("15680")
     assert amounts["cash"] == Decimal("5880")
     assert amounts["pos"] == Decimal("9800")
+
+
+def test_repair_split_paygate_pos_after_uuid_line_normalization():
+    text = """
+小計
+15,680
+合計
+15,680
+現金売上
+クレジット売上
+0
+その他支払い
+-PAYGATE
+POS
+9,800
+"""
+    amounts = repair_settlement_amounts(
+        text,
+        {
+            "subtotal": Decimal("15680"),
+            "total": Decimal("15680"),
+            "cash": Decimal("15680"),
+            "pos": Decimal(0),
+        },
+    )
+    assert amounts["pos"] == Decimal("9800")
+    assert amounts["cash"] == Decimal("5880")

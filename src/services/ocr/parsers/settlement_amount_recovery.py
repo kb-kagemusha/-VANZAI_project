@@ -125,9 +125,17 @@ def repair_settlement_amounts(
 
     for index, line in enumerate(lines):
         compact = _compact(line).upper().replace("-", "")
-        if "PAYGATEPOS" not in compact:
+        if "PAYGATEPOS" not in compact and compact not in {"PAYGATE", "PAY0ATE"}:
             continue
         if not _needs_sales_recovery(repaired.get("pos")):
+            break
+        search_lines = lines[index : index + 4]
+        for candidate in search_lines[1:]:
+            amount = _standalone_amount(candidate)
+            if _accept_sales_amount(amount):
+                repaired["pos"] = amount
+                break
+        if _accept_sales_amount(repaired.get("pos")):
             break
         if index + 1 < len(lines):
             amount = _standalone_amount(lines[index + 1])
@@ -172,13 +180,21 @@ def repair_settlement_amounts(
 
     if (
         repaired.get("total") is not None
-        and repaired.get("cash") is not None
-        and repaired.get("total") == repaired.get("cash")
+        and repaired.get("cash") == repaired.get("total")
         and repaired.get("cash") > 0
     ):
-        repaired["credit"] = Decimal(0)
-        repaired["pos"] = Decimal(0)
-        repaired["other"] = Decimal(0)
+        pos = repaired.get("pos") or Decimal(0)
+        credit = repaired.get("credit") or Decimal(0)
+        other = repaired.get("other") or Decimal(0)
+        remainder = repaired["total"] - pos - credit - other
+        if pos > 0 and is_valid_settlement_unit_sales_amount(pos) and is_valid_settlement_unit_sales_amount(
+            remainder
+        ):
+            repaired["cash"] = remainder
+        else:
+            repaired["credit"] = Decimal(0)
+            repaired["pos"] = Decimal(0)
+            repaired["other"] = Decimal(0)
 
     other = repaired.get("other")
     pos = repaired.get("pos")

@@ -1608,6 +1608,38 @@ button {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--line);
+  display: block;
+}
+
+.ocr-image-thumb-frame {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.ocr-image-thumb-frame .ocr-thumb,
+.ocr-image-thumb-frame .ocr-thumb-loading,
+.ocr-image-thumb-frame .ocr-thumb-fallback {
+  width: 100%;
+  height: 100%;
+}
+
+.ocr-image-thumb-uploaded-at {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.12rem 0.2rem;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 0.58rem;
+  line-height: 1.2;
+  text-align: center;
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ocr-thumb-loading,
@@ -1655,6 +1687,11 @@ button {
   width: 88px;
   height: 88px;
   flex-shrink: 0;
+}
+
+.ocr-image-card-top .ocr-image-thumb-frame {
+  width: 88px;
+  height: 88px;
 }
 
 .ocr-image-card-body {

@@ -1407,3 +1407,40 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260706_0b21_subto
     assert row.pos_sales == Decimal("9800")
     assert row.transaction_count == 16
 
+
+PRODUCTION_OCR_TEXT_260704_0B21_SPLIT_PAYGATE = """
+端末識別番号
+0b21
+精算
+2026/07/04 22:57:57
+端末番号
+0b21ee3e-0e48-475b-8246-7fd3b19741ea
+小計
+15,680
+合計
+15,680
+現金売上
+クレジット売上
+0
+その他支払い
+-PAYGATE
+POS
+9/800
+-その他
+0
+通常取引数
+16
+"""
+
+
+def test_paygate_settlement_parser_handles_split_paygate_pos_line_260704_0b21():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260704_0B21_SPLIT_PAYGATE))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.amount == Decimal("15680")
+    assert row.cash_sales == Decimal("5880")
+    assert row.pos_sales == Decimal("9800")
+    assert row.transaction_count == 16
+

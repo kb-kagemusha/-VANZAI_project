@@ -64,6 +64,11 @@ def preprocess_settlement_uuid_mid_band(image_bytes: bytes) -> np.ndarray:
     return _preprocess_settlement_band(image_bytes, y0=0.20, y1=0.36, scale=6.0, max_width=3800)
 
 
+def preprocess_settlement_sales_band(image_bytes: bytes) -> np.ndarray:
+    """Sales breakdown band: 小計/合計/現金売上/PAYGATE POS（長尺レシート向け）。"""
+    return _preprocess_settlement_band(image_bytes, y0=0.20, y1=0.52, scale=5.0, max_width=3600)
+
+
 def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
     """Run focused header/terminal band OCR first, then default passes, and merge."""
     return merge_ocr_results(
@@ -73,6 +78,7 @@ def run_settlement_ocr(image_bytes: bytes) -> OcrEngineResult:
         run_ocr(preprocess_settlement_terminal_band(image_bytes)),
         run_ocr(preprocess_settlement_uuid_mid_band(image_bytes)),
         run_ocr(preprocess_settlement_uuid_wide_band(image_bytes)),
+        run_ocr(preprocess_settlement_sales_band(image_bytes)),
         run_ocr(preprocess_for_ocr(image_bytes)),
         run_ocr(preprocess_upscaled_for_ocr(image_bytes, scale=2.0, max_width=2800)),
     )
