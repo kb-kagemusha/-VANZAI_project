@@ -640,6 +640,14 @@ button {
   background: rgba(239, 230, 211, 0.55);
 }
 
+.data-table--striped tbody tr:nth-child(even) {
+  background: rgba(29, 39, 49, 0.035);
+}
+
+.data-table--striped tbody tr:nth-child(even) td {
+  border-bottom-color: rgba(29, 39, 49, 0.06);
+}
+
 .status-badge {
   display: inline-flex;
   padding: 0.3rem 0.65rem;

@@ -2754,6 +2754,7 @@ export function ReceiptOcrPage({
                 columns={visibleRowColumns}
                 rows={paginatedSavedRows}
                 getRowKey={(row) => row.id}
+                striped
                 emptyTitle={
                   isPaygate ? "Paygateの保存データがありません" : "精算レシートの保存データがありません"
                 }
