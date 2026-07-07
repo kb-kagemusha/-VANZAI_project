@@ -46,29 +46,30 @@ curl -sf https://api.vanzai-portal.com/api/health
 - `npm run build` が `ENOENT package.json` で即失敗
 - コミット時に `index.html` が **削除としてステージ** され、本番に HTML が無い状態になる
 
-**調査結果（2026-07-07）**
+**調査結果（2026-07-07 更新）**
 
 | 項目 | 状態 |
 |------|------|
-| プロジェクトパス | `C:\VANZAI_project`（**OneDrive フォルダ外**） |
-| OneDrive 設定 | **あり** — デスクトップ・ドキュメントは `C:\Users\bunya\OneDrive` / `C:\OneDrive\OneDrive - OKS…` へリダイレクト（Microsoft 365 組織アカウント） |
-| OneDrive プロセス | 調査時点では **未稼働**（常時同期しているわけではない可能性） |
-| `[conflicted N]` の意味 | **OneDrive 固有**の競合ファイル名。別マシン／別同期コピーと同時編集した痕跡 |
-| git 履歴 | `package.json` の **delete がコミットに含まれた** 記録が複数回あり（Cursor エージェント作業時）。その後 `package.jsonを復元` コミットが繰り返されている |
+| プロジェクトパス | `C:\VANZAI_project` |
+| **pCloud Drive** | **インストール済み**（`C:\Program Files\pCloud Drive`） |
+| `[conflicted N]` の意味 | **pCloud / OneDrive 共通**の競合ファイル名（`package [conflicted 58].json` 等）。pCloud 公式も `filename.conflicted` または `[conflicted]` サフィックスを文書化 |
+| OneDrive | Windows / M365 由来のレジストリ設定は残るが、ユーザー未インストールの場合は副次要因 |
+| git 履歴 | `package.json` の **delete がコミットに含まれた** 記録が複数回（Cursor エージェント作業時） |
 
 **結論（想定される複合原因）**
 
-1. **主因**: Cursor エージェントの git 操作で正本ファイルが削除コミットされる
-2. **副因**: OneDrive が PC に設定済みのため、同期対象に入っていたコピーや過去の同期状態で `[conflicted]` が発生
+1. **主因（同期）**: **pCloud Sync** が `C:\VANZAI_project` またはそのコピーを同期対象に含め、Cursor の頻繁な書き込みと競合 → `[conflicted]` 生成
+2. **主因（git）**: Cursor エージェントの git 操作で正本が削除コミットされる
 
 **対処**
 
-1. 正本は git。`git show HEAD:apps/admin-web/package.json` で内容確認
-2. 復元: `git checkout HEAD -- <path>`
-3. **BOM なし UTF-8** で書き戻す（PowerShell `Set-Content` は BOM 付きになり vite が落ちる）
-4. コミット前に `git status` で `D index.html` / `D package.json` が無いか必ず確認
-5. リポジトリは **OneDrive 配下に置かない**（現状 `C:\VANZAI_project` で OK）。ドキュメント配下に clone しない
-6. OneDrive の「バックアップ」設定は [OneDrive 設定] → [同期とバックアップ] で確認し、開発フォルダを含めない
+1. 正本は git。`git checkout HEAD -- <path>` で復元
+2. **pCloud**: トレイアイコン → Settings → **Exclusions** に以下を追加
+   - `C:\VANZAI_project` 全体（または最低限 `.git` / `node_modules` / `storage` / `dist`）
+   - pCloud 公式も `.git` ディレクトリの同期非推奨を明記
+3. 既に同期済みの場合: Sync を一時停止 → 競合コピー削除 → Exclusions 設定 → 再開しない（開発フォルダは同期外が原則）
+4. コミット前に `git status` で `D package.json` / `D index.html` が無いか確認
+5. **BOM なし UTF-8** で保存（PowerShell `Set-Content` は BOM 付きで vite が落ちる）
 
 ### 2.2 package.json の UTF-8 BOM
 
