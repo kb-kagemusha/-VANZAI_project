@@ -2601,7 +2601,8 @@ button {
   background: #fff;
 }
 
-.ocr-data-section-shell .ocr-data-section-tabs {
+.ocr-data-section-shell .ocr-data-section-tabs,
+.ocr-data-section-shell .ocr-source-type-tabs {
   margin-top: 0;
   border: none;
   border-radius: 0;
@@ -2619,7 +2620,8 @@ button {
   z-index: 1;
 }
 
-.ocr-data-section-panel {
+.ocr-data-section-panel,
+.ocr-source-type-panel {
   background: #fff;
   padding: 1rem 1.2rem 1.2rem;
   margin: 0;
@@ -2628,8 +2630,8 @@ button {
   box-shadow: none;
 }
 
-.ocr-source-type-tabs {
-  margin-bottom: 0.15rem;
+.ocr-source-type-shell .ocr-source-type-tabs {
+  margin-bottom: 0;
 }
 
 .ocr-saved-data-tab {

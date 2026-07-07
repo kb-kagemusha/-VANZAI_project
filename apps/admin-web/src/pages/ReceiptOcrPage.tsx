@@ -3399,27 +3399,35 @@ export function OcrPage() {
         title="レシートOCR"
         description="Paygateスクリーンショットと精算レシートをアップロード・解析します。"
       />
-      <div className="ocr-saved-data-tabs ocr-source-type-tabs" role="tablist" aria-label="OCR種別">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={sourceType === "paygate_screenshot"}
-          className={`ocr-saved-data-tab${sourceType === "paygate_screenshot" ? " is-active" : ""}`}
-          onClick={() => selectSourceType("paygate_screenshot")}
-        >
-          Paygateスクリーンショット
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={sourceType === "paygate_settlement"}
-          className={`ocr-saved-data-tab${sourceType === "paygate_settlement" ? " is-active" : ""}`}
-          onClick={() => selectSourceType("paygate_settlement")}
-        >
-          精算レシート
-        </button>
+      <div className="ocr-data-section-shell ocr-source-type-shell">
+        <div className="ocr-saved-data-tabs ocr-source-type-tabs" role="tablist" aria-label="OCR種別">
+          <button
+            type="button"
+            role="tab"
+            id="ocr-source-tab-paygate"
+            aria-selected={sourceType === "paygate_screenshot"}
+            aria-controls="ocr-source-panel"
+            className={`ocr-saved-data-tab${sourceType === "paygate_screenshot" ? " is-active" : ""}`}
+            onClick={() => selectSourceType("paygate_screenshot")}
+          >
+            Paygateスクリーンショット
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="ocr-source-tab-settlement"
+            aria-selected={sourceType === "paygate_settlement"}
+            aria-controls="ocr-source-panel"
+            className={`ocr-saved-data-tab${sourceType === "paygate_settlement" ? " is-active" : ""}`}
+            onClick={() => selectSourceType("paygate_settlement")}
+          >
+            精算レシート
+          </button>
+        </div>
+        <div className="ocr-source-type-panel" id="ocr-source-panel" role="tabpanel" aria-labelledby={sourceType === "paygate_screenshot" ? "ocr-source-tab-paygate" : "ocr-source-tab-settlement"}>
+          <ReceiptOcrPage key={sourceType} sourceType={sourceType} showPageHeader={false} />
+        </div>
       </div>
-      <ReceiptOcrPage key={sourceType} sourceType={sourceType} showPageHeader={false} />
     </div>
   );
 }
