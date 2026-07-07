@@ -3397,7 +3397,7 @@ export function OcrPage() {
         title="レシートOCR"
         description="Paygateスクリーンショットと精算レシートをアップロード・解析します。"
       />
-      <div className="ocr-saved-data-tabs" role="tablist" aria-label="OCR種別">
+      <div className="ocr-saved-data-tabs ocr-source-type-tabs" role="tablist" aria-label="OCR種別">
         <button
           type="button"
           role="tab"
