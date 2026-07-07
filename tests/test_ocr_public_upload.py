@@ -96,6 +96,14 @@ def test_rate_limit_blocks_after_limit(db_session):
     assert _increment_rate_limit(db_session, "test:scope", limit=5) is False
 
 
+def test_uploader_display_name_rules():
+    from src.services.ocr_service import OcrService
+
+    assert OcrService._uploader_display_name("田中", "external", "public_link") == "田中"
+    assert OcrService._uploader_display_name(None, "ops_user", None) == "管理者"
+    assert OcrService._uploader_display_name(None, "external", "public_link") is None
+
+
 def test_public_upload_requires_uploader_name(db_session, monkeypatch):
     monkeypatch.setenv("OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED", "false")
     from io import BytesIO

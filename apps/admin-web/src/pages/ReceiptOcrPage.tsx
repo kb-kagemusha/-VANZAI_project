@@ -66,6 +66,7 @@ import {
   collectOcrParseFailureMessages,
 } from "../lib/ocr/parseFailureMessages";
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
+import { formatOcrRowUploaderLabel, formatOcrUploaderLabel } from "../lib/ocr/uploaderDisplay";
 import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
 import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
@@ -696,14 +697,8 @@ function OcrParseStatusBadge({ value }: { value: string }) {
   return <span className={`status-badge ${tone}`}>{formatOcrParseStatus(value)}</span>;
 }
 
-function OcrUploadOriginBadge({ image }: { image: OcrSourceImageItem }) {
-  if (image.upload_origin !== "public_link") {
-    return null;
-  }
-  const label = image.public_uploader_name?.trim()
-    ? `外部（${image.public_uploader_name.trim()}）`
-    : "外部";
-  return <span className="ocr-external-badge-inline">{label}</span>;
+function OcrImageUploaderLabel({ image }: { image: OcrSourceImageItem }) {
+  return <span className="ocr-image-uploader-label">入稿者: {formatOcrUploaderLabel(image)}</span>;
 }
 
 function OcrImageFilenameEditor({
@@ -823,7 +818,7 @@ function OcrUploadedImageItem({
         </div>
         <div className="ocr-image-row-status">
           <OcrParseStatusBadge value={image.parse_status} />
-          <OcrUploadOriginBadge image={image} />
+          <OcrImageUploaderLabel image={image} />
           {isDuplicate ? (
             <span className="ocr-duplicate-badge-inline">
               {image.reused_existing ? "同一画像" : "同名"}
@@ -877,7 +872,7 @@ function OcrUploadedImageItem({
         <div className="ocr-image-source">{sourceLabel}</div>
         <div className="ocr-image-status-row">
           <OcrParseStatusBadge value={image.parse_status} />
-          <OcrUploadOriginBadge image={image} />
+          <OcrImageUploaderLabel image={image} />
           <span className="ocr-image-meta">{formatDateTime(image.created_at)}</span>
         </div>
         {isDuplicate ? (
@@ -2000,7 +1995,7 @@ export function ReceiptOcrPage({
     {
       key: "source_uploader_name",
       header: "入稿者",
-      render: (row: OcrExtractedRowItem) => row.source_uploader_name?.trim() || "-",
+      render: (row: OcrExtractedRowItem) => formatOcrRowUploaderLabel(row.source_uploader_name),
     },
     {
       key: "record_date",

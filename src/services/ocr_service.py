@@ -554,12 +554,15 @@ class OcrService:
     def _uploader_display_name(
         public_uploader_name: str | None,
         uploaded_by: str | None,
+        upload_origin: str | None = None,
     ) -> str | None:
         if public_uploader_name and public_uploader_name.strip():
             return public_uploader_name.strip()
-        if uploaded_by and uploaded_by.strip() and uploaded_by.strip() != "external":
-            return uploaded_by.strip()
-        return None
+        if upload_origin == "public_link":
+            return None
+        if uploaded_by and uploaded_by.strip():
+            return "管理者"
+        return "管理者"
 
     def get_image_row_context(self, image_ids: set[str]) -> dict[str, dict[str, str | None]]:
         if not image_ids:
@@ -570,6 +573,7 @@ class OcrService:
                 OcrSourceImage.original_filename,
                 OcrSourceImage.public_uploader_name,
                 OcrSourceImage.uploaded_by,
+                OcrSourceImage.upload_origin,
             ).where(
                 OcrSourceImage.id.in_(image_ids),
                 OcrSourceImage.deleted_at.is_(None),
@@ -578,9 +582,13 @@ class OcrService:
         return {
             image_id: {
                 "filename": filename,
-                "uploader_name": self._uploader_display_name(public_uploader_name, uploaded_by),
+                "uploader_name": self._uploader_display_name(
+                    public_uploader_name,
+                    uploaded_by,
+                    upload_origin,
+                ),
             }
-            for image_id, filename, public_uploader_name, uploaded_by in rows
+            for image_id, filename, public_uploader_name, uploaded_by, upload_origin in rows
         }
 
     def update_image_filename(
