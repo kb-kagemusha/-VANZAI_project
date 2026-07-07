@@ -46,9 +46,9 @@ export function OcrUploadLinkPanel() {
   const items = linksQuery.data?.items ?? [];
 
   return (
-    <section className="panel-card page-stack">
-      <h2>外部アップロードリンク</h2>
-      <p className="muted-text">
+    <section className="panel-card page-stack ocr-upload-link-panel">
+      <h2 className="ocr-upload-link-title">外部アップロードリンク</h2>
+      <p className="muted-text ocr-upload-link-intro">
         現場向けの共有URLを発行します。発行直後のみURLをコピーできます。
         <br />
         <span className="ocr-limit-accent">管理画面からの直接アップロード</span>
@@ -114,7 +114,8 @@ export function OcrUploadLinkPanel() {
       </div>
 
       {items.length ? (
-        <table className="data-table">
+        <div className="ocr-upload-link-links-table-wrap">
+          <table className="data-table ocr-upload-link-table">
           <thead>
             <tr>
               <th>ラベル</th>
@@ -146,6 +147,7 @@ export function OcrUploadLinkPanel() {
             ))}
           </tbody>
         </table>
+        </div>
       ) : null}
     </section>
   );

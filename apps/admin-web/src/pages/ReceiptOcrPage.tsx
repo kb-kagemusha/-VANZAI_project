@@ -153,18 +153,28 @@ const SAVED_ROW_PAGE_SIZE_KEY = "vanzai.ocr.savedRowPageSize";
 const SAVED_ROW_UI_KEY_PREFIX = "vanzai.ocr.savedRowUi";
 const OCR_DATA_SECTION_TAB_KEY_PREFIX = "vanzai.ocr.dataSectionTab";
 
-type OcrDataSectionTab = "saved" | "hq_csv" | "self_report";
+type OcrDataSectionTab = "uploaded_images" | "saved" | "hq_csv" | "self_report";
+
+const PAYGATE_ONLY_DATA_TABS = new Set<OcrDataSectionTab>(["hq_csv", "self_report"]);
+
+function isOcrDataSectionTab(value: string): value is OcrDataSectionTab {
+  return value === "uploaded_images" || value === "saved" || value === "hq_csv" || value === "self_report";
+}
 
 function readOcrDataSectionTab(sourceType: OcrSourceType): OcrDataSectionTab {
   try {
     const raw = window.sessionStorage.getItem(`${OCR_DATA_SECTION_TAB_KEY_PREFIX}.${sourceType}`);
-    if (raw === "saved" || raw === "hq_csv" || raw === "self_report") {
-      return raw;
+    if (!raw || !isOcrDataSectionTab(raw)) {
+      return "uploaded_images";
     }
+    if (sourceType === "paygate_settlement" && PAYGATE_ONLY_DATA_TABS.has(raw)) {
+      return "uploaded_images";
+    }
+    return raw;
   } catch {
     // private browsing 等
   }
-  return "saved";
+  return "uploaded_images";
 }
 
 function writeOcrDataSectionTab(sourceType: OcrSourceType, tab: OcrDataSectionTab) {
@@ -2400,7 +2410,76 @@ export function ReceiptOcrPage({
         </div>
       </div>
 
-      <section className="panel-card page-stack">
+      <div className="ocr-saved-data-tabs ocr-data-section-tabs" role="tablist" aria-label="OCRデータ">
+        <button
+          type="button"
+          role="tab"
+          id="ocr-data-tab-uploaded-images"
+          aria-selected={dataSectionTab === "uploaded_images"}
+          aria-controls="ocr-data-panel-uploaded-images"
+          className={`ocr-saved-data-tab${dataSectionTab === "uploaded_images" ? " is-active" : ""}`}
+          onClick={() => {
+            setDataSectionTab("uploaded_images");
+            writeOcrDataSectionTab(sourceType, "uploaded_images");
+          }}
+        >
+          アップロード済み画像
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="ocr-data-tab-saved"
+          aria-selected={dataSectionTab === "saved"}
+          aria-controls="ocr-data-panel-saved"
+          className={`ocr-saved-data-tab${dataSectionTab === "saved" ? " is-active" : ""}`}
+          onClick={() => {
+            setDataSectionTab("saved");
+            writeOcrDataSectionTab(sourceType, "saved");
+          }}
+        >
+          保存データ
+        </button>
+        {isPaygate ? (
+          <>
+            <button
+              type="button"
+              role="tab"
+              id="ocr-data-tab-hq-csv"
+              aria-selected={dataSectionTab === "hq_csv"}
+              aria-controls="ocr-data-panel-hq-csv"
+              className={`ocr-saved-data-tab${dataSectionTab === "hq_csv" ? " is-active" : ""}`}
+              onClick={() => {
+                setDataSectionTab("hq_csv");
+                writeOcrDataSectionTab(sourceType, "hq_csv");
+              }}
+            >
+              CSVとの照合
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="ocr-data-tab-self-report"
+              aria-selected={dataSectionTab === "self_report"}
+              aria-controls="ocr-data-panel-self-report"
+              className={`ocr-saved-data-tab${dataSectionTab === "self_report" ? " is-active" : ""}`}
+              onClick={() => {
+                setDataSectionTab("self_report");
+                writeOcrDataSectionTab(sourceType, "self_report");
+              }}
+            >
+              自己申告データとの比較
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      {dataSectionTab === "uploaded_images" ? (
+      <section
+        className="panel-card page-stack"
+        role="tabpanel"
+        id="ocr-data-panel-uploaded-images"
+        aria-labelledby="ocr-data-tab-uploaded-images"
+      >
         <div className="ocr-section-header">
           <PageHeader
             eyebrow="履歴"
@@ -2560,60 +2639,14 @@ export function ReceiptOcrPage({
           </>
         ) : null}
       </section>
-
-      {isPaygate ? (
-        <div className="ocr-saved-data-tabs ocr-data-section-tabs" role="tablist" aria-label="保存データ・突合">
-          <button
-            type="button"
-            role="tab"
-            id="ocr-data-tab-saved"
-            aria-selected={dataSectionTab === "saved"}
-            aria-controls="ocr-data-panel-saved"
-            className={`ocr-saved-data-tab${dataSectionTab === "saved" ? " is-active" : ""}`}
-            onClick={() => {
-              setDataSectionTab("saved");
-              writeOcrDataSectionTab(sourceType, "saved");
-            }}
-          >
-            保存データ
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="ocr-data-tab-hq-csv"
-            aria-selected={dataSectionTab === "hq_csv"}
-            aria-controls="ocr-data-panel-hq-csv"
-            className={`ocr-saved-data-tab${dataSectionTab === "hq_csv" ? " is-active" : ""}`}
-            onClick={() => {
-              setDataSectionTab("hq_csv");
-              writeOcrDataSectionTab(sourceType, "hq_csv");
-            }}
-          >
-            CSVとの照合
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="ocr-data-tab-self-report"
-            aria-selected={dataSectionTab === "self_report"}
-            aria-controls="ocr-data-panel-self-report"
-            className={`ocr-saved-data-tab${dataSectionTab === "self_report" ? " is-active" : ""}`}
-            onClick={() => {
-              setDataSectionTab("self_report");
-              writeOcrDataSectionTab(sourceType, "self_report");
-            }}
-          >
-            自己申告データとの比較
-          </button>
-        </div>
       ) : null}
 
-      {!isPaygate || dataSectionTab === "saved" ? (
+      {dataSectionTab === "saved" ? (
       <section
         className="panel-card page-stack"
-        role={isPaygate ? "tabpanel" : undefined}
-        id={isPaygate ? "ocr-data-panel-saved" : undefined}
-        aria-labelledby={isPaygate ? "ocr-data-tab-saved" : undefined}
+        role="tabpanel"
+        id="ocr-data-panel-saved"
+        aria-labelledby="ocr-data-tab-saved"
       >
         <PageHeader
           eyebrow="年月別"

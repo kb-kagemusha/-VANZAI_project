@@ -853,6 +853,74 @@ button {
   max-width: 6rem;
 }
 
+.ocr-upload-link-panel.page-stack {
+  gap: 0.6rem;
+  padding: 0.8rem 0.95rem;
+}
+
+.ocr-upload-link-title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.ocr-upload-link-intro {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.ocr-upload-link-panel .public-form-limit-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.ocr-upload-link-panel .ocr-upload-link-form {
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ocr-upload-link-panel .ocr-upload-link-form .form-field {
+  gap: 0.25rem;
+  font-size: 0.84rem;
+}
+
+.ocr-upload-link-panel .ocr-upload-link-form .form-field input {
+  padding: 0.38rem 0.55rem;
+  font-size: 0.88rem;
+}
+
+.ocr-upload-link-panel .ocr-upload-link-form-actions {
+  gap: 0.5rem;
+}
+
+.ocr-upload-link-panel .registration-action-button {
+  min-height: 34px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.88rem;
+}
+
+.ocr-upload-link-panel .upload-actions {
+  margin: 0;
+}
+
+.ocr-upload-link-links-table-wrap {
+  max-height: 8.5rem;
+  overflow: auto;
+}
+
+.ocr-upload-link-panel .ocr-upload-link-table th,
+.ocr-upload-link-panel .ocr-upload-link-table td {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .ocr-upload-link-panel .ocr-upload-link-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dashboard-action-row {
   display: flex;
   gap: 0.75rem;
