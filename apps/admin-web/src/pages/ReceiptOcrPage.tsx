@@ -9,6 +9,7 @@ import { AppNotification, type AppNotificationState } from "../components/AppNot
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { OcrSavedRowReviewModal } from "../components/ocr/OcrSavedRowReviewModal";
+import { OcrScreenshotRenamePromptModal } from "../components/ocr/OcrScreenshotRenamePromptModal";
 import { OcrUploadLinkPanel } from "../components/ocr/OcrUploadLinkPanel";
 import { OcrFieldConfidenceLegend } from "../components/ocr/OcrFieldConfidence";
 import { OcrRowConfidenceCell } from "../components/ocr/OcrRowConfidenceCell";
@@ -69,6 +70,12 @@ import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
 import { formatOcrRowUploaderLabel, formatOcrUploaderLabel } from "../lib/ocr/uploaderDisplay";
 import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
 import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
+import {
+  buildScreenshotRenamePromptQueue,
+  buildSuggestedScreenshotImageFilename,
+  needsScreenshotRenamePrompt,
+  type ScreenshotRenamePromptPayload,
+} from "../lib/ocr/paygateScreenshotImageRename";
 import { formatOcrImageErrorMessage, formatOcrValidationMessages, formatLocalizedErrorMessage, formatUnitBreakdownStatus } from "../lib/ocr/validationMessages";
 import { normalizeTerminalShortIdInput } from "../lib/ocr/terminalShortId";
 import {
@@ -845,6 +852,8 @@ function OcrUploadedImageItem({
   isRenaming,
   isDeleting,
   isReparsing,
+  needsFilenameTidy,
+  onOrganizeFilename,
 }: {
   image: OcrSourceImageItem;
   viewMode: ImageViewMode;
@@ -856,6 +865,8 @@ function OcrUploadedImageItem({
   isRenaming: boolean;
   isDeleting: boolean;
   isReparsing: boolean;
+  needsFilenameTidy?: boolean;
+  onOrganizeFilename?: (imageId: string) => void;
 }) {
   const isDuplicate = Boolean(image.reused_existing || image.has_filename_duplicate);
   const fileName = image.original_filename || image.id;
@@ -885,11 +896,24 @@ function OcrUploadedImageItem({
               {image.reused_existing ? "同一画像" : "同名"}
             </span>
           ) : null}
+          {needsFilenameTidy ? (
+            <span className="ocr-filename-tidy-badge">名前未整理</span>
+          ) : null}
         </div>
         {image.error_message ? (
           <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
         ) : null}
         <div className="ocr-image-row-actions">
+          {needsFilenameTidy && onOrganizeFilename ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isReparsing || isDeleting || isRenaming}
+              onClick={() => onOrganizeFilename(image.id)}
+            >
+              名前を整理
+            </button>
+          ) : null}
           {canReparse && onReparse ? (
             <OcrParseProgressHover progress={null} active={isReparsing}>
               <button
@@ -944,10 +968,23 @@ function OcrUploadedImageItem({
             {image.reused_existing ? "同一画像（再アップロード）" : "同名ファイルあり"}
           </p>
         ) : null}
+        {needsFilenameTidy ? (
+          <p className="ocr-filename-tidy-badge">名前未整理（全取引確定済み）</p>
+        ) : null}
         {image.error_message ? (
           <p className="ocr-image-error">{formatOcrImageErrorMessage(image.error_message)}</p>
         ) : null}
         <div className="ocr-image-row-actions">
+          {needsFilenameTidy && onOrganizeFilename ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isReparsing || isDeleting || isRenaming}
+              onClick={() => onOrganizeFilename(image.id)}
+            >
+              名前を整理
+            </button>
+          ) : null}
           {canReparse && onReparse ? (
             <OcrParseProgressHover progress={null} active={isReparsing}>
               <button
@@ -1130,6 +1167,8 @@ export function ReceiptOcrPage({
     () => readSavedRowUi(sourceType)?.filters ?? DEFAULT_SAVED_ROW_FILTERS,
   );
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [renamePromptQueue, setRenamePromptQueue] = useState<ScreenshotRenamePromptPayload[]>([]);
+  const [deferredRenameImageIds, setDeferredRenameImageIds] = useState<Set<string>>(() => new Set());
   const [dataSectionTab, setDataSectionTab] = useState<OcrDataSectionTab>(() => readOcrDataSectionTab(sourceType));
   const [parseProgress, setParseProgress] = useState<OcrParseProgressState | null>(null);
   const [parseResultSummary, setParseResultSummary] = useState<OcrBatchParseResult | null>(null);
@@ -1464,27 +1503,6 @@ export function ReceiptOcrPage({
         };
       });
       window.setTimeout(() => setReparseProgress(null), 2500);
-    },
-  });
-
-  const confirmMutation = useMutation({
-    mutationFn: (rowIds: string[]) => confirmOcrRows(rowIds),
-    onSuccess: async () => {
-      setSelectedRowIds([]);
-      setFormError(null);
-      await queryClient.invalidateQueries({ queryKey: ["ocr-rows"] });
-    },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 422 && error.detail && typeof error.detail === "object") {
-        const payload = error.detail as {
-          rejected_row_ids?: string[];
-          reasons?: Record<string, string[]>;
-        };
-        const count = payload.rejected_row_ids?.length ?? 0;
-        setFormError(`確定できない行が ${count} 件含まれています。要確認行を修正してから再度お試しください。`);
-        return;
-      }
-      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "確定に失敗しました"));
     },
   });
 
@@ -1827,6 +1845,100 @@ export function ReceiptOcrPage({
       queryClient.invalidateQueries({ queryKey: ["ocr-images"] }),
     ]);
   }, [queryClient]);
+
+  const enqueueScreenshotRenamePrompts = useCallback(
+    async (confirmedRowIds: string[]) => {
+      if (!confirmedRowIds.length) {
+        return;
+      }
+      const data = await queryClient.fetchQuery({
+        queryKey: ["ocr-rows", selectedPeriodKey],
+        queryFn: () =>
+          listOcrRows({
+            period_key: selectedPeriodKey || undefined,
+            limit: 500,
+          }),
+      });
+      const queue = buildScreenshotRenamePromptQueue(
+        data.items,
+        confirmedRowIds,
+        deferredRenameImageIds,
+      );
+      if (queue.length) {
+        setRenamePromptQueue(queue);
+      }
+    },
+    [deferredRenameImageIds, queryClient, selectedPeriodKey],
+  );
+
+  const openRenamePromptForImage = useCallback(
+    (imageId: string) => {
+      const image = uploadedImages.find((item) => item.id === imageId);
+      if (!image) {
+        return;
+      }
+      const suggestedFilename = buildSuggestedScreenshotImageFilename(
+        savedRows,
+        imageId,
+        image.original_filename,
+      );
+      if (!suggestedFilename) {
+        return;
+      }
+      setDeferredRenameImageIds((current) => {
+        const next = new Set(current);
+        next.delete(imageId);
+        return next;
+      });
+      setRenamePromptQueue([
+        {
+          imageId,
+          currentFilename: image.original_filename || imageId,
+          suggestedFilename,
+          remainingCount: 0,
+        },
+      ]);
+    },
+    [savedRows, uploadedImages],
+  );
+
+  const confirmMutation = useMutation({
+    mutationFn: (rowIds: string[]) => confirmOcrRows(rowIds),
+    onSuccess: async (_result, rowIds) => {
+      setSelectedRowIds([]);
+      setFormError(null);
+      await invalidateSavedRowQueries();
+      await enqueueScreenshotRenamePrompts(rowIds);
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 422 && error.detail && typeof error.detail === "object") {
+        const payload = error.detail as {
+          rejected_row_ids?: string[];
+          reasons?: Record<string, string[]>;
+        };
+        const count = payload.rejected_row_ids?.length ?? 0;
+        setFormError(`確定できない行が ${count} 件含まれています。要確認行を修正してから再度お試しください。`);
+        return;
+      }
+      setFormError(formatLocalizedErrorMessage(error instanceof ApiError ? error.message : null, "確定に失敗しました"));
+    },
+  });
+
+  const screenshotImagesNeedingTidy = useMemo(() => {
+    if (sourceType !== "paygate_screenshot") {
+      return new Set<string>();
+    }
+    const imageIds = new Set<string>();
+    for (const image of uploadedImages) {
+      if (needsScreenshotRenamePrompt(savedRows, image.id, image.original_filename)) {
+        imageIds.add(image.id);
+      }
+    }
+    return imageIds;
+  }, [savedRows, sourceType, uploadedImages]);
+
+  const currentRenamePrompt = renamePromptQueue[0] ?? null;
+
   const tabSavedRows = useMemo(
     () => savedRows.filter((row) => row.source_type === sourceType),
     [savedRows, sourceType],
@@ -2639,6 +2751,10 @@ export function ReceiptOcrPage({
                       isReparsing={
                         reparseImageMutation.isPending && reparseImageMutation.variables === image.id
                       }
+                      needsFilenameTidy={screenshotImagesNeedingTidy.has(image.id)}
+                      onOrganizeFilename={
+                        sourceType === "paygate_screenshot" ? openRenamePromptForImage : undefined
+                      }
                     />
                   ))}
                 </ul>
@@ -3057,10 +3173,8 @@ export function ReceiptOcrPage({
           onClose={() => setReviewingRow(null)}
           onSaved={invalidateSavedRowQueries}
           onConfirm={async () => {
-            await confirmOcrRows([reviewingRowLive.id]);
+            await confirmMutation.mutateAsync([reviewingRowLive.id]);
             setReviewingRow(null);
-            setFormError(null);
-            await invalidateSavedRowQueries();
           }}
           confirming={confirmMutation.isPending}
           onReparse={
@@ -3398,6 +3512,27 @@ export function ReceiptOcrPage({
         detail={notification.detail}
         confirmLabel={notification.confirmLabel}
         onClose={closeNotification}
+      />
+      <OcrScreenshotRenamePromptModal
+        payload={currentRenamePrompt}
+        busy={renameImageMutation.isPending}
+        onApply={async (filename) => {
+          if (!currentRenamePrompt) {
+            return;
+          }
+          await renameImageMutation.mutateAsync({
+            imageId: currentRenamePrompt.imageId,
+            filename,
+          });
+          setRenamePromptQueue((queue) => queue.slice(1));
+        }}
+        onLater={() => {
+          if (!currentRenamePrompt) {
+            return;
+          }
+          setDeferredRenameImageIds((current) => new Set(current).add(currentRenamePrompt.imageId));
+          setRenamePromptQueue((queue) => queue.slice(1));
+        }}
       />
       <ConfirmDialog
         open={Boolean(pendingConfirm)}

@@ -10,6 +10,7 @@ import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
 import { formatSettlementRecordDate } from "../../lib/ocr/settlementDateFormat";
 import { buildSettlementReceiptFilename } from "../../lib/ocr/settlementReceiptFilename";
 import { buildPaygateScreenshotFilename } from "../../lib/ocr/paygateScreenshotFilename";
+import { formatScreenshotSiblingProgressText } from "../../lib/ocr/paygateScreenshotImageRename";
 import { formatOcrValidationMessages, formatLocalizedErrorMessage } from "../../lib/ocr/validationMessages";
 import type { OcrExtractedRowItem } from "../../types/api";
 import { OcrParseProgressHover } from "../OcrParseProgressHover";
@@ -316,7 +317,7 @@ export function OcrSavedRowReviewModal({
   imageSiblingRows?: OcrExtractedRowItem[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
-  onConfirm: (options?: { imageFilename?: string }) => Promise<void> | void;
+  onConfirm: () => Promise<void> | void;
   confirming: boolean;
   onReparse?: () => void;
   reparsing?: boolean;
@@ -335,6 +336,10 @@ export function OcrSavedRowReviewModal({
   const [customFilename, setCustomFilename] = useState<string | null>(null);
   const [editingFilename, setEditingFilename] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
+  const siblingProgressText = useMemo(
+    () => (!isSettlement ? formatScreenshotSiblingProgressText(imageSiblingRows) : null),
+    [imageSiblingRows, isSettlement],
+  );
 
   const filenameRows = useMemo(
     () =>
@@ -462,12 +467,13 @@ export function OcrSavedRowReviewModal({
     }
     setError(null);
     try {
-      const filenameToApply =
-        row.status !== "confirmed" ? (customFilename ?? suggestedFilename).trim() || suggestedFilename : undefined;
-      if (filenameToApply && filenameToApply !== row.source_image_filename) {
-        await renameOcrImage(row.source_image_id, filenameToApply);
+      if (isSettlement && row.status !== "confirmed") {
+        const filenameToApply = (customFilename ?? suggestedFilename).trim() || suggestedFilename;
+        if (filenameToApply && filenameToApply !== row.source_image_filename) {
+          await renameOcrImage(row.source_image_id, filenameToApply);
+        }
       }
-      await onConfirm(filenameToApply ? { imageFilename: filenameToApply } : undefined);
+      await onConfirm();
     } catch (err) {
       setError(formatLocalizedErrorMessage(err instanceof ApiError ? err.message : null, "確定に失敗しました"));
     }
@@ -562,10 +568,13 @@ export function OcrSavedRowReviewModal({
                   ) : null}
                 </>
               )}
-              {row.status !== "confirmed" && !editingFilename ? (
+              {isSettlement && row.status !== "confirmed" && !editingFilename ? (
                 <p className="ocr-row-review-filename-hint">
                   確定時の推奨名: {suggestedFilename}
                 </p>
+              ) : null}
+              {siblingProgressText ? (
+                <p className="ocr-row-review-sibling-progress">{siblingProgressText}</p>
               ) : null}
             </div>
               <div className="ocr-row-review-badges">
