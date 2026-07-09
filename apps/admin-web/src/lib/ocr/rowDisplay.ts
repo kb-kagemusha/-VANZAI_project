@@ -164,3 +164,28 @@ export function isOcrRowSelectable(row: OcrRowConfirmInput) {
 export function isOcrRowDeletable(_row: Pick<OcrExtractedRowItem, "confirm_required" | "status">) {
   return true;
 }
+
+export type SavedRowStatusFilter = "" | "unconfirmed" | "confirmed";
+
+export function normalizeSavedRowStatusFilter(status: unknown): SavedRowStatusFilter {
+  if (status === "confirmed") {
+    return "confirmed";
+  }
+  if (status === "unconfirmed" || status === "pending_review") {
+    return "unconfirmed";
+  }
+  return "";
+}
+
+export function matchesSavedRowStatusFilter(
+  row: Pick<OcrExtractedRowItem, "status">,
+  filter: SavedRowStatusFilter,
+): boolean {
+  if (!filter) {
+    return true;
+  }
+  if (filter === "unconfirmed") {
+    return row.status !== "confirmed";
+  }
+  return row.status === filter;
+}

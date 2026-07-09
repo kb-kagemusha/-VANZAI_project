@@ -8,6 +8,8 @@ import {
   isOcrRowConfirmable,
   isOcrRowDeletable,
   isOcrRowSelectable,
+  matchesSavedRowStatusFilter,
+  normalizeSavedRowStatusFilter,
 } from "./rowDisplay";
 
 const BASE_SCREENSHOT_ROW = {
@@ -145,5 +147,22 @@ describe("formatOcrRowValidationCell", () => {
         translate,
       ),
     ).toBe("OK");
+  });
+});
+
+describe("saved row status filters", () => {
+  it("normalizes legacy pending_review to unconfirmed", () => {
+    expect(normalizeSavedRowStatusFilter("pending_review")).toBe("unconfirmed");
+    expect(normalizeSavedRowStatusFilter("unconfirmed")).toBe("unconfirmed");
+    expect(normalizeSavedRowStatusFilter("confirmed")).toBe("confirmed");
+    expect(normalizeSavedRowStatusFilter("")).toBe("");
+  });
+
+  it("matches unconfirmed rows by excluding confirmed status", () => {
+    expect(matchesSavedRowStatusFilter({ status: "pending_review" }, "unconfirmed")).toBe(true);
+    expect(matchesSavedRowStatusFilter({ status: "parsed" }, "unconfirmed")).toBe(true);
+    expect(matchesSavedRowStatusFilter({ status: "confirmed" }, "unconfirmed")).toBe(false);
+    expect(matchesSavedRowStatusFilter({ status: "confirmed" }, "confirmed")).toBe(true);
+    expect(matchesSavedRowStatusFilter({ status: "pending_review" }, "")).toBe(true);
   });
 });

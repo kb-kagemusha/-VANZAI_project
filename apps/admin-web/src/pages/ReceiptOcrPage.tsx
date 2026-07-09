@@ -69,7 +69,7 @@ import {
 import { formatPaygatePaymentMethodDisplay } from "../lib/ocr/paymentMethod";
 import { formatOcrRowUploaderLabel, formatOcrUploaderLabel } from "../lib/ocr/uploaderDisplay";
 import { formatSettlementRecordDate } from "../lib/ocr/settlementDateFormat";
-import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable } from "../lib/ocr/rowDisplay";
+import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable, matchesSavedRowStatusFilter, normalizeSavedRowStatusFilter, type SavedRowStatusFilter } from "../lib/ocr/rowDisplay";
 import {
   buildScreenshotRenamePromptQueue,
   buildSuggestedScreenshotImageFilename,
@@ -197,7 +197,7 @@ type SavedRowValidationFilter = "" | "ok" | "error";
 
 type SavedRowFilters = {
   terminalShortId: string;
-  status: string;
+  status: SavedRowStatusFilter;
   validation: SavedRowValidationFilter;
   keyword: string;
 };
@@ -249,9 +249,15 @@ function readSavedRowUi(sourceType: OcrSourceType): SavedRowUiPersist | null {
     if (!parsed || typeof parsed !== "object") {
       return null;
     }
+    const filters: Partial<SavedRowFilters> =
+      parsed.filters && typeof parsed.filters === "object" ? parsed.filters : {};
     return {
       page: typeof parsed.page === "number" && parsed.page >= 0 ? parsed.page : 0,
-      filters: { ...DEFAULT_SAVED_ROW_FILTERS, ...(parsed.filters || {}) },
+      filters: {
+        ...DEFAULT_SAVED_ROW_FILTERS,
+        ...filters,
+        status: normalizeSavedRowStatusFilter(filters.status),
+      },
     };
   } catch {
     return null;
@@ -1958,7 +1964,7 @@ export function ReceiptOcrPage({
           return false;
         }
       }
-      if (savedRowFilters.status && row.status !== savedRowFilters.status) {
+      if (!matchesSavedRowStatusFilter(row, savedRowFilters.status)) {
         return false;
       }
       if (savedRowFilters.validation === "ok") {
@@ -2890,14 +2896,32 @@ export function ReceiptOcrPage({
               />
             </label>
           ) : null}
+          <button
+            type="button"
+            className={`secondary-button ocr-saved-status-filter-toggle${
+              savedRowFilters.status === "unconfirmed" ? " is-active" : ""
+            }`}
+            aria-pressed={savedRowFilters.status === "unconfirmed"}
+            onClick={() =>
+              handleSavedRowFilterChange({
+                status: savedRowFilters.status === "unconfirmed" ? "" : "unconfirmed",
+              })
+            }
+          >
+            未確定のみ
+          </button>
           <label>
             ステータス
             <select
               value={savedRowFilters.status}
-              onChange={(event) => handleSavedRowFilterChange({ status: event.target.value })}
+              onChange={(event) =>
+                handleSavedRowFilterChange({
+                  status: normalizeSavedRowStatusFilter(event.target.value),
+                })
+              }
             >
               <option value="">すべて</option>
-              <option value="pending_review">未確定</option>
+              <option value="unconfirmed">未確定</option>
               <option value="confirmed">確定済み</option>
             </select>
           </label>

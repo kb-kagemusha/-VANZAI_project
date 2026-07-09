@@ -2623,6 +2623,12 @@ button {
   gap: 0.5rem;
 }
 
+.ocr-saved-status-filter-toggle.is-active {
+  border-color: rgba(200, 85, 61, 0.35);
+  background: rgba(200, 85, 61, 0.12);
+  color: #9a3412;
+}
+
 .ocr-sort-button {
   display: inline-flex;
   align-items: center;
