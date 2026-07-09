@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatOcrRowValidationCell, getOcrRowDisplayLabels, isOcrRowConfirmable, isOcrRowDeletable, isOcrRowSelectable } from "./rowDisplay";
+import {
+  formatOcrRowConfirmBlockerMessage,
+  formatOcrRowValidationCell,
+  getOcrRowConfirmBlockers,
+  getOcrRowDisplayLabels,
+  isOcrRowConfirmable,
+  isOcrRowDeletable,
+  isOcrRowSelectable,
+} from "./rowDisplay";
 
 const BASE_SCREENSHOT_ROW = {
   amount_inferred: false,
@@ -65,14 +73,49 @@ describe("getOcrRowDisplayLabels", () => {
 });
 
 describe("isOcrRowConfirmable", () => {
-  it("disables confirm-required rows", () => {
-    expect(isOcrRowConfirmable({ confirm_required: true, status: "pending_review" })).toBe(false);
-    expect(isOcrRowConfirmable({ confirm_required: false, status: "pending_review" })).toBe(true);
-    expect(isOcrRowConfirmable({ confirm_required: false, status: "confirmed" })).toBe(false);
+  const baseRow = {
+    status: "pending_review" as const,
+    source_type: "paygate_screenshot" as const,
+    terminal_id_partial: false,
+    validation_errors: null,
+    amount_inferred: false,
+    amount_source: "ocr",
+    datetime_source: "ocr_strict",
+    record_date: "2026-06-27",
+    record_time: "12:00:00",
+    amount: "980",
+    transaction_no: "1272409",
+    receipt_no: "7782464677325",
+  };
+
+  it("allows confirm when only confirm_required is true (OCR補正・fuzzy日時)", () => {
+    expect(
+      isOcrRowConfirmable({
+        ...baseRow,
+        amount_source: "corrected_ocr",
+        datetime_source: "fuzzy",
+      }),
+    ).toBe(true);
+  });
+
+  it("blocks inferred amount rows", () => {
+    expect(
+      isOcrRowConfirmable({
+        ...baseRow,
+        amount_inferred: true,
+        amount_source: "fallback_default",
+      }),
+    ).toBe(false);
+  });
+
+  it("blocks confirmed rows", () => {
+    expect(isOcrRowConfirmable({ ...baseRow, status: "confirmed" })).toBe(false);
   });
 
   it("keeps alias isOcrRowSelectable in sync", () => {
-    expect(isOcrRowSelectable({ confirm_required: true, status: "pending_review" })).toBe(false);
+    expect(isOcrRowSelectable({ ...baseRow, amount_inferred: true, amount_source: "fallback_default" })).toBe(
+      false,
+    );
   });
 });
 

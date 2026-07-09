@@ -149,12 +149,20 @@ def metadata_from_parsed_fields(
 
 
 def _get_screenshot_confirm_rejection_reasons(row: Any) -> list[str]:
-    """paygate_screenshot: transaction_no / receipt_no が必須。"""
+    """paygate_screenshot: 必須項目・検証エラー・推定値のみブロック。
+
+    confirm_required はレビュー促し用フラグ。目視確認後の「問題なしで確定」は
+    補正済み金額(corrected_ocr)や fuzzy 日時でも許可する。
+    """
     reasons: list[str] = []
-    if getattr(row, "confirm_required", False):
-        reasons.append("confirm_required")
     if getattr(row, "validation_errors", None):
         reasons.append("validation_errors")
+    if getattr(row, "amount_inferred", False):
+        reasons.append("amount_inferred")
+    if getattr(row, "amount_source", None) == "fallback_default":
+        reasons.append("amount_inferred")
+    if getattr(row, "datetime_source", None) == "missing":
+        reasons.append("missing_datetime")
     if row.record_date is None:
         reasons.append("missing_record_date")
     if row.record_time is None:

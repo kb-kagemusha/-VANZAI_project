@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 import { ApiError, fetchOcrImageBlobUrl, renameOcrImage, updateOcrRow } from "../../lib/api/client";
 import { formatCurrency, formatYenAmountPlain } from "../../lib/formatters";
-import { getOcrRowDisplayLabels, isOcrRowConfirmable } from "../../lib/ocr/rowDisplay";
+import { getOcrRowDisplayLabels, isOcrRowConfirmable, formatOcrRowConfirmBlockerMessage, getOcrRowConfirmBlockers } from "../../lib/ocr/rowDisplay";
 import type { OcrParseProgressState } from "../../lib/ocr/batchParse";
 import { normalizeTerminalShortIdInput } from "../../lib/ocr/terminalShortId";
 import { formatPaygatePaymentMethodDisplay } from "../../lib/ocr/paymentMethod";
@@ -336,6 +336,11 @@ export function OcrSavedRowReviewModal({
   const [customFilename, setCustomFilename] = useState<string | null>(null);
   const [editingFilename, setEditingFilename] = useState(false);
   const confirmable = isOcrRowConfirmable(row);
+  const confirmBlockers = useMemo(() => getOcrRowConfirmBlockers(row), [row]);
+  const confirmBlockerMessage = useMemo(
+    () => formatOcrRowConfirmBlockerMessage(confirmBlockers),
+    [confirmBlockers],
+  );
   const siblingProgressText = useMemo(
     () => (!isSettlement ? formatScreenshotSiblingProgressText(imageSiblingRows) : null),
     [imageSiblingRows, isSettlement],
@@ -381,7 +386,7 @@ export function OcrSavedRowReviewModal({
     setImageFilename(row.source_image_filename || row.source_image_id);
     setCustomFilename(null);
     setEditingFilename(false);
-  }, [imageSiblingRows, row]);
+  }, [row]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -461,8 +466,8 @@ export function OcrSavedRowReviewModal({
       setError("変更を保存してから確定してください。");
       return;
     }
-    if (!confirmable || row.terminal_id_partial) {
-      setError("要確認の項目があります。内容を修正して保存してから確定してください。");
+    if (!confirmable) {
+      setError(confirmBlockerMessage || "確定できない項目があります。内容を修正してから確定してください。");
       return;
     }
     setError(null);
@@ -622,6 +627,9 @@ export function OcrSavedRowReviewModal({
           </div>
           <div className="ocr-row-review-data-footer">
             {error ? <p className="ocr-warning-text">{error}</p> : null}
+            {!confirmable && confirmBlockerMessage ? (
+              <p className="ocr-warning-text ocr-row-review-confirm-blocker">{confirmBlockerMessage}</p>
+            ) : null}
             {isDirty ? <p className="ocr-row-review-dirty-note">未保存の変更があります</p> : null}
             <div className="ocr-modal-actions ocr-row-review-actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
@@ -647,13 +655,13 @@ export function OcrSavedRowReviewModal({
                 type="button"
                 className="primary-button"
                 onClick={handleConfirm}
-                disabled={busy || !confirmable || isDirty || row.terminal_id_partial}
+                disabled={busy || !confirmable || isDirty}
                 title={
-                  row.terminal_id_partial
-                    ? "端末番号が部分抽出のため確定できません"
-                    : confirmable
-                      ? "問題なしとして確定します"
-                      : "要確認項目を解消してから確定できます"
+                  confirmable
+                    ? row.confirm_required
+                      ? "要確認項目がありますが、内容を確認済みなら確定できます"
+                      : "問題なしとして確定します"
+                    : confirmBlockerMessage || "確定できません"
                 }
               >
                 {confirming ? "確定中..." : "問題なしで確定"}

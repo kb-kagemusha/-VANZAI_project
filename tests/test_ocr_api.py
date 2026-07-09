@@ -561,7 +561,7 @@ def test_confirm_rejects_confirm_required_rows(api_client, db_session, accountin
     assert response.status_code == 422
     body = response.json()["detail"]
     assert row.id in body["rejected_row_ids"]
-    assert "confirm_required" in body["reasons"][row.id]
+    assert "amount_inferred" in body["reasons"][row.id]
 
     db_session.refresh(ok_row)
     assert ok_row.status == "pending_review"

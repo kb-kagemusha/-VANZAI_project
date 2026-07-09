@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from src.services.ocr.confirm_metadata import (
+    get_confirm_rejection_reasons,
     metadata_from_parsed_fields,
     resolve_amount_from_parser_meta,
 )
@@ -110,3 +111,43 @@ def test_invalid_record_time_adds_validation_error():
     )
     errors = validate_parsed_row(parsed)
     assert "record_time format is invalid (expected HH:MM:SS)" in errors
+
+
+def test_screenshot_confirm_allows_corrected_ocr_without_confirm_required_block():
+    class _Row:
+        source_type = "paygate_screenshot"
+        status = "pending_review"
+        deleted_at = None
+        validation_errors = None
+        amount_inferred = False
+        amount_source = "corrected_ocr"
+        datetime_source = "fuzzy"
+        confirm_required = True
+        record_date = date(2026, 6, 10)
+        record_time = "20:52:07"
+        amount = Decimal("980")
+        transaction_no = "1230567"
+        receipt_no = "7810946337325"
+
+    assert get_confirm_rejection_reasons(_Row()) == []
+
+
+def test_screenshot_confirm_still_blocks_inferred_amount():
+    class _Row:
+        source_type = "paygate_screenshot"
+        status = "pending_review"
+        deleted_at = None
+        validation_errors = None
+        amount_inferred = True
+        amount_source = "fallback_default"
+        datetime_source = "ocr_strict"
+        confirm_required = True
+        record_date = date(2026, 6, 10)
+        record_time = "20:52:07"
+        amount = Decimal("980")
+        transaction_no = "1230567"
+        receipt_no = "7810946337325"
+
+    reasons = get_confirm_rejection_reasons(_Row())
+    assert "amount_inferred" in reasons
+    assert "confirm_required" not in reasons
