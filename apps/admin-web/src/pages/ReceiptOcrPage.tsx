@@ -1954,6 +1954,10 @@ export function ReceiptOcrPage({
     () => savedRows.filter((row) => row.source_type === sourceType),
     [savedRows, sourceType],
   );
+  const unconfirmedSavedRowCount = useMemo(
+    () => tabSavedRows.filter((row) => matchesSavedRowStatusFilter(row, "unconfirmed")).length,
+    [tabSavedRows],
+  );
   const filteredSavedRows = useMemo(() => {
     const terminalFilter = savedRowFilters.terminalShortId.trim().toLowerCase();
     const keyword = savedRowFilters.keyword.trim().toLowerCase();
@@ -2610,6 +2614,11 @@ export function ReceiptOcrPage({
           }}
         >
           保存データ
+          {unconfirmedSavedRowCount > 0 ? (
+            <span className="ocr-tab-badge" aria-label={`未確定 ${unconfirmedSavedRowCount} 件`}>
+              {unconfirmedSavedRowCount}
+            </span>
+          ) : null}
         </button>
         {isPaygate ? (
           <>
