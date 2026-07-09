@@ -31,7 +31,7 @@ from src.services.ocr.parsers.settlement_terminal_id import (
 )
 from src.services.ocr.parsers.settlement_layout import (
     extract_amounts_from_layout,
-    extract_settlement_datetime,
+    extract_settlement_datetime_with_meta,
     merge_layout_amounts,
 )
 from src.services.ocr.parsers.ocr_field_confidence import build_settlement_field_confidence
@@ -1382,18 +1382,11 @@ def _normalize_settlement_text(text: str) -> str:
     return normalized
 
 
-def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, str]:
-    layout_date, layout_time = extract_settlement_datetime(text)
+def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, str, date | None]:
+    layout_date, layout_time, corrected_from = extract_settlement_datetime_with_meta(text)
     if layout_date and layout_time:
-        return layout_date, layout_time, "layout"
-
-    dt_match = _DATETIME_RE.search(text)
-    if dt_match:
-        return (
-            datetime.strptime(dt_match.group(1), "%Y/%m/%d").date(),
-            dt_match.group(2),
-            "ocr_strict",
-        )
+        source = "fuzzy" if corrected_from else "layout"
+        return layout_date, layout_time, source, corrected_from
 
     date_match = _SETTLEMENT_DATE_RE.search(text)
     time_match = _SETTLEMENT_TIME_RE.search(text)
@@ -1405,10 +1398,25 @@ def _extract_settlement_datetime(text: str) -> tuple[date | None, str | None, st
         record_time = time_match.group(1)
 
     if record_date and record_time:
-        return record_date, record_time, "ocr_strict"
+        record_date, record_time, corrected_from = _finalize_settlement_datetime_from_layout(
+            record_date,
+            record_time,
+        )
+        source = "fuzzy" if corrected_from else "ocr_strict"
+        return record_date, record_time, source, corrected_from
     if record_date or record_time:
-        return record_date, record_time, "fuzzy"
-    return None, None, "missing"
+        return record_date, record_time, "fuzzy", None
+    return None, None, "missing", None
+
+
+def _finalize_settlement_datetime_from_layout(
+    record_date: date,
+    record_time: str,
+) -> tuple[date, str, date | None]:
+    from src.services.ocr.parsers.settlement_layout import _finalize_settlement_datetime
+
+    repaired_date, repaired_time, corrected_from = _finalize_settlement_datetime(record_date, record_time)
+    return repaired_date or record_date, repaired_time or record_time, corrected_from
 
 
 class PaygateSettlementParser(BaseOcrParser):
@@ -1419,7 +1427,7 @@ class PaygateSettlementParser(BaseOcrParser):
         if not _SETTLEMENT_SIGNAL_RE.search(text):
             return []
 
-        record_date, record_time, parsed_datetime_source = _extract_settlement_datetime(text)
+        record_date, record_time, parsed_datetime_source, datetime_corrected_from = _extract_settlement_datetime(text)
         amounts, amount_corrections = _extract_settlement_amounts(text)
         terminal_short_id_hint = _extract_terminal_short_id_hint(text)
         terminal_id, terminal_meta = _extract_terminal_id_with_meta(ocr_result, text, terminal_short_id_hint)
@@ -1496,6 +1504,11 @@ class PaygateSettlementParser(BaseOcrParser):
                 "amounts": {k: str(v) for k, v in amounts.items() if v is not None},
                 **({"amount_corrections": amount_corrections} if amount_corrections else {}),
                 **amount_meta,
+                **(
+                    {"datetime_corrected_from": datetime_corrected_from.isoformat()}
+                    if datetime_corrected_from
+                    else {}
+                ),
             },
         )
         apply_settlement_derived_fields(parsed)

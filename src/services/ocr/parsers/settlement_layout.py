@@ -6,8 +6,11 @@ Typical order:
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
+
+from src.services.ocr.parsers.paygate_consensus import dates_differ_by_ocr_confusion
 
 from src.services.ocr.parsers.settlement_amount import (
     _is_settlement_amount_plausible,
@@ -272,6 +275,93 @@ def _parse_settlement_time_from_text(line: str) -> str | None:
     return None
 
 
+def _repair_settlement_year_by_recency(record_date: date) -> date:
+    """年桁 5/6 混同の単一候補を、本日に近い妥当な年へ補正する。"""
+    today = date.today()
+    best = record_date
+    best_distance = abs((record_date - today).days)
+    year_str = f"{record_date.year:04d}"
+    for index, digit in enumerate(year_str):
+        if digit not in {"5", "6"}:
+            continue
+        flipped = "6" if digit == "5" else "5"
+        alt_year = int(year_str[:index] + flipped + year_str[index + 1 :])
+        alt = _valid_settlement_date(alt_year, record_date.month, record_date.day)
+        if alt is None or not dates_differ_by_ocr_confusion(record_date, alt):
+            continue
+        distance = abs((alt - today).days)
+        if distance < best_distance:
+            best = alt
+            best_distance = distance
+    return best
+
+
+def collect_settlement_date_candidates(zone: str) -> list[date]:
+    """精算ヘッダ帯から読み取れる日付候補をすべて集める（マルチパスOCRの年誤読対策）。"""
+    normalized_zone = "\n".join(_normalize_datetime_line(line) for line in zone.splitlines())
+    candidates: list[date] = []
+
+    for match in _DATETIME_RE.finditer(normalized_zone):
+        candidates.append(datetime.strptime(match.group(1), "%Y/%m/%d").date())
+
+    lines = [line.strip() for line in normalized_zone.splitlines() if line.strip()]
+    joined_lines = _join_split_date_lines([_normalize_datetime_line(line) for line in lines])
+    for line in joined_lines:
+        parsed = _parse_settlement_date_from_text(line)
+        if parsed:
+            candidates.append(parsed)
+
+    return candidates
+
+
+def resolve_settlement_date_candidates(candidates: list[date]) -> date | None:
+    """複数の日付候補から、OCR 5/6 混同を考慮して最も妥当な日付を選ぶ。"""
+    if not candidates:
+        return None
+    counts = Counter(candidates)
+    ranked = counts.most_common()
+    top_date, top_count = ranked[0]
+    if len(ranked) == 1:
+        return top_date
+    second_date, second_count = ranked[1]
+    if top_count > second_count:
+        return top_date
+    if top_count == second_count and dates_differ_by_ocr_confusion(top_date, second_date):
+        return max(top_date, second_date)
+    confusion_cluster = [
+        candidate
+        for candidate, count in ranked
+        if count == top_count
+        and any(
+            dates_differ_by_ocr_confusion(candidate, other)
+            for other, other_count in ranked
+            if other_count == top_count and other != candidate
+        )
+    ]
+    if len(confusion_cluster) >= 2:
+        return max(confusion_cluster)
+    return top_date
+
+
+def resolve_settlement_date_votes(votes: list[tuple[date, float]]) -> date | None:
+    """OCR 行信頼度付きの日付候補から最終日付を決める。"""
+    if not votes:
+        return None
+    scores: dict[date, float] = {}
+    for record_date, weight in votes:
+        scores[record_date] = scores.get(record_date, 0.0) + weight
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], -item[0].toordinal()))
+    top_date, top_score = ranked[0]
+    if len(ranked) == 1:
+        return top_date
+    second_date, second_score = ranked[1]
+    if top_score > second_score + 0.05:
+        return top_date
+    if dates_differ_by_ocr_confusion(top_date, second_date):
+        return max(top_date, second_date)
+    return top_date
+
+
 def _pair_date_time_from_lines(lines: list[str], *, max_gap: int = 3) -> tuple[date | None, str | None]:
     normalized = _join_split_date_lines([_normalize_datetime_line(line) for line in lines])
     date_hits: list[tuple[int, date]] = []
@@ -297,50 +387,96 @@ def _pair_date_time_from_lines(lines: list[str], *, max_gap: int = 3) -> tuple[d
     return best
 
 
-def _extract_datetime_from_zone(zone: str) -> tuple[date | None, str | None]:
+def _finalize_settlement_datetime(
+    record_date: date | None,
+    record_time: str | None,
+    corrected_from: date | None = None,
+) -> tuple[date | None, str | None, date | None]:
+    if record_date is None:
+        return None, record_time, corrected_from
+    repaired = _repair_settlement_year_by_recency(record_date)
+    if repaired == record_date:
+        return record_date, record_time, corrected_from
+    return repaired, record_time, corrected_from or record_date
+
+
+def _extract_datetime_from_zone(zone: str) -> tuple[date | None, str | None, date | None]:
     normalized_zone = "\n".join(_normalize_datetime_line(line) for line in zone.splitlines())
-    match = _DATETIME_RE.search(normalized_zone)
-    if match:
-        return (
-            datetime.strptime(match.group(1), "%Y/%m/%d").date(),
-            match.group(2),
-        )
+    datetime_pairs: list[tuple[date, str | None]] = []
+    first_in_zone: date | None = None
+    for match in _DATETIME_RE.finditer(normalized_zone):
+        parsed_date = datetime.strptime(match.group(1), "%Y/%m/%d").date()
+        if first_in_zone is None:
+            first_in_zone = parsed_date
+        datetime_pairs.append((parsed_date, match.group(2)))
 
     lines = [line.strip() for line in normalized_zone.splitlines() if line.strip()]
-    return _pair_date_time_from_lines(lines)
+    paired_date, paired_time = _pair_date_time_from_lines(lines)
+    if paired_date:
+        if first_in_zone is None:
+            first_in_zone = paired_date
+        datetime_pairs.append((paired_date, paired_time))
+
+    resolved_date = resolve_settlement_date_candidates(collect_settlement_date_candidates(zone))
+    if resolved_date is None and datetime_pairs:
+        resolved_date = resolve_settlement_date_candidates([pair[0] for pair in datetime_pairs])
+    if resolved_date is None:
+        return None, None, None
+
+    corrected_from: date | None = None
+    if (
+        first_in_zone is not None
+        and resolved_date != first_in_zone
+        and dates_differ_by_ocr_confusion(first_in_zone, resolved_date)
+    ):
+        corrected_from = first_in_zone
+
+    matched_times = [record_time for record_date, record_time in datetime_pairs if record_date == resolved_date and record_time]
+    if matched_times:
+        return _finalize_settlement_datetime(resolved_date, matched_times[0], corrected_from)
+    fallback_times = [record_time for _, record_time in datetime_pairs if record_time]
+    if fallback_times:
+        return _finalize_settlement_datetime(resolved_date, fallback_times[0], corrected_from)
+    return _finalize_settlement_datetime(resolved_date, paired_time, corrected_from)
 
 
 def extract_settlement_datetime(text: str) -> tuple[date | None, str | None]:
     """精算レシートの日時を、固定順序と行分割の両方から抽出する。"""
+    record_date, record_time, _ = extract_settlement_datetime_with_meta(text)
+    return record_date, record_time
+
+
+def extract_settlement_datetime_with_meta(text: str) -> tuple[date | None, str | None, date | None]:
+    """精算レシートの日時と、年桁補正前の日付（あれば）を返す。"""
     for settlement in _SETTLEMENT_TITLE_RE.finditer(text):
         after_settlement = text[settlement.end() :]
         terminal = _TERMINAL_LABEL_RE.search(after_settlement)
         header = after_settlement[: terminal.start()] if terminal else after_settlement[:250]
-        record_date, record_time = _extract_datetime_from_zone(header)
+        record_date, record_time, corrected_from = _extract_datetime_from_zone(header)
         if record_date and record_time:
-            return record_date, record_time
+            return record_date, record_time, corrected_from
 
     for match in _TERMINAL_SHORT_ID_ZONE_RE.finditer(text):
         zone = text[match.end() : match.end() + 220]
         terminal = _TERMINAL_LABEL_RE.search(zone)
         header = zone[: terminal.start()] if terminal else zone
-        record_date, record_time = _extract_datetime_from_zone(header)
+        record_date, record_time, corrected_from = _extract_datetime_from_zone(header)
         if record_date and record_time:
-            return record_date, record_time
+            return record_date, record_time, corrected_from
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     record_date, record_time = _pair_date_time_from_lines(lines, max_gap=4)
     if record_date and record_time:
-        return record_date, record_time
+        return _finalize_settlement_datetime(record_date, record_time)
 
     normalized_text = "\n".join(_normalize_datetime_line(line) for line in text.splitlines())
     match = _DATETIME_RE.search(normalized_text)
     if match:
-        return (
+        return _finalize_settlement_datetime(
             datetime.strptime(match.group(1), "%Y/%m/%d").date(),
             match.group(2),
         )
-    return None, None
+    return None, None, None
 
 
 def extract_settlement_datetime_from_layout(text: str) -> tuple[date | None, str | None]:

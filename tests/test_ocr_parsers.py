@@ -721,11 +721,11 @@ PRODUCTION_OCR_TEXT_260703_8 = """
 6bfac729-2983-40e1-8785-
 \u01119ecf7f5cb39
 小計
-13,920
+3,920
 合計
-13,920
+3,920
 現金売上
-13,920
+3,920
 通常取引数
 4
 """
@@ -740,6 +740,37 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_8():
     assert row.terminal_id == "6bfac729-2983-40e1-8785-d9ecf7f5cb39"
     assert row.amount == Decimal("3920")
     assert row.transaction_count == 4
+    assert row.record_date == date(2026, 6, 29)
+    assert row.record_time == "23:06:21"
+
+
+PRODUCTION_OCR_TEXT_260703_8_MISREAD_YEAR = """
+端末識別番号:6bfa
+精算
+2025/06/29 23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-
+d9ecf7f5cb39
+小計
+3,920
+合計
+3,920
+現金売上
+3,920
+通常取引数
+4
+"""
+
+
+def test_paygate_settlement_parser_corrects_year_five_to_six_for_260703_8():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_8_MISREAD_YEAR))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 6, 29)
+    assert row.record_time == "23:06:21"
+    assert row.datetime_source == "fuzzy"
+    assert row.raw_payload.get("datetime_corrected_from") == "2025-06-29"
 
 
 PRODUCTION_OCR_TEXT_260703_11 = """

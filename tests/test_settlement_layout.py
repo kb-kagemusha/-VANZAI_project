@@ -153,3 +153,31 @@ def test_extract_settlement_datetime_handles_nine_digit_compact_date_and_seven_d
     record_date, record_time = extract_settlement_datetime(text)
     assert record_date == date(2026, 7, 4)
     assert record_time == "23:04:34"
+
+
+def test_extract_settlement_datetime_prefers_2026_when_multipass_ocr_has_year_confusion():
+    text = """
+端末識別番号:6bfa
+精算
+2025/06/29 23:06:21
+2026/06/29
+23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-d9ecf7f5cb39
+"""
+    record_date, record_time = extract_settlement_datetime(text)
+    assert record_date == date(2026, 6, 29)
+    assert record_time == "23:06:21"
+
+
+def test_extract_settlement_datetime_repairs_single_candidate_year_five_to_six():
+    text = """
+端末識別番号:6bfa
+精算
+2025/06/29 23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-d9ecf7f5cb39
+"""
+    record_date, record_time = extract_settlement_datetime(text)
+    assert record_date == date(2026, 6, 29)
+    assert record_time == "23:06:21"
