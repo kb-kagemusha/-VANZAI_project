@@ -835,7 +835,7 @@ function OcrImageFilenameEditor({
     <div className="ocr-filename-display">
       <OcrFilenamePreviewLink imageId={image.id} filename={fullName} />
       <button type="button" className="ghost-button ocr-filename-edit" onClick={() => setEditing(true)}>
-        名前変更
+        ファイル名を変更
       </button>
     </div>
   );
@@ -1871,37 +1871,6 @@ export function ReceiptOcrPage({
     [deferredRenameImageIds, queryClient, selectedPeriodKey],
   );
 
-  const openRenamePromptForImage = useCallback(
-    (imageId: string) => {
-      const image = uploadedImages.find((item) => item.id === imageId);
-      if (!image) {
-        return;
-      }
-      const suggestedFilename = buildSuggestedScreenshotImageFilename(
-        savedRows,
-        imageId,
-        image.original_filename,
-      );
-      if (!suggestedFilename) {
-        return;
-      }
-      setDeferredRenameImageIds((current) => {
-        const next = new Set(current);
-        next.delete(imageId);
-        return next;
-      });
-      setRenamePromptQueue([
-        {
-          imageId,
-          currentFilename: image.original_filename || imageId,
-          suggestedFilename,
-          remainingCount: 0,
-        },
-      ]);
-    },
-    [savedRows, uploadedImages],
-  );
-
   const confirmMutation = useMutation({
     mutationFn: (rowIds: string[]) => confirmOcrRows(rowIds),
     onSuccess: async (_result, rowIds) => {
@@ -1928,14 +1897,50 @@ export function ReceiptOcrPage({
     if (sourceType !== "paygate_screenshot") {
       return new Set<string>();
     }
+    const filenames = new Map<string, string | null>();
+    for (const row of savedRows) {
+      if (row.source_type !== "paygate_screenshot" || row.voided_at) {
+        continue;
+      }
+      filenames.set(row.source_image_id, row.source_image_filename);
+    }
     const imageIds = new Set<string>();
-    for (const image of uploadedImages) {
-      if (needsScreenshotRenamePrompt(savedRows, image.id, image.original_filename)) {
-        imageIds.add(image.id);
+    for (const [imageId, filename] of filenames) {
+      if (needsScreenshotRenamePrompt(savedRows, imageId, filename)) {
+        imageIds.add(imageId);
       }
     }
     return imageIds;
-  }, [savedRows, sourceType, uploadedImages]);
+  }, [savedRows, sourceType]);
+
+  const firstScreenshotImageNeedingTidy = useMemo(
+    () => [...screenshotImagesNeedingTidy][0] ?? null,
+    [screenshotImagesNeedingTidy],
+  );
+
+  const openScreenshotFilenameDialog = useCallback(
+    (imageId: string) => {
+      const image = uploadedImages.find((item) => item.id === imageId);
+      const sampleRow = savedRows.find((row) => row.source_image_id === imageId);
+      const currentFilename = image?.original_filename ?? sampleRow?.source_image_filename ?? imageId;
+      const suggestedFilename =
+        buildSuggestedScreenshotImageFilename(savedRows, imageId, currentFilename) ?? currentFilename;
+      setDeferredRenameImageIds((current) => {
+        const next = new Set(current);
+        next.delete(imageId);
+        return next;
+      });
+      setRenamePromptQueue([
+        {
+          imageId,
+          currentFilename,
+          suggestedFilename,
+          remainingCount: 0,
+        },
+      ]);
+    },
+    [savedRows, uploadedImages],
+  );
 
   const currentRenamePrompt = renamePromptQueue[0] ?? null;
 
@@ -2160,13 +2165,24 @@ export function ReceiptOcrPage({
         const name = row.source_image_filename;
         if (!name) return "-";
         return (
-          <OcrFilenamePreviewLink
-            imageId={row.source_image_id}
-            filename={name}
-            hideExtension
-            clampLines={sourceType === "paygate_settlement"}
-            onClickPreview={() => setReviewingRow(row)}
-          />
+          <div className="ocr-saved-row-filename-cell">
+            <OcrFilenamePreviewLink
+              imageId={row.source_image_id}
+              filename={name}
+              hideExtension
+              clampLines={sourceType === "paygate_settlement"}
+              onClickPreview={() => setReviewingRow(row)}
+            />
+            {sourceType === "paygate_screenshot" ? (
+              <button
+                type="button"
+                className="ghost-button ocr-saved-row-filename-action"
+                onClick={() => openScreenshotFilenameDialog(row.source_image_id)}
+              >
+                {screenshotImagesNeedingTidy.has(row.source_image_id) ? "整理" : "名前変更"}
+              </button>
+            ) : null}
+          </div>
         );
       },
     },
@@ -2569,6 +2585,11 @@ export function ReceiptOcrPage({
           }}
         >
           アップロード済み画像
+          {screenshotImagesNeedingTidy.size > 0 ? (
+            <span className="ocr-tab-badge" aria-label={`名前未整理 ${screenshotImagesNeedingTidy.size} 件`}>
+              {screenshotImagesNeedingTidy.size}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -2632,7 +2653,9 @@ export function ReceiptOcrPage({
             description={
               imagesSectionCollapsed
                 ? `全 ${totalImages} 件（折りたたみ中）`
-                : "サーバーに保存された画像のサムネイル・状態を表示します。"
+                : sourceType === "paygate_screenshot"
+                  ? "サーバーに保存された画像のサムネイル・状態を表示します。ファイル名は各画像の「名前変更」「名前を整理」、または保存データ一覧からも変更できます。"
+                  : "サーバーに保存された画像のサムネイル・状態を表示します。"
             }
           />
           <button
@@ -2753,7 +2776,7 @@ export function ReceiptOcrPage({
                       }
                       needsFilenameTidy={screenshotImagesNeedingTidy.has(image.id)}
                       onOrganizeFilename={
-                        sourceType === "paygate_screenshot" ? openRenamePromptForImage : undefined
+                        sourceType === "paygate_screenshot" ? openScreenshotFilenameDialog : undefined
                       }
                     />
                   ))}
@@ -2802,6 +2825,37 @@ export function ReceiptOcrPage({
           title="保存データ"
           description={`${pageTitle}の解析結果を年月別に表示します（${tabSavedRows.length}件）。`}
         />
+        {sourceType === "paygate_screenshot" && screenshotImagesNeedingTidy.size > 0 ? (
+          <div className="ocr-filename-tidy-banner" role="status">
+            <div className="ocr-filename-tidy-banner-text">
+              <strong>ファイル名の整理が未完了の画像が {screenshotImagesNeedingTidy.size} 件あります。</strong>
+              <span>
+                一覧の「整理」ボタン、詳細の「推奨名に整理」、または「アップロード済み画像」タブから変更できます。
+              </span>
+            </div>
+            <div className="ocr-filename-tidy-banner-actions">
+              {firstScreenshotImageNeedingTidy ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => openScreenshotFilenameDialog(firstScreenshotImageNeedingTidy)}
+                >
+                  整理を始める
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setDataSectionTab("uploaded_images");
+                  writeOcrDataSectionTab(sourceType, "uploaded_images");
+                }}
+              >
+                アップロード済み画像へ
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="filter-row">
           <label>
             対象月
@@ -3177,6 +3231,8 @@ export function ReceiptOcrPage({
             setReviewingRow(null);
           }}
           confirming={confirmMutation.isPending}
+          screenshotImageNeedsTidy={screenshotImagesNeedingTidy.has(reviewingRowLive.source_image_id)}
+          onOrganizeScreenshotFilename={() => openScreenshotFilenameDialog(reviewingRowLive.source_image_id)}
           onReparse={
             reviewingRowLive.status !== "confirmed"
               ? () =>
@@ -3532,6 +3588,12 @@ export function ReceiptOcrPage({
           }
           setDeferredRenameImageIds((current) => new Set(current).add(currentRenamePrompt.imageId));
           setRenamePromptQueue((queue) => queue.slice(1));
+          showNotification({
+            tone: "info",
+            title: "ファイル名の整理をあとで行えます",
+            message:
+              "保存データ一覧の案内バナー、「画像ファイル」列の「整理／名前変更」、または「アップロード済み画像」タブからいつでも変更できます。",
+          });
         }}
       />
       <ConfirmDialog

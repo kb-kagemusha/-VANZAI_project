@@ -3282,6 +3282,73 @@ button {
   color: var(--ink);
 }
 
+.ocr-rename-prompt-footnote {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.ocr-filename-tidy-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: #fff4d6;
+  border: 1px solid #f0d48a;
+}
+
+.ocr-filename-tidy-banner-text {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.ocr-filename-tidy-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ocr-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #8a5a00;
+  background: #fff4d6;
+  border: 1px solid #f0d48a;
+}
+
+.ocr-saved-row-filename-cell {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: start;
+}
+
+.ocr-saved-row-filename-action {
+  padding-inline: 0;
+  font-size: 0.78rem;
+}
+
+.ocr-row-review-filename-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 .ocr-rename-prompt-actions {
   display: flex;
   flex-wrap: wrap;

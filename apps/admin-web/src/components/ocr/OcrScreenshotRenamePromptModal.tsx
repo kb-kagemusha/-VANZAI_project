@@ -82,6 +82,9 @@ export function OcrScreenshotRenamePromptModal({
             />
           </label>
         ) : null}
+        <p className="ocr-rename-prompt-footnote">
+          「後で」にした場合も、保存データ一覧の案内バナー、または「アップロード済み画像」タブの各画像から変更できます。
+        </p>
         <div className="ocr-rename-prompt-actions">
           {editing ? (
             <>

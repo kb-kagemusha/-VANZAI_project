@@ -312,6 +312,8 @@ export function OcrSavedRowReviewModal({
   onReparse,
   reparsing,
   reparseProgress,
+  onOrganizeScreenshotFilename,
+  screenshotImageNeedsTidy,
 }: {
   row: OcrExtractedRowItem;
   imageSiblingRows?: OcrExtractedRowItem[];
@@ -322,6 +324,8 @@ export function OcrSavedRowReviewModal({
   onReparse?: () => void;
   reparsing?: boolean;
   reparseProgress?: OcrParseProgressState | null;
+  onOrganizeScreenshotFilename?: () => void;
+  screenshotImageNeedsTidy?: boolean;
 }) {
   const isSettlement = row.source_type === "paygate_settlement";
   const { url, failed } = useOcrImageBlobUrl(row.source_image_id);
@@ -524,7 +528,7 @@ export function OcrSavedRowReviewModal({
             </h3>
             <div className="ocr-row-review-summary">
             <div className="ocr-row-review-filename-row">
-              {editingFilename && row.status !== "confirmed" ? (
+              {editingFilename && (isSettlement ? row.status !== "confirmed" : true) ? (
                 <>
                   <input
                     type="text"
@@ -558,7 +562,7 @@ export function OcrSavedRowReviewModal({
                   <p className="ocr-row-review-filename" title={displayImageFilename}>
                     {displayImageFilename}
                   </p>
-                  {row.status !== "confirmed" ? (
+                  {isSettlement && row.status !== "confirmed" ? (
                     <button
                       type="button"
                       className="ghost-button ocr-row-review-filename-edit"
@@ -570,6 +574,30 @@ export function OcrSavedRowReviewModal({
                     >
                       名前変更
                     </button>
+                  ) : null}
+                  {!isSettlement && !editingFilename ? (
+                    <div className="ocr-row-review-filename-actions">
+                      {screenshotImageNeedsTidy && onOrganizeScreenshotFilename ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy}
+                          onClick={onOrganizeScreenshotFilename}
+                        >
+                          推奨名に整理
+                        </button>
+                      ) : null}
+                      {onOrganizeScreenshotFilename ? (
+                        <button
+                          type="button"
+                          className="ghost-button ocr-row-review-filename-edit"
+                          disabled={busy}
+                          onClick={onOrganizeScreenshotFilename}
+                        >
+                          ファイル名を変更
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </>
               )}
