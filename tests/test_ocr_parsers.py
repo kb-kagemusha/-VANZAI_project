@@ -655,9 +655,64 @@ def test_paygate_settlement_parser_handles_production_ocr_text_260703_4():
     rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_4))
     assert len(rows) == 1
     row = rows[0]
-    assert row.terminal_short_id == "af4c"
+    # -af4C は UUID 中腹断片であり端末識別番号ではない
+    assert row.terminal_short_id != "af4c"
     assert row.terminal_id is None
-    assert row.transaction_count == 6
+    assert row.raw_payload.get("terminal_id_partial") is True
+
+
+PRODUCTION_OCR_TEXT_260629_B0D6_SPLIT_TERMINAL = """
+日本たばこ産業株式会社
+登録番号: T4-0104-0102-3000
+端末識別番号: b0d6
+精算
+2026/06/29 23:00:30
+端末番号
+b0d6cc26-a0c1-49be-af4c-
+ff22d625c6a7
+小計 5,880
+合計 5,880
+現金売上 5,880
+通常取引数 6
+"""
+
+
+PRODUCTION_OCR_TEXT_260629_B0D6_GARBLED_TERMINAL = """
+日本たばこ産業株式会社
+登録番号: T4-0104-0102-3000
+端末識別番号: b0d6
+精算
+2026/06/29 23:00:30
+端末番号
+-af4C
+f22d625c6a7
+小計 5,880
+合計 5,880
+現金売上 5,880
+通常取引数 6
+"""
+
+
+def test_paygate_settlement_parser_handles_b0d6_split_terminal_uuid():
+    """実レシート相当: 端末番号が 8-4-4-4- / 12 桁で折り返し。"""
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260629_B0D6_SPLIT_TERMINAL))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert not row.raw_payload.get("terminal_id_partial")
+
+
+def test_paygate_settlement_parser_recovers_b0d6_terminal_from_af4c_tail_fragments():
+    """OCR が UUID 先頭行を落とし -af4C / f22d625c6a7 だけ残った場合の復元。"""
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260629_B0D6_GARBLED_TERMINAL))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert not row.raw_payload.get("terminal_id_partial")
 
 
 PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND = """

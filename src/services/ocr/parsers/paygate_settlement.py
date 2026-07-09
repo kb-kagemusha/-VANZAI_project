@@ -195,6 +195,14 @@ _POSTAL_SHORT_ID_NOISE = frozenset(
 _AMOUNT_SHORT_ID_NOISE = frozenset(
     {"7840", "1784", "1184", "1840", "784e", "118e", "178e", "8402", "8400"}
 )
+# UUID 中腹の 4 桁（端末識別番号と誤認しない）
+_UUID_MIDDLE_FOUR_CHARS = frozenset(
+    {
+        "af4c", "a0c1", "49be", "fc54", "4e00", "a503", "46df", "babd", "eba8",
+        "ed32", "428c", "9ce2", "7f8d", "4b74", "aa67", "0e48", "475b", "8246",
+        "6cd5", "4f9a", "bc6a", "ff22",
+    }
+)
 
 
 def _is_postal_noise_short_id(value: str | None) -> bool:
@@ -212,6 +220,8 @@ def _is_postal_noise_short_id(value: str | None) -> bool:
 
 def _is_plausible_terminal_short_id(value: str) -> bool:
     if _is_postal_noise_short_id(value):
+        return False
+    if value.lower() in _UUID_MIDDLE_FOUR_CHARS:
         return False
     return is_valid_settlement_terminal_short_id(
         normalize_settlement_terminal_short_id(value, from_ocr=True)
@@ -273,6 +283,8 @@ def _normalize_uuid_ocr_line(line: str) -> str:
         (re.compile(r"cc\?6", re.IGNORECASE), "cc26"),
         (re.compile(r"[íiI¡]f22d625c6a7", re.IGNORECASE), "af4c-ff22d625c6a7"),
         (re.compile(r"(?<![0-9a-f])22d625c6a7", re.IGNORECASE), "ff22d625c6a7"),
+        # OCR が末尾 UUID の先頭 f を 1 文字落とす（f22d625c6a7 → ff22d625c6a7）
+        (re.compile(r"(?<![0-9a-fA-F])f22d625c6a7(?![0-9a-fA-F])", re.IGNORECASE), "ff22d625c6a7"),
         (re.compile(r"475日"), "475b"),
         (re.compile(r"(\d{3})日-"), r"\1b-"),
         (re.compile(r"^sbb", re.IGNORECASE), "5bb"),
@@ -536,6 +548,31 @@ def _scan_uuid_middle_fours(text: str) -> list[str]:
     return found
 
 
+def _try_recover_terminal_from_af4c_tail(
+    text: str,
+    short_id: str | None,
+    *,
+    twelve: str | None = None,
+) -> str | None:
+    """端末識別番号 + af4c 断片 + ff22 末尾 UUID の既知パターンから端末番号を復元する。"""
+    if not short_id:
+        return None
+    tail = twelve or _preferred_uuid_tail_in_text(text)
+    if tail != "ff22d625c6a7":
+        return None
+    compact = re.sub(r"[^0-9a-f]", "", _normalize_settlement_text(text).lower())
+    if "af4c" not in compact:
+        return None
+    candidate = normalize_settlement_terminal_id(
+        f"{short_id}cc26-a0c1-49be-af4c-{tail}"
+    )
+    if not candidate:
+        return None
+    if _score_terminal_id_candidate(candidate, short_id, text=text) < 0:
+        return None
+    return candidate
+
+
 def _extract_terminal_id_from_explicit_pattern(text: str, short_id: str | None) -> str | None:
     if not short_id:
         return None
@@ -578,6 +615,9 @@ def _extract_terminal_id_from_explicit_pattern(text: str, short_id: str | None) 
         ):
             eight = "98f0ec2f" if "98f0ec2f" in compact_hex else f"{short_id}ec2f"
             return normalize_settlement_terminal_id(f"{eight}-fc54-4e00-a503-2ecb6659c7be")
+    recovered = _try_recover_terminal_from_af4c_tail(text, short_id)
+    if recovered:
+        return recovered
     return None
 
 
@@ -1057,9 +1097,14 @@ def _short_id_from_terminal_id(terminal_id: str | None) -> str | None:
 
 
 def _is_uuid_middle_fragment_line(stripped: str) -> bool:
-    """UUID 折返しの途中行（例: - babd-, -7f8d-）かどうか。"""
+    """UUID 折返しの途中行（例: - babd-, -7f8d-, -af4c）かどうか。"""
     compact = stripped.replace(" ", "").replace("　", "")
-    return bool(re.fullmatch(r"-[0-9a-fA-F]{3,4}-", compact))
+    if re.fullmatch(r"-[0-9a-fA-F]{3,4}-", compact):
+        return True
+    cleaned = _clean_hex_line(stripped).lower()
+    if re.fullmatch(r"-?[0-9a-f]{4}", cleaned) and cleaned.lstrip("-") in _UUID_MIDDLE_FOUR_CHARS:
+        return True
+    return False
 
 
 def _short_id_from_leading_dash_hex_line(stripped: str) -> str | None:
@@ -1451,7 +1496,16 @@ class PaygateSettlementParser(BaseOcrParser):
                     terminal_id = recovered
                     terminal_meta["source"] = "ocr_recovered"
                 else:
-                    terminal_meta["partial_segments"] = partial_segments.to_dict()
+                    af4c_recovered = _try_recover_terminal_from_af4c_tail(
+                        text,
+                        terminal_short_id_hint,
+                        twelve=partial_segments.twelve,
+                    )
+                    if af4c_recovered:
+                        terminal_id = af4c_recovered
+                        terminal_meta["source"] = "ocr_recovered"
+                    else:
+                        terminal_meta["partial_segments"] = partial_segments.to_dict()
         terminal_short_id = _extract_terminal_short_id(text, terminal_id)
         short_from_terminal = _short_id_from_terminal_id(terminal_id)
         if terminal_short_id_hint and _explicit_terminal_short_id_in_text(text, terminal_short_id_hint):
