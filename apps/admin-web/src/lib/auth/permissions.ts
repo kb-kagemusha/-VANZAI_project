@@ -17,10 +17,34 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: DASHBOARD_ROLES,
   },
   {
+    to: "/operations/availability-calendar",
+    label: "出勤可能日カレンダー",
+    description: "スタッフの出勤可能日とシフト担当を確認",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
+    to: "/operations/notices",
+    label: "スタッフ通知",
+    description: "シフト確定・案件変更などをスタッフへ通知",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
+    to: "/operations/registration-requests",
+    label: "登録申請",
+    description: "公開リンク発行と申請承認を管理",
+    allowedRoles: ["admin", "ops", "accounting"],
+  },
+  {
     to: "/operations/csv-import",
     label: "CSV取込",
     description: "実績CSVの提出と洗い替え",
     allowedRoles: ["admin", "ops", "site_manager"],
+  },
+  {
+    to: "/operations/ocr",
+    label: "レシートOCR",
+    description: "Paygateスクリーンショットと精算レシートのOCR解析",
+    allowedRoles: ["admin", "ops", "accounting"],
   },
   {
     to: "/operations/actuals",
@@ -30,8 +54,14 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/operations/assignments",
-    label: "アサイン一覧",
-    description: "予定と確定アサインの参照",
+    label: "配置一覧",
+    description: "予定と確定配置の参照",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
+    to: "/operations/assignment-responses",
+    label: "予定確認監視",
+    description: "未回答と要対応の監視",
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
@@ -65,12 +95,31 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/workers",
+    label: "稼働者一覧",
+    description: "稼働者（スタッフ）の一覧と編集",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
+    to: "/masters/prices",
+    label: "単価一覧",
+    description: "売上・外注・ルール単価を参照",
+    allowedRoles: ["admin", "ops", "accounting"],
+  },
+  {
+    to: "/masters/data",
+    label: "マスタ一覧",
+    description: "稼働者・下請け・クライアント等のマスタデータを参照",
+    allowedRoles: ["admin", "ops", "accounting", "site_manager"],
+  },
+  {
     to: "/audit-logs",
     label: "監査ログ",
     description: "監査ログを条件検索で参照",
     allowedRoles: ["admin", "ops", "accounting"],
   },
 ];
+
 
 export function canAccess(role: UserRole | null | undefined, allowedRoles: UserRole[]): boolean {
   return role ? allowedRoles.includes(role) : false;

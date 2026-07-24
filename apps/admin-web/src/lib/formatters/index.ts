@@ -24,16 +24,56 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+export function normalizeYenAmount(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numeric = Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  return Math.round(numeric);
+}
+
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  const normalized = normalizeYenAmount(value);
+  if (normalized === null) {
     return "-";
   }
 
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Number(value));
+  }).format(normalized);
+}
+
+/** 編集フォーム用。小数点なしの整数文字列を返す。 */
+export function formatYenAmountPlain(value: string | number | null | undefined): string {
+  const normalized = normalizeYenAmount(value);
+  if (normalized === null) {
+    return "";
+  }
+  return String(normalized);
+}
+
+export function formatMaskedAccountNumber(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+
+  if (value.length <= 4) {
+    return "*".repeat(value.length);
+  }
+
+  return `${"*".repeat(value.length - 4)}${value.slice(-4)}`;
 }
 
 export function toMonthInput(periodKey: string): string {
@@ -47,6 +87,17 @@ export function toPeriodKey(monthValue: string): string {
 export function currentMonthInput(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function periodKeyToDateRange(periodKey: string): { from: string; to: string } {
+  const year = Number(periodKey.slice(0, 4));
+  const month = Number(periodKey.slice(4, 6));
+  const lastDay = new Date(year, month, 0).getDate();
+
+  return {
+    from: `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-01`,
+    to: `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-${String(lastDay).padStart(2, "0")}`,
+  };
 }
 
 export function minutesToHours(minutes: number): string {
@@ -64,10 +115,17 @@ export function formatPeriodKey(value: string | null | undefined): string {
 
 const STATUS_LABELS: Record<string, string> = {
   active: "有効",
+  available: "稼働OK（1日）",
+  available_all_day: "稼働OK（1日）",
+  available_after_15: "稼働OK（15時〜）",
   inactive: "無効",
   invalid: "無効",
+  sent: "送信済み",
+  tentative: "仮確定",
   confirmed: "確定",
+  pending_review: "未確定",
   pending: "保留",
+  link_issued: "リンク発行済み",
   canceled: "取消",
   preparing: "準備中",
   issued: "発行済み",
@@ -82,6 +140,9 @@ const STATUS_LABELS: Record<string, string> = {
   soft_closed: "仮締め済み",
   hard_closed: "本締め済み",
   rejected: "却下",
+  unavailable: "稼働不可",
+  consult_required: "稼働はできなくはないので事前相談して",
+  undecided: "未登録",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -95,6 +156,7 @@ const ROLE_LABELS: Record<string, string> = {
 const PAYEE_TYPE_LABELS: Record<string, string> = {
   worker: "稼働者",
   supplier: "取引先",
+  vanzai_staff: "VANZAI担当者",
 };
 
 const IMPORT_MODE_LABELS: Record<string, string> = {
@@ -115,8 +177,35 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   replace_scope_executed: "洗い替え実行",
   actual_superseded: "実績差替え",
   actual_invalidated: "実績無効化",
+  worker_created: "稼働者作成",
+  worker_updated: "稼働者更新",
+  supplier_created: "下請け作成",
+  supplier_updated: "下請け更新",
+  client_created: "クライアント作成",
+  project_created: "案件作成",
+  site_created: "現場作成",
+  project_updated: "案件更新",
+  project_type_created: "案件種別作成",
+  role_created: "役割作成",
+  price_rule_created: "単価ルール作成",
+  price_rule_updated: "単価ルール更新",
+  price_sales_created: "売上単価作成",
+  price_sales_updated: "売上単価更新",
+  price_outsource_created: "外注単価作成",
+  price_outsource_updated: "外注単価更新",
+  shift_slot_created: "シフト枠作成",
+  shift_slot_updated: "シフト枠更新",
+  assignment_created: "アサイン作成",
+  assignment_updated: "アサイン更新",
   assignment_canceled: "アサイン取消",
   assignment_status_changed: "アサイン状態変更",
+  assignment_worker_response_updated: "予定確認応答更新",
+  assignment_response_reminder_sent: "予定確認催促送信",
+  assignment_response_reminder_failed: "予定確認催促失敗",
+  assignment_response_escalation_sent: "管理者通知送信",
+  assignment_response_escalation_failed: "管理者通知失敗",
+  assignment_selection_set_saved: "選択セット保存",
+  assignment_selection_set_deleted: "選択セット削除",
   price_rule_changed: "単価ルール変更",
   price_resolved: "単価解決",
   closing_soft_closed: "仮締め実行",
@@ -131,6 +220,22 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   payout_approved: "支払承認",
   payout_paid: "支払実行",
   payout_corrected: "支払訂正",
+  payout_delivery_sent: "支払明細送信",
+  payout_delivery_failed: "支払明細送信失敗",
+  attendance_checked_in: "出勤打刻",
+  attendance_checked_out: "退勤打刻",
+  availability_updated: "稼働可否更新",
+  expense_submitted: "経費申請",
+  expense_approved: "経費承認",
+  expense_rejected: "経費却下",
+  registration_link_created: "公開リンク作成",
+  registration_link_reissued: "公開リンク再発行",
+  registration_link_pin_lock_reset: "公開リンクロック解除",
+  registration_request_submitted: "登録申請送信",
+  registration_request_file_uploaded: "登録申請ファイルアップロード",
+  registration_request_file_downloaded: "登録申請ファイルダウンロード",
+  registration_request_approved: "登録申請承認",
+  registration_request_rejected: "登録申請却下",
 };
 
 export const AUDIT_ACTION_OPTION_GROUPS = [
@@ -142,8 +247,16 @@ export const AUDIT_ACTION_OPTION_GROUPS = [
       { value: "replace_scope_executed", label: "洗い替え実行" },
       { value: "actual_superseded", label: "実績差替え" },
       { value: "actual_invalidated", label: "実績無効化" },
+      { value: "assignment_updated", label: "アサイン更新" },
       { value: "assignment_canceled", label: "アサイン取消" },
       { value: "assignment_status_changed", label: "アサイン状態変更" },
+      { value: "assignment_worker_response_updated", label: "予定確認応答更新" },
+      { value: "assignment_response_reminder_sent", label: "予定確認催促送信" },
+      { value: "assignment_response_reminder_failed", label: "予定確認催促失敗" },
+      { value: "assignment_response_escalation_sent", label: "管理者通知送信" },
+      { value: "assignment_response_escalation_failed", label: "管理者通知失敗" },
+      { value: "assignment_selection_set_saved", label: "選択セット保存" },
+      { value: "assignment_selection_set_deleted", label: "選択セット削除" },
     ],
   },
   {
@@ -168,6 +281,8 @@ export const AUDIT_ACTION_OPTION_GROUPS = [
       { value: "payout_approved", label: "支払承認" },
       { value: "payout_paid", label: "支払実行" },
       { value: "payout_corrected", label: "支払訂正" },
+      { value: "payout_delivery_sent", label: "支払明細送信" },
+      { value: "payout_delivery_failed", label: "支払明細送信失敗" },
     ],
   },
 ] as Array<{
@@ -187,6 +302,8 @@ const AUDIT_TARGET_TYPE_LABELS: Record<string, string> = {
   actuals: "実績",
   assignment: "アサイン",
   assignments: "アサイン",
+  assignment_selection_set: "選択セット",
+  assignment_selection_sets: "選択セット",
   project: "案件",
   projects: "案件",
   shift_slot: "シフト枠",
@@ -195,6 +312,8 @@ const AUDIT_TARGET_TYPE_LABELS: Record<string, string> = {
   invoices: "請求書",
   payout: "支払明細",
   payouts: "支払明細",
+  payout_delivery: "支払明細送信",
+  payout_deliveries: "支払明細送信",
   closing: "締め",
   closings: "締め",
   expense: "経費",
@@ -270,6 +389,11 @@ const AUDIT_SUMMARY_KEY_LABELS: Record<string, string> = {
   paid_at: "支払日時",
   status: "状態",
   reason: "理由",
+  recipient_email: "送信先",
+  delivery_note: "送信理由メモ",
+  internal_note: "内部メモ",
+  error_message: "エラー",
+  provider: "プロバイダ",
 };
 
 export function formatAuditDetailValue(value: unknown): string {
@@ -293,6 +417,19 @@ export function formatStatus(value: string | null | undefined): string {
     return "-";
   }
   return STATUS_LABELS[value] || value;
+}
+
+const OCR_PARSE_STATUS_LABELS: Record<string, string> = {
+  pending: "解析待ち",
+  completed: "完了",
+  failed: "失敗",
+};
+
+export function formatOcrParseStatus(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  return OCR_PARSE_STATUS_LABELS[value] || formatStatus(value);
 }
 
 export function formatRole(value: string | null | undefined): string {

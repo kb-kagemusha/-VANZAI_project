@@ -30,6 +30,55 @@ def test_shift_unconfirmed_reminder():
     assert "テスト署名" in template.body
 
 
+def test_assignment_response_reminder():
+    """予定確認未回答催促メールテスト"""
+    service = EmailTemplateService(sender_signature="テスト署名")
+
+    template = service.assignment_response_reminder(
+        worker_name="山田太郎",
+        worker_email="yamada@example.com",
+        period_start=date(2026, 4, 1),
+        period_end=date(2026, 4, 15),
+        pending_assignments=[
+            {"work_date": date(2026, 4, 3), "project_name": "新宿警備案件", "shift_label": "日勤"},
+            {"work_date": date(2026, 4, 5), "project_name": "渋谷警備案件", "shift_label": None},
+        ],
+    )
+
+    assert template.to == "yamada@example.com"
+    assert "未回答の予定確認が2件あります" in template.subject
+    assert "山田太郎 様" in template.body
+    assert "対象期間: 2026-04-01〜2026-04-15" in template.body
+    assert "未回答件数: 2" in template.body
+
+
+def test_assignment_response_escalation_summary():
+    service = EmailTemplateService(sender_signature="テスト署名")
+
+    template = service.assignment_response_escalation_summary(
+        admin_name="Admin",
+        admin_email="admin@example.com",
+        period_start=date(2026, 4, 1),
+        period_end=date(2026, 4, 7),
+        escalated_assignments=[
+            {
+                "work_date": date(2026, 4, 2),
+                "project_name": "Project A",
+                "worker_name": "Worker A",
+                "shift_label": "日勤",
+                "reason": "依頼から96時間経過",
+            }
+        ],
+    )
+
+    assert template.to == "admin@example.com"
+    assert "エスカレーション対象が1件" in template.subject
+    assert "Admin 様" in template.body
+    assert "対象期間: 2026-04-01〜2026-04-07" in template.body
+    assert "Project A / Worker A / 日勤 / 依頼から96時間経過" in template.body
+    assert "テスト署名" in template.body
+
+
 def test_csv_unsubmitted_reminder():
     """CSV未提出催促メールテスト"""
     service = EmailTemplateService()

@@ -8,12 +8,14 @@ import {
 } from "react";
 
 import {
+  ApiError,
   clearStoredAccessToken,
   getCurrentUser,
   getStoredAccessToken,
   requestToken,
   setStoredAccessToken,
 } from "../api/client";
+import { DASHBOARD_ROLES, canAccess } from "./permissions";
 import type { AuthUser } from "../../types/api";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -23,9 +25,14 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function canUseAdminConsole(user: AuthUser): boolean {
+  return canAccess(user.role, DASHBOARD_ROLES);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
@@ -45,6 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const currentUser = await getCurrentUser();
+        if (!canUseAdminConsole(currentUser)) {
+          clearStoredAccessToken();
+          if (active) {
+            setUser(null);
+            setStatus("unauthenticated");
+          }
+          return;
+        }
         if (active) {
           setUser(currentUser);
           setStatus("authenticated");
@@ -83,6 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await requestToken(username, password);
       setStoredAccessToken(token.access_token);
       const currentUser = await getCurrentUser();
+      if (!canUseAdminConsole(currentUser)) {
+        clearStoredAccessToken();
+        setUser(null);
+        setStatus("unauthenticated");
+        throw new ApiError(403, "このアカウントは管理画面を利用できません");
+      }
       setUser(currentUser);
       setStatus("authenticated");
     },
@@ -90,6 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearStoredAccessToken();
       setUser(null);
       setStatus("unauthenticated");
+    },
+    async refreshUser() {
+      const currentUser = await getCurrentUser();
+      if (!canUseAdminConsole(currentUser)) {
+        clearStoredAccessToken();
+        setUser(null);
+        setStatus("unauthenticated");
+        throw new ApiError(403, "このアカウントは管理画面を利用できません");
+      }
+      setUser(currentUser);
     },
   };
 

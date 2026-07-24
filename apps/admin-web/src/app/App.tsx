@@ -4,16 +4,27 @@ import { AppShell } from "../components/AppShell";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
 import { CsvImportPage } from "../pages/CsvImportPage";
 import { ActualsPage } from "../pages/ActualsPage";
+import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
+import { AvailabilityCalendarPage } from "../pages/AvailabilityCalendarPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { InvoicesPage } from "../pages/InvoicesPage";
 import { LoginPage } from "../pages/LoginPage";
+import { MasterDataPage } from "../pages/MasterDataPage";
 import { PayoutsPage } from "../pages/PayoutsPage";
+import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
+import { WorkersPage } from "../pages/WorkersPage";
+import { ChangePasswordPage } from "../pages/ChangePasswordPage";
+import { NoticesPage } from "../pages/NoticesPage";
+import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
+import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
+import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
+import { OcrPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -21,6 +32,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
+      <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/403" element={<ForbiddenPage />} />
@@ -43,6 +56,31 @@ export function App() {
             }
           />
           <Route
+            path="/operations/ocr"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <OcrPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/ocr-paygate"
+            element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />}
+          />
+          <Route
+            path="/operations/ocr-settlement"
+            element={<Navigate to="/operations/ocr?source=paygate_settlement" replace />}
+          />
+          <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />} />
+          <Route
+            path="/operations/availability-calendar"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <AvailabilityCalendarPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
             path="/operations/actuals"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
@@ -55,6 +93,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
                 <AssignmentsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/assignment-responses"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <AssignmentResponsesPage />
               </PermissionRoute>
             }
           />
@@ -99,10 +145,51 @@ export function App() {
             }
           />
           <Route
+            path="/masters/prices"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <PriceManagementPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/workers"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <WorkersPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/data"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <MasterDataPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
             path="/audit-logs"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
                 <AuditLogsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/account/change-password" element={<ChangePasswordPage />} />
+          <Route
+            path="/operations/notices"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <NoticesPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/registration-requests"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <RegistrationRequestsPage />
               </PermissionRoute>
             }
           />

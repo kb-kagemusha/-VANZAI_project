@@ -1,0 +1,48 @@
+---
+description: 修正完了後は必ず 1)バージョン 2)CHANGELOG 3)コミット・push・デプロイ まで実行（毎回の明示指示不要）
+alwaysApply: true
+---
+
+# 修正完了後の必須手順（リリースワークフロー）
+
+ユーザー向けのコード変更（機能追加・バグ修正・UI改善・表示調整など）を完了したら、**ユーザーが「コミットしない」「デプロイしない」「ローカルのみ」等と明示しない限り、毎回必ず次の 3 ステップをこの順で最後まで実行する。**
+
+**「デプロイしますか？」と聞かず、完了報告だけで終えない。** 同じ指示をユーザーに繰り返させない。
+
+## 必須 3 ステップ
+
+### 1. バージョンアップ
+
+- `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` を**同一値**に更新
+- バグ修正・表示調整 → **Z**（例: `0.10.66` → `0.10.67`）
+- 既存画面への機能追加・新API → **Y**
+- 大きな機能・画面体系の変更 → **X**
+- 「修正だけだから据え置き」は不可
+
+### 2. CHANGELOG 追記
+
+- ルート `CHANGELOG.md` に `## [X.Y.Z] - YYYY-MM-DD` と変更内容を追記
+- ステップ 1 で上げた版番号と一致させる
+
+### 3. コミット・Push・デプロイ
+
+1. 変更範囲に応じたテストを実行
+2. `git add` → `git commit` → `git push origin <現在ブランチ>`
+3. VPS: `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh`
+   - SSH: `ssh -i ~/.ssh/vanzai_vps vanzai@220.158.28.35`（または `Host vanzai-vps`）
+4. `systemctl restart vanzai-api` が失敗したら `bash /var/www/vanzai/restart_uvicorn.sh`
+5. API 応答を確認（例: `curl`）
+
+手順の正本: `scripts/deploy/DEPLOY_STEPS.md`
+
+## スキップしてよい場合
+
+- 質問のみ・レビューのみ（コード未変更）
+- ユーザーが「コミットしない」「デプロイしない」「ローカルのみ」と明示したとき
+- ドキュメントのみで本番反映が不要と判断できるとき（ユーザーが本番反映を求めている場合は除く）
+
+## 完了報告に含めるもの
+
+- 反映バージョン（`Ver.X.Y.Z`）
+- コミット hash
+- push・デプロイ・API 再起動の成否

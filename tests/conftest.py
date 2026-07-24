@@ -1,6 +1,13 @@
 """
 Test fixtures for VANZAI project
 """
+import os
+
+# JWT_SECRET_KEY を1字字でも設定しておかないと、アプリ import で RuntimeError になる。
+# テスト用ダミー値をデフォルトにする（空文字も未設定と同扱いにする）。
+if not os.environ.get("JWT_SECRET_KEY"):
+    os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-only"
+
 import pytest
 from datetime import date, time
 from decimal import Decimal
@@ -13,6 +20,8 @@ from fastapi.testclient import TestClient
 from src.models.base import Base, generate_ulid
 from src.models.master import Worker, Client, Site, ProjectType, Role
 from src.models.transaction import Project, ShiftSlot, Assignment
+import src.models.ocr  # noqa: F401 — register OCR tables for metadata.create_all
+import src.models.inventory_reconciliation  # noqa: F401 — register inventory tables
 from src.models.enums import AssignmentStatus
 from src.api.main import app
 from src.api.deps import get_db

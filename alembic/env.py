@@ -1,6 +1,5 @@
-"""
-Alembic migration environment
-"""
+"""Alembic migration environment."""
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -13,6 +12,10 @@ from src.models.base import Base
 from src.models import master, transaction  # noqa: F401
 
 config = context.config
+
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
