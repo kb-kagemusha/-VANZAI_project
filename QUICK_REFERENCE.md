@@ -70,7 +70,7 @@ npm run smoke:e2e
 ## 📁 重要ファイルの場所
 
 ### 環境設定
-- `.env` - 環境変数（Kintone設定、SMTP設定など）
+- `.env` - 環境変数（SMTP設定、JWT、DB など）
 - `.env.example` - 環境変数テンプレート
 - `pyproject.toml` - Python依存関係
 
@@ -251,7 +251,7 @@ db.close()
   - A: `vanzai.db` 内の `clients`, `workers`, `roles` など
   
 - Q: CSVはどこ？
-  - A: `kintone_app/*.csv`（サンプル）、`docs/kintone/csv/*.csv`（ドキュメント用）
+  - A: `docs/kintone/csv/*.csv`（サンプル）、管理画面の CSV 取込
 
 - Q: APIエンドポイントは？
   - A: http://localhost:8000/api/docs で確認

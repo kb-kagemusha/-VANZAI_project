@@ -70,7 +70,7 @@
 - ✅ **REST API**: FastAPIによる完全なREST API（Swagger UI対応）
 - ✅ **メール送信**: SMTP統合（Gmail/SendGrid/AWS SES対応）
 - ✅ **銀行振込**: 全銀フォーマット自動生成
-- ✅ **Kintone連携**: マスタ同期・実績取得・エラー書き戻し
+- ✅ **Web管理画面**: admin-web（https://vanzai-portal.com）でマスタ・案件・請求・支払を一元管理
 - ✅ **スケジューラー**: 週次催促・日次更新・月次請求書の自動実行
 
 ### 📊 実装状況
@@ -166,29 +166,21 @@ pip install -e .
 copy .env.example .env
 
 # .env ファイルを編集
-# - KINTONE_SUBDOMAIN を設定
-# - Kintoneはアプリ別トークン方式: KINTONE_TOKEN_* を対象アプリ分だけ設定
-#   （アプリIDは KINTONE_APP_*、ゲストスペースは KINTONE_GUEST_SPACE_ID）
+# - JWT_SECRET_KEY（本番は openssl rand -hex 32 で生成）
 # - SMTP設定（開発環境はGmail推奨）
-# - 送信元メールをKintone設定アプリで管理する場合:
-#   KINTONE_APP_SYSTEM_SETTINGS / KINTONE_TOKEN_SYSTEM_SETTINGS を設定
+# - DATABASE_URL
 ```
 
-#### 2.1 Kintone マスタ同期（DB→Kintone）
+#### 2.1 マスタデータ投入（CSV / 管理画面）
 
-`scripts/sync_db_to_kintone.py` はデフォルトで **UPSERT（更新/追加）** を行い、再実行しても二重化しない想定です。
+マスタは **admin-web** または CSV 取込で管理する（Kintone 連携は廃止）。
 
 ```powershell
-# 例: 紹介者マスタを同期（デフォルト: upsert）
-C:/VANZAI_project/.venv/Scripts/python.exe scripts/sync_db_to_kintone.py suppliers
-
-# 例: 初回投入など、追加のみで実行したい場合
-C:/VANZAI_project/.venv/Scripts/python.exe scripts/sync_db_to_kintone.py suppliers --mode add
+# 例: テスト用マスタを投入
+python scripts/import_master_data.py
 ```
 
-UPSERTの注意:
-- `worker_id` / `client_id` / `supplier_id` 等のキー項目は、Kintone側で **フィールドコードが一致**し、かつ **重複禁止（ユニーク相当）が有効**である必要があります。
-- `introducer_supplier_id` はDBの `suppliers.id`（ULID文字列）を参照するため、Kintone側は **文字列(1行)** 前提です。
+本番運用は https://vanzai-portal.com のマスタ画面から登録・編集する。
 
 #### 3. データベース初期化
 ```powershell
@@ -264,33 +256,27 @@ python scripts/import_master_data.py
 - [ ] 決定内容を [docs/decisions/DECISION_LOG.md](docs/decisions/DECISION_LOG.md) に「理由付き」で記録
 
 ### B. 環境変数の本番想定セット
-- [ ] `.env` に `KINTONE_TOKEN_*`（対象アプリ分）を設定
-- [ ] `.env` に `KINTONE_APP_*` を設定
+- [ ] `.env` に `JWT_SECRET_KEY` / `DATABASE_URL` を設定
 - [ ] メール送信設定を有効化（初回は `EMAIL_DRY_RUN=true` 推奨）
 - [ ] スケジューラーを使う場合は `SCHEDULER_ENABLED=true` を設定
 
-### C. Kintone側の準備（外部作業）
-- [ ] フィールドコード/タイプを整合（手順: [docs/kintone/](docs/kintone/)）
-- [ ] 必要アプリのトークンが用意できたら `.env` に反映
+### C. 管理画面の準備
+- [ ] admin-web（https://vanzai-portal.com）にログインできることを確認
+- [ ] マスタ（クライアント・稼働者・案件種別等）が登録済みであること
 
-### D. 同期と検証（DB→Kintone）
-- [ ] `python scripts/sync_db_to_kintone.py all` を実行
-- [ ] Kintone側でレコードが期待通りに作成/更新されることを確認
-
-### E. 月次運用リハーサル（ローカル）
+### D. 運用リハーサル（ローカル or 本番）
 - [ ] 実績CSV取り込み → 集計 → 締め → 請求/支払生成 を通しで実行
 - [ ] PDF生成（請求書/支払明細）を確認
 - [ ] メール送信（dry-run）で文面を確認
 - [ ] 全銀フォーマットの出力を確認
 
-### F. デプロイ準備
+### E. デプロイ準備
 - [ ] API起動コマンドを `uvicorn src.api.main:app ...` に統一
 - [ ] Reverse Proxy/永続プロセス/ログ出力先を確定
 - [ ] 運用RUNBOOKの差分を反映
 
 ### G. 追加実装（必要なものだけ）
 - [ ] CSV取り込みのチャンク処理（Phase 2）
-- [ ] Kintone双方向同期の拡張
 - [ ] Wヘッダーbundle単価の設計/実装（低優先度）
 - [ ] JWT/OAuth2 認証導入
 - [ ] フロントエンド実装
@@ -527,7 +513,7 @@ A:
 
 ### 現状（2026-01-30）
 - ✅ 完全版API: `src/api/main.py`（Dashboard/請求/支払/締め 等）
-- ✅ Kintone連携: DB→Kintone同期（UPSERT）、実績取得、エラー書き戻し（スクリプト/サービス）
+- ✅ Web管理画面: admin-web / staff-mobile（VPS 上で運用）
 - ✅ スケジューラー: env駆動（`SCHEDULER_ENABLED=true` で有効化）
 
 ### 運用拡張（任意）
@@ -576,7 +562,7 @@ A:
 - [STATUS.md](docs/ops/STATUS.md) - 実装状況と既知の制約
 - [CSV_IMPORT_GUIDE.md](docs/ops/CSV_IMPORT_GUIDE.md) - CSV取り込み詳細手順
 - [USER_MANUAL.md](docs/ops/USER_MANUAL.md) - ユーザー向け運用マニュアル
-- [FAQ.md](docs/ops/FAQ.md) - 運用・Kintone連携FAQ
+- [FAQ.md](docs/ops/FAQ.md) - 運用FAQ
 - [RUNBOOK_MONTHLY.md](RUNBOOK_MONTHLY.md) - 月次運用手順
 - [RUNBOOK_WEEKLY.md](RUNBOOK_WEEKLY.md) - 週次運用手順
 

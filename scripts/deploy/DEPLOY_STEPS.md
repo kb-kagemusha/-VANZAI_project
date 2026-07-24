@@ -147,7 +147,7 @@ nano /var/www/vanzai/.env
 `env.production.template` の内容を参考に、以下を設定：
 - `DATABASE_URL` ← `/root/db_credentials.txt` の値
 - `JWT_SECRET_KEY` ← `openssl rand -hex 32` の出力
-- Kintoneトークン ← ローカルの `.env` から転記
+- `SMTP_FROM_EMAIL` / `SMTP_FROM_NAME` ← メール送信用
 
 ---
 
