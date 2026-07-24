@@ -1,7 +1,9 @@
-"""Kintone API連携サービス（シンプル実装）
+"""Kintone API連携サービス（非推奨・レガシー）
 
-マスタ同期・実績取得・エラー書き戻しの基本機能
-requests ライブラリで直接REST APIを使用
+本番運用は VPS（FastAPI + PostgreSQL + admin-web / staff-mobile）のみで完結する。
+このモジュールは過去のデータ移行スクリプト（scripts/sync_db_to_kintone.py 等）向けに残置している。
+
+新規機能では使用しないこと。
 """
 
 import logging

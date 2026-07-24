@@ -135,7 +135,7 @@ staff-mobile の予定画面から「参加可」または「辞退」で返信�
         project_name: str,
         target_month: str,
         deadline: datetime,
-        submission_method: str = "kintoneアプリにアップロード",
+        submission_method: str = "管理画面（vanzai-portal.com）のCSV取込",
     ) -> EmailTemplate:
         """
         実績CSV未提出催促メール

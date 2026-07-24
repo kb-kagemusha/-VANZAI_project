@@ -199,11 +199,6 @@ def get_default_sender(provider: str = "gmail") -> EmailSender:
         EmailSender
     """
     config = SMTPConfig.from_env(provider)
-    kintone_from_email, kintone_from_name = _load_kintone_email_overrides()
-    if kintone_from_email:
-        config.from_email = kintone_from_email
-    if kintone_from_name:
-        config.from_name = kintone_from_name
     return EmailSender(config)
 
 
@@ -238,51 +233,3 @@ def send_quick_email(
     
     sender = get_default_sender(provider)
     return sender.send_email(template, dry_run=dry_run)
-
-
-def _load_kintone_email_overrides() -> tuple[Optional[str], Optional[str]]:
-    """Kintoneの設定アプリから送信元メールを取得する（任意）。"""
-    app_id_raw = os.getenv("KINTONE_APP_SYSTEM_SETTINGS")
-    token = os.getenv("KINTONE_TOKEN_SYSTEM_SETTINGS")
-    if not app_id_raw or not token:
-        return None, None
-
-    try:
-        app_id = int(app_id_raw)
-    except ValueError:
-        print("KINTONE_APP_SYSTEM_SETTINGS is not a valid integer")
-        return None, None
-
-    try:
-        from src.services.kintone_service import KintoneConfig, KintoneService
-    except Exception as exc:  # pragma: no cover - 実行環境に依存
-        print(f"Failed to import KintoneService: {exc}")
-        return None, None
-
-    config = KintoneConfig()
-    service = KintoneService(config, api_token=token)
-
-    try:
-        records = service.get_records(
-            app_id,
-            query='settings_key = "email"',
-            fields=["settings_key", "smtp_from_email", "smtp_from_name"],
-        )
-    except Exception as exc:
-        print(f"Failed to load email settings from Kintone: {exc}")
-        return None, None
-
-    if not records:
-        return None, None
-
-    record = records[0]
-
-    def _get_value(field_code: str) -> Optional[str]:
-        field = record.get(field_code)
-        if isinstance(field, dict):
-            value = field.get("value")
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return None
-
-    return _get_value("smtp_from_email"), _get_value("smtp_from_name")

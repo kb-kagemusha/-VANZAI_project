@@ -100,8 +100,6 @@ if [ ! -f "${APP_DIR}/.env" ]; then
   JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
   JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
   EMAIL_DRY_RUN=true
-  KINTONE_SUBDOMAIN=xtf5wpxp3gk2
-  KINTONE_GUEST_SPACE_ID=3
   OCR_UPLOAD_TOKEN_SECRET=<openssl rand -hex 32 で生成>
   OCR_UPLOAD_SESSION_SECRET=<openssl rand -hex 32 で生成>
   OCR_UPLOAD_IP_SECRET=<openssl rand -hex 32 で生成>

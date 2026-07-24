@@ -7,6 +7,15 @@
 - **Y（中）**: 細かな機能追加（既存画面への機能追加、新APIエンドポイント、新ページなど）
 - **Z（右）**: バグ修正・軽微な変更（修正、リファクタリング、表示調整など）
 
+## [0.11.36] - 2026-07-24
+
+### Changed
+- **Kintone連携を本番運用から外し、VPS（FastAPI + PostgreSQL + admin-web / staff-mobile）のみで完結する構成に変更**
+  - メール送信の送信元設定は `.env` の `SMTP_FROM_EMAIL` / `SMTP_FROM_NAME` のみを使用（Kintone 設定アプリ参照を廃止）
+  - 実績CSV未提出催促メールの既定提出先を管理画面のCSV取込に変更
+  - `.env` テンプレート・本番デプロイ手順から Kintone 環境変数を削除
+  - `kintone_service` / `kintone_field_mappings` は移行用スクリプト向けにレガシーとして残置
+
 ## [0.11.35] - 2026-07-09
 
 ### Added
