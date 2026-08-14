@@ -88,9 +88,10 @@
 
 1. **バージョンアップ** — `apps/admin-web/package.json` と `apps/staff-mobile/package.json` を同一版に（セクション9）
 2. **CHANGELOG 追記** — ルート `CHANGELOG.md`
-3. **コミット・Push・デプロイ** — テスト → commit → push → VPS デプロイ → API 再起動 → 動作確認
+3. **コミット・Push・デプロイ** — テスト → commit → push → VPS で `02_app_deploy.sh` のみ（`git pull` / `stash` 不要）→ 動作確認
 
 - 手順の正本: `.cursor/rules/release-workflow.mdc`、`scripts/deploy/DEPLOY_STEPS.md`、実行スクリプト: `scripts/deploy/02_app_deploy.sh`
+- VPS 上で scp 等による直接編集はデプロイと競合するため行わない
 - VPS: `vanzai@220.158.28.35`（SSH鍵 `~/.ssh/vanzai_vps`、設定済みなら `ssh vanzai-vps`）
 - `systemctl restart vanzai-api` が sudo 権限で失敗する場合は `bash /var/www/vanzai/restart_uvicorn.sh` で API を再起動する
 - デプロイしない例外: 質問のみ・レビューのみ（コード未変更）、ユーザーがローカル作業のみを明示した場合
