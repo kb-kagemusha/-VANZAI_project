@@ -251,7 +251,7 @@ db.close()
   - A: `vanzai.db` 内の `clients`, `workers`, `roles` など
   
 - Q: CSVはどこ？
-  - A: `docs/kintone/csv/*.csv`（サンプル）、管理画面の CSV 取込
+  - A: 管理画面のマスタ画面、または `docs/kintone/csv/*.csv` 等のサンプル CSV（初回投入用）
 
 - Q: APIエンドポイントは？
   - A: http://localhost:8000/api/docs で確認

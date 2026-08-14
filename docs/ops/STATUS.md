@@ -1,6 +1,37 @@
 # 実装状況（STATUS）
 
-最終更新: 2026-04-09
+最終更新: 2026-07-24
+
+---
+
+## 2026-07-24 Kintone 連携除去（本番）
+
+### 監査結果
+
+本番パッケージ（`src/`, `apps/`, `tests/`, デプロイスクリプト）から Kintone API 呼び出しは**ゼロ**。
+
+| 領域 | Kintone 参照 |
+|------|-------------|
+| `src/api/main.py` ほか API | なし |
+| `src/services/` | なし（旧 `kintone_service` は `scripts/legacy/kintone/` へ移動） |
+| `apps/admin-web`, `apps/staff-mobile` | なし |
+| `scripts/deploy/` | なし |
+| `.env.example` | `KINTONE_*` 変数なし |
+
+### 運用の正本
+
+- **データ**: PostgreSQL（VPS）
+- **画面**: admin-web + staff-mobile
+- **マスタ**: 管理画面・公開登録フォーム・CSV 取込
+- **メール送信元**: `.env` の `SMTP_FROM_EMAIL` / `SMTP_FROM_NAME` のみ
+
+### レガシー資産（本番未使用）
+
+- `scripts/legacy/kintone/`
+- `scripts/sync_db_to_kintone.py` 等
+- `kintone_app/`, `docs/kintone/`（アーカイブ）
+
+詳細: `CHANGELOG.md` [0.11.36]〜[0.11.37]、`docs/kintone/README.md`
 
 ---
 
@@ -306,7 +337,6 @@ sudo nginx -t && sudo systemctl reload nginx
 | Storage | ローカル `storage/` ディレクトリ（Cloudflare R2 切替対応の抽象層あり）|
 | Infra | Xserver VPS（Ubuntu）, nginx, systemd |
 | CI/Test | pytest 302件、Playwright E2E smoke |
-| Kintone連携 | Kintone REST API（マスタ同期スクリプト群）|
 
 ---
 

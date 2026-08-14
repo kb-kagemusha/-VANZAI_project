@@ -1,6 +1,17 @@
 # VANZAI Project - 案件・シフト・実績・請求・支払 一元管理システム
 
-## 🆕 フロント運用メニュー状況（2026-02-18 06:48:20）
+## 🆕 最新アップデート (2026年7月24日)
+
+### Kintone 連携の本番除去（Ver.0.11.36〜0.11.37）
+- 本番運用は **VPS（admin-web + staff-mobile + API）のみ**で完結
+- `kintone_service` は `scripts/legacy/kintone/` へ移動（本番パッケージから除外）
+- 運用ドキュメントを admin-web 前提に更新（USER_MANUAL / FAQ / CLIENT_FEATURE_SUMMARY 等）
+
+詳細: [CHANGELOG.md](CHANGELOG.md)、[docs/CLIENT_FEATURE_SUMMARY.md](docs/CLIENT_FEATURE_SUMMARY.md)
+
+## フロント運用メニュー（管理画面）
+
+管理画面（https://vanzai-portal.com）から以下を操作します。
 
 ### 1. マスタ登録
 - クライアント情報の登録
@@ -20,37 +31,26 @@
 - 見積書/請求書の発行・確認
 - 支払明細書の発行・確認
 
-### 4. 現在は準備中（表示はあるが未設定）
-- 単価管理（売上単価・外注単価・単価ルール）
-- シフト管理（枠/アサイン）
-- 経費精算
-- インセンティブ管理
-- 支払明細送信
-- 銀行振込（全銀データ）
-- タスク進捗
-- 案件資料
+### 4. 現在は準備中または部分実装
+- 販売台数報告（sales_reports UI）
+- 案件タスク・案件資料
+- 簡易 PL・個人成績表
 - 貸出備品/貸出履歴
 
-## 🆕 最新アップデート (2026年2月16日)
+---
 
-- App174（見積書・請求書発行）改善、App171再構成、必要アプリの日本語ラベル統一（フィールドコード維持）を反映（詳細: [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md), [docs/kintone/FRONT_DASHBOARD_SETUP.md](docs/kintone/FRONT_DASHBOARD_SETUP.md)）
+## 過去のアップデート（アーカイブ）
 
-## 🆕 最新アップデート (2026年2月4日)
+<details>
+<summary>2026年2月以前の Kintone 移行期メモ（クリックで展開）</summary>
 
-### ✅ 案件カテゴリマスタ実装完了
-**機能**: フロントページの案件登録で大カテゴリ→中カテゴリ→小カテゴリの動的カスケード選択が可能に
+### 2026年2月16日
+- 見積書・請求書発行フロー改善（当時は Kintone App174 併用期）
 
-**実装内容**:
-- 49件のカテゴリデータをマスタで管理（App164）
-  - 大カテゴリ: 4件
-  - 中カテゴリ: 11件
-  - 小カテゴリ: 34件
-- ハードコード削除（157行 → 0行）
-- マスタから動的読み込み（95行の新規実装）
-- カスケード選択の自動絞り込み
+### 2026年2月4日 — 案件カテゴリマスタ
+- 案件種別のカスケード選択（現行は admin-web マスタで管理）
 
-**セットアップ**: [docs/kintone/QUICK_START_APP164.md](docs/kintone/QUICK_START_APP164.md)（5分で完了）  
-**詳細レポート**: [docs/COMPLETION_REPORT_CATEGORY_MASTER_2026-02-04.md](docs/COMPLETION_REPORT_CATEGORY_MASTER_2026-02-04.md)
+</details>
 
 ---
 

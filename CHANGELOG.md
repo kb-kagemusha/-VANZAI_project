@@ -13,7 +13,8 @@
 - **Kintone連携の完全除去（監査対応）**
   - `kintone_service` / `kintone_field_mappings` を `src/services/` から `scripts/legacy/kintone/` へ移動（本番パッケージから除外）
   - 移行スクリプト（`sync_db_to_kintone.py` 等）の import パスを更新
-  - README / DEPLOYMENT_GUIDE / DEPLOY_STEPS / USER_MANUAL / FAQ / QUICK_REFERENCE を admin-web 前提の VPS 単体運用に更新
+  - README / DEPLOYMENT_GUIDE / DEPLOY_STEPS / USER_MANUAL / FAQ / QUICK_REFERENCE / CLIENT_FEATURE_SUMMARY / CSV_IMPORT_GUIDE / DESIGN_SPEC を admin-web 前提の VPS 単体運用に更新
+  - `docs/kintone/README.md` をアーカイブ案内として新設
 
 ## [0.11.36] - 2026-07-24
 
