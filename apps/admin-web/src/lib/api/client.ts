@@ -117,6 +117,11 @@ import type {
   InventoryReconciliationBatchResponse,
   InventoryReconciliationResultItem,
 } from "../../types/api";
+import type {
+  OrderRequestListResponse,
+  OrderRequestVersion,
+  OrderRequestWrite,
+} from "../../types/orderRequest";
 
 function resolveApiBaseUrl(): string {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -1359,4 +1364,82 @@ export function updateInventoryReconciliationResult(
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+export function listOrderRequests(params: {
+  kind?: string;
+  queue?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return apiFetch<OrderRequestListResponse>(
+    "/api/order-requests",
+    undefined,
+    params,
+  );
+}
+
+export function createOrderRequest(body: OrderRequestWrite) {
+  return apiFetch<OrderRequestVersion>("/api/order-requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getOrderRequestVersion(versionId: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}`,
+  );
+}
+
+export function updateOrderRequestVersion(
+  versionId: string,
+  body: Partial<OrderRequestWrite>,
+) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+export function confirmOrderRequest(versionId: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}/confirm`,
+    { method: "POST" },
+  );
+}
+
+export function reviseOrderRequest(versionId: string, reason: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}/revise`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+export function cancelOrderRequest(versionId: string, reason: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}/cancel`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+export function addOrderRequestNote(versionId: string, body: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/versions/${versionId}/notes`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+export function revokeOrderRequestView(deliveryId: string) {
+  return apiFetch<OrderRequestVersion>(
+    `/api/order-requests/deliveries/${deliveryId}/revoke-view`,
+    { method: "POST" },
+  );
+}
+
+export function downloadOrderRequestPdf(versionId: string, documentNumber: string, versionNo: number) {
+  return downloadBinaryFile(
+    `/api/order-requests/versions/${versionId}/pdf`,
+    `${documentNumber}-v${versionNo}.pdf`,
+  );
 }

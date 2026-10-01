@@ -10,6 +10,7 @@ from alembic import context
 # Import models for autogenerate
 from src.models.base import Base
 from src.models import master, transaction  # noqa: F401
+import src.models.order_request  # noqa: F401
 
 config = context.config
 

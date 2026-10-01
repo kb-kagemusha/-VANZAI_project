@@ -11,6 +11,12 @@ from src.models.transaction import (
     AuditLog,
     PayoutDelivery,
 )
+from src.models.order_request import (
+    OrderRequestDocument,
+    OrderRequestVersion,
+    OrderRequestDelivery,
+    OrderRequestNote,
+)
 from src.models.ocr import (
     OcrSourceImage,
     OcrParseJob,
@@ -42,4 +48,8 @@ __all__ = [
     "OcrMonthlyExport",
     "OcrReconciliationBatch",
     "OcrReconciliationResult",
+    "OrderRequestDocument",
+    "OrderRequestVersion",
+    "OrderRequestDelivery",
+    "OrderRequestNote",
 ]

@@ -170,6 +170,12 @@ class AuditAction(str, Enum):
     NOTICE_DELETED = "notice_deleted"
     NOTICE_RESPONDED = "notice_responded"
 
+    # 発注依頼書
+    ORDER_REQUEST_CONFIRMED = "order_request_confirmed"
+    ORDER_REQUEST_REVISED = "order_request_revised"
+    ORDER_REQUEST_CANCELLED = "order_request_cancelled"
+    ORDER_REQUEST_VIEW_REVOKED = "order_request_view_revoked"
+
 
 class InvoiceStatus(str, Enum):
     """

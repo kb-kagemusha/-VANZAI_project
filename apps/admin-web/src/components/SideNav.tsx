@@ -9,6 +9,7 @@ import {
   Briefcase,
   Grid3X3,
   FileText,
+  ScrollText,
   CreditCard,
   Receipt,
   UserRound,
@@ -43,6 +44,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/masters/prices": Tag,
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
+  "/operations/order-requests": ScrollText,
   "/operations/notices": MessageSquare,
   "/operations/registration-requests": ClipboardList,
 };

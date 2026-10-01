@@ -866,3 +866,33 @@
   - `branch_id`の運用上の未入力が継続する場合、NOT NULL制約化を再検討する
 - Spec Reference: `PAYGATE精算レシート OCR・在庫照合 計画書（改訂版 v4）`、`docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md`
 
+---
+
+### DEC-027: 発注依頼書は確定版を正本にし、公式LINE送信は別単位にする（2026-10-02）
+- Date: 2026-10-02
+- Status: Confirmed（書式とLINEチャネルは未入手）
+- Decision: 発注依頼書の初期実装は、共通の入力内容を版として確定し、版×稼働者の送付行と共有一覧までとする。確定後の本文・PDF・送付時の氏名は上書きしない。公式LINEへの push、本人紐付け、受領Webhookは、利用企業の公式アカウント権限と弁護士確認済み書式が揃ってから接続する。
+- Context:
+  - 計画は「発注依頼書の作成・公式LINE送付・受領履歴」。目的は、誰が誰に何を送り、誰が受領操作をしたかを担当者間で共有すること
+  - リポジトリに弁護士確認済み書式は無く、LINEチャネルの秘密情報も無い
+  - 受領は本人の「受け取りました」であり、PDFを開いたことや電話連絡では成立しない
+- Options:
+  - A: 書式とチャネルが揃うまでコードを置かない
+  - B: 保存・版・送付行・一覧を先に作り、PDFは入力の保存用とし、送信は未接続のままにする
+  - C: 仮の法的書式とLINE送信まで一度に作る
+- Chosen: B
+- Why:
+  - 送付履歴が残ることが課題の中心であり、送信成功を待ってから記録する形にはしない
+  - 未入手の書式を法的レイアウトとして固定せず、入手後に差し替える余地を残す
+  - チャネル権限が無い状態で push を実装しても受入できない
+- Impact:
+  - Data model: `order_request_documents` / `order_request_versions` / `order_request_deliveries` / `order_request_notes`
+  - UI/UX: 管理画面「発注依頼書」（admin / ops）。テスト区分は既定の一覧に出さない
+  - Ops/Runbook: 導入手順は `docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+  - Migration: `alembic/versions/20261002a001_add_order_requests.py`
+- Follow-ups:
+  - 弁護士確認済み書式と受託者名の記載方法を入手し、PDFレイアウトを合わせる
+  - 公式アカウントの管理権限を得てから、本人紐付け、1人ずつの送信、受領Webhookを接続する
+  - PDF閲覧期間、未受領の業務期限、パスワード再発行手順は試行前に運用側で決める
+- Spec Reference: 発注依頼書LINE送付 初期版計画（2026-10-01）、`docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+

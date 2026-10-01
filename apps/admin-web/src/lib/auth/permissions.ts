@@ -23,6 +23,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
+    to: "/operations/order-requests",
+    label: "発注依頼書",
+    description: "依頼書の確定、送付先、受領の共有",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
     to: "/operations/notices",
     label: "スタッフ通知",
     description: "シフト確定・案件変更などをスタッフへ通知",

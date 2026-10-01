@@ -9662,10 +9662,12 @@ async def unsubscribe_push(
 from src.api.ocr_routes import router as ocr_router
 from src.api.inventory_routes import router as inventory_router
 from src.api.public_ocr_routes import router as public_ocr_router
+from src.api.order_request_routes import router as order_request_router
 
 app.include_router(ocr_router)
 app.include_router(inventory_router)
 app.include_router(public_ocr_router)
+app.include_router(order_request_router)
 
 
 if __name__ == "__main__":
