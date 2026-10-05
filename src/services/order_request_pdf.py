@@ -13,6 +13,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
+from src.services.order_request_format import DOCUMENT_TITLE, parse_sections
 from src.services.pdf_generator import DEFAULT_FONT
 
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
@@ -86,20 +87,33 @@ def render_order_request_pdf(
         story.append(Paragraph(escape(TEST_BANNER), banner))
     if not TEMPLATE_LAYOUT_APPLIED:
         story.append(Paragraph(escape(LAYOUT_PENDING_BANNER), banner))
-    story.append(Paragraph("発注依頼書", title))
     story.append(Paragraph(escape(f"{document_number}　第{version_no}版"), value))
-
-    fields = [
-        ("日付", work_date_label),
-        ("現場", site_name),
-        ("現場住所", site_address or ""),
-        ("依頼条件", request_conditions),
-        ("本文", body),
-        ("担当者", contact_name),
-        ("業務用窓口", contact_desk),
-        ("取引相手メモ", counterparty_note or ""),
-        ("送付先（確定時の氏名）", "、".join(worker_names)),
-    ]
+    template = parse_sections(request_conditions) is not None or (body or "").startswith(DOCUMENT_TITLE)
+    if template:
+        story.append(Paragraph(escape(DOCUMENT_TITLE), title))
+        document_body = body or ""
+        if document_body.startswith(DOCUMENT_TITLE):
+            document_body = document_body[len(DOCUMENT_TITLE):].lstrip("\n")
+        story.append(Paragraph(escape(document_body).replace("\n", "<br/>"), value))
+        fields = [
+            ("担当者", contact_name),
+            ("業務用窓口", contact_desk),
+            ("取引相手メモ", counterparty_note or ""),
+            ("送付先（確定時の氏名）", "、".join(worker_names)),
+        ]
+    else:
+        story.append(Paragraph("発注依頼書", title))
+        fields = [
+            ("日付", work_date_label),
+            ("現場", site_name),
+            ("現場住所", site_address or ""),
+            ("依頼条件", request_conditions),
+            ("本文", body),
+            ("担当者", contact_name),
+            ("業務用窓口", contact_desk),
+            ("取引相手メモ", counterparty_note or ""),
+            ("送付先（確定時の氏名）", "、".join(worker_names)),
+        ]
     for caption, text in fields:
         story.append(Paragraph(escape(caption), label))
         story.append(Paragraph(escape(text).replace("\n", "<br/>"), value))

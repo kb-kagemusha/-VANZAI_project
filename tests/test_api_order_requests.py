@@ -287,6 +287,84 @@ def test_worker_and_anonymous_cannot_read_pdf(api_client, db_session, ops_user, 
     assert api_client.get("/storage/pdfs/order-requests/secret.pdf").status_code == 404
 
 
+def test_additional_request_format_replaces_condition_and_body_blob(api_client, db_session, ops_user, pdf_root):
+    import json
+
+    worker = _worker(db_session, "稼働者A")
+    conditions = json.dumps(
+        {
+            "format": "additional-request-v1",
+            "project_name": "春施策_渋谷",
+            "background": "増員",
+            "gather_time": "9:00",
+            "work_time": "10:00-17:00",
+            "dismiss_time": "17:30",
+            "content": "受付",
+            "belongings": "名札",
+            "base_fee": "12000",
+            "incentive": "達成時",
+            "notes": "報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+        },
+        ensure_ascii=False,
+    )
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], request_conditions=conditions, body="無視される本文"),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()["body"]
+    headings = [
+        "【追加案件依頼】",
+        "■案件名",
+        "春施策_渋谷",
+        "■背景",
+        "増員",
+        "■稼働場所",
+        "渋谷現場",
+        "■稼働日",
+        "2026-10-05",
+        "■稼働時間",
+        "集合時間：9:00",
+        "実施時間：10:00-17:00",
+        "解散時間：17:30",
+        "■内容：",
+        "受付",
+        "■持ち物：",
+        "名札",
+        "■単価：",
+        "ベース：¥12000",
+        "インセンティブ：達成時",
+        "■備考：",
+        "・報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+    ]
+    cursor = -1
+    for heading in headings:
+        found = body.find(heading)
+        assert found > cursor, heading
+        cursor = found
+    assert "無視される本文" not in body
+    assert "依頼条件" not in body
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{created.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+
+def test_legacy_free_text_stays_until_rewritten(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["request_conditions"] == "9時集合"
+    assert created.json()["body"] == "通常稼働"
+
+
 def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_user):
     worker = _worker(db_session, "稼働者A")
     duplicated = api_client.post(

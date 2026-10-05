@@ -35,6 +35,7 @@ from src.models.order_request import (
 )
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
+from src.services.order_request_format import apply_template_fields, parse_sections
 from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -241,17 +242,25 @@ class OrderRequestService:
         if len(worker_ids) > MAX_RECIPIENTS:
             raise OrderRequestError(400, f"1回の送付先は{MAX_RECIPIENTS}人までです")
 
-        missing = [
-            name
-            for name, value in (
+        sections = parse_sections(version.request_conditions)
+        required = (
+            (
+                ("案件名", sections.get("project_name") if sections else ""),
+                ("稼働日", version.work_date_label),
+                ("稼働場所", version.site_name),
+                ("担当者", version.contact_name),
+                ("業務用窓口", version.contact_desk),
+            )
+            if sections is not None
+            else (
                 ("日付", version.work_date_label),
                 ("現場", version.site_name),
                 ("依頼条件", version.request_conditions),
                 ("担当者", version.contact_name),
                 ("業務用窓口", version.contact_desk),
             )
-            if not _clean(value)
-        ]
+        )
+        missing = [name for name, value in required if not _clean(value)]
         if missing:
             raise OrderRequestError(400, "確定前に入力してください: " + "、".join(missing))
 
@@ -558,8 +567,14 @@ class OrderRequestService:
         version.site_name = _clean(fields["site_name"])
         version.site_id = fields["site_id"]
         version.site_address = fields["site_address"]
-        version.request_conditions = fields["request_conditions"] or ""
-        version.body = fields["body"] or ""
+        request_conditions, body = apply_template_fields(
+            fields["request_conditions"] or "",
+            fields["body"] or "",
+            work_date_label=version.work_date_label,
+            site_name=version.site_name,
+        )
+        version.request_conditions = request_conditions
+        version.body = body
         version.contact_name = _clean(fields["contact_name"])
         version.contact_desk = _clean(fields["contact_desk"])
         version.counterparty_note = fields["counterparty_note"]

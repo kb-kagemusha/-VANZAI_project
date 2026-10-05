@@ -27,11 +27,19 @@ import {
   sendOrderRequestLine,
   updateOrderRequestVersion,
 } from "../lib/api/client";
+import {
+  composeOrderDocument,
+  EMPTY_ORDER_SECTIONS,
+  sectionsFromStored,
+  serializeOrderSections,
+  type OrderDocumentSections,
+} from "../lib/orderRequestFormat";
 import type {
   LineLinkCode,
   OrderRequestKind,
   OrderRequestQueue,
   OrderRequestStatus,
+  OrderRequestVersion,
   OrderRequestWrite,
 } from "../types/orderRequest";
 
@@ -81,6 +89,7 @@ export function OrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<OrderRequestWrite>(EMPTY_FORM);
+  const [sections, setSections] = useState<OrderDocumentSections>(EMPTY_ORDER_SECTIONS);
   const [workerSearch, setWorkerSearch] = useState("");
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -114,30 +123,48 @@ export function OrderRequestsPage() {
     if (!query) return workers;
     return workers.filter((worker) => worker.name.includes(query) || (worker.furigana ?? "").includes(query));
   }, [workerSearch, workers]);
+  const selectedWorkers = workers.filter((worker) => form.worker_ids.includes(worker.id));
 
   const detail = creating ? null : detailQuery.data;
   const editable = creating || detail?.status === "draft";
 
+  function formFromVersion(version: OrderRequestVersion): OrderRequestWrite {
+    return {
+      kind: version.kind,
+      work_date_label: version.work_date_label,
+      site_id: version.site_id,
+      site_name: version.site_name,
+      site_address: version.site_address,
+      request_conditions: version.request_conditions,
+      body: version.body,
+      contact_name: version.contact_name,
+      contact_desk: version.contact_desk,
+      counterparty_note: version.counterparty_note ?? "",
+      worker_ids: version.draft_worker_ids,
+      phone_first: version.phone_first,
+      phone_note: version.phone_note ?? "",
+      tracker_user_id: version.tracker_user_id,
+      follow_up_due_on: version.follow_up_due_on,
+      assign_tracker_self: Boolean(version.tracker_user_id),
+    };
+  }
+
+  function draftPayload(): OrderRequestWrite {
+    return {
+      ...form,
+      request_conditions: serializeOrderSections(sections),
+      body: composeOrderDocument(sections, form.work_date_label, form.site_name),
+      counterparty_note: form.counterparty_note || null,
+      phone_note: form.phone_note || null,
+      site_address: form.site_address || null,
+      follow_up_due_on: form.follow_up_due_on || null,
+    };
+  }
+
   useEffect(() => {
     if (!detail || creating) return;
-    setForm({
-      kind: detail.kind,
-      work_date_label: detail.work_date_label,
-      site_id: detail.site_id,
-      site_name: detail.site_name,
-      site_address: detail.site_address,
-      request_conditions: detail.request_conditions,
-      body: detail.body,
-      contact_name: detail.contact_name,
-      contact_desk: detail.contact_desk,
-      counterparty_note: detail.counterparty_note ?? "",
-      worker_ids: detail.draft_worker_ids,
-      phone_first: detail.phone_first,
-      phone_note: detail.phone_note ?? "",
-      tracker_user_id: detail.tracker_user_id,
-      follow_up_due_on: detail.follow_up_due_on,
-      assign_tracker_self: Boolean(detail.tracker_user_id),
-    });
+    setForm(formFromVersion(detail));
+    setSections(sectionsFromStored(detail.request_conditions, detail.body));
   }, [creating, detail]);
 
   function refresh() {
@@ -155,35 +182,13 @@ export function OrderRequestsPage() {
 
   function loadFormFromDetail() {
     if (!detail) return;
-    setForm({
-      kind: detail.kind,
-      work_date_label: detail.work_date_label,
-      site_id: detail.site_id,
-      site_name: detail.site_name,
-      site_address: detail.site_address,
-      request_conditions: detail.request_conditions,
-      body: detail.body,
-      contact_name: detail.contact_name,
-      contact_desk: detail.contact_desk,
-      counterparty_note: detail.counterparty_note ?? "",
-      worker_ids: detail.draft_worker_ids,
-      phone_first: detail.phone_first,
-      phone_note: detail.phone_note ?? "",
-      tracker_user_id: detail.tracker_user_id,
-      follow_up_due_on: detail.follow_up_due_on,
-      assign_tracker_self: Boolean(detail.tracker_user_id),
-    });
+    setForm(formFromVersion(detail));
+    setSections(sectionsFromStored(detail.request_conditions, detail.body));
   }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload: OrderRequestWrite = {
-        ...form,
-        counterparty_note: form.counterparty_note || null,
-        phone_note: form.phone_note || null,
-        site_address: form.site_address || null,
-        follow_up_due_on: form.follow_up_due_on || null,
-      };
+      const payload = draftPayload();
       if (creating) return createOrderRequest(payload);
       if (!detail) throw new Error("版が選ばれていません");
       return updateOrderRequestVersion(detail.id, payload);
@@ -395,6 +400,7 @@ export function OrderRequestsPage() {
             setCreating(true);
             setSelectedId(null);
             setForm(EMPTY_FORM);
+            setSections(EMPTY_ORDER_SECTIONS);
             setActionError("");
             setActionMessage("");
           }}
@@ -458,8 +464,7 @@ export function OrderRequestsPage() {
 
       {(creating || detail) && (
         <form
-          className="card"
-          style={{ display: "grid", gap: "0.75rem", padding: "1rem" }}
+          className="order-draft"
           onSubmit={(event) => {
             event.preventDefault();
             if (editable) {
@@ -468,275 +473,468 @@ export function OrderRequestsPage() {
             }
           }}
         >
-          <h3>{creating ? "新規の下書き" : `${detail?.document_number} 第${detail?.version_no}版`}</h3>
-          {detail?.kind === "test" ? <strong>テスト・正式な発注ではありません</strong> : null}
-          {!creating && detail && detail.status !== "draft" ? (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={loadFormFromDetail}>
-              この版の内容をフォームに表示
-            </button>
-          ) : null}
+          <header className="order-draft-head">
+            <div>
+              <p className="order-draft-kicker">{creating ? "発注依頼書" : detail?.document_number}</p>
+              <h3>{creating ? "新規の下書き" : `第${detail?.version_no}版`}</h3>
+              <p className="order-draft-lead">
+                {creating
+                  ? "追加案件依頼の項目で下書きします。確定するまで送付は始まりません。"
+                  : `${detail ? STATUS_LABEL[detail.status] : ""}${detail?.created_by_name ? ` · ${detail.created_by_name}` : ""}`}
+              </p>
+            </div>
+            <div className="order-draft-head-side">
+              {form.kind === "test" ? (
+                <span className="order-draft-badge is-test">テスト · 正式な発注ではありません</span>
+              ) : (
+                <span className="order-draft-badge">正式</span>
+              )}
+              {!creating && detail && detail.status !== "draft" ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={loadFormFromDetail}>
+                  この版の内容をフォームに表示
+                </button>
+              ) : null}
+            </div>
+          </header>
 
-          <label>
-            区分
-            <select
-              value={form.kind}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, kind: event.target.value as OrderRequestKind })}
-            >
-              <option value="formal">正式</option>
-              <option value="test">テスト</option>
-            </select>
-          </label>
-          <label>
-            日付
-            <input
-              value={form.work_date_label}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, work_date_label: event.target.value })}
-            />
-          </label>
-          <label>
-            現場
-            <input
-              value={form.site_name}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, site_name: event.target.value })}
-            />
-          </label>
-          <label>
-            依頼条件
-            <textarea
-              value={form.request_conditions}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, request_conditions: event.target.value })}
-            />
-          </label>
-          <label>
-            本文
-            <textarea
-              value={form.body}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, body: event.target.value })}
-            />
-          </label>
-          <label>
-            担当者
-            <input
-              value={form.contact_name}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, contact_name: event.target.value })}
-            />
-          </label>
-          <label>
-            業務用窓口
-            <input
-              value={form.contact_desk}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, contact_desk: event.target.value })}
-            />
-          </label>
-          <label>
-            取引相手メモ（下請の正式宛先。共通PDFの宛名差し込みではありません）
-            <textarea
-              value={form.counterparty_note ?? ""}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, counterparty_note: event.target.value })}
-            />
-          </label>
-          <label>
-            正式送付・受領の期限
-            <input
-              type="date"
-              value={form.follow_up_due_on ?? ""}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, follow_up_due_on: event.target.value || null })}
-            />
-          </label>
-          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={form.phone_first}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, phone_first: event.target.checked })}
-            />
-            電話先行（電話しただけでは送付済み・受領済みにしません）
-          </label>
-          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={form.assign_tracker_self}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, assign_tracker_self: event.target.checked })}
-            />
-            追跡担当は自分
-          </label>
-          <label>
-            電話メモ
-            <input
-              value={form.phone_note ?? ""}
-              disabled={!editable}
-              onChange={(event) => setForm({ ...form, phone_note: event.target.value })}
-            />
-          </label>
+          <div className="order-draft-body">
+            <section className="order-draft-section">
+              <h4>追加案件依頼</h4>
+              <div className="order-document">
+                <p className="order-document-title">【追加案件依頼】</p>
+                <div className="order-draft-grid">
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">案件名</span>
+                    <input
+                      value={sections.projectName}
+                      disabled={!editable}
+                      placeholder="例: 〇〇施策_〇〇"
+                      onChange={(event) => setSections({ ...sections, projectName: event.target.value })}
+                    />
+                  </label>
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">背景</span>
+                    <textarea
+                      className="is-short"
+                      value={sections.background}
+                      disabled={!editable}
+                      onChange={(event) => setSections({ ...sections, background: event.target.value })}
+                    />
+                  </label>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">稼働場所</span>
+                    <input
+                      value={form.site_name}
+                      disabled={!editable}
+                      onChange={(event) => setForm({ ...form, site_name: event.target.value })}
+                    />
+                  </label>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">稼働日</span>
+                    <input
+                      value={form.work_date_label}
+                      disabled={!editable}
+                      placeholder="例: 10月6日"
+                      onChange={(event) => setForm({ ...form, work_date_label: event.target.value })}
+                    />
+                  </label>
+                  <div className="order-field order-span-12">
+                    <span className="order-field-label">稼働時間</span>
+                    <div className="order-draft-grid">
+                      <label className="order-field order-span-4">
+                        <span className="order-field-hint">集合時間</span>
+                        <input
+                          value={sections.gatherTime}
+                          disabled={!editable}
+                          placeholder="例: 9:00"
+                          onChange={(event) => setSections({ ...sections, gatherTime: event.target.value })}
+                        />
+                      </label>
+                      <label className="order-field order-span-4">
+                        <span className="order-field-hint">実施時間</span>
+                        <input
+                          value={sections.workTime}
+                          disabled={!editable}
+                          placeholder="10:00-17:00"
+                          onChange={(event) => setSections({ ...sections, workTime: event.target.value })}
+                        />
+                      </label>
+                      <label className="order-field order-span-4">
+                        <span className="order-field-hint">解散時間</span>
+                        <input
+                          value={sections.dismissTime}
+                          disabled={!editable}
+                          placeholder="例: 17:30"
+                          onChange={(event) => setSections({ ...sections, dismissTime: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">内容</span>
+                    <textarea
+                      value={sections.content}
+                      disabled={!editable}
+                      onChange={(event) => setSections({ ...sections, content: event.target.value })}
+                    />
+                  </label>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">持ち物</span>
+                    <textarea
+                      value={sections.belongings}
+                      disabled={!editable}
+                      onChange={(event) => setSections({ ...sections, belongings: event.target.value })}
+                    />
+                  </label>
+                  <div className="order-field order-span-12">
+                    <span className="order-field-label">単価</span>
+                    <div className="order-draft-grid">
+                      <label className="order-field order-span-6">
+                        <span className="order-field-hint">ベース</span>
+                        <input
+                          value={sections.baseFee}
+                          disabled={!editable}
+                          placeholder="例: 12000"
+                          onChange={(event) => setSections({ ...sections, baseFee: event.target.value })}
+                        />
+                      </label>
+                      <label className="order-field order-span-6">
+                        <span className="order-field-hint">インセンティブ</span>
+                        <input
+                          value={sections.incentive}
+                          disabled={!editable}
+                          onChange={(event) => setSections({ ...sections, incentive: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">備考</span>
+                    <textarea
+                      className="is-short"
+                      value={sections.notes}
+                      disabled={!editable}
+                      onChange={(event) => setSections({ ...sections, notes: event.target.value })}
+                    />
+                  </label>
+                </div>
+              </div>
+            </section>
 
-          <fieldset disabled={!editable}>
-            <legend>送付先（最大30人）</legend>
-            <input
-              placeholder="氏名で絞り込み"
-              value={workerSearch}
-              onChange={(event) => setWorkerSearch(event.target.value)}
-            />
-            <div style={{ maxHeight: "220px", overflow: "auto" }}>
-              {visibleWorkers.map((worker) => (
-                <label key={worker.id} style={{ display: "flex", gap: "0.4rem" }}>
+            <section className="order-draft-section">
+              <h4>連絡先</h4>
+              <div className="order-draft-grid">
+                <div className="order-field order-span-4">
+                  <span className="order-field-label">区分</span>
+                  <div className="order-segment" role="group" aria-label="区分">
+                    <button
+                      type="button"
+                      className={form.kind === "formal" ? "is-active" : ""}
+                      disabled={!editable}
+                      onClick={() => setForm({ ...form, kind: "formal" })}
+                    >
+                      正式
+                    </button>
+                    <button
+                      type="button"
+                      className={form.kind === "test" ? "is-active is-test" : ""}
+                      disabled={!editable}
+                      onClick={() => setForm({ ...form, kind: "test" })}
+                    >
+                      テスト
+                    </button>
+                  </div>
+                </div>
+                <label className="order-field order-span-4">
+                  <span className="order-field-label">担当者</span>
+                  <input
+                    value={form.contact_name}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, contact_name: event.target.value })}
+                  />
+                </label>
+                <label className="order-field order-span-4">
+                  <span className="order-field-label">業務用窓口</span>
+                  <input
+                    value={form.contact_desk}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, contact_desk: event.target.value })}
+                  />
+                </label>
+                <label className="order-field order-span-12">
+                  <span className="order-field-label">
+                    取引相手メモ
+                    <span className="order-field-hint">下請の正式宛先です。共通PDFの宛名には差し込みません。</span>
+                  </span>
+                  <textarea
+                    className="is-short"
+                    value={form.counterparty_note ?? ""}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, counterparty_note: event.target.value })}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="order-draft-section">
+              <h4>送付と追跡</h4>
+              <div className="order-draft-grid">
+                <label className="order-field order-span-4">
+                  <span className="order-field-label">正式送付・受領の期限</span>
+                  <input
+                    type="date"
+                    value={form.follow_up_due_on ?? ""}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, follow_up_due_on: event.target.value || null })}
+                  />
+                </label>
+                <label className="order-field order-span-8">
+                  <span className="order-field-label">電話メモ</span>
+                  <input
+                    value={form.phone_note ?? ""}
+                    disabled={!editable}
+                    placeholder="電話した内容があれば"
+                    onChange={(event) => setForm({ ...form, phone_note: event.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="order-choice-row">
+                <label className={`order-choice${form.phone_first ? " is-on" : ""}`}>
                   <input
                     type="checkbox"
-                    checked={form.worker_ids.includes(worker.id)}
-                    onChange={(event) => {
-                      const next = event.target.checked
-                        ? [...form.worker_ids, worker.id]
-                        : form.worker_ids.filter((id) => id !== worker.id);
-                      setForm({ ...form, worker_ids: next });
-                    }}
+                    checked={form.phone_first}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, phone_first: event.target.checked })}
                   />
-                  {worker.name}
+                  <span>
+                    <span className="order-choice-title">電話先行</span>
+                    <span className="order-choice-hint">電話しただけでは、送付済み・受領済みにはしません。</span>
+                  </span>
                 </label>
-              ))}
-            </div>
-          </fieldset>
+                <label className={`order-choice${form.assign_tracker_self ? " is-on" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={form.assign_tracker_self}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, assign_tracker_self: event.target.checked })}
+                  />
+                  <span>
+                    <span className="order-choice-title">追跡担当は自分</span>
+                    <span className="order-choice-hint">保存すると、追跡担当が自分になります。</span>
+                  </span>
+                </label>
+              </div>
+            </section>
 
-          {editable ? (
-            <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
-              下書きを保存
-            </button>
-          ) : null}
-          {detail?.status === "draft" ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={confirmMutation.isPending || saveMutation.isPending}
-              onClick={async () => {
-                setActionError("");
-                try {
-                  const saved = await updateOrderRequestVersion(detail.id, {
-                    ...form,
-                    counterparty_note: form.counterparty_note || null,
-                    phone_note: form.phone_note || null,
-                    site_address: form.site_address || null,
-                    follow_up_due_on: form.follow_up_due_on || null,
-                  });
-                  confirmMutation.mutate(saved.id);
-                } catch (error) {
-                  setActionError(messageOf(error));
-                }
-              }}
-            >
-              確定してPDFを保存
-            </button>
-          ) : null}
-          {detail?.has_pdf ? (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => downloadOrderRequestPdf(detail.id, detail.document_number, detail.version_no)}
-            >
-              PDFを取得
-            </button>
-          ) : null}
+            <section className="order-draft-section">
+              <div className="order-recipients">
+                <div className="order-recipients-head">
+                  <div>
+                    <h4>送付先</h4>
+                    <p>最大30人まで選べます。</p>
+                  </div>
+                  <span className={`order-count${form.worker_ids.length > 30 ? " is-over" : ""}`}>
+                    {form.worker_ids.length} / 30
+                  </span>
+                </div>
+                <div className="order-recipients-search">
+                  <input
+                    placeholder="氏名で絞り込み"
+                    value={workerSearch}
+                    disabled={!editable}
+                    onChange={(event) => setWorkerSearch(event.target.value)}
+                  />
+                </div>
+                {selectedWorkers.length > 0 ? (
+                  <div className="order-recipient-picks">
+                    {selectedWorkers.map((worker) => (
+                      <span key={worker.id} className="order-pick">{worker.name}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="order-recipient-empty">まだ送付先は選ばれていません。</p>
+                )}
+                <div className="order-recipient-list">
+                  {visibleWorkers.map((worker) => (
+                    <label
+                      key={worker.id}
+                      className={`order-recipient${form.worker_ids.includes(worker.id) ? " is-on" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.worker_ids.includes(worker.id)}
+                        disabled={!editable}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...form.worker_ids, worker.id]
+                            : form.worker_ids.filter((id) => id !== worker.id);
+                          setForm({ ...form, worker_ids: next });
+                        }}
+                      />
+                      <span>{worker.name}</span>
+                    </label>
+                  ))}
+                  {visibleWorkers.length === 0 ? (
+                    <p className="order-recipient-empty">該当する稼働者はいません。</p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
 
-          {detail && detail.deliveries.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>送付先</th>
-                  <th>送信</th>
-                  <th>受領</th>
-                  <th>閲覧</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.deliveries.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.worker_name_snapshot}</td>
-                    <td>
-                      {SEND_LABEL[row.send_status] ?? row.send_status}
-                      {row.last_send_error ? `（${row.last_send_error}）` : ""}
-                      {detail.kind === "test" && detail.status === "confirmed" && !detail.dispatch_stopped ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={
-                            sendLine.isPending
-                            || !lineReady
-                            || !row.line_linked
-                            || row.view_revoked
-                            || row.ack_status === "acked"
-                          }
-                          onClick={() => sendLine.mutate(row.id)}
-                        >
-                          この1人にテスト送信
-                        </button>
-                      ) : null}
-                    </td>
-                    <td>{row.ack_status === "acked" ? "受領済" : "未受領"}</td>
-                    <td>
-                      {row.view_revoked ? (
-                        "停止"
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => revokeOrderRequestView(row.id).then(() => {
-                            queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
-                          })}
-                        >
-                          閲覧を停止
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
+            {detail && detail.deliveries.length > 0 ? (
+              <section className="order-draft-section">
+                <h4>送付状況</h4>
+                <div className="order-draft-table">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>送付先</th>
+                        <th>送信</th>
+                        <th>受領</th>
+                        <th>閲覧</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.deliveries.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.worker_name_snapshot}</td>
+                          <td>
+                            {SEND_LABEL[row.send_status] ?? row.send_status}
+                            {row.last_send_error ? `（${row.last_send_error}）` : ""}
+                            {detail.kind === "test" && detail.status === "confirmed" && !detail.dispatch_stopped ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={
+                                  sendLine.isPending
+                                  || !lineReady
+                                  || !row.line_linked
+                                  || row.view_revoked
+                                  || row.ack_status === "acked"
+                                }
+                                onClick={() => sendLine.mutate(row.id)}
+                              >
+                                この1人にテスト送信
+                              </button>
+                            ) : null}
+                          </td>
+                          <td>{row.ack_status === "acked" ? "受領済" : "未受領"}</td>
+                          <td>
+                            {row.view_revoked ? (
+                              "停止"
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => revokeOrderRequestView(row.id).then(() => {
+                                  queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
+                                })}
+                              >
+                                閲覧を停止
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
 
-          {detail ? (
-            <>
-              <label>
-                改訂・取消の理由
-                <input value={reason} onChange={(event) => setReason(event.target.value)} />
-              </label>
-              {detail.status !== "draft" ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => reviseMutation.mutate(detail.id)}
-                >
-                  理由を付けて改訂
-                </button>
-              ) : null}
-              {detail.status !== "cancelled" ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => cancelMutation.mutate(detail.id)}
-                >
-                  理由を付けて取消
-                </button>
-              ) : null}
-              <label>
-                対応メモ
-                <input value={note} onChange={(event) => setNote(event.target.value)} />
-              </label>
-              <button type="button" className="btn btn-ghost" onClick={() => noteMutation.mutate(detail.id)}>
-                メモを追加
-              </button>
-              {detail.notes.map((item) => (
-                <p key={item.id}>
-                  {item.author_name}: {item.body}
-                </p>
-              ))}
-            </>
+            {detail ? (
+              <section className="order-draft-section">
+                <h4>対応</h4>
+                <div className="order-draft-grid">
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">改訂・取消の理由</span>
+                    <input value={reason} onChange={(event) => setReason(event.target.value)} />
+                  </label>
+                </div>
+                <div className="order-inline-actions">
+                  {detail.status !== "draft" ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => reviseMutation.mutate(detail.id)}
+                    >
+                      理由を付けて改訂
+                    </button>
+                  ) : null}
+                  {detail.status !== "cancelled" ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => cancelMutation.mutate(detail.id)}
+                    >
+                      理由を付けて取消
+                    </button>
+                  ) : null}
+                </div>
+                <div className="order-draft-grid">
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">対応メモ</span>
+                    <input value={note} onChange={(event) => setNote(event.target.value)} />
+                  </label>
+                </div>
+                <div className="order-inline-actions">
+                  <button type="button" className="btn btn-ghost" onClick={() => noteMutation.mutate(detail.id)}>
+                    メモを追加
+                  </button>
+                </div>
+                {detail.notes.length > 0 ? (
+                  <ul className="order-note-list">
+                    {detail.notes.map((item) => (
+                      <li key={item.id}>
+                        <span>{item.author_name}</span>
+                        {item.body}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
+
+          {editable || detail?.status === "draft" || detail?.has_pdf ? (
+            <footer className="order-draft-foot">
+              <div className="order-draft-foot-start">
+                {detail?.has_pdf ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => downloadOrderRequestPdf(detail.id, detail.document_number, detail.version_no)}
+                  >
+                    PDFを取得
+                  </button>
+                ) : null}
+              </div>
+              <div className="order-draft-foot-end">
+                {editable ? (
+                  <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
+                    下書きを保存
+                  </button>
+                ) : null}
+                {detail?.status === "draft" ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={confirmMutation.isPending || saveMutation.isPending}
+                    onClick={async () => {
+                      setActionError("");
+                      try {
+                  const saved = await updateOrderRequestVersion(detail.id, draftPayload());
+                        confirmMutation.mutate(saved.id);
+                      } catch (error) {
+                        setActionError(messageOf(error));
+                      }
+                    }}
+                  >
+                    確定してPDFを保存
+                  </button>
+                ) : null}
+              </div>
+            </footer>
           ) : null}
         </form>
       )}
