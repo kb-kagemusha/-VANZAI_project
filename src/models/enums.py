@@ -175,6 +175,11 @@ class AuditAction(str, Enum):
     ORDER_REQUEST_REVISED = "order_request_revised"
     ORDER_REQUEST_CANCELLED = "order_request_cancelled"
     ORDER_REQUEST_VIEW_REVOKED = "order_request_view_revoked"
+    ORDER_REQUEST_LINE_LINKED = "order_request_line_linked"
+    ORDER_REQUEST_LINE_UNLINKED = "order_request_line_unlinked"
+    ORDER_REQUEST_LINE_SENT = "order_request_line_sent"
+    ORDER_REQUEST_LINE_SEND_FAILED = "order_request_line_send_failed"
+    ORDER_REQUEST_ACKED = "order_request_acked"
 
 
 class InvoiceStatus(str, Enum):

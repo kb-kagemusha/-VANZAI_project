@@ -20,6 +20,15 @@ from src.models.order_request import (
     OrderRequestNote,
     OrderRequestVersion,
 )
+from src.services.line_messaging import line_settings
+from src.services.line_order import (
+    LINK_INSTRUCTION,
+    PURPOSE_TEXT,
+    UNLINK_TEXT,
+    LineOrderService,
+    active_line_labels,
+    latest_send_errors,
+)
 from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED
 from src.services.order_request_service import OrderRequestError, OrderRequestService
 
@@ -82,6 +91,11 @@ class NoteBody(BaseModel):
     body: str
 
 
+class LineLinkCodeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    worker_id: str
+
+
 def _ensure(user: User) -> None:
     if user.role not in _ROLES:
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
@@ -108,7 +122,11 @@ def _user_map(db: Session, user_ids: set[str]) -> dict[str, str]:
     return {row.id: row.display_name or row.username for row in rows}
 
 
-def _delivery_out(row: OrderRequestDelivery) -> dict:
+def _delivery_out(
+    row: OrderRequestDelivery,
+    links: dict[str, str | None],
+    errors: dict[str, str | None],
+) -> dict:
     return {
         "id": row.id,
         "worker_id": row.worker_id,
@@ -117,6 +135,9 @@ def _delivery_out(row: OrderRequestDelivery) -> dict:
         "ack_status": row.ack_status,
         "acked_at": row.acked_at,
         "view_revoked": row.view_revoked,
+        "line_linked": row.worker_id in links,
+        "line_display_name": links.get(row.worker_id),
+        "last_send_error": errors.get(row.id),
     }
 
 
@@ -159,6 +180,8 @@ def _version_out(
         }
         - {None},
     )
+    links = active_line_labels(db, {row.worker_id for row in deliveries})
+    errors = latest_send_errors(db, {row.id for row in deliveries})
     return {
         "document_id": document.id,
         "document_number": document.document_number,
@@ -192,8 +215,8 @@ def _version_out(
         "created_by_name": names.get(version.created_by_user_id),
         "has_pdf": bool(version.pdf_object_key),
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
-        "line_send_available": False,
-        "deliveries": [_delivery_out(row) for row in deliveries],
+        "line_send_available": line_settings().configured,
+        "deliveries": [_delivery_out(row, links, errors) for row in deliveries],
         "notes": [_note_out(row, names) for row in notes],
         "created_at": version.created_at,
         "updated_at": version.updated_at,
@@ -228,7 +251,7 @@ def _list_item(db: Session, document: OrderRequestDocument, version: OrderReques
         "cancel_reason": version.cancel_reason,
         "has_pdf": bool(version.pdf_object_key),
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
-        "line_send_available": False,
+        "line_send_available": line_settings().configured,
         "confirmed_at": version.confirmed_at,
     }
 
@@ -257,7 +280,7 @@ def list_order_requests(
         "limit": limit,
         "offset": offset,
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
-        "line_send_available": False,
+        "line_send_available": line_settings().configured,
     }
 
 
@@ -410,6 +433,89 @@ def add_order_request_note(
         service = _service(db)
         service.add_note(service.get_version(version_id), actor=current_user, body=body.body)
         return service.get_version(version_id)
+
+    version = _call(db, action)
+    document = db.get(OrderRequestDocument, version.document_id)
+    return _version_out(db, document, version)
+
+
+@router.get("/line-links")
+def list_line_links(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    rows = LineOrderService(db).list_active_links()
+    return {
+        "line_send_available": line_settings().configured,
+        "purpose": PURPOSE_TEXT,
+        "unlink_notice": UNLINK_TEXT,
+        "items": [
+            {
+                "worker_id": worker.id,
+                "worker_name": worker.name,
+                "line_display_name": link.line_display_name,
+                "linked_at": link.linked_at,
+            }
+            for link, worker in rows
+        ],
+    }
+
+
+@router.post("/line-links/codes")
+def issue_line_link_code(
+    body: LineLinkCodeBody,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+
+    def action():
+        return LineOrderService(db).issue_code(actor=current_user, worker_id=body.worker_id)
+
+    worker, code, expires_at = _call(db, action)
+    return {
+        "worker_id": worker.id,
+        "worker_name": worker.name,
+        "code": code,
+        "expires_at": expires_at,
+        "instruction": LINK_INSTRUCTION,
+        "purpose": PURPOSE_TEXT,
+        "unlink_notice": UNLINK_TEXT,
+    }
+
+
+@router.post("/line-links/{worker_id}/revoke")
+def revoke_line_link(
+    worker_id: str,
+    body: ReasonBody,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+
+    def action():
+        return LineOrderService(db).revoke_link(actor=current_user, worker_id=worker_id, reason=body.reason)
+
+    _call(db, action)
+    return {"worker_id": worker_id, "status": "revoked"}
+
+
+@router.post("/deliveries/{delivery_id}/line-send")
+def send_order_request_line(
+    delivery_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+
+    def action():
+        service = _service(db)
+        delivery = LineOrderService(db).send_one(
+            actor=current_user,
+            delivery=service.get_delivery(delivery_id),
+        )
+        return service.get_version(delivery.version_id)
 
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)

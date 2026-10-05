@@ -118,6 +118,8 @@ import type {
   InventoryReconciliationResultItem,
 } from "../../types/api";
 import type {
+  LineLinkCode,
+  LineLinkList,
   OrderRequestListResponse,
   OrderRequestVersion,
   OrderRequestWrite,
@@ -1442,4 +1444,28 @@ export function downloadOrderRequestPdf(versionId: string, documentNumber: strin
     `/api/order-requests/versions/${versionId}/pdf`,
     `${documentNumber}-v${versionNo}.pdf`,
   );
+}
+
+export function listLineLinks() {
+  return apiFetch<LineLinkList>("/api/order-requests/line-links");
+}
+
+export function issueLineLinkCode(workerId: string) {
+  return apiFetch<LineLinkCode>("/api/order-requests/line-links/codes", {
+    method: "POST",
+    body: JSON.stringify({ worker_id: workerId }),
+  });
+}
+
+export function revokeLineLink(workerId: string, reason: string) {
+  return apiFetch<{ worker_id: string; status: string }>(
+    `/api/order-requests/line-links/${workerId}/revoke`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+export function sendOrderRequestLine(deliveryId: string) {
+  return apiFetch<OrderRequestVersion>(`/api/order-requests/deliveries/${deliveryId}/line-send`, {
+    method: "POST",
+  });
 }

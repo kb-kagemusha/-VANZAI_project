@@ -1,6 +1,6 @@
 /**
  * 発注依頼書の作成・確定・共有一覧。
- * 公式LINE送信は未接続。確定しても送付は始まらない。
+ * テスト区分だけ、紐付け済みの1人へ公式LINE送信できる。正式区分は送らない。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,17 +18,30 @@ import {
   downloadOrderRequestPdf,
   getOrderRequestVersion,
   getWorkers,
+  issueLineLinkCode,
+  listLineLinks,
   listOrderRequests,
+  revokeLineLink,
   revokeOrderRequestView,
   reviseOrderRequest,
+  sendOrderRequestLine,
   updateOrderRequestVersion,
 } from "../lib/api/client";
 import type {
+  LineLinkCode,
   OrderRequestKind,
   OrderRequestQueue,
   OrderRequestStatus,
   OrderRequestWrite,
 } from "../types/orderRequest";
+
+const SEND_LABEL: Record<string, string> = {
+  unsent: "未送信",
+  processing: "送信中",
+  accepted: "受付済",
+  failed: "失敗",
+  unknown: "結果不明",
+};
 
 const STATUS_LABEL: Record<OrderRequestStatus, string> = {
   draft: "下書き",
@@ -73,10 +86,17 @@ export function OrderRequestsPage() {
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [linkWorkerId, setLinkWorkerId] = useState("");
+  const [issuedCode, setIssuedCode] = useState<LineLinkCode | null>(null);
+  const [unlinkReason, setUnlinkReason] = useState("");
 
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue],
     queryFn: () => listOrderRequests({ kind, queue, limit: 50, offset: 0 }),
+  });
+  const linksQuery = useQuery({
+    queryKey: ["line-links"],
+    queryFn: listLineLinks,
   });
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
@@ -182,7 +202,11 @@ export function OrderRequestsPage() {
   const confirmMutation = useMutation({
     mutationFn: (versionId: string) => confirmOrderRequest(versionId),
     onSuccess: async (version) => {
-      setActionMessage("確定しました。PDFと送付行を保存しました。公式LINEへの送信はまだ接続していません。");
+      setActionMessage(
+        version.kind === "test"
+          ? "確定しました。テスト区分は、紐付け済みの相手へ1人ずつ送れます。"
+          : "確定しました。正式区分は書式が未適用のため、公式LINEへは送りません。",
+      );
       setActionError("");
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
@@ -223,6 +247,40 @@ export function OrderRequestsPage() {
   });
 
   const layoutPending = listQuery.data ? !listQuery.data.template_layout_applied : true;
+  const lineReady = Boolean(linksQuery.data?.line_send_available);
+  const linkedIds = new Set((linksQuery.data?.items ?? []).map((item) => item.worker_id));
+
+  const issueLink = useMutation({
+    mutationFn: () => issueLineLinkCode(linkWorkerId),
+    onSuccess: async (issued) => {
+      setIssuedCode(issued);
+      setActionError("");
+      setActionMessage("コードを発行しました。公式LINEへこのコードだけを送ってください。");
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+    },
+    onError: (error) => setActionError(messageOf(error)),
+  });
+
+  const revokeLink = useMutation({
+    mutationFn: (workerId: string) => revokeLineLink(workerId, unlinkReason),
+    onSuccess: async () => {
+      setUnlinkReason("");
+      setActionMessage("紐付けを解除しました。解除した相手への公式LINE送信は止まります。");
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+      if (selectedId) await queryClient.invalidateQueries({ queryKey: ["order-request", selectedId] });
+    },
+    onError: (error) => setActionError(messageOf(error)),
+  });
+
+  const sendLine = useMutation({
+    mutationFn: (deliveryId: string) => sendOrderRequestLine(deliveryId),
+    onSuccess: async (version) => {
+      setActionMessage("テスト送信を受け付けました。受領は本人が「受け取りました」を押したときだけです。");
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
+    },
+    onError: (error) => setActionError(messageOf(error)),
+  });
 
   return (
     <section>
@@ -231,11 +289,85 @@ export function OrderRequestsPage() {
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。受領は本人の受け取り操作だけです。"
       />
-      {layoutPending ? (
-        <p className="card" style={{ padding: "0.9rem 1rem" }}>
-          弁護士確認済み書式のレイアウトは未適用です。いまのPDFは入力内容の保存です。公式LINEへの送信もまだ接続していません。
-        </p>
-      ) : null}
+      <p className="card" style={{ padding: "0.9rem 1rem" }}>
+        {layoutPending
+          ? "弁護士確認済み書式のレイアウトは未適用です。いまのPDFは入力内容の保存です。正式区分は公式LINEへ送りません。"
+          : "正式区分の書式を適用しています。"}
+        {lineReady
+          ? " テスト区分は、紐付け済みの1人ずつ送れます。"
+          : " テスト送信には、サーバーへのチャネル設定がまだ必要です。"}
+      </p>
+
+      <section className="card" style={{ padding: "0.9rem 1rem", marginBottom: "1rem" }}>
+        <h2 style={{ marginTop: 0 }}>公式LINEの本人紐付け</h2>
+        <p>{linksQuery.data?.purpose ?? "発注依頼書のテスト送信と受領の記録に使います。"}</p>
+        <p>{linksQuery.data?.unlink_notice ?? "解除後は公式LINE送信を止めます。"}</p>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+          <label>
+            稼働者
+            <select value={linkWorkerId} onChange={(event) => setLinkWorkerId(event.target.value)}>
+              <option value="">選択</option>
+              {workers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name}
+                  {linkedIds.has(worker.id) ? "（紐付け済）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!linkWorkerId || issueLink.isPending}
+            onClick={() => issueLink.mutate()}
+          >
+            紐付けコードを発行
+          </button>
+        </div>
+        {issuedCode ? (
+          <p>
+            {issuedCode.worker_name} のコード: <strong>{issuedCode.code}</strong>
+            <br />
+            {issuedCode.instruction}
+          </p>
+        ) : null}
+        {(linksQuery.data?.items ?? []).length > 0 ? (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>稼働者</th>
+                <th>LINE表示名</th>
+                <th>紐付け日時</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linksQuery.data?.items.map((item) => (
+                <tr key={item.worker_id}>
+                  <td>{item.worker_name}</td>
+                  <td>{item.line_display_name || "表示名なし"}</td>
+                  <td>{new Date(item.linked_at).toLocaleString("ja-JP")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>紐付け済みの稼働者はいません。</p>
+        )}
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+          <label>
+            解除理由
+            <input value={unlinkReason} onChange={(event) => setUnlinkReason(event.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={!linkWorkerId || !unlinkReason.trim() || revokeLink.isPending}
+            onClick={() => revokeLink.mutate(linkWorkerId)}
+          >
+            選択した稼働者の紐付けを解除
+          </button>
+        </div>
+      </section>
 
       <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", margin: "1rem 0" }}>
         <label>
@@ -526,7 +658,26 @@ export function OrderRequestsPage() {
                 {detail.deliveries.map((row) => (
                   <tr key={row.id}>
                     <td>{row.worker_name_snapshot}</td>
-                    <td>{row.send_status === "unsent" ? "未送信" : row.send_status}</td>
+                    <td>
+                      {SEND_LABEL[row.send_status] ?? row.send_status}
+                      {row.last_send_error ? `（${row.last_send_error}）` : ""}
+                      {detail.kind === "test" && detail.status === "confirmed" && !detail.dispatch_stopped ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={
+                            sendLine.isPending
+                            || !lineReady
+                            || !row.line_linked
+                            || row.view_revoked
+                            || row.ack_status === "acked"
+                          }
+                          onClick={() => sendLine.mutate(row.id)}
+                        >
+                          この1人にテスト送信
+                        </button>
+                      ) : null}
+                    </td>
                     <td>{row.ack_status === "acked" ? "受領済" : "未受領"}</td>
                     <td>
                       {row.view_revoked ? (

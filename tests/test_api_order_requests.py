@@ -78,7 +78,10 @@ def _body(worker_ids: list[str], **overrides) -> dict:
     return payload
 
 
-def test_confirm_creates_one_pdf_and_delivery_rows(api_client, db_session, ops_user, pdf_root):
+def test_confirm_creates_one_pdf_and_delivery_rows(api_client, db_session, ops_user, pdf_root, monkeypatch):
+    monkeypatch.delenv("LINE_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_SECRET", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN", raising=False)
     first = _worker(db_session, "稼働者A")
     second = _worker(db_session, "稼働者B")
     created = api_client.post(

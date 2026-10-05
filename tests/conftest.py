@@ -23,6 +23,7 @@ from src.models.transaction import Project, ShiftSlot, Assignment
 import src.models.ocr  # noqa: F401 — register OCR tables for metadata.create_all
 import src.models.inventory_reconciliation  # noqa: F401 — register inventory tables
 import src.models.order_request  # noqa: F401 — register order request tables
+import src.models.line_order  # noqa: F401 — register LINE link tables
 from src.models.enums import AssignmentStatus
 from src.api.main import app
 from src.api.deps import get_db

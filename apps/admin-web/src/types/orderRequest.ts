@@ -10,6 +10,33 @@ export interface OrderRequestDelivery {
   ack_status: string;
   acked_at: string | null;
   view_revoked: boolean;
+  line_linked: boolean;
+  line_display_name: string | null;
+  last_send_error: string | null;
+}
+
+export interface LineWorkerLinkItem {
+  worker_id: string;
+  worker_name: string;
+  line_display_name: string | null;
+  linked_at: string;
+}
+
+export interface LineLinkList {
+  line_send_available: boolean;
+  purpose: string;
+  unlink_notice: string;
+  items: LineWorkerLinkItem[];
+}
+
+export interface LineLinkCode {
+  worker_id: string;
+  worker_name: string;
+  code: string;
+  expires_at: string;
+  instruction: string;
+  purpose: string;
+  unlink_notice: string;
 }
 
 export interface OrderRequestNote {

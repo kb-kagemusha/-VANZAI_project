@@ -892,7 +892,37 @@
   - Migration: `alembic/versions/20261002a001_add_order_requests.py`
 - Follow-ups:
   - 弁護士確認済み書式と受託者名の記載方法を入手し、PDFレイアウトを合わせる
-  - 公式アカウントの管理権限を得てから、本人紐付け、1人ずつの送信、受領Webhookを接続する
+  - 公式アカウントの管理権限を得てから、本人紐付け、1人ずつの送信、受領Webhookを接続する（テスト用アカウントの接続は DEC-028）
   - PDF閲覧期間、未受領の業務期限、パスワード再発行手順は試行前に運用側で決める
 - Spec Reference: 発注依頼書LINE送付 初期版計画（2026-10-01）、`docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+
+---
+
+### DEC-028: テスト用公式LINEではテスト区分だけを1人ずつ送る（2026-10-06）
+- Date: 2026-10-06
+- Status: Confirmed（書式は未入手。PDF閲覧期間とコード期限は暫定）
+- Decision: テスト用公式アカウントが使える状態になったので、本人紐付け、1人ずつの push、受領Webhookを接続する。送れるのはテスト区分だけとする。正式区分は弁護士確認済み書式が適用されるまで送らない。紐付けは、管理画面が発行した一次性コードを本人のLINEから公式アカウントへ送ったときだけ成立させる。受領は「受け取りました」の postback だけを記録し、PDFを開いたことでは記録しない。解除した紐付けへの送信は止める。
+- Context:
+  - DEC-027 はチャネル権限が無い間、送信を未接続にしていた
+  - テスト用公式アカウントの Messaging API と長期チャネルアクセストークン、友だち追加が揃った
+  - 弁護士確認済み書式はまだ無い
+  - PDF閲覧期間、未受領の業務期限、パスワード再発行手順は未決
+- Options:
+  - A: 書式が揃うまで送信コードを置かない
+  - B: テスト区分だけ送り、正式区分と書式レイアウトは止めたままにする
+  - C: 正式区分も同じPDFで送る
+- Chosen: B
+- Why:
+  - 送信経路と受領記録は、書式の欄位置と独立して確認できる
+  - 未確認の書式を正式な発注として送ると、テストと正式の区別が崩れる
+- Impact:
+  - Data model: `line_worker_links` / `line_link_codes` / `line_webhook_events` / `order_request_send_attempts` / `order_request_file_tokens`
+  - UI/UX: 発注依頼書画面に紐付けと「この1人にテスト送信」
+  - Ops/Runbook: チャネル値はサーバー環境変数。Webhook URL は `https://api.vanzai-portal.com/api/line/webhook`
+  - Migration: `alembic/versions/20261006a001_add_line_order_links.py`
+- Follow-ups:
+  - PDFを開ける期間（暫定7日）と紐付けコードの期限（暫定30分）を運用側が確定する
+  - 弁護士確認済み書式の適用後に、正式区分の送信可否を別決定にする
+  - 未受領の業務期限とパスワード再発行手順は試行前に決める
+- Spec Reference: DEC-027、`docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
 

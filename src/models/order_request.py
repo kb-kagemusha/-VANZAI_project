@@ -1,7 +1,7 @@
 """発注依頼書（共通PDF・版・送付行）。
 
 計画: 発注依頼書LINE送付 初期版。確定後の本文と送付時の氏名は上書きしない。
-LINE送信・受領Webhookは別単位。ここでは送付行の状態だけを保持する。
+公式LINEの紐付け・送信試行・受領は line_order 側。このファイルは版と送付行を保持する。
 """
 from datetime import date, datetime
 
