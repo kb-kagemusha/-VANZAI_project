@@ -3522,6 +3522,11 @@ button {
   line-height: 1.45;
 }
 
+.order-field.order-field-top input {
+  align-self: start;
+  height: auto;
+}
+
 .order-field input,
 .order-field textarea,
 .order-recipients-search input {

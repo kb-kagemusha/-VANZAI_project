@@ -188,9 +188,11 @@ export function OrderRequestsPage() {
   const previewLineText = linePushPreviewText({
     documentNumber: previewDocumentNumber,
     versionNo: previewVersionNo,
+    projectName: sections.projectName,
     workDateLabel: form.work_date_label,
     siteName: form.site_name,
   });
+  const previewProjectCut = `案件名: ${withFullwidthTilde(sections.projectName)}`.length > 80;
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
   const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
   const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
@@ -662,7 +664,7 @@ export function OrderRequestsPage() {
             <section className="order-draft-section">
               <h4>連絡先</h4>
               <div className="order-draft-grid">
-                <label className="order-field order-span-4">
+                <label className="order-field order-field-top order-span-4">
                   <span className="order-field-label">担当者</span>
                   <input
                     value={form.contact_name}
@@ -670,7 +672,7 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <label className="order-field order-span-4">
+                <label className="order-field order-field-top order-span-4">
                   <span className="order-field-label">業務用窓口</span>
                   <input
                     value={form.contact_desk}
@@ -990,8 +992,8 @@ export function OrderRequestsPage() {
                 </div>
               </div>
             </div>
-            {previewDateCut || previewSiteCut ? (
-              <p className="order-line-note">稼働日と現場は、LINEの文面ではそれぞれ80文字までです。続きはPDFに入ります。</p>
+            {previewProjectCut || previewDateCut || previewSiteCut ? (
+              <p className="order-line-note">案件名、稼働日、現場は、LINEの文面ではそれぞれ80文字までです。続きはPDFに入ります。</p>
             ) : null}
             <p className="order-line-note">
               通知に出る文面は「テストの発注依頼書です。受け取りましたを押すと受領になります。」です。「PDFを開く」のリンクは送信時に発行されます。保存前の文書番号は未採番です。

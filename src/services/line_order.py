@@ -48,6 +48,7 @@ from src.services.line_messaging import (
     build_line_client,
     line_settings,
 )
+from src.services.order_request_format import parse_sections
 from src.services.order_request_pdf import TEST_BANNER
 from src.services.order_request_service import OrderRequestError
 
@@ -232,6 +233,7 @@ class LineOrderService:
         messages = _push_messages(
             document_number=document.document_number,
             version_no=version.version_no,
+            project_name=_project_name(version.request_conditions),
             work_date_label=version.work_date_label,
             site_name=version.site_name,
             pdf_url=pdf_url,
@@ -471,10 +473,18 @@ def _attempt_result(result: LineCallResult) -> str:
     return ATTEMPT_FAILED
 
 
+def _project_name(request_conditions: str | None) -> str:
+    sections = parse_sections(request_conditions)
+    if not sections:
+        return ""
+    return str(sections.get("project_name") or "")
+
+
 def _push_messages(
     *,
     document_number: str,
     version_no: int,
+    project_name: str,
     work_date_label: str,
     site_name: str,
     pdf_url: str,
@@ -484,6 +494,7 @@ def _push_messages(
         [
             TEST_BANNER,
             f"発注依頼書 {document_number}（版{version_no}）",
+            f"案件名: {project_name}"[:80],
             f"稼働日: {work_date_label}"[:80],
             f"現場: {site_name}"[:80],
             "このメッセージはテスト送信です。",

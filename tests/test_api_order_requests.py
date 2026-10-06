@@ -469,3 +469,21 @@ def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_us
     )
     assert too_many.status_code == 400
     assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_line_push_text_includes_project_name():
+    from src.services.line_order import _push_messages
+
+    messages = _push_messages(
+        document_number="OR-1",
+        version_no=1,
+        project_name="横浜おいも万博",
+        work_date_label="10/9",
+        site_name="赤レンガ倉庫",
+        pdf_url="https://example.invalid/pdf",
+        delivery_id="delivery-1",
+    )
+    text = messages[0]["text"]
+    assert "発注依頼書 OR-1（版1）" in text
+    assert "案件名: 横浜おいも万博" in text
+    assert text.index("発注依頼書") < text.index("案件名:") < text.index("稼働日:")

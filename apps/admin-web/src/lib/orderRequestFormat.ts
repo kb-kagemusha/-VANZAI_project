@@ -144,12 +144,14 @@ export const LINE_LAYOUT_PENDING = "弁護士確認済み書式のレイアウ�
 export function linePushPreviewText(input: {
   documentNumber: string;
   versionNo: number;
+  projectName: string;
   workDateLabel: string;
   siteName: string;
 }): string {
   const detail = [
     LINE_TEST_BANNER,
     `発注依頼書 ${input.documentNumber}（版${input.versionNo}）`,
+    `案件名: ${withFullwidthTilde(input.projectName)}`.slice(0, 80),
     `稼働日: ${withFullwidthTilde(input.workDateLabel)}`.slice(0, 80),
     `現場: ${withFullwidthTilde(input.siteName)}`.slice(0, 80),
     "このメッセージはテスト送信です。",
