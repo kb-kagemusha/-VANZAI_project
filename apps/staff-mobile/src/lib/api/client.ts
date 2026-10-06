@@ -28,6 +28,11 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE_URL = resolveApiBaseUrl();
 const ACCESS_TOKEN_KEY = "vanzai.staff.access_token";
+const REFRESH_TOKEN_KEY = "vanzai.staff.refresh_token";
+const ACCESS_COOKIE = "vanzai_staff_access";
+const REFRESH_COOKIE = "vanzai_staff_refresh";
+const ACCESS_COOKIE_MAX_AGE_SECONDS = 60 * 30;
+const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 export class ApiError extends Error {
   status: number;
@@ -69,21 +74,150 @@ async function readResponse(response: Response): Promise<unknown> {
   return text ? { message: text } : null;
 }
 
+function writeCookie(name: string, value: string, maxAgeSeconds: number) {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; SameSite=Lax${secure}`;
+}
+
+function clearCookie(name: string) {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`;
+  for (const part of document.cookie.split("; ")) {
+    if (part.startsWith(prefix)) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+  return null;
+}
+
+function readPersistedToken(storageKey: string, cookieName: string): string | null {
+  const fromStorage = window.localStorage.getItem(storageKey);
+  if (fromStorage) {
+    return fromStorage;
+  }
+  const fromCookie = readCookie(cookieName);
+  if (fromCookie) {
+    window.localStorage.setItem(storageKey, fromCookie);
+    return fromCookie;
+  }
+  return null;
+}
+
 function emitUnauthorized() {
   clearStoredAccessToken();
   window.dispatchEvent(new Event("vanzai:unauthorized"));
 }
 
 export function getStoredAccessToken(): string | null {
-  return window.localStorage.getItem(ACCESS_TOKEN_KEY);
+  return readPersistedToken(ACCESS_TOKEN_KEY, ACCESS_COOKIE);
+}
+
+export function getStoredRefreshToken(): string | null {
+  return readPersistedToken(REFRESH_TOKEN_KEY, REFRESH_COOKIE);
+}
+
+export function setStoredSession(accessToken: string, refreshToken: string) {
+  window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  writeCookie(ACCESS_COOKIE, accessToken, ACCESS_COOKIE_MAX_AGE_SECONDS);
+  writeCookie(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_MAX_AGE_SECONDS);
 }
 
 export function setStoredAccessToken(token: string) {
   window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  writeCookie(ACCESS_COOKIE, token, ACCESS_COOKIE_MAX_AGE_SECONDS);
 }
 
 export function clearStoredAccessToken() {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  clearCookie(ACCESS_COOKIE);
+  clearCookie(REFRESH_COOKIE);
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function performRefresh(): Promise<boolean> {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    return false;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl("/api/auth/refresh"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    return false;
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      clearStoredAccessToken();
+    }
+    return false;
+  }
+
+  const payload = (await readResponse(response)) as TokenResponse;
+  if (!payload?.access_token || !payload?.refresh_token) {
+    return false;
+  }
+  setStoredSession(payload.access_token, payload.refresh_token);
+  return true;
+}
+
+export function refreshStoredSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+export async function ensurePersistentSession(): Promise<void> {
+  if (getStoredRefreshToken()) {
+    return;
+  }
+  const token = await apiFetch<TokenResponse>("/api/auth/session", { method: "POST" });
+  setStoredSession(token.access_token, token.refresh_token);
+}
+
+async function fetchAuthorized(url: string, init?: RequestInit, retried = false): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  const token = getStoredAccessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(url, { ...init, headers });
+  if (response.status !== 401 || retried) {
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+    return response;
+  }
+
+  if (!getStoredRefreshToken()) {
+    emitUnauthorized();
+    return response;
+  }
+
+  const refreshed = await refreshStoredSession();
+  if (refreshed) {
+    return fetchAuthorized(url, init, true);
+  }
+  if (!getStoredAccessToken() && !getStoredRefreshToken()) {
+    emitUnauthorized();
+  }
+  return response;
 }
 
 export async function apiFetch<T>(
@@ -92,26 +226,18 @@ export async function apiFetch<T>(
   params?: Record<string, string | number | boolean | undefined>,
 ): Promise<T> {
   const headers = new Headers(init?.headers);
-  const token = getStoredAccessToken();
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
   if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(buildUrl(path, params), {
+  const response = await fetchAuthorized(buildUrl(path, params), {
     ...init,
     headers,
   });
   const payload = await readResponse(response);
 
   if (!response.ok) {
-    if (response.status === 401) {
-      emitUnauthorized();
-    }
     const message =
       typeof payload === "object" && payload !== null && "detail" in payload
         ? String(payload.detail)
@@ -125,20 +251,10 @@ export async function apiFetch<T>(
 }
 
 async function downloadBinaryFile(path: string, fallbackFileName: string) {
-  const headers = new Headers();
-  const token = getStoredAccessToken();
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(buildUrl(path), { headers });
-  const payload = await readResponse(response);
+  const response = await fetchAuthorized(buildUrl(path));
 
   if (!response.ok) {
-    if (response.status === 401) {
-      emitUnauthorized();
-    }
+    const payload = await readResponse(response);
     const message =
       typeof payload === "object" && payload !== null && "detail" in payload
         ? String(payload.detail)

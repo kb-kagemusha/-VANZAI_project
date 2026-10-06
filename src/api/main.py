@@ -28,6 +28,7 @@ from src.api.jwt_auth import (
     authenticate_user, 
     create_access_token, 
     create_refresh_token,
+    get_refresh_token_subject,
     get_current_user,
     get_current_active_user,
     get_password_hash,
@@ -1671,6 +1672,52 @@ async def login_for_access_token(
         "refresh_token": refresh_token,
         "token_type": "bearer"
     }
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+def _issue_token_pair(username: str) -> dict:
+    return {
+        "access_token": create_access_token(data={"sub": username}),
+        "refresh_token": create_refresh_token(data={"sub": username}),
+        "token_type": "bearer",
+    }
+
+
+@app.post("/api/auth/refresh", tags=["Authentication"])
+async def refresh_access_token(
+    payload: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    リフレッシュトークンから新しいアクセストークンを発行する。
+
+    画面のバージョン更新で再読み込みしても、パスワード再入力なしでセッションを継続する。
+    """
+    username = get_refresh_token_subject(payload.refresh_token)
+    user = db.query(User).filter(User.username == username).first()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _issue_token_pair(user.username)
+
+
+@app.post("/api/auth/session", tags=["Authentication"])
+async def issue_session_from_access_token(
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    有効なアクセストークンからリフレッシュトークンを発行する。
+
+    更新用トークンをまだ保存していないログイン中のブラウザが、
+    次のバージョン更新でもログアウトしないようにする。
+    """
+    return _issue_token_pair(current_user.username)
 
 
 @app.get("/api/auth/me", tags=["Authentication"])

@@ -85,6 +85,28 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def get_refresh_token_subject(token: str) -> str:
+    """
+    リフレッシュトークンからユーザー名を取り出す。
+
+    アクセストークンや期限切れトークンは拒否する。
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if username is None or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return username
+
+
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     リフレッシュトークン生成

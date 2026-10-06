@@ -8,11 +8,15 @@ import {
 } from "react";
 
 import {
+  ApiError,
   clearStoredAccessToken,
+  ensurePersistentSession,
   getCurrentUser,
   getStoredAccessToken,
+  getStoredRefreshToken,
+  refreshStoredSession,
   requestToken,
-  setStoredAccessToken,
+  setStoredSession,
 } from "../api/client";
 import type { AuthUser } from "../../types/api";
 
@@ -35,25 +39,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     async function restoreSession() {
-      const token = getStoredAccessToken();
-      if (!token) {
-        if (active) {
-          setStatus("unauthenticated");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (!getStoredAccessToken()) {
+          await refreshStoredSession();
         }
-        return;
-      }
+        if (!getStoredAccessToken()) {
+          if (active) {
+            setStatus("unauthenticated");
+          }
+          return;
+        }
 
-      try {
-        const currentUser = await getCurrentUser();
-        if (active) {
-          setUser(currentUser);
-          setStatus("authenticated");
-        }
-      } catch {
-        clearStoredAccessToken();
-        if (active) {
-          setUser(null);
-          setStatus("unauthenticated");
+        try {
+          const currentUser = await getCurrentUser();
+          try {
+            await ensurePersistentSession();
+          } catch {
+            // 更新用トークンの保存に失敗しても、今のログインは維持する
+          }
+          if (active) {
+            setUser(currentUser);
+            setStatus("authenticated");
+          }
+          return;
+        } catch (error) {
+          const status = error instanceof ApiError ? error.status : 0;
+          if (status === 403) {
+            clearStoredAccessToken();
+            if (active) {
+              setUser(null);
+              setStatus("unauthenticated");
+            }
+            return;
+          }
+          const sessionGone = !getStoredAccessToken() && !getStoredRefreshToken();
+          if (status === 401 && sessionGone) {
+            if (active) {
+              setUser(null);
+              setStatus("unauthenticated");
+            }
+            return;
+          }
+          if (attempt < 2) {
+            await new Promise((resolve) => window.setTimeout(resolve, 800));
+            continue;
+          }
+          if (active) {
+            setUser(null);
+            setStatus("unauthenticated");
+          }
         }
       }
     }
@@ -81,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     async login(username: string, password: string) {
       const token = await requestToken(username, password);
-      setStoredAccessToken(token.access_token);
+      setStoredSession(token.access_token, token.refresh_token);
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setStatus("authenticated");
