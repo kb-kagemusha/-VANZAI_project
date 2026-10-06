@@ -992,8 +992,8 @@ export function OrderRequestsPage() {
               <div className="order-line-template">
                 <p>{LINE_BUTTON_TEXT}</p>
                 <div className="order-line-actions">
-                  <span>{LINE_ACCEPT_LABEL}</span>
-                  <span>{LINE_DECLINE_LABEL}</span>
+                  <span className="is-accept">{LINE_ACCEPT_LABEL}</span>
+                  <span className="is-decline">{LINE_DECLINE_LABEL}</span>
                 </div>
               </div>
             </div>

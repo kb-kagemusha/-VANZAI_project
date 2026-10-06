@@ -3941,10 +3941,17 @@ button {
   display: block;
   padding: 0.55rem 0.7rem;
   border-radius: 8px;
-  background: #06c755;
   color: #fff;
   font-weight: 700;
   text-align: center;
+}
+
+.order-line-actions span.is-accept {
+  background: #06c755;
+}
+
+.order-line-actions span.is-decline {
+  background: #c8553d;
 }
 
 .order-line-pdf {

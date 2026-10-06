@@ -618,26 +618,43 @@ def _push_messages(
     return [
         {"type": "text", "text": detail[:5000]},
         {
-            "type": "template",
+            "type": "flex",
             "altText": "依頼の案件について、受諾または辞退を押してください。",
-            "template": {
-                "type": "buttons",
-                "text": BUTTON_TEMPLATE_TEXT,
-                "actions": [
-                    {
-                        "type": "postback",
-                        "label": ACCEPT_LABEL,
-                        "data": f"or_accept:{delivery_id}",
-                        "displayText": ACCEPT_LABEL,
-                    },
-                    {
-                        "type": "postback",
-                        "label": DECLINE_LABEL,
-                        "data": f"or_decline:{delivery_id}",
-                        "displayText": DECLINE_LABEL,
-                        "inputOption": "openKeyboard",
-                    },
-                ],
+            "contents": {
+                "type": "bubble",
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "md",
+                    "contents": [
+                        {"type": "text", "text": BUTTON_TEMPLATE_TEXT, "wrap": True, "size": "sm"},
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "color": "#06C755",
+                            "height": "sm",
+                            "action": {
+                                "type": "postback",
+                                "label": ACCEPT_LABEL,
+                                "data": f"or_accept:{delivery_id}",
+                                "displayText": ACCEPT_LABEL,
+                            },
+                        },
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "color": "#C8553D",
+                            "height": "sm",
+                            "action": {
+                                "type": "postback",
+                                "label": DECLINE_LABEL,
+                                "data": f"or_decline:{delivery_id}",
+                                "displayText": DECLINE_LABEL,
+                                "inputOption": "openKeyboard",
+                            },
+                        },
+                    ],
+                },
             },
         },
     ]

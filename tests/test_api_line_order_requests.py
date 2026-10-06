@@ -227,11 +227,14 @@ def test_send_test_document_to_one_linked_worker_and_record_ack(
     text = fake_line.pushes[0][1][0]["text"]
     assert "PDF: https://api.example.test/api/line/order-request-files/" in text
     pdf_url = text.split("PDF: ", 1)[1].strip()
-    actions = fake_line.pushes[0][1][1]["template"]["actions"]
-    assert actions[0]["label"] == "依頼の案件、受諾します"
-    assert actions[0]["data"] == f"or_accept:{delivery_id}"
-    assert actions[1]["label"] == "今回は辞退します"
-    assert actions[1]["inputOption"] == "openKeyboard"
+    message = fake_line.pushes[0][1][1]
+    buttons = [item for item in message["contents"]["body"]["contents"] if item["type"] == "button"]
+    assert buttons[0]["action"]["label"] == "依頼の案件、受諾します"
+    assert buttons[0]["action"]["data"] == f"or_accept:{delivery_id}"
+    assert buttons[0]["color"] == "#06C755"
+    assert buttons[1]["action"]["label"] == "今回は辞退します"
+    assert buttons[1]["action"]["inputOption"] == "openKeyboard"
+    assert buttons[1]["color"] == "#C8553D"
     token = pdf_url.rsplit("/", 1)[-1]
     pdf = api_client.get(f"/api/line/order-request-files/{token}")
     assert pdf.status_code == 200
