@@ -106,6 +106,8 @@ def _confirm(api_client, ops_user, worker_id: str, *, kind: str = "test") -> dic
             "contact_name": "担当",
             "contact_desk": "03-0000-0000",
             "worker_ids": [worker_id],
+            "follow_up_due_on": "2026-10-20",
+            "follow_up_due_time": "21:00",
         },
         headers=_auth(ops_user.username),
     )
@@ -469,13 +471,14 @@ def test_reminder_is_sent_once_after_the_due_date(
     assert sent.status_code == 200, sent.text
     version = db_session.get(OrderRequestVersion, confirmed["id"])
     version.follow_up_due_on = date(2026, 10, 6)
+    version.follow_up_due_at = datetime(2026, 10, 6, 21, 0, tzinfo=timezone(timedelta(hours=9)))
     db_session.commit()
 
     service = LineOrderService(db_session)
-    assert service.send_due_reminders(today=date(2026, 10, 6)) == 0
-    assert service.send_due_reminders(today=date(2026, 10, 7)) == 1
+    assert service.send_due_reminders(now=datetime(2026, 10, 6, 20, 59, tzinfo=timezone(timedelta(hours=9)))) == 0
+    assert service.send_due_reminders(now=datetime(2026, 10, 6, 21, 0, tzinfo=timezone(timedelta(hours=9)))) == 1
     db_session.commit()
     assert fake_line.pushes[-1][1][0]["text"] == REMINDER_TEXT
     db_session.expire_all()
-    assert service.send_due_reminders(today=date(2026, 10, 8)) == 0
+    assert service.send_due_reminders(now=datetime(2026, 10, 8, 21, 0, tzinfo=timezone(timedelta(hours=9)))) == 0
     assert db_session.get(OrderRequestDelivery, delivery_id).ack_reminded_at is not None

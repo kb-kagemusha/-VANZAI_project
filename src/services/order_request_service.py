@@ -39,6 +39,24 @@ from src.services.order_request_format import apply_template_fields, parse_secti
 from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
+DEFAULT_DUE_TIME = "21:00"
+
+
+def follow_up_moment(due_on: date, due_time: str | None) -> datetime:
+    text = (due_time or DEFAULT_DUE_TIME).strip()[:5]
+    try:
+        parsed = datetime.strptime(text, "%H:%M").time()
+    except ValueError as exc:
+        raise OrderRequestError(400, "期限の案内の時刻は 21:00 のように入れてください") from exc
+    return datetime.combine(due_on, parsed, tzinfo=JST)
+
+
+def follow_up_time_label(moment: datetime | None) -> str:
+    if moment is None:
+        return DEFAULT_DUE_TIME
+    if moment.tzinfo is None:
+        return moment.strftime("%H:%M")
+    return moment.astimezone(JST).strftime("%H:%M")
 
 
 class OrderRequestError(Exception):
@@ -96,6 +114,7 @@ class OrderRequestService:
         phone_note: str | None,
         tracker_user_id: str | None,
         follow_up_due_on: date | None,
+        follow_up_due_time: str | None = DEFAULT_DUE_TIME,
     ) -> OrderRequestVersion:
         self._validate_kind(kind)
         worker_ids = self._normalize_worker_ids(worker_ids)
@@ -136,6 +155,7 @@ class OrderRequestService:
             phone_note=phone_note,
             tracker_user_id=tracker_user_id,
             follow_up_due_on=follow_up_due_on,
+            follow_up_due_time=follow_up_due_time,
         )
         self.session.add(document)
         self.session.add(version)
@@ -164,6 +184,7 @@ class OrderRequestService:
         tracker_user_id: str | None = None,
         clear_tracker: bool = False,
         follow_up_due_on: date | None = None,
+        follow_up_due_time: str | None = None,
         clear_follow_up: bool = False,
     ) -> OrderRequestVersion:
         if version.status == STATUS_CANCELLED:
@@ -192,12 +213,19 @@ class OrderRequestService:
             document.kind = kind
 
         if version.status != STATUS_DRAFT:
-            if tracker_user_id is not None or clear_tracker or follow_up_due_on is not None or clear_follow_up:
+            if (
+                tracker_user_id is not None
+                or clear_tracker
+                or follow_up_due_on is not None
+                or follow_up_due_time is not None
+                or clear_follow_up
+            ):
                 self._apply_follow_up(
                     version,
                     tracker_user_id=version.tracker_user_id if tracker_user_id is None else tracker_user_id,
                     clear_tracker=clear_tracker,
                     follow_up_due_on=version.follow_up_due_on if follow_up_due_on is None else follow_up_due_on,
+                    follow_up_due_time=follow_up_due_time,
                     clear_follow_up=clear_follow_up,
                 )
             self.session.flush()
@@ -230,6 +258,7 @@ class OrderRequestService:
             follow_up_due_on=None if clear_follow_up else (
                 version.follow_up_due_on if follow_up_due_on is None else follow_up_due_on
             ),
+            follow_up_due_time=follow_up_due_time,
         )
         self.session.flush()
         return version
@@ -263,8 +292,12 @@ class OrderRequestService:
             )
         )
         missing = [name for name, value in required if not _clean(value)]
+        if version.follow_up_due_on is None:
+            missing.append("期限の案内")
         if missing:
             raise OrderRequestError(400, "確定前に入力してください: " + "、".join(missing))
+        if version.follow_up_due_at is None and version.follow_up_due_on is not None:
+            version.follow_up_due_at = follow_up_moment(version.follow_up_due_on, DEFAULT_DUE_TIME)
 
         workers = self._load_workers(worker_ids)
         site_name = _clean(version.site_name)
@@ -390,6 +423,7 @@ class OrderRequestService:
             phone_first=False,
             tracker_user_id=version.tracker_user_id,
             follow_up_due_on=version.follow_up_due_on,
+            follow_up_due_at=version.follow_up_due_at,
             created_by_user_id=actor.id,
         )
         self.session.add(draft)
@@ -579,8 +613,13 @@ class OrderRequestService:
                 row.send_status == SEND_ACCEPTED and row.ack_status == ACK_UNACKED
                 for row in deliveries
             )
-        due = version.follow_up_due_on
-        if due is None or due >= _today():
+        due_at = version.follow_up_due_at
+        if due_at is not None:
+            if due_at.tzinfo is None:
+                due_at = due_at.replace(tzinfo=JST)
+            if due_at > _now():
+                return False
+        elif version.follow_up_due_on is None or version.follow_up_due_on >= _today():
             return False
         if version.phone_first and version.status == STATUS_DRAFT:
             return True
@@ -624,7 +663,11 @@ class OrderRequestService:
         phone_note = fields["phone_note"]
         version.phone_note = None if phone_note is None else _case_text(phone_note)
         version.tracker_user_id = tracker_user_id
-        version.follow_up_due_on = fields["follow_up_due_on"]
+        due_on = fields["follow_up_due_on"]
+        if due_on is None:
+            raise OrderRequestError(400, "期限の案内の日付を入れてください")
+        version.follow_up_due_on = due_on
+        version.follow_up_due_at = follow_up_moment(due_on, fields.get("follow_up_due_time"))
 
     def _apply_follow_up(
         self,
@@ -633,6 +676,7 @@ class OrderRequestService:
         tracker_user_id: str | None,
         clear_tracker: bool,
         follow_up_due_on: date | None,
+        follow_up_due_time: str | None,
         clear_follow_up: bool,
     ) -> None:
         if clear_tracker:
@@ -641,9 +685,13 @@ class OrderRequestService:
             self._ensure_user(tracker_user_id)
             version.tracker_user_id = tracker_user_id
         if clear_follow_up:
-            version.follow_up_due_on = None
-        elif follow_up_due_on is not None:
+            raise OrderRequestError(400, "期限の案内の日付を入れてください")
+        if follow_up_due_on is not None:
             version.follow_up_due_on = follow_up_due_on
+            version.follow_up_due_at = follow_up_moment(
+                follow_up_due_on,
+                follow_up_due_time or follow_up_time_label(version.follow_up_due_at),
+            )
 
     def _document(self, version: OrderRequestVersion) -> OrderRequestDocument:
         document = version.document or self.session.get(OrderRequestDocument, version.document_id)

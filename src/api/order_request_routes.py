@@ -31,7 +31,11 @@ from src.services.line_order import (
 )
 from src.services.order_request_format import parse_sections
 from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED
-from src.services.order_request_service import OrderRequestError, OrderRequestService
+from src.services.order_request_service import (
+    OrderRequestError,
+    OrderRequestService,
+    follow_up_time_label,
+)
 
 router = APIRouter(prefix="/api/order-requests", tags=["Order Requests"])
 
@@ -57,6 +61,7 @@ class OrderRequestWrite(BaseModel):
     phone_note: str | None = None
     tracker_user_id: str | None = None
     follow_up_due_on: date | None = None
+    follow_up_due_time: str | None = "21:00"
     assign_tracker_self: bool = False
 
 
@@ -79,6 +84,7 @@ class OrderRequestUpdate(BaseModel):
     phone_note: str | None = None
     tracker_user_id: str | None = None
     follow_up_due_on: date | None = None
+    follow_up_due_time: str | None = None
     assign_tracker_self: bool | None = None
 
 
@@ -210,6 +216,7 @@ def _version_out(
         "tracker_user_id": version.tracker_user_id,
         "tracker_name": names.get(version.tracker_user_id or ""),
         "follow_up_due_on": version.follow_up_due_on,
+        "follow_up_due_time": follow_up_time_label(version.follow_up_due_at),
         "confirmed_at": version.confirmed_at,
         "confirmed_by_name": names.get(version.confirmed_by_user_id or ""),
         "cancelled_at": version.cancelled_at,
@@ -258,6 +265,7 @@ def _list_item(db: Session, document: OrderRequestDocument, version: OrderReques
         "acked_count": sum(1 for row in deliveries if row.ack_status != ACK_UNACKED),
         "phone_first": version.phone_first,
         "follow_up_due_on": version.follow_up_due_on,
+        "follow_up_due_time": follow_up_time_label(version.follow_up_due_at),
         "dispatch_stopped": version.dispatch_stopped,
         "cancel_reason": version.cancel_reason,
         "has_pdf": bool(version.pdf_object_key),
@@ -370,6 +378,7 @@ def update_order_request_version(
             tracker_user_id=fields.get("tracker_user_id"),
             clear_tracker="tracker_user_id" in fields and fields.get("tracker_user_id") is None,
             follow_up_due_on=fields.get("follow_up_due_on"),
+            follow_up_due_time=fields.get("follow_up_due_time"),
             clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
         )
 
@@ -465,6 +474,7 @@ def list_order_request_replies(
                 "document_number": document.document_number,
                 "version_no": version.version_no,
                 "kind": document.kind,
+                "project_name": _project_name(version.request_conditions),
                 "site_name": version.site_name,
                 "work_date_label": version.work_date_label,
                 "worker_name": delivery.worker_name_snapshot,

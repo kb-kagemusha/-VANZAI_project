@@ -74,6 +74,7 @@ export interface OrderRequestVersion {
   tracker_user_id: string | null;
   tracker_name: string | null;
   follow_up_due_on: string | null;
+  follow_up_due_time: string;
   confirmed_at: string | null;
   confirmed_by_name: string | null;
   cancelled_at: string | null;
@@ -107,6 +108,7 @@ export interface OrderRequestListItem {
   acked_count: number;
   phone_first: boolean;
   follow_up_due_on: string | null;
+  follow_up_due_time: string;
   dispatch_stopped: boolean;
   cancel_reason: string | null;
   has_pdf: boolean;
@@ -130,6 +132,7 @@ export interface OrderRequestReplyItem {
   document_number: string;
   version_no: number;
   kind: string;
+  project_name: string;
   site_name: string;
   work_date_label: string;
   worker_name: string;
@@ -161,5 +164,6 @@ export interface OrderRequestWrite {
   phone_note: string | null;
   tracker_user_id: string | null;
   follow_up_due_on: string | null;
+  follow_up_due_time: string;
   assign_tracker_self: boolean;
 }

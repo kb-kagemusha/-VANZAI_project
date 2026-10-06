@@ -73,6 +73,8 @@ def _body(worker_ids: list[str], **overrides) -> dict:
         "contact_desk": "03-0000-0000",
         "worker_ids": worker_ids,
         "phone_first": False,
+        "follow_up_due_on": "2026-10-20",
+        "follow_up_due_time": "21:00",
     }
     payload.update(overrides)
     return payload
@@ -498,6 +500,25 @@ def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_us
     )
     assert too_many.status_code == 400
     assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_follow_up_due_date_is_required_and_defaults_to_21(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    missing = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], follow_up_due_on=None),
+        headers=_auth(ops_user.username),
+    )
+    assert missing.status_code == 400, missing.text
+
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], follow_up_due_on="2026-10-08", follow_up_due_time="21:00"),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["follow_up_due_on"] == "2026-10-08"
+    assert created.json()["follow_up_due_time"] == "21:00"
 
 
 def test_line_push_text_includes_project_name():

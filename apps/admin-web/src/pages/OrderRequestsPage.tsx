@@ -87,6 +87,7 @@ const EMPTY_FORM: OrderRequestWrite = {
   phone_note: "",
   tracker_user_id: null,
   follow_up_due_on: null,
+  follow_up_due_time: "21:00",
   assign_tracker_self: false,
 };
 
@@ -158,6 +159,7 @@ export function OrderRequestsPage() {
       phone_note: version.phone_note ?? "",
       tracker_user_id: version.tracker_user_id,
       follow_up_due_on: version.follow_up_due_on,
+      follow_up_due_time: version.follow_up_due_time || "21:00",
       assign_tracker_self: Boolean(version.tracker_user_id),
     };
   }
@@ -172,7 +174,14 @@ export function OrderRequestsPage() {
       phone_note: form.phone_note || null,
       site_address: form.site_address || null,
       follow_up_due_on: form.follow_up_due_on || null,
+      follow_up_due_time: form.follow_up_due_time || "21:00",
     };
+  }
+
+  function dueMissing(): boolean {
+    if (form.follow_up_due_on) return false;
+    setActionError("期限の案内の日付を入れてください");
+    return true;
   }
 
   useEffect(() => {
@@ -232,6 +241,7 @@ export function OrderRequestsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (dueMissing()) throw new Error("期限の案内の日付を入れてください");
       const payload = draftPayload();
       if (creating) return createOrderRequest(payload);
       if (!detail) throw new Error("版が選ばれていません");
@@ -359,60 +369,23 @@ export function OrderRequestsPage() {
           : " 送信には、サーバーへのチャネル設定がまだ必要です。紐付けは稼働者登録・一覧で行います。"}
       </p>
 
-      <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", margin: "1rem 0" }}>
-        <label>
-          区分
-          <select value={kind} onChange={(event) => setKind(event.target.value as OrderRequestKind | "all")}>
-            <option value="formal">正式</option>
-            <option value="test">テスト</option>
-            <option value="all">すべて</option>
-          </select>
-        </label>
-        <label>
-          一覧
-          <select value={queue} onChange={(event) => setQueue(event.target.value as OrderRequestQueue)}>
-            <option value="all">最新版</option>
-            <option value="unsent">未送付</option>
-            <option value="unknown">結果不明</option>
-            <option value="unacked">未受領</option>
-            <option value="overdue">期限超過</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            setCreating(true);
-            setSelectedId(null);
-            setForm(EMPTY_FORM);
-            setSections(EMPTY_ORDER_SECTIONS);
-            setActionError("");
-            setActionMessage("");
-          }}
-        >
-          新規の下書き
-        </button>
-      </div>
-
       {actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
       {actionMessage ? <p>{actionMessage}</p> : null}
       {listQuery.isLoading ? <LoadingOverlay /> : null}
       {listQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(listQuery.error)} /> : null}
 
-      <section className="order-draft-section" style={{ marginBottom: "1rem" }}>
-        <h4>送信と返事</h4>
-        <div className="card" style={{ overflow: "auto" }}>
+      <section className="order-list-frame is-sent">
+        <h3>送信した依頼</h3>
+        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。</p>
+        <div className="order-list-table">
           <table className="data-table">
             <thead>
               <tr>
                 <th>文書番号</th>
-                <th>現場</th>
+                <th>案件名</th>
                 <th>日付</th>
                 <th>送付先</th>
-                <th>送信</th>
                 <th>返事</th>
-                <th>辞退理由</th>
-                <th>期限の案内</th>
               </tr>
             </thead>
             <tbody>
@@ -423,16 +396,13 @@ export function OrderRequestsPage() {
                       {row.document_number}
                     </button>
                   </td>
-                  <td className="order-cell-multiline">{siteLabelForList(row.site_name)}</td>
+                  <td className="order-cell-multiline">{siteLabelForList(row.project_name)}</td>
                   <td className="order-cell-multiline">{row.work_date_label}</td>
                   <td>{row.worker_name}</td>
-                  <td>{SEND_LABEL[row.send_status] ?? row.send_status}</td>
                   <td>
                     {REPLY_LABEL[row.ack_status] ?? row.ack_status}
-                    {row.acked_at ? ` ${row.acked_at.slice(0, 10)}` : ""}
+                    {row.decline_reason ? <div className="order-cell-multiline">{row.decline_reason}</div> : null}
                   </td>
-                  <td className="order-cell-multiline">{row.decline_reason || "—"}</td>
-                  <td>{row.ack_reminded_at ? "送付済" : row.follow_up_due_on ? row.follow_up_due_on : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -443,7 +413,48 @@ export function OrderRequestsPage() {
         </div>
       </section>
 
-      <div className="card" style={{ overflow: "auto", marginBottom: "1rem" }}>
+      <section className="order-list-frame is-created">
+        <div className="order-list-head">
+          <div>
+            <h3>作成した依頼書</h3>
+            <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setCreating(true);
+              setSelectedId(null);
+              setForm(EMPTY_FORM);
+              setSections(EMPTY_ORDER_SECTIONS);
+              setActionError("");
+              setActionMessage("");
+            }}
+          >
+            新規の下書き
+          </button>
+        </div>
+        <div className="order-list-filters">
+          <label>
+            区分
+            <select value={kind} onChange={(event) => setKind(event.target.value as OrderRequestKind | "all")}>
+              <option value="formal">正式</option>
+              <option value="test">テスト</option>
+              <option value="all">すべて</option>
+            </select>
+          </label>
+          <label>
+            一覧
+            <select value={queue} onChange={(event) => setQueue(event.target.value as OrderRequestQueue)}>
+              <option value="all">最新版</option>
+              <option value="unsent">未送付</option>
+              <option value="unknown">結果不明</option>
+              <option value="unacked">未受領</option>
+              <option value="overdue">期限超過</option>
+            </select>
+          </label>
+        </div>
+        <div className="order-list-table">
         <table className="data-table">
           <thead>
             <tr>
@@ -481,7 +492,7 @@ export function OrderRequestsPage() {
                 <td>{item.created_by_name}</td>
                 <td>{item.tracker_name ?? "—"}</td>
                 <td>{item.recipient_count}</td>
-                <td>{item.follow_up_due_on ?? "—"}</td>
+                <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -489,7 +500,8 @@ export function OrderRequestsPage() {
         {listQuery.data && listQuery.data.items.length === 0 ? (
           <EmptyState title="該当なし" description="この条件の発注依頼書はありません" />
         ) : null}
-      </div>
+        </div>
+      </section>
 
       {detailQuery.isLoading ? <LoadingOverlay /> : null}
 
@@ -500,6 +512,7 @@ export function OrderRequestsPage() {
             event.preventDefault();
             if (editable) {
               setActionError("");
+              if (dueMissing()) return;
               saveMutation.mutate();
             }
           }}
@@ -699,15 +712,29 @@ export function OrderRequestsPage() {
               <h4>送付と追跡</h4>
               <div className="order-draft-grid">
                 <label className="order-field order-span-4">
-                  <span className="order-field-label">正式送付・受領の期限</span>
+                  <span className="order-field-label">
+                    期限の案内
+                    <span className="order-field-hint">必須です。この日時を過ぎて返事が無い相手へ、案内を1回送ります。</span>
+                  </span>
                   <input
                     type="date"
+                    required
                     value={form.follow_up_due_on ?? ""}
                     disabled={!editable}
                     onChange={(event) => setForm({ ...form, follow_up_due_on: event.target.value || null })}
                   />
                 </label>
-                <label className="order-field order-span-8">
+                <label className="order-field order-span-4">
+                  <span className="order-field-label">案内の時刻</span>
+                  <input
+                    type="time"
+                    required
+                    value={form.follow_up_due_time || "21:00"}
+                    disabled={!editable}
+                    onChange={(event) => setForm({ ...form, follow_up_due_time: event.target.value || "21:00" })}
+                  />
+                </label>
+                <label className="order-field order-span-4">
                   <span className="order-field-label">電話メモ</span>
                   <input
                     value={form.phone_note ?? ""}
@@ -972,6 +999,7 @@ export function OrderRequestsPage() {
                     disabled={confirmMutation.isPending || saveMutation.isPending}
                     onClick={async () => {
                       setActionError("");
+                      if (dueMissing()) return;
                       try {
                   const saved = await updateOrderRequestVersion(detail.id, draftPayload());
                         confirmMutation.mutate(saved.id);

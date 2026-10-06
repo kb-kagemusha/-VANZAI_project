@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -496,15 +496,16 @@ class LineOrderService:
         self.session.flush()
         return "declined", DECLINE_RECORDED
 
-    def send_due_reminders(self, *, today: date | None = None) -> int:
-        """期限の翌日以降、まだ返事が無い送信先へ案内を1回送る。"""
-        due_before = today or datetime.now(JST).date()
+    def send_due_reminders(self, *, now: datetime | None = None) -> int:
+        """期限の日時を過ぎて、まだ返事が無い送信先へ案内を1回送る。"""
+        moment = now or datetime.now(JST)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=JST)
         rows = (
             self.session.query(OrderRequestDelivery)
             .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
             .filter(
-                OrderRequestVersion.follow_up_due_on.is_not(None),
-                OrderRequestVersion.follow_up_due_on < due_before,
+                OrderRequestVersion.follow_up_due_at.is_not(None),
                 OrderRequestVersion.status != STATUS_CANCELLED,
                 OrderRequestVersion.dispatch_stopped.is_(False),
                 OrderRequestDelivery.send_status == SEND_ACCEPTED,
@@ -516,6 +517,13 @@ class LineOrderService:
         )
         sent = 0
         for delivery in rows:
+            due_at = delivery.version.follow_up_due_at
+            if due_at is None:
+                continue
+            if due_at.tzinfo is None:
+                due_at = due_at.replace(tzinfo=JST)
+            if due_at > moment:
+                continue
             link = self._active_link_for_worker(delivery.worker_id)
             if link is None:
                 continue

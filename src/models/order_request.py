@@ -106,6 +106,7 @@ class OrderRequestVersion(Base, TimestampMixin):
         String(26), ForeignKey("users.id"), nullable=True
     )
     follow_up_due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    follow_up_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     confirmed_by_user_id: Mapped[str | None] = mapped_column(
