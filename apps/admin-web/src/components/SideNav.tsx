@@ -25,6 +25,7 @@ import {
 
 import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
 import { useAuth } from "../lib/auth/auth-context";
+import { useAppVersion } from "../lib/hooks/useAppVersion";
 import { BrandMark } from "./BrandMark";
 
 const NAV_ICONS: Record<string, LucideIcon> = {
@@ -56,6 +57,7 @@ type SideNavProps = {
 
 export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
+  const { currentVersion } = useAppVersion();
 
   return (
     <aside className={`side-nav${collapsed ? " is-collapsed" : ""}`}>
@@ -75,8 +77,8 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
           <BrandMark size={collapsed ? 36 : 48} />
           {!collapsed ? (
             <div>
-              <p className="eyebrow">{"\u30d5\u30a7\u30fc\u30ba1"}</p>
-              <h2>{"\u7ba1\u7406\u753b\u9762"}</h2>
+              <h2>管理画面</h2>
+              <p className="side-nav-version">ver.{currentVersion}</p>
             </div>
           ) : null}
         </div>

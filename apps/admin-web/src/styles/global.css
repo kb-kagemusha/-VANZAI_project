@@ -118,12 +118,6 @@ button {
   padding: 0 0.8rem 0.75rem;
 }
 
-.side-nav-brand .eyebrow {
-  color: rgba(248, 239, 225, 0.55);
-  text-transform: none;
-  letter-spacing: 0.06em;
-}
-
 .side-nav-brand h2 {
   margin: 0;
   font-family: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", sans-serif;
@@ -136,6 +130,15 @@ button {
   -moz-osx-font-smoothing: auto;
   text-shadow: none;
   letter-spacing: 0.02em;
+}
+
+.side-nav-version {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(248, 239, 225, 0.55);
 }
 
 .side-nav-brand > div {

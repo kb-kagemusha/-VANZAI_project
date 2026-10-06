@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import packageJson from "../../../package.json";
+
 declare global {
   interface Window {
     __APP_VERSION__?: string;
@@ -36,7 +38,7 @@ async function fetchLatestVersion(): Promise<VersionPayload | null> {
 }
 
 export function useAppVersion(): AppVersionState {
-  const currentVersion = window.__APP_VERSION__ ?? "0.0.0";
+  const currentVersion = window.__APP_VERSION__ ?? packageJson.version ?? "0.0.0";
   const currentBuildId = window.__APP_BUILD_ID__ ?? currentVersion;
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [latestBuildId, setLatestBuildId] = useState<string | null>(null);
