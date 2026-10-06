@@ -408,6 +408,7 @@ export function OrderRequestsPage() {
           <thead>
             <tr>
               <th>文書番号</th>
+              <th>案件名</th>
               <th>版</th>
               <th>区分</th>
               <th>状態</th>
@@ -427,6 +428,7 @@ export function OrderRequestsPage() {
                     {item.document_number}
                   </button>
                 </td>
+                <td className="order-cell-multiline">{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
                 <td>{item.kind === "test" ? "テスト" : "正式"}</td>
                 <td>

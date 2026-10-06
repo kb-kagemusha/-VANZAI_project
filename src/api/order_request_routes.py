@@ -29,6 +29,7 @@ from src.services.line_order import (
     active_line_labels,
     latest_send_errors,
 )
+from src.services.order_request_format import parse_sections
 from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED
 from src.services.order_request_service import OrderRequestError, OrderRequestService
 
@@ -225,6 +226,13 @@ def _version_out(
     }
 
 
+def _project_name(request_conditions: str | None) -> str:
+    sections = parse_sections(request_conditions)
+    if not sections:
+        return ""
+    return str(sections.get("project_name") or "")
+
+
 def _list_item(db: Session, document: OrderRequestDocument, version: OrderRequestVersion, names: dict[str, str]) -> dict:
     deliveries = (
         db.query(OrderRequestDelivery)
@@ -239,6 +247,7 @@ def _list_item(db: Session, document: OrderRequestDocument, version: OrderReques
         "version_id": version.id,
         "version_no": version.version_no,
         "status": version.status,
+        "project_name": _project_name(version.request_conditions),
         "site_name": version.site_name,
         "work_date_label": version.work_date_label,
         "created_by_name": names.get(document.created_by_user_id),

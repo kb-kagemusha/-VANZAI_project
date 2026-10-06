@@ -215,11 +215,20 @@ def test_kind_cannot_change_after_confirm_and_revision_keeps_old_version(api_cli
 def test_default_list_hides_test_documents(api_client, db_session, ops_user, pdf_root):
     worker = _worker(db_session, "稼働者A")
     api_client.post("/api/order-requests", json=_body([worker.id], kind="test"), headers=_auth(ops_user.username))
-    formal = api_client.post("/api/order-requests", json=_body([worker.id]), headers=_auth(ops_user.username))
+    formal = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            request_conditions='{"format":"additional-request-v1","project_name":"横浜おいも万博"}',
+        ),
+        headers=_auth(ops_user.username),
+    )
     listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
     assert listed.status_code == 200
     numbers = {item["document_number"] for item in listed.json()["items"]}
     assert formal.json()["document_number"] in numbers
+    listed_formal = next(item for item in listed.json()["items"] if item["document_number"] == formal.json()["document_number"])
+    assert listed_formal["project_name"] == "横浜おいも万博"
     assert all(item["kind"] == "formal" for item in listed.json()["items"])
 
     tests = api_client.get("/api/order-requests?kind=test", headers=_auth(ops_user.username))

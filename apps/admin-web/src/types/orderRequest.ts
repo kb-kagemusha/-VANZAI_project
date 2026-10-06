@@ -96,6 +96,7 @@ export interface OrderRequestListItem {
   version_id: string;
   version_no: number;
   status: OrderRequestStatus;
+  project_name: string;
   site_name: string;
   work_date_label: string;
   created_by_name: string | null;
