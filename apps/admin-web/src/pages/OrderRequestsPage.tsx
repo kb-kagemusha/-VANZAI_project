@@ -303,6 +303,45 @@ export function OrderRequestsPage() {
     onError: (error) => setActionError(messageOf(error)),
   });
 
+  const canSend = Boolean(
+    detail
+    && detail.status === "confirmed"
+    && !detail.dispatch_stopped
+    && detail.deliveries.length > 0,
+  );
+
+  async function sendToLinkedRecipients() {
+    if (!detail) return;
+    const targets = detail.deliveries.filter((row) => (
+      row.line_linked
+      && !row.view_revoked
+      && row.ack_status === "unacked"
+    ));
+    if (targets.length === 0) {
+      setActionError("送れる紐付け済みの送付先がありません。稼働者登録・一覧で本人紐付けをしてください。");
+      return;
+    }
+    setSendingSelected(true);
+    setActionError("");
+    const failed: string[] = [];
+    for (const row of targets) {
+      try {
+        await sendOrderRequestLine(row.id);
+      } catch (error) {
+        failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
+      }
+    }
+    setSendingSelected(false);
+    await refresh();
+    await queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
+    if (failed.length > 0) {
+      setActionError(failed.join(" / "));
+      setActionMessage(`${targets.length - failed.length}人へ送信しました。`);
+    } else {
+      setActionMessage(`${targets.length}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
+    }
+  }
+
   return (
     <section>
       <PageHeader
@@ -475,6 +514,16 @@ export function OrderRequestsPage() {
               </p>
             </div>
             <div className="order-draft-head-side">
+              {canSend ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={sendingSelected || sendLine.isPending || !lineReady}
+                  onClick={sendToLinkedRecipients}
+                >
+                  送付する
+                </button>
+              ) : null}
               {form.kind === "test" ? (
                 <span className="order-draft-badge is-test">テスト · 正式な発注ではありません</span>
               ) : (
@@ -767,38 +816,9 @@ export function OrderRequestsPage() {
                       type="button"
                       className="btn btn-primary"
                       disabled={sendingSelected || sendLine.isPending || !lineReady}
-                      onClick={async () => {
-                        const targets = detail.deliveries.filter((row) => (
-                          row.line_linked
-                          && !row.view_revoked
-                          && row.ack_status === "unacked"
-                        ));
-                        if (targets.length === 0) {
-                          setActionError("送れる紐付け済みの送付先がありません。稼働者登録・一覧で本人紐付けをしてください。");
-                          return;
-                        }
-                        setSendingSelected(true);
-                        setActionError("");
-                        const failed: string[] = [];
-                        for (const row of targets) {
-                          try {
-                            await sendOrderRequestLine(row.id);
-                          } catch (error) {
-                            failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
-                          }
-                        }
-                        setSendingSelected(false);
-                        await refresh();
-                        await queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
-                        if (failed.length > 0) {
-                          setActionError(failed.join(" / "));
-                          setActionMessage(`${targets.length - failed.length}人へ送信しました。`);
-                        } else {
-                          setActionMessage(`${targets.length}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
-                        }
-                      }}
+                      onClick={sendToLinkedRecipients}
                     >
-                      選んだ送付先に送る
+                      送付する
                     </button>
                   </div>
                 ) : null}
@@ -920,7 +940,7 @@ export function OrderRequestsPage() {
             ) : null}
           </div>
 
-          {editable || detail?.status === "draft" || detail?.has_pdf ? (
+          {editable || detail?.status === "draft" || detail?.has_pdf || canSend ? (
             <footer className="order-draft-foot">
               <div className="order-draft-foot-start">
                 {detail?.has_pdf ? (
@@ -937,6 +957,16 @@ export function OrderRequestsPage() {
                 <button type="button" className="btn btn-ghost" onClick={() => setLinePreviewOpen(true)}>
                   送付内容を確認
                 </button>
+                {canSend ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={sendingSelected || sendLine.isPending || !lineReady}
+                    onClick={sendToLinkedRecipients}
+                  >
+                    送付する
+                  </button>
+                ) : null}
                 {editable ? (
                   <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
                     下書きを保存
