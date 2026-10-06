@@ -8,14 +8,18 @@ DEFAULT_NOTES = "報酬の期限等その他の事項は、業務委託契約書
 _SECTION_KEYS = (
     "project_name",
     "background",
+    "hours",
+    "content",
+    "belongings",
+    "fee",
+    "notes",
+)
+_LEGACY_KEYS = (
     "gather_time",
     "work_time",
     "dismiss_time",
-    "content",
-    "belongings",
     "base_fee",
     "incentive",
-    "notes",
 )
 
 
@@ -29,16 +33,20 @@ def parse_sections(request_conditions: str | None) -> dict | None:
         return None
     if not isinstance(data, dict) or data.get("format") != FORMAT_ID:
         return None
-    return {key: _text(data.get(key)) for key in _SECTION_KEYS}
+    sections = {key: _text(data.get(key)) for key in (*_SECTION_KEYS, *_LEGACY_KEYS)}
+    if not sections["hours"]:
+        sections["hours"] = _legacy_hours(sections)
+    if not sections["fee"]:
+        sections["fee"] = _legacy_fee(sections)
+    return sections
 
 
 def compose_document(sections: dict, *, work_date_label: str, site_name: str) -> str:
     notes = _text(sections.get("notes"))
     if notes and not notes.startswith("・"):
         notes = f"・{notes}"
-    base = _text(sections.get("base_fee"))
-    if base and not base.startswith(("¥", "￥")):
-        base = f"¥{base}"
+    hours = _text(sections.get("hours")) or _legacy_hours(sections)
+    fee = _text(sections.get("fee")) or _legacy_fee(sections)
     return "\n".join(
         [
             DOCUMENT_TITLE,
@@ -56,9 +64,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
             _text(work_date_label),
             "",
             "■稼働時間",
-            f"集合時間：{_text(sections.get('gather_time'))}",
-            f"実施時間：{_text(sections.get('work_time'))}",
-            f"解散時間：{_text(sections.get('dismiss_time'))}",
+            hours,
             "",
             "■内容：",
             _text(sections.get("content")),
@@ -67,8 +73,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
             _text(sections.get("belongings")),
             "",
             "■単価：",
-            f"ベース：{base}",
-            f"インセンティブ：{_text(sections.get('incentive'))}",
+            fee,
             "",
             "■備考：",
             notes,
@@ -91,6 +96,33 @@ def apply_template_fields(request_conditions: str, body: str, *, work_date_label
         canonical_conditions(sections),
         compose_document(sections, work_date_label=work_date_label, site_name=site_name),
     )
+
+
+def _legacy_hours(sections: dict) -> str:
+    lines = []
+    gather = _text(sections.get("gather_time"))
+    work = _text(sections.get("work_time"))
+    dismiss = _text(sections.get("dismiss_time"))
+    if gather:
+        lines.append(f"集合時間：{gather}")
+    if work:
+        lines.append(f"実施時間：{work}")
+    if dismiss:
+        lines.append(f"解散時間：{dismiss}")
+    return "\n".join(lines)
+
+
+def _legacy_fee(sections: dict) -> str:
+    lines = []
+    base = _text(sections.get("base_fee"))
+    incentive = _text(sections.get("incentive"))
+    if base:
+        if not base.startswith(("¥", "￥")):
+            base = f"¥{base}"
+        lines.append(f"ベース：{base}")
+    if incentive:
+        lines.append(f"インセンティブ：{incentive}")
+    return "\n".join(lines)
 
 
 def _text(value) -> str:

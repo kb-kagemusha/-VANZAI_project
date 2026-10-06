@@ -84,9 +84,9 @@ class OrderRequestVersion(Base, TimestampMixin):
     )
     revision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    work_date_label: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    work_date_label: Mapped[str] = mapped_column(Text, nullable=False, default="")
     site_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("sites.id"), nullable=True)
-    site_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    site_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     site_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_conditions: Mapped[str] = mapped_column(Text, nullable=False, default="")
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")

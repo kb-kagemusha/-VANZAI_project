@@ -353,6 +353,70 @@ def test_additional_request_format_replaces_condition_and_body_blob(api_client, 
     assert confirmed.status_code == 200, confirmed.text
 
 
+def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops_user):
+    import json
+
+    worker = _worker(db_session, "稼働者A")
+    hours = "\n".join(
+        [
+            "10/9(金)　※初日30分前集合",
+            "　8:30　集合・準備",
+            "　10:00~18:00　PR実施",
+            "　19:00　片付け・解散",
+            "",
+            "10/10(土)〜10/13(火)",
+            "　9:00　集合・準備",
+        ]
+    )
+    fee = "\n".join(
+        [
+            "10/9(金)　初日30分前集合",
+            "報酬：¥20,500(税抜)",
+            "　(昼食代、交通費込み)",
+            "",
+            "※インセン無し",
+        ]
+    )
+    site = "横浜赤レンガ倉庫 イベント広場\n（神奈川県横浜市中区新港1-1）\n※具体的な集合場所は追って。"
+    work_dates = "10/8(木)　前日準備\n10/9(金)~10/13(火)　実施日"
+    conditions = json.dumps(
+        {
+            "format": "additional-request-v1",
+            "project_name": "【横浜おいも万博2026】\nhttps://example.com/event",
+            "background": "-",
+            "hours": hours,
+            "content": "・商品販売促進",
+            "belongings": "・ipad\n・プリンター",
+            "fee": fee,
+            "notes": "報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+        },
+        ensure_ascii=False,
+    )
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label=work_dates,
+            site_name=site,
+            request_conditions=conditions,
+            body="無視される本文",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()
+    assert data["site_name"] == site
+    assert data["work_date_label"] == work_dates
+    stored = json.loads(data["request_conditions"])
+    assert stored["hours"] == hours
+    assert stored["fee"] == fee
+    body = data["body"]
+    assert "集合時間：" not in body
+    assert "ベース：" not in body
+    for line in (hours, fee, site, work_dates, "・商品販売促進", "・ipad"):
+        assert line in body
+
+
 def test_legacy_free_text_stays_until_rewritten(api_client, db_session, ops_user):
     worker = _worker(db_session, "稼働者A")
     created = api_client.post(

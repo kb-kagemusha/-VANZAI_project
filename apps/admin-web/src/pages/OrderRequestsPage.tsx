@@ -445,8 +445,8 @@ export function OrderRequestsPage() {
                   {item.phone_first ? " / 電話先行" : ""}
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
-                <td>{item.site_name}</td>
-                <td>{item.work_date_label}</td>
+                <td className="order-cell-multiline">{item.site_name}</td>
+                <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
                 <td>{item.tracker_name ?? "—"}</td>
                 <td>{item.recipient_count}</td>
@@ -505,10 +505,11 @@ export function OrderRequestsPage() {
                 <div className="order-draft-grid">
                   <label className="order-field order-span-12">
                     <span className="order-field-label">案件名</span>
-                    <input
+                    <textarea
+                      className="is-short"
                       value={sections.projectName}
                       disabled={!editable}
-                      placeholder="例: 〇〇施策_〇〇"
+                      placeholder={"【イベント名】\nhttps://example.com/event"}
                       onChange={(event) => setSections({ ...sections, projectName: event.target.value })}
                     />
                   </label>
@@ -521,56 +522,40 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, background: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-6">
+                  <label className="order-field order-span-12">
                     <span className="order-field-label">稼働場所</span>
-                    <input
+                    <textarea
+                      className="is-short"
                       value={form.site_name}
                       disabled={!editable}
+                      placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
                       onChange={(event) => setForm({ ...form, site_name: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-6">
+                  <label className="order-field order-span-12">
                     <span className="order-field-label">稼働日</span>
-                    <input
+                    <textarea
+                      className="is-short"
                       value={form.work_date_label}
                       disabled={!editable}
-                      placeholder="例: 10月6日"
+                      placeholder={"10/8(木)　前日準備\n10/9(金)〜10/13(火)　実施日"}
                       onChange={(event) => setForm({ ...form, work_date_label: event.target.value })}
                     />
                   </label>
-                  <div className="order-field order-span-12">
-                    <span className="order-field-label">稼働時間</span>
-                    <div className="order-draft-grid">
-                      <label className="order-field order-span-4">
-                        <span className="order-field-hint">集合時間</span>
-                        <input
-                          value={sections.gatherTime}
-                          disabled={!editable}
-                          placeholder="例: 9:00"
-                          onChange={(event) => setSections({ ...sections, gatherTime: event.target.value })}
-                        />
-                      </label>
-                      <label className="order-field order-span-4">
-                        <span className="order-field-hint">実施時間</span>
-                        <input
-                          value={sections.workTime}
-                          disabled={!editable}
-                          placeholder="10:00-17:00"
-                          onChange={(event) => setSections({ ...sections, workTime: event.target.value })}
-                        />
-                      </label>
-                      <label className="order-field order-span-4">
-                        <span className="order-field-hint">解散時間</span>
-                        <input
-                          value={sections.dismissTime}
-                          disabled={!editable}
-                          placeholder="例: 17:30"
-                          onChange={(event) => setSections({ ...sections, dismissTime: event.target.value })}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  <label className="order-field order-span-6">
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">
+                      稼働時間
+                      <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
+                    </span>
+                    <textarea
+                      className="is-tall"
+                      value={sections.hours}
+                      disabled={!editable}
+                      placeholder={"10/9(金)　※初日30分前集合\n　8:30　集合・準備\n　10:00~18:00　実施\n　19:00　片付け・解散\n\n10/10(土)〜10/13(火)\n　9:00　集合・準備\n　10:00~18:00　実施\n　19:00　片付け・解散"}
+                      onChange={(event) => setSections({ ...sections, hours: event.target.value })}
+                    />
+                  </label>
+                  <label className="order-field order-span-12">
                     <span className="order-field-label">内容</span>
                     <textarea
                       value={sections.content}
@@ -578,7 +563,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, content: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-6">
+                  <label className="order-field order-span-12">
                     <span className="order-field-label">持ち物</span>
                     <textarea
                       value={sections.belongings}
@@ -586,28 +571,19 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, belongings: event.target.value })}
                     />
                   </label>
-                  <div className="order-field order-span-12">
-                    <span className="order-field-label">単価</span>
-                    <div className="order-draft-grid">
-                      <label className="order-field order-span-6">
-                        <span className="order-field-hint">ベース</span>
-                        <input
-                          value={sections.baseFee}
-                          disabled={!editable}
-                          placeholder="例: 12000"
-                          onChange={(event) => setSections({ ...sections, baseFee: event.target.value })}
-                        />
-                      </label>
-                      <label className="order-field order-span-6">
-                        <span className="order-field-hint">インセンティブ</span>
-                        <input
-                          value={sections.incentive}
-                          disabled={!editable}
-                          onChange={(event) => setSections({ ...sections, incentive: event.target.value })}
-                        />
-                      </label>
-                    </div>
-                  </div>
+                  <label className="order-field order-span-12">
+                    <span className="order-field-label">
+                      単価
+                      <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
+                    </span>
+                    <textarea
+                      className="is-tall"
+                      value={sections.fee}
+                      disabled={!editable}
+                      placeholder={"10/9(金)\n報酬：¥20,500(税抜)\n　(昼食代、交通費込み)\n\n10/10(土)〜10/13(火)\n報酬：¥19,500(税抜)\n　(昼食代、交通費込み)"}
+                      onChange={(event) => setSections({ ...sections, fee: event.target.value })}
+                    />
+                  </label>
                   <label className="order-field order-span-12">
                     <span className="order-field-label">備考</span>
                     <textarea

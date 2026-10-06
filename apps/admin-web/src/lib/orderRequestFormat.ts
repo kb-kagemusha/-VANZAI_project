@@ -7,26 +7,20 @@ export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、�
 export interface OrderDocumentSections {
   projectName: string;
   background: string;
-  gatherTime: string;
-  workTime: string;
-  dismissTime: string;
+  hours: string;
   content: string;
   belongings: string;
-  baseFee: string;
-  incentive: string;
+  fee: string;
   notes: string;
 }
 
 export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   projectName: "",
   background: "",
-  gatherTime: "",
-  workTime: "",
-  dismissTime: "",
+  hours: "",
   content: "",
   belongings: "",
-  baseFee: "",
-  incentive: "",
+  fee: "",
   notes: DEFAULT_ORDER_NOTES,
 };
 
@@ -50,13 +44,10 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     format: ORDER_FORMAT_ID,
     project_name: sections.projectName.trim(),
     background: sections.background.trim(),
-    gather_time: sections.gatherTime.trim(),
-    work_time: sections.workTime.trim(),
-    dismiss_time: sections.dismissTime.trim(),
+    hours: sections.hours.trim(),
     content: sections.content.trim(),
     belongings: sections.belongings.trim(),
-    base_fee: sections.baseFee.trim(),
-    incentive: sections.incentive.trim(),
+    fee: sections.fee.trim(),
     notes: sections.notes.trim(),
   });
 }
@@ -67,7 +58,6 @@ export function composeOrderDocument(
   siteName: string,
 ): string {
   const notes = withBullet(sections.notes.trim());
-  const base = withYen(sections.baseFee.trim());
   return [
     ORDER_DOCUMENT_TITLE,
     "",
@@ -84,9 +74,7 @@ export function composeOrderDocument(
     workDateLabel.trim(),
     "",
     "■稼働時間",
-    `集合時間：${sections.gatherTime.trim()}`,
-    `実施時間：${sections.workTime.trim()}`,
-    `解散時間：${sections.dismissTime.trim()}`,
+    sections.hours.trim(),
     "",
     "■内容：",
     sections.content.trim(),
@@ -95,8 +83,7 @@ export function composeOrderDocument(
     sections.belongings.trim(),
     "",
     "■単価：",
-    `ベース：${base}`,
-    `インセンティブ：${sections.incentive.trim()}`,
+    sections.fee.trim(),
     "",
     "■備考：",
     notes,
@@ -112,18 +99,39 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
     return {
       projectName: textOf(data.project_name),
       background: textOf(data.background),
-      gatherTime: textOf(data.gather_time),
-      workTime: textOf(data.work_time),
-      dismissTime: textOf(data.dismiss_time),
+      hours: textOf(data.hours) || legacyHours(data),
       content: textOf(data.content),
       belongings: textOf(data.belongings),
-      baseFee: textOf(data.base_fee),
-      incentive: textOf(data.incentive),
+      fee: textOf(data.fee) || legacyFee(data),
       notes: textOf(data.notes),
     };
   } catch {
     return null;
   }
+}
+
+function legacyHours(data: Record<string, unknown>): string {
+  return [
+    labeled("集合時間", textOf(data.gather_time)),
+    labeled("実施時間", textOf(data.work_time)),
+    labeled("解散時間", textOf(data.dismiss_time)),
+  ].filter(Boolean).join("\n");
+}
+
+function legacyFee(data: Record<string, unknown>): string {
+  const base = textOf(data.base_fee);
+  const incentive = textOf(data.incentive);
+  const lines = [];
+  if (base) {
+    const amount = base.startsWith("¥") || base.startsWith("￥") ? base : `¥${base}`;
+    lines.push(`ベース：${amount}`);
+  }
+  if (incentive) lines.push(`インセンティブ：${incentive}`);
+  return lines.join("\n");
+}
+
+function labeled(label: string, value: string): string {
+  return value ? `${label}：${value}` : "";
 }
 
 function textOf(value: unknown): string {
@@ -133,9 +141,4 @@ function textOf(value: unknown): string {
 function withBullet(notes: string): string {
   if (!notes || notes.startsWith("・")) return notes;
   return `・${notes}`;
-}
-
-function withYen(amount: string): string {
-  if (!amount || amount.startsWith("¥") || amount.startsWith("￥")) return amount;
-  return `¥${amount}`;
 }

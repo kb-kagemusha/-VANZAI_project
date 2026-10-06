@@ -3539,6 +3539,15 @@ button {
   min-height: 4.75rem;
 }
 
+.order-field textarea.is-tall {
+  min-height: 12rem;
+}
+
+.order-cell-multiline {
+  white-space: pre-line;
+  max-width: 18rem;
+}
+
 .order-field input::placeholder,
 .order-field textarea::placeholder,
 .order-recipients-search input::placeholder {
