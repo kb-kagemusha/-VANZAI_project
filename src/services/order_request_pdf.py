@@ -12,7 +12,7 @@ from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -25,7 +25,7 @@ from src.services.pdf_generator import DEFAULT_FONT
 TEMPLATE_LAYOUT_APPLIED = False
 
 # 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は1枚目の下。複数人の氏名は出さない）。
-PDF_LAYOUT_ID = "order-request-branded-v5"
+PDF_LAYOUT_ID = "order-request-branded-v6"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -91,10 +91,10 @@ def render_order_request_pdf(
         story.append(_banner(TEST_BANNER, content_width, styles))
         story.append(Spacer(1, 3 * mm))
 
-    title = DOCUMENT_TITLE if _is_template(request_conditions, body) else "発注依頼書"
+    title = "追加案件依頼書" if _is_template(request_conditions, body) else "発注依頼書"
     story.append(_brand(content_width))
     story.append(Spacer(1, 4 * mm))
-    story.append(_title_row(
+    story.extend(_title_block(
         title,
         document_number,
         version_no,
@@ -102,7 +102,6 @@ def render_order_request_pdf(
         content_width,
         styles,
     ))
-    story.append(Spacer(1, 3.5 * mm))
     story.append(_field_table(_document_fields(
         request_conditions=request_conditions,
         body=body,
@@ -203,7 +202,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             fontSize=18,
             leading=24,
             textColor=_INK,
-            alignment=TA_LEFT,
+            alignment=TA_CENTER,
             **common,
         ),
         "company": ParagraphStyle(
@@ -275,32 +274,38 @@ def format_created_on(value: datetime | None) -> str:
     return f"{local.year}年{local.month}月{local.day}日"
 
 
-def _title_row(
+def _title_block(
     title: str,
     document_number: str,
     version_no: int,
     created_label: str,
     width: float,
     styles: dict,
-) -> Table:
-    title_width = 62 * mm
-    meta = (
-        f"文書番号　{escape(document_number)}　第{version_no}版"
-        f"<br/>作成日　{escape(created_label)}"
+) -> list:
+    heading = Table([[_paragraph(title, styles["title"])]], colWidths=[width])
+    heading.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+    meta = Table(
+        [
+            [Paragraph(f"文書番号　{escape(document_number)}　第{version_no}版", styles["meta"])],
+            [Paragraph(f"作成日　{escape(created_label)}", styles["meta"])],
+        ],
+        colWidths=[width],
     )
-    table = Table(
-        [[_paragraph(title, styles["title"]), Paragraph(meta, styles["meta"])]],
-        colWidths=[title_width, width - title_width],
-    )
-    table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+    meta.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
     ]))
-    return table
+    return [heading, Spacer(1, 1.5 * mm), meta, Spacer(1, 3.5 * mm)]
 
 
 def _brand(width: float) -> Table:

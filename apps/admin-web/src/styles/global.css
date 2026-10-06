@@ -4067,21 +4067,19 @@ button {
 }
 
 .order-line-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
   margin: 0 0 0.75rem;
 }
 
-.order-line-heading .order-line-doctitle,
-.order-line-heading .order-line-docno,
-.order-line-created {
-  margin: 0;
+.order-line-heading .order-line-doctitle {
+  margin: 0 0 0.35rem;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
 .order-line-heading .order-line-docno,
-.order-line-created {
+.order-line-heading .order-line-created {
+  margin: 0;
   text-align: right;
   font-size: 0.88rem;
   line-height: 1.45;
