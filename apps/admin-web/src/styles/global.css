@@ -3547,6 +3547,10 @@ button {
   min-height: 4.75rem;
 }
 
+.order-field textarea.is-site {
+  min-height: calc(4.75rem + 1.6em);
+}
+
 .order-field textarea.is-tall {
   min-height: 12rem;
 }

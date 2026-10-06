@@ -582,7 +582,7 @@ export function OrderRequestsPage() {
                   <label className="order-field order-span-4">
                     <span className="order-field-label">稼働場所</span>
                     <textarea
-                      className="is-short"
+                      className="is-short is-site"
                       value={form.site_name}
                       disabled={!editable}
                       placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
@@ -601,10 +601,7 @@ export function OrderRequestsPage() {
                   </label>
                   <div className="order-span-gap" />
                   <label className="order-field order-span-4">
-                    <span className="order-field-label">
-                      稼働時間
-                      <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
-                    </span>
+                    <span className="order-field-label">稼働時間</span>
                     <textarea
                       className="is-tall"
                       value={sections.hours}
@@ -630,10 +627,7 @@ export function OrderRequestsPage() {
                     />
                   </label>
                   <label className="order-field order-span-4">
-                    <span className="order-field-label">
-                      単価
-                      <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
-                    </span>
+                    <span className="order-field-label">単価</span>
                     <textarea
                       className="is-tall"
                       value={sections.fee}
