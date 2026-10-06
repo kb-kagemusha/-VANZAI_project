@@ -24,6 +24,11 @@ CURRENT_BRANCH=""
 # 1. コード取得（初回: clone / 更新: pull）
 # ----------------------------------------
 echo "[1/7] コード取得..."
+SCRIPT_PATH="${APP_DIR}/scripts/deploy/02_app_deploy.sh"
+SCRIPT_HASH_BEFORE=""
+if [ -f "${SCRIPT_PATH}" ]; then
+    SCRIPT_HASH_BEFORE=$(sha256sum "${SCRIPT_PATH}" | awk '{print $1}')
+fi
 if [ -d "${APP_DIR}/.git" ]; then
     echo "  git pull (更新)..."
     cd ${APP_DIR}
@@ -50,10 +55,11 @@ else
 fi
 echo "  コード取得完了: $(git log --oneline -1)"
 
-# 取得した新しいスクリプトで続きを実行する。古いプロセスのまま後半だけ進むのを防ぐ。
-if [ "${VANZAI_DEPLOY_REEXEC:-0}" != "1" ]; then
+# デプロイ手順そのものが変わったときだけ、新しいスクリプトでやり直す。
+SCRIPT_HASH_AFTER=$(sha256sum "${SCRIPT_PATH}" | awk '{print $1}')
+if [ -n "${SCRIPT_HASH_BEFORE}" ] && [ "${SCRIPT_HASH_BEFORE}" != "${SCRIPT_HASH_AFTER}" ] && [ "${VANZAI_DEPLOY_REEXEC:-0}" != "1" ]; then
     export VANZAI_DEPLOY_REEXEC=1
-    exec bash "${APP_DIR}/scripts/deploy/02_app_deploy.sh"
+    exec bash "${SCRIPT_PATH}"
 fi
 
 # ----------------------------------------
