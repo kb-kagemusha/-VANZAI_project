@@ -62,7 +62,7 @@ CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 8
 
 PURPOSE_TEXT = (
-    "発注依頼書のテスト送信と、本人の受領操作を記録するために公式LINEと稼働者を紐付けます。"
+    "発注依頼書を公式LINEで送るため、稼働者と本人のLINEを紐付けます。"
 )
 UNLINK_TEXT = "解除は管理画面から行います。解除後は、その稼働者への公式LINE送信を止めます。"
 LINK_INSTRUCTION = (
@@ -212,17 +212,12 @@ class LineOrderService:
         document = self.session.get(OrderRequestDocument, version.document_id) if version else None
         if version is None or document is None:
             raise OrderRequestError(404, "送付行が見つかりません")
-        if document.kind != KIND_TEST:
-            raise OrderRequestError(
-                409,
-                "弁護士確認済み書式が未適用のため、正式区分は公式LINEへ送りません。テスト区分で送信してください",
-            )
+        if delivery.ack_status != ACK_UNACKED:
+            raise OrderRequestError(409, "返事がある送付先には再送しません")
         if version.status != STATUS_CONFIRMED or version.dispatch_stopped:
             raise OrderRequestError(409, "確定済みで送付を止めていない版だけ送れます")
         if delivery.view_revoked:
             raise OrderRequestError(409, "閲覧を停止した送付先には送れません")
-        if delivery.ack_status == ACK_ACKED:
-            raise OrderRequestError(409, "受領済みの送付先には再送しません")
         if not version.pdf_object_key:
             raise OrderRequestError(409, "PDFが無いため送れません")
         link = self._active_link_for_worker(delivery.worker_id)
@@ -250,6 +245,7 @@ class LineOrderService:
             site_name=version.site_name,
             pdf_url=pdf_url,
             delivery_id=delivery.id,
+            is_test=document.kind == KIND_TEST,
         )
         try:
             result = self.client.push_messages(link.line_user_id, messages)
@@ -607,18 +603,18 @@ def _push_messages(
     site_name: str,
     pdf_url: str,
     delivery_id: str,
+    is_test: bool,
 ) -> list[dict]:
-    detail = "\n".join(
-        [
-            TEST_BANNER,
-            f"発注依頼書 {document_number}（版{version_no}）",
-            f"案件名: {project_name}"[:80],
-            f"稼働日: {work_date_label}"[:80],
-            f"現場: {site_name}"[:80],
-            "このメッセージはテスト送信です。",
-            f"PDF: {pdf_url}",
-        ]
-    )
+    lines = [
+        f"発注依頼書 {document_number}（版{version_no}）",
+        f"案件名: {project_name}"[:80],
+        f"稼働日: {work_date_label}"[:80],
+        f"現場: {site_name}"[:80],
+        f"PDF: {pdf_url}",
+    ]
+    if is_test:
+        lines = [TEST_BANNER, *lines[:-1], "このメッセージはテスト送信です。", lines[-1]]
+    detail = "\n".join(lines)
     return [
         {"type": "text", "text": detail[:5000]},
         {

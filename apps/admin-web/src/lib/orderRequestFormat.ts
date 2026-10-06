@@ -145,7 +145,7 @@ export function withFullwidthTilde(value: string): string {
   return value.replace(/~/g, "～");
 }
 
-/** 公式LINEのテスト送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
+/** 公式LINEの送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
 export const LINE_TEST_BANNER = "テスト・正式な発注ではありません";
 export const LINE_ACCEPT_LABEL = "依頼の案件、受諾します";
 export const LINE_DECLINE_LABEL = "今回は辞退します";
@@ -159,17 +159,18 @@ export function linePushPreviewText(input: {
   projectName: string;
   workDateLabel: string;
   siteName: string;
+  isTest?: boolean;
 }): string {
-  const detail = [
-    LINE_TEST_BANNER,
+  const lines = [
+    ...(input.isTest === false ? [] : [LINE_TEST_BANNER]),
     `発注依頼書 ${input.documentNumber}（版${input.versionNo}）`,
     `案件名: ${withFullwidthTilde(input.projectName)}`.slice(0, 80),
     `稼働日: ${withFullwidthTilde(input.workDateLabel)}`.slice(0, 80),
     `現場: ${withFullwidthTilde(input.siteName)}`.slice(0, 80),
-    "このメッセージはテスト送信です。",
+    ...(input.isTest === false ? [] : ["このメッセージはテスト送信です。"]),
     "PDF: （送信時にリンクが付きます）",
-  ].join("\n");
-  return detail.slice(0, 500);
+  ];
+  return lines.join("\n").slice(0, 500);
 }
 
 function labeled(label: string, value: string): string {

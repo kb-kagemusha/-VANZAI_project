@@ -482,6 +482,7 @@ def test_line_push_text_includes_project_name():
         site_name="赤レンガ倉庫",
         pdf_url="https://example.invalid/pdf",
         delivery_id="delivery-1",
+        is_test=True,
     )
     text = messages[0]["text"]
     assert "発注依頼書 OR-1（版1）" in text

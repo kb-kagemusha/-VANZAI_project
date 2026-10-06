@@ -1,6 +1,6 @@
 /**
  * 発注依頼書の作成・確定・共有一覧。
- * テスト区分だけ、紐付け済みの1人へ公式LINE送信できる。正式区分は送らない。
+ * 確定した版は、稼働者登録・一覧で紐付けた送付先へ公式LINEで送る。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,11 +18,8 @@ import {
   downloadOrderRequestPdf,
   getOrderRequestVersion,
   getWorkers,
-  issueLineLinkCode,
-  listLineLinks,
   listOrderRequestReplies,
   listOrderRequests,
-  revokeLineLink,
   revokeOrderRequestView,
   reviseOrderRequest,
   sendOrderRequestLine,
@@ -46,7 +43,6 @@ import {
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
 import type {
-  LineLinkCode,
   OrderRequestKind,
   OrderRequestQueue,
   OrderRequestStatus,
@@ -114,9 +110,7 @@ export function OrderRequestsPage() {
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [linePreviewOpen, setLinePreviewOpen] = useState(false);
-  const [linkWorkerId, setLinkWorkerId] = useState("");
-  const [issuedCode, setIssuedCode] = useState<LineLinkCode | null>(null);
-  const [unlinkReason, setUnlinkReason] = useState("");
+  const [sendingSelected, setSendingSelected] = useState(false);
 
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue],
@@ -125,10 +119,6 @@ export function OrderRequestsPage() {
   const repliesQuery = useQuery({
     queryKey: ["order-request-replies"],
     queryFn: listOrderRequestReplies,
-  });
-  const linksQuery = useQuery({
-    queryKey: ["line-links"],
-    queryFn: listLineLinks,
   });
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
@@ -207,6 +197,7 @@ export function OrderRequestsPage() {
     projectName: sections.projectName,
     workDateLabel: form.work_date_label,
     siteName: form.site_name,
+    isTest: form.kind === "test",
   });
   const previewProjectCut = `案件名: ${withFullwidthTilde(sections.projectName)}`.length > 80;
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
@@ -259,11 +250,7 @@ export function OrderRequestsPage() {
   const confirmMutation = useMutation({
     mutationFn: (versionId: string) => confirmOrderRequest(versionId),
     onSuccess: async (version) => {
-      setActionMessage(
-        version.kind === "test"
-          ? "確定しました。テスト区分は、紐付け済みの相手へ1人ずつ送れます。"
-          : "確定しました。正式区分は書式が未適用のため、公式LINEへは送りません。",
-      );
+      setActionMessage("確定しました。紐付け済みの送付先へ送れます。本人紐付けは稼働者登録・一覧で行います。");
       setActionError("");
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
@@ -304,35 +291,12 @@ export function OrderRequestsPage() {
   });
 
   const layoutPending = listQuery.data ? !listQuery.data.template_layout_applied : true;
-  const lineReady = Boolean(linksQuery.data?.line_send_available);
-  const linkedIds = new Set((linksQuery.data?.items ?? []).map((item) => item.worker_id));
-
-  const issueLink = useMutation({
-    mutationFn: () => issueLineLinkCode(linkWorkerId),
-    onSuccess: async (issued) => {
-      setIssuedCode(issued);
-      setActionError("");
-      setActionMessage("コードを発行しました。公式LINEへこのコードだけを送ってください。");
-      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
-    },
-    onError: (error) => setActionError(messageOf(error)),
-  });
-
-  const revokeLink = useMutation({
-    mutationFn: (workerId: string) => revokeLineLink(workerId, unlinkReason),
-    onSuccess: async () => {
-      setUnlinkReason("");
-      setActionMessage("紐付けを解除しました。解除した相手への公式LINE送信は止まります。");
-      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
-      if (selectedId) await queryClient.invalidateQueries({ queryKey: ["order-request", selectedId] });
-    },
-    onError: (error) => setActionError(messageOf(error)),
-  });
+  const lineReady = Boolean(listQuery.data?.line_send_available || detail?.line_send_available);
 
   const sendLine = useMutation({
     mutationFn: (deliveryId: string) => sendOrderRequestLine(deliveryId),
     onSuccess: async (version) => {
-      setActionMessage("テスト送信を受け付けました。返事は本人が受諾するか、辞退理由を送ったときだけです。");
+      setActionMessage("送信を受け付けました。返事は本人が受諾するか、辞退理由を送ったときだけです。");
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
     },
@@ -348,83 +312,12 @@ export function OrderRequestsPage() {
       />
       <p className="card" style={{ padding: "0.9rem 1rem" }}>
         {layoutPending
-          ? "弁護士確認済み書式のレイアウトは未適用です。いまのPDFは入力内容の保存です。正式区分は公式LINEへ送りません。"
+          ? "弁護士確認済み書式のレイアウトは未適用です。いまのPDFは入力内容の保存です。"
           : "正式区分の書式を適用しています。"}
         {lineReady
-          ? " テスト区分は、紐付け済みの1人ずつ送れます。"
-          : " テスト送信には、サーバーへのチャネル設定がまだ必要です。"}
+          ? " 確定後、選んだ送付先のうち公式LINEと紐付いた人へ送れます。紐付けは稼働者登録・一覧で行います。"
+          : " 送信には、サーバーへのチャネル設定がまだ必要です。紐付けは稼働者登録・一覧で行います。"}
       </p>
-
-      <section className="card" style={{ padding: "0.9rem 1rem", marginBottom: "1rem" }}>
-        <h2 style={{ marginTop: 0 }}>公式LINEの本人紐付け</h2>
-        <p>{linksQuery.data?.purpose ?? "発注依頼書のテスト送信と受領の記録に使います。"}</p>
-        <p>{linksQuery.data?.unlink_notice ?? "解除後は公式LINE送信を止めます。"}</p>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
-          <label>
-            稼働者
-            <select value={linkWorkerId} onChange={(event) => setLinkWorkerId(event.target.value)}>
-              <option value="">選択</option>
-              {workers.map((worker) => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.name}
-                  {linkedIds.has(worker.id) ? "（紐付け済）" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!linkWorkerId || issueLink.isPending}
-            onClick={() => issueLink.mutate()}
-          >
-            紐付けコードを発行
-          </button>
-        </div>
-        {issuedCode ? (
-          <p>
-            {issuedCode.worker_name} のコード: <strong>{issuedCode.code}</strong>
-            <br />
-            {issuedCode.instruction}
-          </p>
-        ) : null}
-        {(linksQuery.data?.items ?? []).length > 0 ? (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>稼働者</th>
-                <th>LINE表示名</th>
-                <th>紐付け日時</th>
-              </tr>
-            </thead>
-            <tbody>
-              {linksQuery.data?.items.map((item) => (
-                <tr key={item.worker_id}>
-                  <td>{item.worker_name}</td>
-                  <td>{item.line_display_name || "表示名なし"}</td>
-                  <td>{new Date(item.linked_at).toLocaleString("ja-JP")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>紐付け済みの稼働者はいません。</p>
-        )}
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
-          <label>
-            解除理由
-            <input value={unlinkReason} onChange={(event) => setUnlinkReason(event.target.value)} />
-          </label>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={!linkWorkerId || !unlinkReason.trim() || revokeLink.isPending}
-            onClick={() => revokeLink.mutate(linkWorkerId)}
-          >
-            選択した稼働者の紐付けを解除
-          </button>
-        </div>
-      </section>
 
       <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", margin: "1rem 0" }}>
         <label>
@@ -505,7 +398,7 @@ export function OrderRequestsPage() {
             </tbody>
           </table>
           {repliesQuery.data && repliesQuery.data.items.length === 0 ? (
-            <EmptyState title="送信済みはありません" description="テスト送信した依頼がここに出ます。" />
+            <EmptyState title="送信済みはありません" description="送付先へ送った依頼がここに出ます。" />
           ) : null}
         </div>
       </section>
@@ -866,6 +759,47 @@ export function OrderRequestsPage() {
             {detail && detail.deliveries.length > 0 ? (
               <section className="order-draft-section">
                 <h4>送付状況</h4>
+                {detail.status === "confirmed" && !detail.dispatch_stopped ? (
+                  <div className="order-inline-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={sendingSelected || sendLine.isPending || !lineReady}
+                      onClick={async () => {
+                        const targets = detail.deliveries.filter((row) => (
+                          row.line_linked
+                          && !row.view_revoked
+                          && row.ack_status === "unacked"
+                        ));
+                        if (targets.length === 0) {
+                          setActionError("送れる紐付け済みの送付先がありません。稼働者登録・一覧で本人紐付けをしてください。");
+                          return;
+                        }
+                        setSendingSelected(true);
+                        setActionError("");
+                        const failed: string[] = [];
+                        for (const row of targets) {
+                          try {
+                            await sendOrderRequestLine(row.id);
+                          } catch (error) {
+                            failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
+                          }
+                        }
+                        setSendingSelected(false);
+                        await refresh();
+                        await queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
+                        if (failed.length > 0) {
+                          setActionError(failed.join(" / "));
+                          setActionMessage(`${targets.length - failed.length}人へ送信しました。`);
+                        } else {
+                          setActionMessage(`${targets.length}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
+                        }
+                      }}
+                    >
+                      選んだ送付先に送る
+                    </button>
+                  </div>
+                ) : null}
                 <div className="order-draft-table">
                   <table className="data-table">
                     <thead>
@@ -883,22 +817,21 @@ export function OrderRequestsPage() {
                           <td>
                             {SEND_LABEL[row.send_status] ?? row.send_status}
                             {row.last_send_error ? `（${row.last_send_error}）` : ""}
-                            {detail.kind === "test" && detail.status === "confirmed" && !detail.dispatch_stopped ? (
+                            {detail.status === "confirmed" && !detail.dispatch_stopped ? (
                               <button
                                 type="button"
                                 className="btn btn-primary btn-sm"
                                 disabled={
                                   sendLine.isPending
+                                  || sendingSelected
                                   || !lineReady
                                   || !row.line_linked
                                   || row.view_revoked
-                                  || row.ack_status === "acked"
-                                  || row.ack_status === "declined"
-                                  || row.ack_status === "decline_pending"
+                                  || row.ack_status !== "unacked"
                                 }
                                 onClick={() => sendLine.mutate(row.id)}
                               >
-                                この1人にテスト送信
+                                この人に送る
                               </button>
                             ) : null}
                           </td>
@@ -933,52 +866,54 @@ export function OrderRequestsPage() {
               <section className="order-draft-section">
                 <h4>対応</h4>
                 <div className="order-draft-grid">
-                  <label className="order-field order-span-12">
-                    <span className="order-field-label">改訂・取消の理由</span>
-                    <input value={reason} onChange={(event) => setReason(event.target.value)} />
-                  </label>
+                  <div className="order-span-6">
+                    <label className="order-field">
+                      <span className="order-field-label">改訂・取消の理由</span>
+                      <input value={reason} onChange={(event) => setReason(event.target.value)} />
+                    </label>
+                    <div className="order-inline-actions">
+                      {detail.status !== "draft" ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => reviseMutation.mutate(detail.id)}
+                        >
+                          理由を付けて改訂
+                        </button>
+                      ) : null}
+                      {detail.status !== "cancelled" ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => cancelMutation.mutate(detail.id)}
+                        >
+                          理由を付けて取消
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="order-span-6">
+                    <label className="order-field">
+                      <span className="order-field-label">対応メモ</span>
+                      <input value={note} onChange={(event) => setNote(event.target.value)} />
+                    </label>
+                    <div className="order-inline-actions">
+                      <button type="button" className="btn btn-ghost" onClick={() => noteMutation.mutate(detail.id)}>
+                        メモを追加
+                      </button>
+                    </div>
+                    {detail.notes.length > 0 ? (
+                      <ul className="order-note-list">
+                        {detail.notes.map((item) => (
+                          <li key={item.id}>
+                            <span>{item.author_name}</span>
+                            {item.body}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="order-inline-actions">
-                  {detail.status !== "draft" ? (
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => reviseMutation.mutate(detail.id)}
-                    >
-                      理由を付けて改訂
-                    </button>
-                  ) : null}
-                  {detail.status !== "cancelled" ? (
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => cancelMutation.mutate(detail.id)}
-                    >
-                      理由を付けて取消
-                    </button>
-                  ) : null}
-                </div>
-                <div className="order-draft-grid">
-                  <label className="order-field order-span-12">
-                    <span className="order-field-label">対応メモ</span>
-                    <input value={note} onChange={(event) => setNote(event.target.value)} />
-                  </label>
-                </div>
-                <div className="order-inline-actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => noteMutation.mutate(detail.id)}>
-                    メモを追加
-                  </button>
-                </div>
-                {detail.notes.length > 0 ? (
-                  <ul className="order-note-list">
-                    {detail.notes.map((item) => (
-                      <li key={item.id}>
-                        <span>{item.author_name}</span>
-                        {item.body}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </section>
             ) : null}
           </div>
@@ -1047,7 +982,7 @@ export function OrderRequestsPage() {
             <p className="order-line-note">
               {form.kind === "test"
                 ? "テスト区分で送る公式LINEの画面です。この確認では送信しません。"
-                : "いまの区分は正式です。公式LINEには送りません。下はテスト区分にしたときに送る画面です。送信はしません。"}
+                : "正式区分で送る公式LINEの画面です。この確認では送信しません。"}
             </p>
             <div className="order-line-chat" aria-label="LINEのトーク画面">
               <p className="order-line-who">公式LINE</p>

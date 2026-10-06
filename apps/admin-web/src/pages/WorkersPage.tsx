@@ -18,11 +18,15 @@ import {
   getWorkerBankAccounts,
   getSuppliers,
   getWorkers,
+  issueLineLinkCode,
+  listLineLinks,
+  revokeLineLink,
   updateWorkerBankAccount,
   updateWorker,
 } from "../lib/api/client";
 import { formatDate, formatMaskedAccountNumber } from "../lib/formatters";
 import type { WorkerAvailabilityPreference, WorkerBankAccountItem, WorkerListItem } from "../types/api";
+import type { LineLinkCode } from "../types/orderRequest";
 
 const PAGE_SIZE = 30;
 
@@ -54,6 +58,127 @@ function validateEffectiveRange(effectiveFrom: string, effectiveUntil: string): 
   if (effectiveUntil && effectiveUntil < effectiveFrom) {
     throw new ApiError(400, "有効終了日は有効開始日以降を指定してください");
   }
+}
+
+function messageOf(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "処理に失敗しました";
+}
+
+function LineWorkerLinkSection() {
+  const queryClient = useQueryClient();
+  const [linkWorkerId, setLinkWorkerId] = useState("");
+  const [issuedCode, setIssuedCode] = useState<LineLinkCode | null>(null);
+  const [unlinkReason, setUnlinkReason] = useState("");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  const linksQuery = useQuery({
+    queryKey: ["line-links"],
+    queryFn: listLineLinks,
+  });
+  const workersQuery = useQuery({
+    queryKey: ["line-link-workers"],
+    queryFn: () => getWorkers({ limit: 200, is_active: true, sort_by: "name", sort_order: "asc" }),
+  });
+  const workers = workersQuery.data?.items ?? [];
+  const linkedIds = new Set((linksQuery.data?.items ?? []).map((item) => item.worker_id));
+
+  const issueLink = useMutation({
+    mutationFn: () => issueLineLinkCode(linkWorkerId),
+    onSuccess: async (issued) => {
+      setIssuedCode(issued);
+      setError("");
+      setNotice("コードを発行しました。公式LINEへこのコードだけを送ってください。");
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+    },
+    onError: (caught) => setError(messageOf(caught)),
+  });
+  const revokeLink = useMutation({
+    mutationFn: (workerId: string) => revokeLineLink(workerId, unlinkReason),
+    onSuccess: async () => {
+      setUnlinkReason("");
+      setNotice("紐付けを解除しました。解除した相手への公式LINE送信は止まります。");
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+    },
+    onError: (caught) => setError(messageOf(caught)),
+  });
+
+  return (
+    <section className="card" style={{ padding: "0.9rem 1rem" }}>
+      <h2 style={{ marginTop: 0 }}>公式LINEの本人紐付け</h2>
+      <p>{linksQuery.data?.purpose ?? "発注依頼書を公式LINEで送るため、稼働者と本人のLINEを紐付けます。"}</p>
+      <p>{linksQuery.data?.unlink_notice ?? "解除後は公式LINE送信を止めます。"}</p>
+      {notice ? <p>{notice}</p> : null}
+      {error ? <p className="form-error">{error}</p> : null}
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+        <label>
+          稼働者
+          <select value={linkWorkerId} onChange={(event) => setLinkWorkerId(event.target.value)}>
+            <option value="">選択</option>
+            {workers.map((worker) => (
+              <option key={worker.id} value={worker.id}>
+                {worker.name}
+                {linkedIds.has(worker.id) ? "（紐付け済）" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!linkWorkerId || issueLink.isPending}
+          onClick={() => issueLink.mutate()}
+        >
+          紐付けコードを発行
+        </button>
+      </div>
+      {issuedCode ? (
+        <p>
+          {issuedCode.worker_name} のコード: <strong>{issuedCode.code}</strong>
+          <br />
+          {issuedCode.instruction}
+        </p>
+      ) : null}
+      {(linksQuery.data?.items ?? []).length > 0 ? (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>稼働者</th>
+              <th>LINE表示名</th>
+              <th>紐付け日時</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linksQuery.data?.items.map((item) => (
+              <tr key={item.worker_id}>
+                <td>{item.worker_name}</td>
+                <td>{item.line_display_name || "表示名なし"}</td>
+                <td>{new Date(item.linked_at).toLocaleString("ja-JP")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p>紐付け済みの稼働者はいません。</p>
+      )}
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+        <label>
+          解除理由
+          <input value={unlinkReason} onChange={(event) => setUnlinkReason(event.target.value)} />
+        </label>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={!linkWorkerId || !unlinkReason.trim() || revokeLink.isPending}
+          onClick={() => revokeLink.mutate(linkWorkerId)}
+        >
+          選択した稼働者の紐付けを解除
+        </button>
+      </div>
+    </section>
+  );
 }
 
 export function WorkersPage() {
@@ -344,7 +469,7 @@ export function WorkersPage() {
   }
 
   if (workersQuery.isLoading) {
-    return <LoadingOverlay label="稼働者一覧を読み込み中..." />;
+    return <LoadingOverlay label="稼働者登録・一覧を読み込み中..." />;
   }
 
   if (workersQuery.error instanceof ApiError && workersQuery.error.status === 403) {
@@ -352,7 +477,7 @@ export function WorkersPage() {
   }
 
   if (workersQuery.isError || !workersQuery.data) {
-    return <ErrorState title="稼働者一覧の取得に失敗しました" description="認証または API 疎通を確認してください。" />;
+    return <ErrorState title="稼働者登録・一覧の取得に失敗しました" description="認証または API 疎通を確認してください。" />;
   }
 
   const { items, total } = workersQuery.data;
@@ -362,10 +487,12 @@ export function WorkersPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="稼働者一覧"
-        description="登録された稼働者（スタッフ）の一覧です。"
+        title="稼働者登録・一覧"
+        description="登録された稼働者（スタッフ）の一覧です。管理者と運用担当は、公式LINEの本人紐付けもここで行います。"
         eyebrow="マスタ"
       />
+
+      {user?.role === "admin" || user?.role === "ops" ? <LineWorkerLinkSection /> : null}
 
       <FilterBar>
         <label>

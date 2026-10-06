@@ -1,4 +1,4 @@
-"""公式LINEの紐付け、テスト送信、受領。正式区分は送らない。"""
+"""公式LINEの紐付け、送信、受領。"""
 from __future__ import annotations
 
 import base64
@@ -287,7 +287,7 @@ def test_other_line_user_cannot_ack(api_client, db_session, ops_user, pdf_root, 
     assert db_session.get(OrderRequestDelivery, delivery_id).ack_status == "unacked"
 
 
-def test_formal_document_is_not_sent(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
+def test_formal_document_is_sent_without_test_banner(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
     worker = _worker(db_session, "稼働者A")
     confirmed = _confirm(api_client, ops_user, worker.id, kind="formal")
     delivery_id = confirmed["deliveries"][0]["id"]
@@ -296,8 +296,11 @@ def test_formal_document_is_not_sent(api_client, db_session, ops_user, pdf_root,
         f"/api/order-requests/deliveries/{delivery_id}/line-send",
         headers=_auth(ops_user.username),
     )
-    assert response.status_code == 409
-    assert fake_line.pushes == []
+    assert response.status_code == 200, response.text
+    text = fake_line.pushes[0][1][0]["text"]
+    assert "テスト・正式な発注ではありません" not in text
+    assert "このメッセージはテスト送信です。" not in text
+    assert "PDF: https://api.example.test/api/line/order-request-files/" in text
 
 
 def test_send_requires_channel_settings(api_client, db_session, ops_user, pdf_root, monkeypatch, fake_line):

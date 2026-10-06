@@ -102,8 +102,8 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/masters/workers",
-    label: "稼働者一覧",
-    description: "稼働者（スタッフ）の一覧と編集",
+    label: "稼働者登録・一覧",
+    description: "稼働者（スタッフ）の登録、一覧、公式LINEの本人紐付け",
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
