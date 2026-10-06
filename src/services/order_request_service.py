@@ -252,16 +252,14 @@ class OrderRequestService:
                 ("案件名", sections.get("project_name") if sections else ""),
                 ("稼働日", version.work_date_label),
                 ("稼働場所", version.site_name),
-                ("担当者", version.contact_name),
-                ("業務用窓口", version.contact_desk),
+                ("担当者", version.contact_name or version.contact_desk),
             )
             if sections is not None
             else (
                 ("日付", version.work_date_label),
                 ("現場", version.site_name),
                 ("依頼条件", version.request_conditions),
-                ("担当者", version.contact_name),
-                ("業務用窓口", version.contact_desk),
+                ("担当者", version.contact_name or version.contact_desk),
             )
         )
         missing = [name for name, value in required if not _clean(value)]

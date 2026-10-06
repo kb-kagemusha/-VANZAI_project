@@ -116,6 +116,26 @@ def test_confirm_creates_one_pdf_and_delivery_rows(api_client, db_session, ops_u
     assert "attachment" in pdf.headers["content-disposition"]
 
 
+def test_confirm_without_business_desk(api_client, db_session, ops_user, pdf_root, monkeypatch):
+    monkeypatch.delenv("LINE_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_SECRET", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN", raising=False)
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], contact_desk=""),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{created.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["contact_name"] == "依頼担当"
+    assert confirmed.json()["contact_desk"] == ""
+
+
 def test_pdf_save_failure_rolls_back_confirmation(api_client, db_session, ops_user, pdf_root, monkeypatch):
     worker = _worker(db_session, "稼働者A")
     created = api_client.post(

@@ -96,8 +96,7 @@ def render_order_request_pdf(
             document_body = document_body[len(DOCUMENT_TITLE):].lstrip("\n")
         story.append(Paragraph(escape(document_body).replace("\n", "<br/>"), value))
         fields = [
-            ("担当者", contact_name),
-            ("業務用窓口", contact_desk),
+            ("担当者", contact_name or contact_desk),
             ("取引相手メモ", counterparty_note or ""),
             ("送付先（確定時の氏名）", "、".join(worker_names)),
         ]
@@ -109,8 +108,7 @@ def render_order_request_pdf(
             ("現場住所", site_address or ""),
             ("依頼条件", request_conditions),
             ("本文", body),
-            ("担当者", contact_name),
-            ("業務用窓口", contact_desk),
+            ("担当者", contact_name or contact_desk),
             ("取引相手メモ", counterparty_note or ""),
             ("送付先（確定時の氏名）", "、".join(worker_names)),
         ]

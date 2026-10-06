@@ -150,8 +150,8 @@ export function OrderRequestsPage() {
       site_address: version.site_address,
       request_conditions: version.request_conditions,
       body: version.body,
-      contact_name: version.contact_name,
-      contact_desk: version.contact_desk,
+      contact_name: version.contact_name || version.contact_desk,
+      contact_desk: "",
       counterparty_note: version.counterparty_note ?? "",
       worker_ids: version.draft_worker_ids,
       phone_first: version.phone_first,
@@ -167,6 +167,7 @@ export function OrderRequestsPage() {
       ...form,
       request_conditions: serializeOrderSections(sections),
       body: composeOrderDocument(sections, form.work_date_label, form.site_name),
+      contact_desk: "",
       counterparty_note: form.counterparty_note || null,
       phone_note: form.phone_note || null,
       site_address: form.site_address || null,
@@ -679,14 +680,7 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <label className="order-field order-field-top order-span-4">
-                  <span className="order-field-label">業務用窓口</span>
-                  <input
-                    value={form.contact_desk}
-                    disabled={!editable}
-                    onChange={(event) => setForm({ ...form, contact_desk: withFullwidthTilde(event.target.value) })}
-                  />
-                </label>
+                <div className="order-span-gap" aria-hidden="true" />
                 <label className="order-field order-span-4">
                   <span className="order-field-label">
                     取引相手メモ
@@ -1049,10 +1043,6 @@ export function OrderRequestsPage() {
                 <div>
                   <dt>担当者</dt>
                   <dd>{form.contact_name || "—"}</dd>
-                </div>
-                <div>
-                  <dt>業務用窓口</dt>
-                  <dd>{form.contact_desk || "—"}</dd>
                 </div>
                 <div>
                   <dt>取引相手メモ</dt>
