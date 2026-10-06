@@ -145,6 +145,23 @@ export function withFullwidthTilde(value: string): string {
   return value.replace(/~/g, "～");
 }
 
+/** ダウンロード名。src/services/order_request_pdf.py の order_request_pdf_filename と同じ切り方。 */
+export function orderRequestPdfFileName(workDateLabel: string, projectName: string): string {
+  const piece = (value: string) =>
+    value
+      .replace(/[\\/]/g, "／")
+      .replace(/:/g, "：")
+      .replace(/[*"<>|?\r\n\t]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^[ .]+|[ .]+$/g, "")
+      .slice(0, 80);
+  const date = piece(workDateLabel);
+  const project = piece(projectName);
+  const stem = date && project ? `${date}＋${project}` : date || project || "発注依頼書";
+  return `${stem}.pdf`;
+}
+
 /** 公式LINEの送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
 export const LINE_TEST_BANNER = "テスト・正式な発注ではありません";
 export const LINE_ACCEPT_LABEL = "依頼の案件、受諾します";

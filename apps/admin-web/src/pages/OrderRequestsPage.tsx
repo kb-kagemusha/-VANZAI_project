@@ -35,6 +35,7 @@ import {
   LINE_LAYOUT_PENDING,
   LINE_TEST_BANNER,
   linePushPreviewText,
+  orderRequestPdfFileName,
   ORDER_DOCUMENT_TITLE,
   sectionsFromStored,
   serializeOrderSections,
@@ -967,7 +968,13 @@ export function OrderRequestsPage() {
                   <button
                     type="button"
                     className="btn btn-ghost"
-                    onClick={() => downloadOrderRequestPdf(detail.id, detail.document_number, detail.version_no)}
+                    onClick={() => {
+                      const stored = sectionsFromStored(detail.request_conditions, detail.body);
+                      downloadOrderRequestPdf(
+                        detail.id,
+                        orderRequestPdfFileName(detail.work_date_label, stored.projectName),
+                      );
+                    }}
                   >
                     PDFを取得
                   </button>

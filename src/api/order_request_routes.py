@@ -30,7 +30,12 @@ from src.services.line_order import (
     latest_send_errors,
 )
 from src.services.order_request_format import parse_sections
-from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED
+from src.services.order_request_pdf import (
+    TEMPLATE_LAYOUT_APPLIED,
+    attachment_content_disposition,
+    order_request_pdf_filename,
+    project_name_from_document,
+)
 from src.services.order_request_service import (
     OrderRequestError,
     OrderRequestService,
@@ -602,12 +607,14 @@ def download_order_request_pdf(
     try:
         version = service.get_version(version_id)
         payload = service.read_pdf(version)
-        document = db.get(OrderRequestDocument, version.document_id)
     except OrderRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    filename = f"{document.document_number}-v{version.version_no}.pdf"
+    filename = order_request_pdf_filename(
+        work_date_label=version.work_date_label,
+        project_name=project_name_from_document(version.request_conditions, version.body),
+    )
     return Response(
         content=payload,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": attachment_content_disposition(filename)},
     )

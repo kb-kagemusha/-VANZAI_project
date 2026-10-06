@@ -53,7 +53,11 @@ from src.services.line_messaging import (
     line_settings,
 )
 from src.services.order_request_format import parse_sections
-from src.services.order_request_pdf import TEST_BANNER
+from src.services.order_request_pdf import (
+    TEST_BANNER,
+    order_request_pdf_filename,
+    project_name_from_document,
+)
 from src.services.order_request_service import OrderRequestError
 
 LINK_CODE_MINUTES = 30
@@ -313,6 +317,21 @@ class LineOrderService:
         from src.services.order_request_service import OrderRequestService
 
         return OrderRequestService(self.session, self.storage).read_pdf(version)
+
+    def shared_pdf_filename(self, token: str) -> str:
+        row = (
+            self.session.query(OrderRequestFileToken)
+            .filter(OrderRequestFileToken.token == token)
+            .one_or_none()
+        )
+        delivery = self.session.get(OrderRequestDelivery, row.delivery_id) if row else None
+        version = self.session.get(OrderRequestVersion, delivery.version_id) if delivery else None
+        if version is None:
+            return order_request_pdf_filename(work_date_label="", project_name="")
+        return order_request_pdf_filename(
+            work_date_label=version.work_date_label,
+            project_name=project_name_from_document(version.request_conditions, version.body),
+        )
 
     def handle_webhook(self, payload: dict) -> None:
         events = payload.get("events") if isinstance(payload, dict) else None

@@ -585,6 +585,7 @@ def test_order_pdf_embeds_japanese_font():
     assert DEFAULT_FONT == "IPAexGothic"
     assert b"IPAexGothic" in pdf
     assert PDF_LAYOUT_ID.encode("ascii") in pdf
+    assert b"/Subtype /Image" in pdf or b"/Subtype/Image" in pdf
     assert len(pdf) > 20000
     fields = _headed_fields(body.split("【追加案件依頼】", 1)[1])
     assert [caption for caption, _text in fields] == [
@@ -600,3 +601,15 @@ def test_order_pdf_embeds_japanese_font():
         "備考",
     ]
     assert fields[4][1].startswith("集合時間：9:00")
+
+
+def test_order_pdf_filename_is_date_plus_project():
+    from src.services.order_request_pdf import attachment_content_disposition, order_request_pdf_filename
+
+    name = order_request_pdf_filename(work_date_label="10/5～10/8", project_name="有楽町交通会館")
+    assert name == "10／5～10／8＋有楽町交通会館.pdf"
+    header = attachment_content_disposition(name)
+    assert "filename*=UTF-8''" in header
+    assert "10%EF%BC%8F5" in header
+    blank = order_request_pdf_filename(work_date_label="", project_name="")
+    assert blank == "発注依頼書.pdf"

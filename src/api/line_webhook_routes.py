@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.deps import get_db
 from src.services.line_messaging import line_settings, verify_line_signature
 from src.services.line_order import LineOrderService
+from src.services.order_request_pdf import attachment_content_disposition
 from src.services.order_request_service import OrderRequestError
 
 router = APIRouter(prefix="/api/line", tags=["LINE"])
@@ -44,14 +45,16 @@ def download_shared_order_request_pdf(token: str, db: Session = Depends(get_db))
     if "/" in token or len(token) > 80:
         raise HTTPException(status_code=404, detail="PDFのリンクは無効です")
     try:
-        content = LineOrderService(db).read_shared_pdf(token)
+        service = LineOrderService(db)
+        content = service.read_shared_pdf(token)
+        filename = service.shared_pdf_filename(token)
     except OrderRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return Response(
         content=content,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": "attachment; filename=order-request.pdf",
+            "Content-Disposition": attachment_content_disposition(filename),
             "Cache-Control": "no-store",
         },
     )

@@ -360,6 +360,21 @@ export async function apiFetch<T>(
   return payload as T;
 }
 
+function fileNameFromContentDisposition(header: string, fallbackFileName: string): string {
+  const encoded = header.match(/filename\*\s*=\s*UTF-8''([^;\s]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // 壊れた指定は通常の filename を見る
+    }
+  }
+  const quoted = header.match(/filename\s*=\s*"([^"]+)"/i)?.[1];
+  if (quoted) return quoted;
+  const plain = header.match(/filename\s*=\s*([^;\s]+)/i)?.[1];
+  return plain || fallbackFileName;
+}
+
 async function downloadBinaryFile(path: string, fallbackFileName: string) {
   const response = await fetchAuthorized(buildUrl(path));
 
@@ -376,9 +391,10 @@ async function downloadBinaryFile(path: string, fallbackFileName: string) {
   }
 
   const blob = await response.blob();
-  const contentDisposition = response.headers.get("content-disposition") || "";
-  const matchedFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
-  const fileName = matchedFileName || fallbackFileName;
+  const fileName = fileNameFromContentDisposition(
+    response.headers.get("content-disposition") || "",
+    fallbackFileName,
+  );
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
 
@@ -436,9 +452,10 @@ async function downloadBinaryFileWithQuery(path: string, fallbackFileName: strin
   }
 
   const blob = await response.blob();
-  const contentDisposition = response.headers.get("content-disposition") || "";
-  const matchedFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
-  const fileName = matchedFileName || fallbackFileName;
+  const fileName = fileNameFromContentDisposition(
+    response.headers.get("content-disposition") || "",
+    fallbackFileName,
+  );
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
 
@@ -1539,10 +1556,10 @@ export function revokeOrderRequestView(deliveryId: string) {
   );
 }
 
-export function downloadOrderRequestPdf(versionId: string, documentNumber: string, versionNo: number) {
+export function downloadOrderRequestPdf(versionId: string, fallbackFileName: string) {
   return downloadBinaryFile(
     `/api/order-requests/versions/${versionId}/pdf`,
-    `${documentNumber}-v${versionNo}.pdf`,
+    fallbackFileName,
   );
 }
 

@@ -3,15 +3,18 @@
 弁護士確認済み書式は未入手のため、入力項目を枠付きで並べる保存用PDFとする。
 書式の欄位置へ合わせる作業は TEMPLATE_LAYOUT_APPLIED を真にするときだけ行う。
 """
+import re
 from io import BytesIO
+from pathlib import Path
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from src.services.order_request_format import DOCUMENT_TITLE, parse_sections
 from src.services.pdf_generator import DEFAULT_FONT
@@ -19,8 +22,10 @@ from src.services.pdf_generator import DEFAULT_FONT
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
 TEMPLATE_LAYOUT_APPLIED = False
 
-# 保存済みPDFを開いたとき、この印が無いものは項目枠の版へ作り直す。
-PDF_LAYOUT_ID = "order-request-boxed-v1"
+# 保存済みPDFを開いたとき、この印が無いものはロゴ付きの版へ作り直す。
+PDF_LAYOUT_ID = "order-request-branded-v1"
+COMPANY_NAME = "株式会社VANZAI"
+_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
 
 TEST_BANNER = "テスト・正式な発注ではありません"
 LAYOUT_PENDING_BANNER = (
@@ -31,15 +36,15 @@ REPLY_NOTE = (
     "PDFを開いたことは返事ではありません。"
 )
 
-_INK = colors.HexColor("#1d2731")
-_MUTED = colors.HexColor("#5c6b7a")
-_LINE = colors.HexColor("#d0cbc6")
-_LABEL_BG = colors.HexColor("#f6f4f1")
-_PAPER = colors.HexColor("#f7f5f2")
-_ACCENT = colors.HexColor("#c8553d")
-_HEADER_BG = colors.HexColor("#1d2731")
-_WARN = colors.HexColor("#8a1c1c")
-_WARN_BG = colors.HexColor("#fdecec")
+_BRAND_RED = colors.HexColor("#E61F19")
+_INK = colors.HexColor("#111111")
+_MUTED = colors.HexColor("#5E5856")
+_LINE = colors.HexColor("#E4D6D4")
+_LABEL_BG = colors.HexColor("#FBF4F3")
+_PAPER = colors.HexColor("#FBF7F6")
+_ACCENT = _BRAND_RED
+_WARN = _BRAND_RED
+_WARN_BG = colors.HexColor("#FDECEB")
 _WHITE = colors.white
 
 
@@ -70,7 +75,7 @@ def render_order_request_pdf(
         rightMargin=right,
         topMargin=14 * mm,
         bottomMargin=16 * mm,
-        title=DOCUMENT_TITLE if _is_template(request_conditions, body) else "発注依頼書",
+        title=_download_stem(work_date_label, project_name_from_document(request_conditions, body)),
         subject=PDF_LAYOUT_ID,
     )
     styles = _styles()
@@ -80,8 +85,12 @@ def render_order_request_pdf(
         story.append(Spacer(1, 3 * mm))
 
     title = DOCUMENT_TITLE if _is_template(request_conditions, body) else "発注依頼書"
-    story.append(_header(title, document_number, version_no, content_width, styles))
+    story.append(_brand(content_width))
     story.append(Spacer(1, 4 * mm))
+    story.append(_paragraph(title, styles["title"]))
+    story.append(Spacer(1, 1 * mm))
+    story.append(_paragraph(f"文書番号　{document_number}　　第{version_no}版", styles["meta"]))
+    story.append(Spacer(1, 3.5 * mm))
     story.append(_field_table(_document_fields(
         request_conditions=request_conditions,
         body=body,
@@ -98,8 +107,10 @@ def render_order_request_pdf(
 
     def _decorate(canvas, _doc):
         canvas.saveState()
-        canvas.setFillColor(_MUTED)
+        canvas.setFillColor(_INK)
         canvas.setFont(DEFAULT_FONT, 8)
+        canvas.drawRightString(page_width - right, 10 * mm, COMPANY_NAME)
+        canvas.setFillColor(_MUTED)
         canvas.drawString(left, 10 * mm, f"{document_number}　第{version_no}版")
         if not TEMPLATE_LAYOUT_APPLIED:
             canvas.drawString(left, 6 * mm, LAYOUT_PENDING_BANNER)
@@ -176,10 +187,18 @@ def _styles() -> dict[str, ParagraphStyle]:
     return {
         "title": ParagraphStyle(
             "or_title",
-            fontSize=16,
-            leading=22,
-            textColor=_WHITE,
+            fontSize=18,
+            leading=24,
+            textColor=_INK,
             alignment=TA_LEFT,
+            **common,
+        ),
+        "company": ParagraphStyle(
+            "or_company",
+            fontSize=12,
+            leading=16,
+            textColor=_INK,
+            alignment=TA_RIGHT,
             **common,
         ),
         "meta": ParagraphStyle(
@@ -234,29 +253,70 @@ def _paragraph(text: str, style: ParagraphStyle, empty_style: ParagraphStyle | N
     return Paragraph(escape(raw).replace("\n", "<br/>"), style)
 
 
-def _header(title: str, document_number: str, version_no: int, width: float, styles: dict) -> Table:
-    meta = f"文書番号　{document_number}　　第{version_no}版"
-    table = Table(
-        [
-            [_paragraph(title, styles["title"])],
-            [_paragraph(meta, styles["meta"])],
-        ],
-        colWidths=[width],
-    )
+def _brand(width: float) -> Table:
+    logo_height = 11 * mm
+    logo_width = logo_height * (200 / 50)
+    logo = Image(str(_LOGO_PATH), width=logo_width, height=logo_height, mask="auto")
+    company = Paragraph(escape(COMPANY_NAME), _styles()["company"])
+    table = Table([[logo, company]], colWidths=[logo_width + 4 * mm, width - logo_width - 4 * mm])
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), _HEADER_BG),
-        ("BACKGROUND", (0, 1), (-1, 1), _PAPER),
-        ("BOX", (0, 0), (-1, -1), 0.8, _HEADER_BG),
-        ("LINEABOVE", (0, 1), (-1, 1), 2.5, _ACCENT),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (0, 0), 8),
-        ("BOTTOMPADDING", (0, 0), (0, 0), 8),
-        ("TOPPADDING", (0, 1), (-1, 1), 5),
-        ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.4, _ACCENT),
     ]))
     return table
+
+
+def project_name_from_document(request_conditions: str | None, body: str | None) -> str:
+    sections = parse_sections(request_conditions)
+    if sections:
+        name = str(sections.get("project_name") or "").strip()
+        if name:
+            return name.splitlines()[0].strip()
+    for caption, text in _headed_fields(body or ""):
+        if caption == "案件名" and text.strip():
+            return text.strip().splitlines()[0].strip()
+    return ""
+
+
+def order_request_pdf_filename(*, work_date_label: str, project_name: str) -> str:
+    return f"{_download_stem(work_date_label, project_name)}.pdf"
+
+
+def attachment_content_disposition(filename: str) -> str:
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"order-request.pdf\"; filename*=UTF-8''{encoded}"
+
+
+def _download_stem(work_date_label: str, project_name: str) -> str:
+    date = _filename_piece(work_date_label)
+    project = _filename_piece(project_name)
+    if date and project:
+        return f"{date}＋{project}"
+    return date or project or "発注依頼書"
+
+
+def _filename_piece(value: str) -> str:
+    text = (value or "").translate(str.maketrans({
+        "\\": "／",
+        "/": "／",
+        ":": "：",
+        "*": "",
+        "?": "",
+        '"': "",
+        "<": "",
+        ">": "",
+        "|": "",
+        "\n": " ",
+        "\r": " ",
+        "\t": " ",
+    }))
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    return text[:80]
 
 
 def _field_table(fields: list[tuple[str, str]], width: float, styles: dict) -> Table:
