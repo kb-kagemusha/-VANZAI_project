@@ -7,6 +7,7 @@
 set -euo pipefail
 
 APP_DIR="/var/www/vanzai"
+STAMP_DIR="${APP_DIR}/.deploy-stamps"
 
 echo "=============================="
 echo "  フロントエンドのみデプロイ"
@@ -14,9 +15,24 @@ echo "=============================="
 
 build_app() {
   local name=$1
+  local app_path="${APP_DIR}/apps/${name}"
+  local lock_file="${app_path}/package-lock.json"
+  local lock_stamp="${STAMP_DIR}/${name}-npm-lock.sha256"
+  local lock_hash=""
   echo "[build] ${name}..."
-  cd "${APP_DIR}/apps/${name}"
-  npm ci --silent
+  cd "${app_path}"
+  mkdir -p "${STAMP_DIR}"
+  if [ -f "${lock_file}" ]; then
+    lock_hash=$(sha256sum "${lock_file}" | awk '{print $1}')
+  fi
+  if [ -d "${app_path}/node_modules" ] && [ -n "${lock_hash}" ] && [ -f "${lock_stamp}" ] && [ "$(cat "${lock_stamp}")" = "${lock_hash}" ]; then
+    echo "[build] ${name}: package-lock に変更なし。npm ci を省略"
+  else
+    npm ci --silent
+    if [ -n "${lock_hash}" ]; then
+      printf '%s\n' "${lock_hash}" > "${lock_stamp}"
+    fi
+  fi
   VITE_API_BASE_URL=https://api.vanzai-portal.com npm run build
   echo "[build] ${name} OK"
 }

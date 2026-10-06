@@ -10,6 +10,7 @@ set -euo pipefail
 APP_DIR="/var/www/vanzai"
 REPO_URL="https://github.com/kb-kagemusha/-VANZAI_project.git"
 VENV_DIR="${APP_DIR}/.venv"
+STAMP_DIR="${APP_DIR}/.deploy-stamps"
 # PaddleOCR 2.x と互換のある OpenCV 4.x（5.x は cv2.INTER_LINEAR 欠落で OCR 失敗）
 OPENCV_HEADLESS_PIN="opencv-python-headless==4.10.0.84"
 
@@ -49,28 +50,54 @@ else
 fi
 echo "  コード取得完了: $(git log --oneline -1)"
 
+# 取得した新しいスクリプトで続きを実行する。古いプロセスのまま後半だけ進むのを防ぐ。
+if [ "${VANZAI_DEPLOY_REEXEC:-0}" != "1" ]; then
+    export VANZAI_DEPLOY_REEXEC=1
+    exec bash "${APP_DIR}/scripts/deploy/02_app_deploy.sh"
+fi
+
 # ----------------------------------------
 # 2. Python 仮想環境・依存パッケージ
+# pyproject.toml と導入済みの OpenCV が同じなら、PyPI へ取りに行かない。
+# 本番には dev（pytest / ruff）を入れない。
 # ----------------------------------------
 echo "[2/7] Python 環境セットアップ..."
 cd ${APP_DIR}
+mkdir -p "${STAMP_DIR}"
 
-if [ ! -d "${VENV_DIR}" ]; then
-    python3.12 -m venv ${VENV_DIR}
-fi
+python_deps_ok() {
+    [ -x "${VENV_DIR}/bin/python" ] || return 1
+    [ -f "${STAMP_DIR}/pyproject.sha256" ] || return 1
+    [ "$(cat "${STAMP_DIR}/pyproject.sha256")" = "$(sha256sum "${APP_DIR}/pyproject.toml" | awk '{print $1}')" ] || return 1
+    "${VENV_DIR}/bin/python" - <<'PY'
+import sys
+from importlib.metadata import distributions
 
-${VENV_DIR}/bin/pip install --upgrade pip -q
-${VENV_DIR}/bin/pip install psycopg2-binary -q
-${VENV_DIR}/bin/pip install -e ".[dev]" -q
-${VENV_DIR}/bin/pip install -e ".[ocr]" -q
+names = set()
+for dist in distributions():
+    name = (dist.metadata.get("Name") or "").lower()
+    if name:
+        names.add(name)
+forbidden = {"opencv-python", "opencv-contrib-python", "opencv-contrib-python-headless"}
+if names & forbidden:
+    sys.exit(1)
+for module_name in ("fastapi", "psycopg2", "cv2"):
+    __import__(module_name)
+import cv2
+if not str(getattr(cv2, "__version__", "")).startswith("4.10."):
+    sys.exit(1)
+if not hasattr(cv2, "INTER_LINEAR"):
+    sys.exit(1)
+PY
+}
 
-# paddleocr の依存解決で OpenCV 5.x が入ることがある。5.x は PaddleOCR 2.x と非互換。
-# 全 opencv 系を一度外し、4.x headless を強制再インストールして検証する。
-${VENV_DIR}/bin/pip uninstall -y \
-    opencv-contrib-python opencv-python \
-    opencv-contrib-python-headless opencv-python-headless 2>/dev/null || true
-${VENV_DIR}/bin/pip install --force-reinstall "${OPENCV_HEADLESS_PIN}"
-${VENV_DIR}/bin/python - <<'PY'
+repair_opencv() {
+    echo "  OpenCV を 4.10 headless に揃えます"
+    ${VENV_DIR}/bin/pip uninstall -y \
+        opencv-contrib-python opencv-python \
+        opencv-contrib-python-headless opencv-python-headless >/dev/null 2>&1 || true
+    ${VENV_DIR}/bin/pip install "${OPENCV_HEADLESS_PIN}"
+    ${VENV_DIR}/bin/python - <<'PY'
 import cv2
 
 if not hasattr(cv2, "INTER_LINEAR"):
@@ -79,7 +106,27 @@ if not hasattr(cv2, "INTER_LINEAR"):
     )
 print(f"  opencv-python-headless OK: {cv2.__version__}")
 PY
-echo "  Python パッケージインストール完了"
+}
+
+if [ ! -d "${VENV_DIR}" ]; then
+    python3.12 -m venv ${VENV_DIR}
+fi
+
+if python_deps_ok; then
+    echo "  Python 依存は変更なし。パッケージの再取得は省略"
+else
+    ${VENV_DIR}/bin/pip install --upgrade pip -q
+    ${VENV_DIR}/bin/pip install psycopg2-binary -q
+    ${VENV_DIR}/bin/pip install -e . -q
+    ${VENV_DIR}/bin/pip install -e ".[ocr]" -q
+    # paddleocr の依存解決で OpenCV 5.x が入ることがある。導入したときだけ 4.x に戻す。
+    repair_opencv
+    sha256sum "${APP_DIR}/pyproject.toml" | awk '{print $1}' > "${STAMP_DIR}/pyproject.sha256"
+fi
+
+# 本番にテスト実行系を残さない。未導入ならすぐ終わる。
+${VENV_DIR}/bin/pip uninstall -y pytest pytest-cov ruff >/dev/null 2>&1 || true
+echo "  Python 環境確認完了"
 
 # ----------------------------------------
 # 3. .env ファイル確認
@@ -169,10 +216,23 @@ build_with_asset_retention() {
         done
     fi
 
-    # ビルド実行
+    # ビルド実行。lockfile が同じなら npm ci はしない（中身の検証は lock の更新時に npm ci が行う）。
     echo "  ${APP_NAME} ビルド中..."
     cd "${APP_PATH}"
-    npm ci --silent
+    local LOCK_FILE="${APP_PATH}/package-lock.json"
+    local LOCK_STAMP="${STAMP_DIR}/${APP_NAME}-npm-lock.sha256"
+    local LOCK_HASH=""
+    if [ -f "${LOCK_FILE}" ]; then
+        LOCK_HASH=$(sha256sum "${LOCK_FILE}" | awk '{print $1}')
+    fi
+    if [ -d "${APP_PATH}/node_modules" ] && [ -n "${LOCK_HASH}" ] && [ -f "${LOCK_STAMP}" ] && [ "$(cat "${LOCK_STAMP}")" = "${LOCK_HASH}" ]; then
+        echo "  ${APP_NAME}: package-lock に変更なし。npm ci を省略"
+    else
+        npm ci --silent
+        if [ -n "${LOCK_HASH}" ]; then
+            printf '%s\n' "${LOCK_HASH}" > "${LOCK_STAMP}"
+        fi
+    fi
     VITE_API_BASE_URL=https://api.vanzai-portal.com npm run build
 
     # ビルド後: アーカイブの旧ファイルを dist/assets に復元（新ファイルは上書きしない）
