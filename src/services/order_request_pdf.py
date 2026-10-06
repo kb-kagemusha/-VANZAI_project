@@ -24,8 +24,8 @@ from src.services.pdf_generator import DEFAULT_FONT
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
 TEMPLATE_LAYOUT_APPLIED = False
 
-# 保存済みPDFを開いたとき、この印が無いものは返事の欄を1枚目へ固定した版へ作り直す。
-PDF_LAYOUT_ID = "order-request-branded-v3"
+# 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は1枚目の下。複数人の氏名は出さない）。
+PDF_LAYOUT_ID = "order-request-branded-v4"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -151,8 +151,10 @@ def _document_fields(
     extras = [
         ("担当者", contact_name or contact_desk or ""),
         ("取引相手メモ", counterparty_note or ""),
-        ("送付先\n（確定時の氏名）", "、".join(worker_names)),
     ]
+    # 1通のPDFを選んだ全員へ送る。複数人の氏名を載せると、他の送付先に名前が渡る。
+    if len(worker_names) == 1:
+        extras.append(("送付先\n（確定時の氏名）", worker_names[0]))
     if _is_template(request_conditions, body):
         document_body = body or ""
         if document_body.startswith(DOCUMENT_TITLE):

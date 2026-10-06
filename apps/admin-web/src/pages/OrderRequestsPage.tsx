@@ -1089,10 +1089,12 @@ export function OrderRequestsPage() {
                   <dt>取引相手メモ</dt>
                   <dd>{form.counterparty_note || "—"}</dd>
                 </div>
-                <div>
-                  <dt>送付先（確定時の氏名）</dt>
-                  <dd>{selectedWorkers.map((worker) => worker.name).join("、") || "—"}</dd>
-                </div>
+                {selectedWorkers.length === 1 ? (
+                  <div>
+                    <dt>送付先（確定時の氏名）</dt>
+                    <dd>{selectedWorkers[0].name || "—"}</dd>
+                  </div>
+                ) : null}
               </dl>
               <p className="order-line-note">返事は本人の受諾か、辞退理由の送信で記録します。このPDFを開いたことは返事ではありません。</p>
             </section>

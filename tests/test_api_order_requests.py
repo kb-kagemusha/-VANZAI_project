@@ -604,6 +604,30 @@ def test_order_pdf_embeds_japanese_font():
     assert fields[4][1].startswith("集合時間：9:00")
 
 
+def test_order_pdf_omits_recipient_names_when_several_people_are_selected():
+    from src.services.order_request_pdf import _document_fields
+
+    common = dict(
+        request_conditions="",
+        body="本文",
+        work_date_label="10/5",
+        site_name="現場",
+        site_address=None,
+        contact_name="担当",
+        contact_desk="",
+        counterparty_note=None,
+    )
+    one = _document_fields(**common, worker_names=["山田"])
+    assert ("送付先\n（確定時の氏名）", "山田") in one
+
+    several = _document_fields(**common, worker_names=["山田", "佐藤"])
+    captions = [caption for caption, _text in several]
+    assert "送付先\n（確定時の氏名）" not in captions
+    joined = "\n".join(text for _caption, text in several)
+    assert "山田" not in joined
+    assert "佐藤" not in joined
+
+
 def test_order_pdf_created_on_uses_japan_date():
     from datetime import datetime
     from zoneinfo import ZoneInfo
