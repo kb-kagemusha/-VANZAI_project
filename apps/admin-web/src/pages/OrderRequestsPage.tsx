@@ -35,6 +35,7 @@ import {
   LINE_DECLINE_PROMPT,
   LINE_TEST_BANNER,
   linePushPreviewText,
+  orderRequestDocumentTitle,
   orderRequestPdfFileName,
   ORDER_DOCUMENT_TITLE,
   parseWorkDateRange,
@@ -1114,7 +1115,7 @@ export function OrderRequestsPage() {
               <h4>PDFを開いたとき</h4>
               {form.kind === "test" ? <p className="order-line-banner">{LINE_TEST_BANNER}</p> : null}
               <div className="order-line-heading">
-                <p className="order-line-doctitle">追加案件依頼書</p>
+                <p className="order-line-doctitle">{orderRequestDocumentTitle(form.work_date_label, sections.projectName)}</p>
                 <p className="order-line-docno">文書番号　{previewDocumentNumber}　第{previewVersionNo}版</p>
                 <p className="order-line-created">作成日　{formatCreatedOn(creating ? null : detail?.created_at)}</p>
               </div>

@@ -25,7 +25,7 @@ from src.services.pdf_generator import DEFAULT_FONT
 TEMPLATE_LAYOUT_APPLIED = False
 
 # 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は1枚目の下。複数人の氏名は出さない）。
-PDF_LAYOUT_ID = "order-request-branded-v6"
+PDF_LAYOUT_ID = "order-request-branded-v7"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -76,6 +76,7 @@ def render_order_request_pdf(
     _note_w, note_h = note.wrap(content_width - note_pad_x * 2, 40 * mm)
     note_box_h = note_h + note_pad_y * 2
     note_bottom = 11 * mm
+    project_name = project_name_from_document(request_conditions, body)
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -83,7 +84,7 @@ def render_order_request_pdf(
         rightMargin=right,
         topMargin=12 * mm,
         bottomMargin=note_bottom + note_box_h + 2.5 * mm,
-        title=_download_stem(work_date_label, project_name_from_document(request_conditions, body)),
+        title=_download_stem(work_date_label, project_name),
         subject=PDF_LAYOUT_ID,
     )
     story: list = []
@@ -91,7 +92,11 @@ def render_order_request_pdf(
         story.append(_banner(TEST_BANNER, content_width, styles))
         story.append(Spacer(1, 3 * mm))
 
-    title = "追加案件依頼書" if _is_template(request_conditions, body) else "発注依頼書"
+    title = (
+        order_request_document_title(work_date_label=work_date_label, project_name=project_name)
+        if _is_template(request_conditions, body)
+        else "発注依頼書"
+    )
     story.append(_brand(content_width))
     story.append(Spacer(1, 4 * mm))
     story.extend(_title_block(
@@ -338,6 +343,11 @@ def project_name_from_document(request_conditions: str | None, body: str | None)
     return ""
 
 
+def order_request_document_title(*, work_date_label: str, project_name: str) -> str:
+    """PDFの見出し。稼働日（◯年◯月◯日～◯年◯月◯日）：案件名"""
+    return _compose_title(_plain_piece(work_date_label), _plain_piece(project_name), empty="追加案件依頼書")
+
+
 def order_request_pdf_filename(*, work_date_label: str, project_name: str) -> str:
     return f"{_download_stem(work_date_label, project_name)}.pdf"
 
@@ -348,11 +358,24 @@ def attachment_content_disposition(filename: str) -> str:
 
 
 def _download_stem(work_date_label: str, project_name: str) -> str:
-    date = _filename_piece(work_date_label)
-    project = _filename_piece(project_name)
+    return _compose_title(
+        _filename_piece(work_date_label),
+        _filename_piece(project_name),
+        empty="発注依頼書",
+    )
+
+
+def _compose_title(date: str, project: str, *, empty: str) -> str:
     if date and project:
-        return f"{date}＋{project}"
-    return date or project or "発注依頼書"
+        return f"稼働日（{date}）：{project}"
+    if date:
+        return f"稼働日（{date}）"
+    return project or empty
+
+
+def _plain_piece(value: str) -> str:
+    text = (value or "").replace("~", "～")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _filename_piece(value: str) -> str:

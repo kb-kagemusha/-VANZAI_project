@@ -640,11 +640,21 @@ def test_order_pdf_created_on_uses_japan_date():
 
 
 def test_order_pdf_filename_is_date_plus_project():
-    from src.services.order_request_pdf import attachment_content_disposition, order_request_pdf_filename
+    from src.services.order_request_pdf import (
+        attachment_content_disposition,
+        order_request_document_title,
+        order_request_pdf_filename,
+    )
 
-    name = order_request_pdf_filename(work_date_label="10/5～10/8", project_name="有楽町交通会館")
-    assert name == "10／5～10／8＋有楽町交通会館.pdf"
-    header = attachment_content_disposition(name)
+    name = order_request_pdf_filename(work_date_label="2026年10月8日～2026年10月13日", project_name="有楽町交通会館")
+    assert name == "稼働日（2026年10月8日～2026年10月13日）：有楽町交通会館.pdf"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="有楽町交通会館",
+    ) == "稼働日（2026年10月8日～2026年10月13日）：有楽町交通会館"
+    legacy = order_request_pdf_filename(work_date_label="10/5～10/8", project_name="有楽町交通会館")
+    assert legacy == "稼働日（10／5～10／8）：有楽町交通会館.pdf"
+    header = attachment_content_disposition(legacy)
     assert "filename*=UTF-8''" in header
     assert "10%EF%BC%8F5" in header
     blank = order_request_pdf_filename(work_date_label="", project_name="")

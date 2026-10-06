@@ -204,21 +204,41 @@ function isoDate(year: string, month: string, day: string): string {
   return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/** PDFの見出し。src/services/order_request_pdf.py の order_request_document_title と同じ切り方。 */
+export function orderRequestDocumentTitle(workDateLabel: string, projectName: string): string {
+  return composeTitle(datePiece(workDateLabel), projectPiece(projectName), "追加案件依頼書");
+}
+
 /** ダウンロード名。src/services/order_request_pdf.py の order_request_pdf_filename と同じ切り方。 */
 export function orderRequestPdfFileName(workDateLabel: string, projectName: string): string {
-  const piece = (value: string) =>
-    value
-      .replace(/[\\/]/g, "／")
-      .replace(/:/g, "：")
-      .replace(/[*"<>|?\r\n\t]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/^[ .]+|[ .]+$/g, "")
-      .slice(0, 80);
-  const date = piece(workDateLabel);
-  const project = piece(projectName);
-  const stem = date && project ? `${date}＋${project}` : date || project || "発注依頼書";
+  const stem = composeTitle(filePiece(workDateLabel), filePiece(projectPiece(projectName)), "発注依頼書");
   return `${stem}.pdf`;
+}
+
+function composeTitle(date: string, project: string, empty: string): string {
+  if (date && project) return `稼働日（${date}）：${project}`;
+  if (date) return `稼働日（${date}）`;
+  return project || empty;
+}
+
+function datePiece(value: string): string {
+  return withFullwidthTilde(value).replace(/\s+/g, " ").trim();
+}
+
+function projectPiece(value: string): string {
+  const first = value.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return withFullwidthTilde(first).replace(/\s+/g, " ").trim();
+}
+
+function filePiece(value: string): string {
+  return value
+    .replace(/[\\/]/g, "／")
+    .replace(/:/g, "：")
+    .replace(/[*"<>|?\r\n\t]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[ .]+|[ .]+$/g, "")
+    .slice(0, 80);
 }
 
 /** 公式LINEの送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
