@@ -420,6 +420,7 @@ def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops
             "content": "・商品販売促進",
             "belongings": "・ipad\n・プリンター",
             "fee": fee,
+            "work_date_detail": "10/8(木)　前日準備\n10/9(金)~10/13(火)　実施日",
             "notes": "報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
         },
         ensure_ascii=False,
@@ -443,11 +444,13 @@ def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops
     stored = json.loads(data["request_conditions"])
     assert stored["hours"] == expected_hours
     assert stored["fee"] == fee
+    assert stored["work_date_detail"] == "10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"
     body = data["body"]
     assert "集合時間：" not in body
     assert "ベース：" not in body
     assert "~" not in stored["hours"]
-    for line in (expected_hours, fee, site, work_dates, "・商品販売促進", "・ipad"):
+    assert body.index("■稼働日") < body.index(work_dates) < body.index("■稼働日の詳細") < body.index("■稼働時間")
+    for line in (expected_hours, fee, site, work_dates, stored["work_date_detail"], "・商品販売促進", "・ipad"):
         assert line in body
 
 

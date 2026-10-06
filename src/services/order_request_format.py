@@ -8,6 +8,7 @@ DEFAULT_NOTES = "報酬の期限等その他の事項は、業務委託契約書
 _SECTION_KEYS = (
     "project_name",
     "background",
+    "work_date_detail",
     "hours",
     "content",
     "belongings",
@@ -64,6 +65,9 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
             "",
             "■稼働日",
             _text(work_date_label),
+            "",
+            "■稼働日の詳細",
+            _text(sections.get("work_date_detail")),
             "",
             "■稼働時間",
             hours,

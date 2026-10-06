@@ -28,6 +28,7 @@ import {
 import {
   composeOrderDocument,
   EMPTY_ORDER_SECTIONS,
+  formatWorkDateRange,
   LINE_ACCEPT_LABEL,
   LINE_BUTTON_TEXT,
   LINE_DECLINE_LABEL,
@@ -36,6 +37,7 @@ import {
   linePushPreviewText,
   orderRequestPdfFileName,
   ORDER_DOCUMENT_TITLE,
+  parseWorkDateRange,
   sectionsFromStored,
   serializeOrderSections,
   siteLabelForList,
@@ -219,6 +221,16 @@ export function OrderRequestsPage() {
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
   const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
   const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
+  const parsedWorkDates = parseWorkDateRange(form.work_date_label);
+  const workDateFrom = parsedWorkDates?.from ?? "";
+  const workDateTo = parsedWorkDates?.to ?? "";
+  const legacyWorkDate = parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
+
+  function setWorkDateBound(bound: "from" | "to", value: string) {
+    const from = bound === "from" ? value : workDateFrom;
+    const to = bound === "to" ? value : workDateTo;
+    setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
+  }
   const previewPdfBody = previewDocument.startsWith(ORDER_DOCUMENT_TITLE)
     ? previewDocument.slice(ORDER_DOCUMENT_TITLE.length).replace(/^\n+/, "")
     : previewDocument;
@@ -618,17 +630,46 @@ export function OrderRequestsPage() {
                       onChange={(event) => setForm({ ...form, site_name: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  <div className="order-field order-span-4">
                     <span className="order-field-label">稼働日</span>
+                    <div className="order-date-range">
+                      <input
+                        type="date"
+                        aria-label="稼働日の開始"
+                        value={workDateFrom}
+                        disabled={!editable}
+                        onChange={(event) => setWorkDateBound("from", event.target.value)}
+                      />
+                      <span className="order-date-range-sep" aria-hidden="true">～</span>
+                      <input
+                        type="date"
+                        aria-label="稼働日の終了"
+                        value={workDateTo}
+                        disabled={!editable}
+                        onChange={(event) => setWorkDateBound("to", event.target.value)}
+                      />
+                    </div>
+                    {parsedWorkDates && form.work_date_label ? (
+                      <span className="order-field-hint">{form.work_date_label}</span>
+                    ) : null}
+                    {legacyWorkDate ? (
+                      <span className="order-field-hint order-date-legacy">
+                        保存されている文面です。日付を入れると、こちらに置き換わります。
+                        {"\n"}
+                        {legacyWorkDate}
+                      </span>
+                    ) : null}
+                  </div>
+                  <label className="order-field order-span-4">
+                    <span className="order-field-label">稼働日の詳細</span>
                     <textarea
                       className="is-short"
-                      value={form.work_date_label}
+                      value={sections.workDateDetail}
                       disabled={!editable}
                       placeholder={"10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"}
-                      onChange={(event) => setForm({ ...form, work_date_label: withFullwidthTilde(event.target.value) })}
+                      onChange={(event) => setSections({ ...sections, workDateDetail: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <div className="order-span-gap" />
                   <label className="order-field order-span-4">
                     <span className="order-field-label">稼働時間</span>
                     <textarea

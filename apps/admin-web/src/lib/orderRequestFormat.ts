@@ -7,6 +7,7 @@ export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、�
 export interface OrderDocumentSections {
   projectName: string;
   background: string;
+  workDateDetail: string;
   hours: string;
   content: string;
   belongings: string;
@@ -18,6 +19,7 @@ export interface OrderDocumentSections {
 export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   projectName: "",
   background: "",
+  workDateDetail: "",
   hours: "",
   content: "",
   belongings: "",
@@ -46,6 +48,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     format: ORDER_FORMAT_ID,
     project_name: wavy(sections.projectName.trim()),
     background: wavy(sections.background.trim()),
+    work_date_detail: wavy(sections.workDateDetail.trim()),
     hours: wavy(sections.hours.trim()),
     content: wavy(sections.content.trim()),
     belongings: wavy(sections.belongings.trim()),
@@ -76,6 +79,9 @@ export function composeOrderDocument(
     "■稼働日",
     wavy(workDateLabel.trim()),
     "",
+    "■稼働日の詳細",
+    wavy(sections.workDateDetail.trim()),
+    "",
     "■稼働時間",
     wavy(sections.hours.trim()),
     "",
@@ -105,6 +111,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
     return {
       projectName: textOf(data.project_name),
       background: textOf(data.background),
+      workDateDetail: textOf(data.work_date_detail),
       hours: textOf(data.hours) || legacyHours(data),
       content: textOf(data.content),
       belongings: textOf(data.belongings),
@@ -143,6 +150,58 @@ export function siteLabelForList(value: string): string {
 
 export function withFullwidthTilde(value: string): string {
   return value.replace(/~/g, "～");
+}
+
+/** 稼働日の2つの日付を「2026年10月8日～2026年10月13日」にする。片方だけならその日付。 */
+export function formatWorkDateRange(from: string, to: string): string {
+  const start = jpDate(from);
+  const end = jpDate(to);
+  if (start && end) return `${start}～${end}`;
+  if (start) return start;
+  if (end) return `～${end}`;
+  return "";
+}
+
+/** 上の書式だけを日付入力へ戻す。自由文は null。 */
+export function parseWorkDateRange(label: string): { from: string; to: string } | null {
+  const text = label.trim();
+  const range = text.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日[～〜](\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (range) {
+    const from = isoDate(range[1], range[2], range[3]);
+    const to = isoDate(range[4], range[5], range[6]);
+    if (from && to) return { from, to };
+    return null;
+  }
+  const onlyEnd = text.match(/^[～〜](\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (onlyEnd) {
+    const to = isoDate(onlyEnd[1], onlyEnd[2], onlyEnd[3]);
+    if (to) return { from: "", to };
+    return null;
+  }
+  const single = text.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (single) {
+    const from = isoDate(single[1], single[2], single[3]);
+    if (from) return { from, to: "" };
+  }
+  return null;
+}
+
+function jpDate(iso: string): string {
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const date = isoDate(match[1], match[2], match[3]);
+  if (!date) return "";
+  return `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日`;
+}
+
+function isoDate(year: string, month: string, day: string): string {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return "";
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return "";
+  return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 /** ダウンロード名。src/services/order_request_pdf.py の order_request_pdf_filename と同じ切り方。 */

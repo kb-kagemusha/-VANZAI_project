@@ -3580,7 +3580,6 @@ button {
 }
 
 .order-span-4 { grid-column: span 4; }
-.order-span-gap { grid-column: span 4; }
 .order-span-6 { grid-column: span 6; }
 .order-span-8 { grid-column: span 8; }
 .order-span-12 { grid-column: span 12; }
@@ -3649,6 +3648,29 @@ button {
 
 .order-field textarea.is-tall {
   min-height: 12rem;
+}
+
+.order-date-range {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.order-date-range input[type="date"] {
+  flex: 1 1 0;
+  width: 1%;
+  min-width: 0;
+  padding: 0.55rem 0.4rem;
+}
+
+.order-date-range-sep {
+  flex: none;
+  font-weight: 700;
+}
+
+.order-date-legacy {
+  white-space: pre-line;
 }
 
 .order-cell-multiline {
@@ -3942,10 +3964,6 @@ button {
   .order-span-6,
   .order-span-8 {
     grid-column: span 12;
-  }
-
-  .order-span-gap {
-    display: none;
   }
 }
 
