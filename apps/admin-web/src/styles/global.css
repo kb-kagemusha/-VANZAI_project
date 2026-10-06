@@ -739,6 +739,45 @@ button {
   color: #1f5572;
 }
 
+.worker-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.worker-tag-list .status-badge {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.worker-tag-picker {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem 0.7rem;
+  margin: 0;
+}
+
+.worker-tag-picker legend {
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+}
+
+.worker-tag-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.worker-tag-picker-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.worker-tag-picker-options input {
+  width: auto;
+}
+
 .pagination-bar {
   display: flex;
   justify-content: space-between;

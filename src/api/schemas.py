@@ -687,6 +687,7 @@ class CalendarWorkerRow(BaseModel):
     pioneer_training_done: Optional[bool] = None
     p_shirt_count: Optional[int] = None
     license_type: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
     days: dict[str, CalendarDayInfo] = Field(default_factory=dict)
 
 
@@ -906,6 +907,7 @@ class WorkerListQuery(PaginationQuery, SortQuery):
     search: Optional[str] = Field(None, max_length=100)
     is_active: Optional[bool] = None
     supplier_id: Optional[str] = None
+    tag: Optional[str] = Field(None, max_length=50)
 
 
 class WorkerListItem(BaseModel):
@@ -933,6 +935,18 @@ class WorkerListItem(BaseModel):
     pioneer_training_done: Optional[bool] = None
     p_shirt_count: Optional[int] = None
     license_type: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class WorkerTagOption(BaseModel):
+    """定義済み稼働者タグ"""
+    code: str
+    label: str
+
+
+class WorkerTagCatalogResponse(BaseModel):
+    """定義済み稼働者タグ一覧"""
+    items: list[WorkerTagOption]
 
 
 class WorkerListResponse(PageResponse[WorkerListItem]):
@@ -963,6 +977,17 @@ class WorkerCreateRequest(BaseModel):
     pioneer_training_done: Optional[bool] = None
     p_shirt_count: Optional[int] = None
     license_type: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str]) -> list[str]:
+        from src.domain.worker_tags import UnknownWorkerTagError, normalize_worker_tags
+
+        try:
+            return normalize_worker_tags(value)
+        except UnknownWorkerTagError as exc:
+            raise ValueError(f"未定義のタグです: {exc.code}") from exc
 
 
 class WorkerUpdateRequest(WorkerCreateRequest):

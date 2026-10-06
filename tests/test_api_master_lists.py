@@ -168,6 +168,49 @@ def test_update_worker_succeeds_for_admin(api_client, db_session, worker):
     assert payload["is_active"] is False
 
 
+def test_worker_tags_are_predefined_only(api_client, db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_worker_tags",
+        email="admin_worker_tags@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+    headers = _auth_header(user.username)
+
+    catalog = api_client.get("/api/worker-tags", headers=headers)
+    assert catalog.status_code == 200
+    codes = [item["code"] for item in catalog.json()["items"]]
+    assert codes == ["regular", "spot", "leader", "newcomer"]
+
+    created = api_client.post(
+        "/api/workers",
+        json={"name": "Tagged Worker", "is_active": True, "tags": ["newcomer", "regular", "regular"]},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    assert created.json()["tags"] == ["regular", "newcomer"]
+
+    rejected = api_client.post(
+        "/api/workers",
+        json={"name": "Free Tag Worker", "is_active": True, "tags": ["夜勤専門"]},
+        headers=headers,
+    )
+    assert rejected.status_code == 422
+
+    listed = api_client.get("/api/workers", params={"tag": "regular"}, headers=headers)
+    assert listed.status_code == 200
+    assert created.json()["id"] in [item["id"] for item in listed.json()["items"]]
+
+    hidden = api_client.get("/api/workers", params={"tag": "leader"}, headers=headers)
+    assert hidden.status_code == 200
+    assert created.json()["id"] not in [item["id"] for item in hidden.json()["items"]]
+
+    unknown = api_client.get("/api/workers", params={"tag": "custom"}, headers=headers)
+    assert unknown.status_code == 422
+
+
 def test_get_worker_availability_preferences_returns_saved_values(api_client, db_session, worker):
     user = create_user_with_hashed_password(
         db=db_session,

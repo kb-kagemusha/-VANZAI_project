@@ -74,6 +74,7 @@ import type {
   TokenResponse,
   WorkerAvailabilityPreference,
   WorkerListItem,
+  WorkerTagOption,
   WorkerCreateRequest,
   WorkerUpdateRequest,
   WorkerQualsUpdateRequest,
@@ -775,6 +776,10 @@ export function releaseHardCloseProject(projectId: string, periodKey: string, ap
 // ===========================
 // Master Data
 // ===========================
+
+export function getWorkerTags() {
+  return apiFetch<{ items: WorkerTagOption[] }>("/api/worker-tags");
+}
 
 export function getWorkers(params?: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<WorkerListItem>>("/api/workers", undefined, params);

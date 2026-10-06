@@ -634,6 +634,7 @@ export interface WorkerListItem {
   pioneer_training_done: boolean | null;
   p_shirt_count: number | null;
   license_type: string | null;
+  tags: string[];
 }
 
 export interface WorkerCreateRequest {
@@ -657,6 +658,12 @@ export interface WorkerCreateRequest {
   pioneer_training_done: boolean | null;
   p_shirt_count: number | null;
   license_type: string | null;
+  tags: string[];
+}
+
+export interface WorkerTagOption {
+  code: string;
+  label: string;
 }
 
 export interface WorkerUpdateRequest extends WorkerCreateRequest {}
@@ -697,6 +704,7 @@ export interface CalendarWorkerRow {
   pioneer_training_done: boolean | null;
   p_shirt_count: number | null;
   license_type: string | null;
+  tags: string[];
   days: Record<string, CalendarDayInfo>;
 }
 

@@ -5,7 +5,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
-import { getAvailabilityCalendar, patchWorkerQuals } from "../lib/api/client";
+import { getAvailabilityCalendar, getWorkerTags, patchWorkerQuals } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import type { CalendarDayInfo, CalendarWorkerRow, WorkerQualsUpdateRequest } from "../types/api";
 
@@ -180,6 +180,12 @@ export function AvailabilityCalendarPage() {
     queryKey: ["availability-calendar", dateFromStr, dateToStr],
     queryFn: () => getAvailabilityCalendar({ date_from: dateFromStr, date_to: dateToStr }),
   });
+  const workerTagsQuery = useQuery({
+    queryKey: ["worker-tags"],
+    queryFn: getWorkerTags,
+  });
+  const workerTagLabel = (code: string) =>
+    workerTagsQuery.data?.items.find((option) => option.code === code)?.label ?? code;
 
   // ─── ナビゲーション ─────────────────────────────────────────
   function prevPeriod() {
@@ -462,6 +468,7 @@ export function AvailabilityCalendarPage() {
                 <WorkerRow
                   key={worker.id}
                   worker={worker}
+                  tagLabel={workerTagLabel}
                   days={days}
                   showQual={showQual}
                   todayStr={todayStr}
@@ -622,6 +629,7 @@ export function AvailabilityCalendarPage() {
 // ─── ワーカー行コンポーネント ─────────────────────────────────
 function WorkerRow({
   worker,
+  tagLabel,
   days,
   showQual,
   todayStr,
@@ -629,6 +637,7 @@ function WorkerRow({
   isLastRow,
 }: {
   worker: CalendarWorkerRow;
+  tagLabel: (code: string) => string;
   days: Date[];
   showQual: boolean;
   todayStr: string;
@@ -658,12 +667,19 @@ function WorkerRow({
           textOverflow: "ellipsis",
           color: worker.is_active ? "#111827" : "#9ca3af",
         }}
-        title={worker.name}
+        title={[worker.name, ...(worker.tags ?? []).map(tagLabel)].filter(Boolean).join(" / ")}
       >
-        {worker.name}
-        {!worker.is_active && (
-          <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 4 }}>(無効)</span>
-        )}
+        <div style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {worker.name}
+          {!worker.is_active && (
+            <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 4 }}>(無効)</span>
+          )}
+        </div>
+        {(worker.tags ?? []).length > 0 ? (
+          <div style={{ fontSize: 10, fontWeight: 600, color: "#1f5572", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {(worker.tags ?? []).map(tagLabel).join(" ")}
+          </div>
+        ) : null}
       </td>
 
       {/* 資格列（固定）*/}

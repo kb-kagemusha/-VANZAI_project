@@ -91,6 +91,8 @@
 
 **マスタ**: worker, client, site, project_type, role, price_sales, price_outsource, price_rule, incentive_rule, supplier, vanzai_staff
 
+稼働者タグは `workers.tags`（定義済みコードの配列）に保存する。自由入力は受け付けない。定義の正本は `src/domain/worker_tags.py`（DEC-029）。
+
 **トランザクション**: project, shift_slot, assignment, actual, import_batch, expense, incentive, invoice, invoice_line, payout, payout_line, payout_delivery, closing
 
 **監査・通知**: audit_log, staff_notice, staff_notice_read, push_subscription

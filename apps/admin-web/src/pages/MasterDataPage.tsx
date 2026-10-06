@@ -8,6 +8,7 @@ import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
+import { WorkerTagList, WorkerTagPicker } from "../components/WorkerTags";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
@@ -29,6 +30,7 @@ import {
   getSupplierBankAccounts,
   getSuppliers,
   getVanzaiStaff,
+  getWorkerTags,
   getWorkers,
   updateClientStaff,
   updateSupplierBankAccount,
@@ -135,6 +137,7 @@ export function MasterDataPage() {
   const [createPlayingManagerFixedFee, setCreatePlayingManagerFixedFee] = useState("");
   const [createNotes, setCreateNotes] = useState("");
   const [createIsActive, setCreateIsActive] = useState(true);
+  const [createTags, setCreateTags] = useState<string[]>([]);
   const [selectedWorker, setSelectedWorker] = useState<WorkerListItem | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierListItem | null>(null);
   const [selectedVanzaiStaff, setSelectedVanzaiStaff] = useState<VanzaiStaffItem | null>(null);
@@ -163,6 +166,7 @@ export function MasterDataPage() {
   const [editPlayingManagerFixedFee, setEditPlayingManagerFixedFee] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [formError, setFormError] = useState("");
   const [formMessage, setFormMessage] = useState("");
   const [editError, setEditError] = useState("");
@@ -212,6 +216,7 @@ export function MasterDataPage() {
     setCreatePlayingManagerFixedFee("");
     setCreateNotes("");
     setCreateIsActive(true);
+    setCreateTags([]);
     setFormError("");
     setFormMessage("");
   }
@@ -235,6 +240,7 @@ export function MasterDataPage() {
     setEditPlayingManagerFixedFee("");
     setEditNotes("");
     setEditIsActive(true);
+    setEditTags([]);
     setEditError("");
     setEditMessage("");
     setSupplierBankBankName("");
@@ -286,6 +292,7 @@ export function MasterDataPage() {
     setEditSupplierId(worker.introducer_supplier_id ?? "");
     setEditNotes(worker.notes ?? "");
     setEditIsActive(worker.is_active);
+    setEditTags(worker.tags ?? []);
     setEditError("");
     setEditMessage("");
   }
@@ -328,6 +335,13 @@ export function MasterDataPage() {
     offset: page * PAGE_SIZE,
     limit: PAGE_SIZE,
   };
+
+  const workerTagsQuery = useQuery({
+    queryKey: ["worker-tags"],
+    queryFn: getWorkerTags,
+    enabled: view === "workers",
+  });
+  const workerTagOptions = workerTagsQuery.data?.items ?? [];
 
   const workersQuery = useQuery({
     queryKey: ["workers-page", search, isActive, page],
@@ -612,6 +626,7 @@ export function MasterDataPage() {
             pioneer_training_done: null,
             p_shirt_count: null,
             license_type: null,
+            tags: createTags,
           },
         });
         break;
@@ -694,6 +709,7 @@ export function MasterDataPage() {
           pioneer_training_done: selectedWorker.pioneer_training_done ?? null,
           p_shirt_count: selectedWorker.p_shirt_count ?? null,
           license_type: selectedWorker.license_type ?? null,
+          tags: editTags,
         },
       });
       return;
@@ -918,6 +934,10 @@ export function MasterDataPage() {
             </label>
           ) : null}
 
+          {view === "workers" ? (
+            <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
+          ) : null}
+
           {(view === "workers" || view === "suppliers" || view === "vanzai_staff") ? (
             <>
               <label>
@@ -1034,6 +1054,9 @@ export function MasterDataPage() {
               </>
             ) : null}
           </div>
+          {selectedWorker ? (
+            <WorkerTagPicker options={workerTagOptions} selected={editTags} onChange={setEditTags} />
+          ) : null}
           <label>
             メモ
             <textarea value={editNotes} onChange={(event) => setEditNotes(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
@@ -1254,6 +1277,7 @@ export function MasterDataPage() {
             { key: "email", header: "メール", render: (row) => row.email ?? "—" },
             { key: "phone", header: "電話", render: (row) => row.phone ?? "—" },
             { key: "supplier", header: "紹介会社", render: (row) => row.introducer_supplier_name ?? "—" },
+            { key: "tags", header: "タグ", render: (row) => <WorkerTagList options={workerTagOptions} codes={row.tags} /> },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
             { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
           ]}

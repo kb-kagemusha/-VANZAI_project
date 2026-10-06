@@ -49,6 +49,7 @@ from src.api.schemas import (
     PriceSalesListQuery, PriceSalesListItem, PriceSalesListResponse, PriceSalesCreateRequest, PriceSalesUpdateRequest,
     PriceOutsourceListQuery, PriceOutsourceListItem, PriceOutsourceListResponse, PriceOutsourceCreateRequest, PriceOutsourceUpdateRequest,
     WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerQualsUpdateRequest,
+    WorkerTagCatalogResponse, WorkerTagOption,
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
     ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
     SiteListQuery, SiteListItem, SiteListResponse, SiteCreateRequest,
@@ -2719,6 +2720,7 @@ async def get_availability_calendar(
         raise HTTPException(status_code=400, detail="date range exceeds 60 days")
 
     from datetime import timedelta
+    from src.domain.worker_tags import stored_worker_tags
     from src.models.master import Worker, Role
     from src.models.transaction import Assignment, ShiftSlot, WorkerAvailability
     from src.models.transaction import Project
@@ -2813,6 +2815,7 @@ async def get_availability_calendar(
                 pioneer_training_done=w.pioneer_training_done,
                 p_shirt_count=w.p_shirt_count,
                 license_type=w.license_type,
+                tags=stored_worker_tags(w.tags),
                 days=days,
             )
         )
@@ -6058,6 +6061,23 @@ async def list_payouts(
 # マスタ一覧エンドポイント
 # ===========================
 
+@app.get("/api/worker-tags", response_model=WorkerTagCatalogResponse, tags=["Master"])
+async def list_worker_tags(
+    current_user: User = Depends(get_current_active_user),
+):
+    """定義済みの稼働者タグを返す。自由入力のタグは作らない。"""
+    try:
+        check_permission(current_user, Permission.MASTER_READ)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    from src.domain.worker_tags import WORKER_TAGS
+
+    return WorkerTagCatalogResponse(
+        items=[WorkerTagOption(code=code, label=label) for code, label in WORKER_TAGS]
+    )
+
+
 @app.get("/api/workers", response_model=WorkerListResponse, tags=["Master"])
 async def list_workers(
     query: WorkerListQuery = Depends(),
@@ -6070,6 +6090,9 @@ async def list_workers(
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
+    from sqlalchemy import Text, cast
+
+    from src.domain.worker_tags import WORKER_TAG_LABELS, stored_worker_tags
     from src.models.master import Worker, Supplier
 
     sort_map = {
@@ -6099,6 +6122,10 @@ async def list_workers(
             | Worker.email.ilike(pattern)
             | Worker.phone.ilike(pattern)
         )
+    if query.tag:
+        if query.tag not in WORKER_TAG_LABELS:
+            raise HTTPException(status_code=422, detail=f"未定義のタグです: {query.tag}")
+        stmt = stmt.filter(cast(Worker.tags, Text).like(f'%"{query.tag}"%'))
 
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Worker.id.desc()).offset(query.offset).limit(query.limit).all()
@@ -6127,6 +6154,7 @@ async def list_workers(
             pioneer_training_done=w.pioneer_training_done,
             p_shirt_count=w.p_shirt_count,
             license_type=w.license_type,
+            tags=stored_worker_tags(w.tags),
         )
         for w, supplier_name in rows
     ]
@@ -6143,6 +6171,7 @@ async def create_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
+        from src.domain.worker_tags import stored_worker_tags
         from src.models.master import Supplier, Worker
 
         supplier_name = None
@@ -6173,6 +6202,7 @@ async def create_worker_master(
             pioneer_training_done=request.pioneer_training_done,
             p_shirt_count=request.p_shirt_count,
             license_type=request.license_type,
+            tags=request.tags,
         )
         db.add(worker)
 
@@ -6188,6 +6218,7 @@ async def create_worker_master(
                 "email": worker.email,
                 "introducer_supplier_id": worker.introducer_supplier_id,
                 "is_active": worker.is_active,
+                "tags": worker.tags,
             },
         )
         db.commit()
@@ -6216,6 +6247,7 @@ async def create_worker_master(
             pioneer_training_done=worker.pioneer_training_done,
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
+            tags=stored_worker_tags(worker.tags),
         )
     except HTTPException:
         raise
@@ -6237,6 +6269,7 @@ async def update_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
+        from src.domain.worker_tags import stored_worker_tags
         from src.models.master import Supplier, Worker
 
         worker = db.get(Worker, worker_id)
@@ -6264,6 +6297,7 @@ async def update_worker_master(
             "introducer_supplier_id": worker.introducer_supplier_id,
             "notes": worker.notes,
             "is_active": worker.is_active,
+            "tags": stored_worker_tags(worker.tags),
         }
 
         worker.name = request.name.strip()
@@ -6286,6 +6320,7 @@ async def update_worker_master(
         worker.pioneer_training_done = request.pioneer_training_done
         worker.p_shirt_count = request.p_shirt_count
         worker.license_type = request.license_type
+        worker.tags = request.tags
 
         AuditService(db).log(
             "worker_updated",
@@ -6308,6 +6343,7 @@ async def update_worker_master(
                 "introducer_supplier_id": worker.introducer_supplier_id,
                 "notes": worker.notes,
                 "is_active": worker.is_active,
+                "tags": stored_worker_tags(worker.tags),
             },
         )
         db.commit()
@@ -6336,6 +6372,7 @@ async def update_worker_master(
             pioneer_training_done=worker.pioneer_training_done,
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
+            tags=stored_worker_tags(worker.tags),
         )
     except HTTPException:
         raise
@@ -6356,6 +6393,7 @@ async def patch_worker_quals(
     """稼働者資格情報のみ更新"""
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
+        from src.domain.worker_tags import stored_worker_tags
         from src.models.master import Worker
         worker = db.get(Worker, worker_id)
         if not worker or worker.deleted_at is not None:
@@ -6416,6 +6454,7 @@ async def patch_worker_quals(
             pioneer_training_done=worker.pioneer_training_done,
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
+            tags=stored_worker_tags(worker.tags),
         )
     except HTTPException:
         raise

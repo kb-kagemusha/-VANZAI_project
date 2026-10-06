@@ -8,6 +8,7 @@ import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
+import { WorkerTagList, WorkerTagPicker } from "../components/WorkerTags";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
@@ -17,6 +18,7 @@ import {
   getWorkerAvailabilityPreferences,
   getWorkerBankAccounts,
   getSuppliers,
+  getWorkerTags,
   getWorkers,
   issueLineLinkCode,
   listLineLinks,
@@ -187,6 +189,7 @@ export function WorkersPage() {
 
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [page, setPage] = useState(0);
 
   // 新規作成フォーム
@@ -196,6 +199,7 @@ export function WorkersPage() {
   const [createSupplierId, setCreateSupplierId] = useState("");
   const [createNotes, setCreateNotes] = useState("");
   const [createIsActive, setCreateIsActive] = useState(true);
+  const [createTags, setCreateTags] = useState<string[]>([]);
   const [formError, setFormError] = useState("");
   const [formMessage, setFormMessage] = useState("");
 
@@ -207,6 +211,7 @@ export function WorkersPage() {
   const [editSupplierId, setEditSupplierId] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
 
@@ -236,17 +241,24 @@ export function WorkersPage() {
   const [bankEditMessage, setBankEditMessage] = useState("");
 
   const workersQuery = useQuery({
-    queryKey: ["workers-list", search, isActive, page],
+    queryKey: ["workers-list", search, isActive, tagFilter, page],
     queryFn: () =>
       getWorkers({
         search: search || undefined,
         is_active: isActive === "" ? undefined : isActive === "true",
+        tag: tagFilter || undefined,
         offset: page * PAGE_SIZE,
         limit: PAGE_SIZE,
         sort_by: "name",
         sort_order: "asc",
       }),
   });
+
+  const workerTagsQuery = useQuery({
+    queryKey: ["worker-tags"],
+    queryFn: getWorkerTags,
+  });
+  const workerTagOptions = workerTagsQuery.data?.items ?? [];
 
   const supplierOptionsQuery = useQuery({
     queryKey: ["suppliers-master-options"],
@@ -350,6 +362,7 @@ export function WorkersPage() {
         pioneer_training_done: null,
         p_shirt_count: null,
         license_type: null,
+        tags: createTags,
       }),
     onSuccess: async () => {
       setFormError("");
@@ -360,6 +373,7 @@ export function WorkersPage() {
       setCreateSupplierId("");
       setCreateNotes("");
       setCreateIsActive(true);
+      setCreateTags([]);
       setPage(0);
       await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
     },
@@ -393,6 +407,7 @@ export function WorkersPage() {
         pioneer_training_done: selectedWorker.pioneer_training_done ?? null,
         p_shirt_count: selectedWorker.p_shirt_count ?? null,
         license_type: selectedWorker.license_type ?? null,
+        tags: editTags,
       });
     },
     onSuccess: async () => {
@@ -431,6 +446,7 @@ export function WorkersPage() {
     setEditSupplierId(worker.introducer_supplier_id ?? "");
     setEditNotes(worker.notes ?? "");
     setEditIsActive(worker.is_active);
+    setEditTags(worker.tags ?? []);
     setEditError("");
     setEditMessage("");
     setSelectedBankAccount(null);
@@ -512,6 +528,15 @@ export function WorkersPage() {
             <option value="false">無効</option>
           </select>
         </label>
+        <label>
+          タグ
+          <select value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(0); }}>
+            <option value="">すべて</option>
+            {workerTagOptions.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+        </label>
       </FilterBar>
 
       {/* 新規追加フォーム（admin のみ） */}
@@ -571,6 +596,7 @@ export function WorkersPage() {
               />
             </label>
           </div>
+          <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{formMessage}</p> : null}
           <div>
@@ -628,6 +654,7 @@ export function WorkersPage() {
               />
             </label>
           </div>
+          <WorkerTagPicker options={workerTagOptions} selected={editTags} onChange={setEditTags} />
           {editError ? <p className="form-error">{editError}</p> : null}
           {editMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{editMessage}</p> : null}
 
@@ -874,6 +901,11 @@ export function WorkersPage() {
               key: "supplier",
               header: "紹介会社",
               render: (row) => row.introducer_supplier_name ?? <span style={{ color: "#9ca3af" }}>—</span>,
+            },
+            {
+              key: "tags",
+              header: "タグ",
+              render: (row) => <WorkerTagList options={workerTagOptions} codes={row.tags} />,
             },
             {
               key: "is_active",
