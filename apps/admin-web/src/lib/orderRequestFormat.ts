@@ -168,7 +168,6 @@ export const LINE_ACCEPT_LABEL = "依頼の案件、受諾します";
 export const LINE_DECLINE_LABEL = "今回は辞退します";
 export const LINE_BUTTON_TEXT = "内容を確認して、受諾または辞退を押してください。";
 export const LINE_DECLINE_PROMPT = "辞退理由を簡単にお聞かせください";
-export const LINE_LAYOUT_PENDING = "弁護士確認済み書式のレイアウトは未適用です。このPDFは入力内容の保存です。";
 
 export function linePushPreviewText(input: {
   documentNumber: string;

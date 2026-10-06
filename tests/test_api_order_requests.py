@@ -603,6 +603,16 @@ def test_order_pdf_embeds_japanese_font():
     assert fields[4][1].startswith("集合時間：9:00")
 
 
+def test_order_pdf_created_on_uses_japan_date():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from src.services.order_request_pdf import format_created_on
+
+    created = datetime(2026, 10, 6, 15, 30, tzinfo=ZoneInfo("UTC"))
+    assert format_created_on(created) == "2026年10月7日"
+
+
 def test_order_pdf_filename_is_date_plus_project():
     from src.services.order_request_pdf import attachment_content_disposition, order_request_pdf_filename
 

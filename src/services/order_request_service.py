@@ -338,6 +338,7 @@ class OrderRequestService:
             contact_desk=snapshot["contact_desk"],
             counterparty_note=version.counterparty_note,
             worker_names=names,
+            created_at=version.created_at,
         )
         object_key = (
             f"order-requests/{document.document_number}/v{version.version_no}.pdf"
@@ -533,6 +534,7 @@ class OrderRequestService:
             contact_desk=version.contact_desk,
             counterparty_note=version.counterparty_note,
             worker_names=[str(name) for name in names],
+            created_at=version.created_at,
         )
 
     def get_version(self, version_id: str) -> OrderRequestVersion:

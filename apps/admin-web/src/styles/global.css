@@ -4066,6 +4066,27 @@ button {
   line-height: 1.45;
 }
 
+.order-line-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.order-line-heading .order-line-doctitle,
+.order-line-heading .order-line-docno,
+.order-line-created {
+  margin: 0;
+}
+
+.order-line-heading .order-line-docno,
+.order-line-created {
+  text-align: right;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .order-line-docno {
   margin: 0 0 0.55rem;
 }

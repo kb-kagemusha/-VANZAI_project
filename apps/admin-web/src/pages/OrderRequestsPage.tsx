@@ -32,7 +32,6 @@ import {
   LINE_BUTTON_TEXT,
   LINE_DECLINE_LABEL,
   LINE_DECLINE_PROMPT,
-  LINE_LAYOUT_PENDING,
   LINE_TEST_BANNER,
   linePushPreviewText,
   orderRequestPdfFileName,
@@ -65,6 +64,12 @@ const REPLY_LABEL: Record<string, string> = {
   decline_pending: "辞退理由待ち",
   declined: "辞退",
 };
+
+function formatCreatedOn(value: string | null | undefined): string {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
 
 const STATUS_LABEL: Record<OrderRequestStatus, string> = {
   draft: "下書き",
@@ -1067,11 +1072,13 @@ export function OrderRequestsPage() {
             <section className="order-line-pdf" aria-label="PDFを開いたとき">
               <h4>PDFを開いたとき</h4>
               {form.kind === "test" ? <p className="order-line-banner">{LINE_TEST_BANNER}</p> : null}
-              <p className="order-line-banner">{LINE_LAYOUT_PENDING}</p>
-              <p className="order-line-docno">
-                {previewDocumentNumber}　第{previewVersionNo}版
-              </p>
-              <p className="order-line-doctitle">{ORDER_DOCUMENT_TITLE}</p>
+              <div className="order-line-heading">
+                <p className="order-line-doctitle">{ORDER_DOCUMENT_TITLE}</p>
+                <div>
+                  <p className="order-line-docno">文書番号　{previewDocumentNumber}　第{previewVersionNo}版</p>
+                  <p className="order-line-created">作成日　{formatCreatedOn(creating ? null : detail?.created_at)}</p>
+                </div>
+              </div>
               <pre>{previewPdfBody}</pre>
               <dl>
                 <div>

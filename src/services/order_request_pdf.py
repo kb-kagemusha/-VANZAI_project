@@ -4,10 +4,12 @@
 書式の欄位置へ合わせる作業は TEMPLATE_LAYOUT_APPLIED を真にするときだけ行う。
 """
 import re
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
 from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT
@@ -22,15 +24,13 @@ from src.services.pdf_generator import DEFAULT_FONT
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
 TEMPLATE_LAYOUT_APPLIED = False
 
-# 保存済みPDFを開いたとき、この印が無いものはロゴ付きの版へ作り直す。
-PDF_LAYOUT_ID = "order-request-branded-v1"
+# 保存済みPDFを開いたとき、この印が無いものは見出し配置の版へ作り直す。
+PDF_LAYOUT_ID = "order-request-branded-v2"
+_JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
 
 TEST_BANNER = "テスト・正式な発注ではありません"
-LAYOUT_PENDING_BANNER = (
-    "弁護士確認済み書式のレイアウトは未適用です。このPDFは入力内容の保存です。"
-)
 REPLY_NOTE = (
     "返事は本人の「依頼の案件、受諾します」または「今回は辞退します」で記録します。"
     "PDFを開いたことは返事ではありません。"
@@ -62,6 +62,7 @@ def render_order_request_pdf(
     contact_desk: str,
     counterparty_note: str | None,
     worker_names: list[str],
+    created_at: datetime | None = None,
 ) -> bytes:
     buffer = BytesIO()
     page_width, _page_height = A4
@@ -87,9 +88,14 @@ def render_order_request_pdf(
     title = DOCUMENT_TITLE if _is_template(request_conditions, body) else "発注依頼書"
     story.append(_brand(content_width))
     story.append(Spacer(1, 4 * mm))
-    story.append(_paragraph(title, styles["title"]))
-    story.append(Spacer(1, 1 * mm))
-    story.append(_paragraph(f"文書番号　{document_number}　　第{version_no}版", styles["meta"]))
+    story.append(_title_row(
+        title,
+        document_number,
+        version_no,
+        format_created_on(created_at),
+        content_width,
+        styles,
+    ))
     story.append(Spacer(1, 3.5 * mm))
     story.append(_field_table(_document_fields(
         request_conditions=request_conditions,
@@ -109,11 +115,9 @@ def render_order_request_pdf(
         canvas.saveState()
         canvas.setFillColor(_INK)
         canvas.setFont(DEFAULT_FONT, 8)
-        canvas.drawRightString(page_width - right, 10 * mm, COMPANY_NAME)
+        canvas.drawRightString(page_width - right, 8 * mm, COMPANY_NAME)
         canvas.setFillColor(_MUTED)
-        canvas.drawString(left, 10 * mm, f"{document_number}　第{version_no}版")
-        if not TEMPLATE_LAYOUT_APPLIED:
-            canvas.drawString(left, 6 * mm, LAYOUT_PENDING_BANNER)
+        canvas.drawString(left, 8 * mm, f"{document_number}　第{version_no}版")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=_decorate, onLaterPages=_decorate)
@@ -204,8 +208,9 @@ def _styles() -> dict[str, ParagraphStyle]:
         "meta": ParagraphStyle(
             "or_meta",
             fontSize=9,
-            leading=13,
+            leading=14,
             textColor=_INK,
+            alignment=TA_RIGHT,
             **common,
         ),
         "label": ParagraphStyle(
@@ -251,6 +256,42 @@ def _paragraph(text: str, style: ParagraphStyle, empty_style: ParagraphStyle | N
     if not raw and empty_style is not None:
         return Paragraph("—", empty_style)
     return Paragraph(escape(raw).replace("\n", "<br/>"), style)
+
+
+def format_created_on(value: datetime | None) -> str:
+    moment = value or datetime.now(_JST)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=ZoneInfo("UTC"))
+    local = moment.astimezone(_JST)
+    return f"{local.year}年{local.month}月{local.day}日"
+
+
+def _title_row(
+    title: str,
+    document_number: str,
+    version_no: int,
+    created_label: str,
+    width: float,
+    styles: dict,
+) -> Table:
+    title_width = 62 * mm
+    meta = (
+        f"文書番号　{escape(document_number)}　第{version_no}版"
+        f"<br/>作成日　{escape(created_label)}"
+    )
+    table = Table(
+        [[_paragraph(title, styles["title"]), Paragraph(meta, styles["meta"])]],
+        colWidths=[title_width, width - title_width],
+    )
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return table
 
 
 def _brand(width: float) -> Table:
