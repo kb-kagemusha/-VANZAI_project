@@ -25,7 +25,7 @@ from src.services.pdf_generator import DEFAULT_FONT
 TEMPLATE_LAYOUT_APPLIED = False
 
 # 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は1枚目の下。複数人の氏名は出さない）。
-PDF_LAYOUT_ID = "order-request-branded-v4"
+PDF_LAYOUT_ID = "order-request-branded-v5"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -148,13 +148,12 @@ def _document_fields(
     counterparty_note: str | None,
     worker_names: list[str],
 ) -> list[tuple[str, str]]:
+    # 送付先の氏名はPDFに出さない。1通を複数人へ送ると、他の人の名前が渡る。
+    del worker_names
     extras = [
         ("担当者", contact_name or contact_desk or ""),
         ("取引相手メモ", counterparty_note or ""),
     ]
-    # 1通のPDFを選んだ全員へ送る。複数人の氏名を載せると、他の送付先に名前が渡る。
-    if len(worker_names) == 1:
-        extras.append(("送付先\n（確定時の氏名）", worker_names[0]))
     if _is_template(request_conditions, body):
         document_body = body or ""
         if document_body.startswith(DOCUMENT_TITLE):
