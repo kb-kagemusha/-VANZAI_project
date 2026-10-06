@@ -1,13 +1,14 @@
-"""発注依頼書の公式LINE紐付け、1人ずつのテスト送信、受領。
+"""発注依頼書の公式LINE紐付け、1人ずつのテスト送信、受諾と辞退。
 
-正式区分は送らない。受領は本人の「受け取りました」だけを記録する。
-PDFを開いたことや電話連絡では受領にしない。
+正式区分は送らない。返事は本人の受諾か、辞退理由の送信だけを記録する。
+PDFを開いたことや電話連絡では返事にしない。
 """
 from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,9 @@ from src.models.line_order import (
 from src.models.master import User, Worker
 from src.models.order_request import (
     ACK_ACKED,
+    ACK_DECLINE_PENDING,
+    ACK_DECLINED,
+    ACK_UNACKED,
     KIND_TEST,
     SEND_ACCEPTED,
     SEND_FAILED,
@@ -65,6 +69,14 @@ LINK_INSTRUCTION = (
     "友だち追加した公式LINEへ、このコードだけを送ってください。"
     "コードの有効期限は30分です。他人のLINEから送らないでください。"
 )
+ACCEPT_LABEL = "依頼の案件、受諾します"
+DECLINE_LABEL = "今回は辞退します"
+ACCEPT_REPLY = "受諾ありがとうございます。よろしくお願い致します"
+DECLINE_PROMPT = "辞退理由を簡単にお聞かせください"
+DECLINE_RECORDED = "辞退を受け付けました。"
+REMINDER_TEXT = "内容を確認して、受領ボタンを押してください"
+BUTTON_TEMPLATE_TEXT = "内容を確認して、受諾または辞退を押してください。"
+JST = ZoneInfo("Asia/Tokyo")
 
 
 def _now() -> datetime:
@@ -348,7 +360,7 @@ class LineOrderService:
             return "ignored", None
         normalized = normalize_link_code(message["text"])
         if len(normalized) != CODE_LENGTH or any(char not in CODE_ALPHABET for char in normalized):
-            return "ignored", None
+            return self._take_decline_reason(line_user_id, message["text"])
         if not line_user_id:
             return "rejected", "このコードは使えません。管理画面で新しいコードを発行してください。"
         code = (
@@ -393,15 +405,20 @@ class LineOrderService:
     def _handle_postback(self, event: dict, line_user_id: str) -> tuple[str, str | None]:
         postback = event.get("postback") if isinstance(event.get("postback"), dict) else {}
         data = postback.get("data") if isinstance(postback.get("data"), str) else ""
-        if not data.startswith("or_ack:"):
-            return "ignored", None
-        delivery_id = data.removeprefix("or_ack:").strip()
+        if data.startswith("or_accept:") or data.startswith("or_ack:"):
+            prefix = "or_accept:" if data.startswith("or_accept:") else "or_ack:"
+            return self._accept(data.removeprefix(prefix).strip(), line_user_id)
+        if data.startswith("or_decline:"):
+            return self._begin_decline(data.removeprefix("or_decline:").strip(), line_user_id)
+        return "ignored", None
+
+    def _delivery_for_reply(self, delivery_id: str, line_user_id: str) -> tuple[OrderRequestDelivery | None, str | None, str | None]:
         delivery = self.session.get(OrderRequestDelivery, delivery_id)
         if delivery is None or not line_user_id:
-            return "rejected", "この受領は記録できません。"
+            return None, "rejected", "この返事は記録できません。"
         link = self._active_link_for_worker(delivery.worker_id)
         if link is None or link.line_user_id != line_user_id:
-            return "rejected", "この依頼の受領者として紐付いていないため、受領は記録しません。"
+            return None, "rejected", "この依頼の相手として紐付いていないため、返事は記録しません。"
         version = self.session.get(OrderRequestVersion, delivery.version_id)
         if (
             version is None
@@ -409,11 +426,20 @@ class LineOrderService:
             or version.status == STATUS_CANCELLED
             or version.dispatch_stopped
         ):
-            return "closed", "この依頼の受領は停止されています。"
+            return None, "closed", "この依頼の返事は停止されています。"
+        return delivery, None, None
+
+    def _accept(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
+        delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+        if delivery is None:
+            return outcome or "rejected", reply
         if delivery.ack_status == ACK_ACKED:
-            return "already", "受領は記録済みです。"
+            return "already", "受諾は記録済みです。"
+        if delivery.ack_status == ACK_DECLINED:
+            return "already", "辞退は記録済みです。"
         delivery.ack_status = ACK_ACKED
         delivery.acked_at = _now()
+        delivery.decline_reason = None
         self.audit.log(
             AuditAction.ORDER_REQUEST_ACKED,
             target_type="order_request_delivery",
@@ -422,7 +448,99 @@ class LineOrderService:
             after_value={"worker_id": delivery.worker_id, "ack_status": ACK_ACKED},
         )
         self.session.flush()
-        return "acked", "受領を記録しました。PDFを開いただけでは受領になりません。"
+        return "acked", ACCEPT_REPLY
+
+    def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
+        delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+        if delivery is None:
+            return outcome or "rejected", reply
+        if delivery.ack_status == ACK_ACKED:
+            return "already", "受諾は記録済みです。"
+        if delivery.ack_status == ACK_DECLINED:
+            return "already", "辞退は記録済みです。"
+        delivery.ack_status = ACK_DECLINE_PENDING
+        self.session.flush()
+        return "decline_pending", DECLINE_PROMPT
+
+    def _take_decline_reason(self, line_user_id: str, text: str) -> tuple[str, str | None]:
+        reason = " ".join(text.split())
+        if not line_user_id or not reason:
+            return "ignored", None
+        link = self._active_link_for_line_user(line_user_id)
+        if link is None:
+            return "ignored", None
+        delivery = (
+            self.session.query(OrderRequestDelivery)
+            .filter(
+                OrderRequestDelivery.worker_id == link.worker_id,
+                OrderRequestDelivery.ack_status == ACK_DECLINE_PENDING,
+                OrderRequestDelivery.view_revoked.is_(False),
+            )
+            .order_by(OrderRequestDelivery.updated_at.desc())
+            .first()
+        )
+        if delivery is None:
+            return "ignored", None
+        delivery.ack_status = ACK_DECLINED
+        delivery.decline_reason = reason[:500]
+        delivery.acked_at = _now()
+        self.audit.log(
+            AuditAction.ORDER_REQUEST_DECLINED,
+            target_type="order_request_delivery",
+            target_id=delivery.id,
+            actor="line-webhook",
+            after_value={
+                "worker_id": delivery.worker_id,
+                "ack_status": ACK_DECLINED,
+                "decline_reason": delivery.decline_reason,
+            },
+        )
+        self.session.flush()
+        return "declined", DECLINE_RECORDED
+
+    def send_due_reminders(self, *, today: date | None = None) -> int:
+        """期限の翌日以降、まだ返事が無い送信先へ案内を1回送る。"""
+        due_before = today or datetime.now(JST).date()
+        rows = (
+            self.session.query(OrderRequestDelivery)
+            .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
+            .filter(
+                OrderRequestVersion.follow_up_due_on.is_not(None),
+                OrderRequestVersion.follow_up_due_on < due_before,
+                OrderRequestVersion.status != STATUS_CANCELLED,
+                OrderRequestVersion.dispatch_stopped.is_(False),
+                OrderRequestDelivery.send_status == SEND_ACCEPTED,
+                OrderRequestDelivery.ack_status == ACK_UNACKED,
+                OrderRequestDelivery.ack_reminded_at.is_(None),
+                OrderRequestDelivery.view_revoked.is_(False),
+            )
+            .all()
+        )
+        sent = 0
+        for delivery in rows:
+            link = self._active_link_for_worker(delivery.worker_id)
+            if link is None:
+                continue
+            try:
+                result = self.client.push_messages(
+                    link.line_user_id,
+                    [{"type": "text", "text": REMINDER_TEXT}],
+                )
+            except LineNotConfigured:
+                return sent
+            if result.status != 200:
+                continue
+            delivery.ack_reminded_at = _now()
+            self.audit.log(
+                AuditAction.ORDER_REQUEST_ACK_REMINDED,
+                target_type="order_request_delivery",
+                target_id=delivery.id,
+                actor="order-ack-reminder",
+                after_value={"worker_id": delivery.worker_id},
+            )
+            sent += 1
+        self.session.flush()
+        return sent
 
     def _reply(self, reply_token: str, text: str | None) -> None:
         if not text:
@@ -498,23 +616,30 @@ def _push_messages(
             f"稼働日: {work_date_label}"[:80],
             f"現場: {site_name}"[:80],
             "このメッセージはテスト送信です。",
+            f"PDF: {pdf_url}",
         ]
     )
     return [
-        {"type": "text", "text": detail[:500]},
+        {"type": "text", "text": detail[:5000]},
         {
             "type": "template",
-            "altText": "テストの発注依頼書です。受け取りましたを押すと受領になります。",
+            "altText": "依頼の案件について、受諾または辞退を押してください。",
             "template": {
                 "type": "buttons",
-                "text": "PDFを開き、受け取りましたを押してください。開いただけでは受領になりません。",
+                "text": BUTTON_TEMPLATE_TEXT,
                 "actions": [
-                    {"type": "uri", "label": "PDFを開く", "uri": pdf_url},
                     {
                         "type": "postback",
-                        "label": "受け取りました",
-                        "data": f"or_ack:{delivery_id}",
-                        "displayText": "受け取りました",
+                        "label": ACCEPT_LABEL,
+                        "data": f"or_accept:{delivery_id}",
+                        "displayText": ACCEPT_LABEL,
+                    },
+                    {
+                        "type": "postback",
+                        "label": DECLINE_LABEL,
+                        "data": f"or_decline:{delivery_id}",
+                        "displayText": DECLINE_LABEL,
+                        "inputOption": "openKeyboard",
                     },
                 ],
             },

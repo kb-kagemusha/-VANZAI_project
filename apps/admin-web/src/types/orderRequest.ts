@@ -9,6 +9,8 @@ export interface OrderRequestDelivery {
   send_status: string;
   ack_status: string;
   acked_at: string | null;
+  decline_reason: string | null;
+  ack_reminded_at: string | null;
   view_revoked: boolean;
   line_linked: boolean;
   line_display_name: string | null;
@@ -119,6 +121,27 @@ export interface OrderRequestListResponse {
   offset: number;
   template_layout_applied: boolean;
   line_send_available: boolean;
+}
+
+export interface OrderRequestReplyItem {
+  delivery_id: string;
+  version_id: string;
+  document_number: string;
+  version_no: number;
+  kind: string;
+  site_name: string;
+  work_date_label: string;
+  worker_name: string;
+  send_status: string;
+  ack_status: string;
+  decline_reason: string | null;
+  acked_at: string | null;
+  follow_up_due_on: string | null;
+  ack_reminded_at: string | null;
+}
+
+export interface OrderRequestReplyList {
+  items: OrderRequestReplyItem[];
 }
 
 export interface OrderRequestWrite {

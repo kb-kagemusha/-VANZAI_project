@@ -120,7 +120,7 @@ def render_order_request_pdf(
     story.append(Spacer(1, 8 * mm))
     story.append(
         Paragraph(
-            "受領は本人の「受け取りました」操作で記録します。このPDFを開いたことは受領ではありません。",
+            "返事は本人の「依頼の案件、受諾します」または「今回は辞退します」で記録します。PDFを開いたことは返事ではありません。",
             label,
         )
     )

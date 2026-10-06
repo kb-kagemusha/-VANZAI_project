@@ -180,6 +180,8 @@ class AuditAction(str, Enum):
     ORDER_REQUEST_LINE_SENT = "order_request_line_sent"
     ORDER_REQUEST_LINE_SEND_FAILED = "order_request_line_send_failed"
     ORDER_REQUEST_ACKED = "order_request_acked"
+    ORDER_REQUEST_DECLINED = "order_request_declined"
+    ORDER_REQUEST_ACK_REMINDED = "order_request_ack_reminded"
 
 
 class InvoiceStatus(str, Enum):

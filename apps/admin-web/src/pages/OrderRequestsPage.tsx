@@ -20,6 +20,7 @@ import {
   getWorkers,
   issueLineLinkCode,
   listLineLinks,
+  listOrderRequestReplies,
   listOrderRequests,
   revokeLineLink,
   revokeOrderRequestView,
@@ -30,13 +31,17 @@ import {
 import {
   composeOrderDocument,
   EMPTY_ORDER_SECTIONS,
+  LINE_ACCEPT_LABEL,
+  LINE_BUTTON_TEXT,
+  LINE_DECLINE_LABEL,
+  LINE_DECLINE_PROMPT,
   LINE_LAYOUT_PENDING,
-  LINE_PDF_BUTTON_TEXT,
   LINE_TEST_BANNER,
   linePushPreviewText,
   ORDER_DOCUMENT_TITLE,
   sectionsFromStored,
   serializeOrderSections,
+  siteLabelForList,
   withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
@@ -55,6 +60,13 @@ const SEND_LABEL: Record<string, string> = {
   accepted: "受付済",
   failed: "失敗",
   unknown: "結果不明",
+};
+
+const REPLY_LABEL: Record<string, string> = {
+  unacked: "未回答",
+  acked: "受諾",
+  decline_pending: "辞退理由待ち",
+  declined: "辞退",
 };
 
 const STATUS_LABEL: Record<OrderRequestStatus, string> = {
@@ -109,6 +121,10 @@ export function OrderRequestsPage() {
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue],
     queryFn: () => listOrderRequests({ kind, queue, limit: 50, offset: 0 }),
+  });
+  const repliesQuery = useQuery({
+    queryKey: ["order-request-replies"],
+    queryFn: listOrderRequestReplies,
   });
   const linksQuery = useQuery({
     queryKey: ["line-links"],
@@ -201,7 +217,10 @@ export function OrderRequestsPage() {
     : previewDocument;
 
   function refresh() {
-    return queryClient.invalidateQueries({ queryKey: ["order-requests"] });
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["order-requests"] }),
+      queryClient.invalidateQueries({ queryKey: ["order-request-replies"] }),
+    ]);
   }
 
   function showDetail(versionId: string) {
@@ -313,7 +332,7 @@ export function OrderRequestsPage() {
   const sendLine = useMutation({
     mutationFn: (deliveryId: string) => sendOrderRequestLine(deliveryId),
     onSuccess: async (version) => {
-      setActionMessage("テスト送信を受け付けました。受領は本人が「受け取りました」を押したときだけです。");
+      setActionMessage("テスト送信を受け付けました。返事は本人が受諾するか、辞退理由を送ったときだけです。");
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
     },
@@ -325,7 +344,7 @@ export function OrderRequestsPage() {
       <PageHeader
         eyebrow="発注依頼"
         title="発注依頼書"
-        description="誰が、誰に、どの版を確定したかを担当者間で共有します。受領は本人の受け取り操作だけです。"
+        description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
       />
       <p className="card" style={{ padding: "0.9rem 1rem" }}>
         {layoutPending
@@ -447,6 +466,50 @@ export function OrderRequestsPage() {
       {listQuery.isLoading ? <LoadingOverlay /> : null}
       {listQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(listQuery.error)} /> : null}
 
+      <section className="order-draft-section" style={{ marginBottom: "1rem" }}>
+        <h4>送信と返事</h4>
+        <div className="card" style={{ overflow: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>文書番号</th>
+                <th>現場</th>
+                <th>日付</th>
+                <th>送付先</th>
+                <th>送信</th>
+                <th>返事</th>
+                <th>辞退理由</th>
+                <th>期限の案内</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(repliesQuery.data?.items ?? []).map((row) => (
+                <tr key={row.delivery_id}>
+                  <td>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(row.version_id)}>
+                      {row.document_number}
+                    </button>
+                  </td>
+                  <td className="order-cell-multiline">{siteLabelForList(row.site_name)}</td>
+                  <td className="order-cell-multiline">{row.work_date_label}</td>
+                  <td>{row.worker_name}</td>
+                  <td>{SEND_LABEL[row.send_status] ?? row.send_status}</td>
+                  <td>
+                    {REPLY_LABEL[row.ack_status] ?? row.ack_status}
+                    {row.acked_at ? ` ${row.acked_at.slice(0, 10)}` : ""}
+                  </td>
+                  <td className="order-cell-multiline">{row.decline_reason || "—"}</td>
+                  <td>{row.ack_reminded_at ? "送付済" : row.follow_up_due_on ? row.follow_up_due_on : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {repliesQuery.data && repliesQuery.data.items.length === 0 ? (
+            <EmptyState title="送信済みはありません" description="テスト送信した依頼がここに出ます。" />
+          ) : null}
+        </div>
+      </section>
+
       <div className="card" style={{ overflow: "auto", marginBottom: "1rem" }}>
         <table className="data-table">
           <thead>
@@ -478,7 +541,7 @@ export function OrderRequestsPage() {
                   {item.phone_first ? " / 電話先行" : ""}
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
-                <td className="order-cell-multiline">{item.site_name}</td>
+                <td className="order-cell-multiline">{siteLabelForList(item.site_name)}</td>
                 <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
                 <td>{item.tracker_name ?? "—"}</td>
@@ -809,7 +872,7 @@ export function OrderRequestsPage() {
                       <tr>
                         <th>送付先</th>
                         <th>送信</th>
-                        <th>受領</th>
+                        <th>返事</th>
                         <th>閲覧</th>
                       </tr>
                     </thead>
@@ -830,6 +893,8 @@ export function OrderRequestsPage() {
                                   || !row.line_linked
                                   || row.view_revoked
                                   || row.ack_status === "acked"
+                                  || row.ack_status === "declined"
+                                  || row.ack_status === "decline_pending"
                                 }
                                 onClick={() => sendLine.mutate(row.id)}
                               >
@@ -837,7 +902,10 @@ export function OrderRequestsPage() {
                               </button>
                             ) : null}
                           </td>
-                          <td>{row.ack_status === "acked" ? "受領済" : "未受領"}</td>
+                          <td>
+                            {REPLY_LABEL[row.ack_status] ?? row.ack_status}
+                            {row.decline_reason ? `（${row.decline_reason}）` : ""}
+                          </td>
                           <td>
                             {row.view_revoked ? (
                               "停止"
@@ -985,18 +1053,21 @@ export function OrderRequestsPage() {
               <p className="order-line-who">公式LINE</p>
               <div className="order-line-bubble">{previewLineText}</div>
               <div className="order-line-template">
-                <p>{LINE_PDF_BUTTON_TEXT}</p>
+                <p>{LINE_BUTTON_TEXT}</p>
                 <div className="order-line-actions">
-                  <span>PDFを開く</span>
-                  <span>受け取りました</span>
+                  <span>{LINE_ACCEPT_LABEL}</span>
+                  <span>{LINE_DECLINE_LABEL}</span>
                 </div>
               </div>
             </div>
+            <p className="order-line-note">
+              辞退を押すと「{LINE_DECLINE_PROMPT}」と出て、次に送った文章を辞退理由として記録します。受諾すると「受諾ありがとうございます。よろしくお願い致します」と返します。
+            </p>
             {previewProjectCut || previewDateCut || previewSiteCut ? (
               <p className="order-line-note">案件名、稼働日、現場は、LINEの文面ではそれぞれ80文字までです。続きはPDFに入ります。</p>
             ) : null}
             <p className="order-line-note">
-              通知に出る文面は「テストの発注依頼書です。受け取りましたを押すと受領になります。」です。「PDFを開く」のリンクは送信時に発行されます。保存前の文書番号は未採番です。
+              通知に出る文面は「依頼の案件について、受諾または辞退を押してください。」です。PDFのリンクは送信時に文面へ付きます。保存前の文書番号は未採番です。
             </p>
             <section className="order-line-pdf" aria-label="PDFを開いたとき">
               <h4>PDFを開いたとき</h4>
@@ -1025,7 +1096,7 @@ export function OrderRequestsPage() {
                   <dd>{selectedWorkers.map((worker) => worker.name).join("、") || "—"}</dd>
                 </div>
               </dl>
-              <p className="order-line-note">受領は本人の「受け取りました」操作で記録します。このPDFを開いたことは受領ではありません。</p>
+              <p className="order-line-note">返事は本人の受諾か、辞退理由の送信で記録します。このPDFを開いたことは返事ではありません。</p>
             </section>
           </div>
         </div>

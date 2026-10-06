@@ -40,7 +40,9 @@ SEND_STATUSES = (SEND_UNSENT, SEND_PROCESSING, SEND_ACCEPTED, SEND_FAILED, SEND_
 
 ACK_UNACKED = "unacked"
 ACK_ACKED = "acked"
-ACK_STATUSES = (ACK_UNACKED, ACK_ACKED)
+ACK_DECLINE_PENDING = "decline_pending"
+ACK_DECLINED = "declined"
+ACK_STATUSES = (ACK_UNACKED, ACK_ACKED, ACK_DECLINE_PENDING, ACK_DECLINED)
 
 MAX_RECIPIENTS = 30
 
@@ -150,6 +152,8 @@ class OrderRequestDelivery(Base, TimestampMixin):
     send_status: Mapped[str] = mapped_column(String(20), nullable=False, default=SEND_UNSENT)
     ack_status: Mapped[str] = mapped_column(String(20), nullable=False, default=ACK_UNACKED)
     acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ack_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     view_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     version: Mapped[OrderRequestVersion] = relationship(back_populates="deliveries")
@@ -161,7 +165,7 @@ class OrderRequestDelivery(Base, TimestampMixin):
             name="ck_order_request_deliveries_send",
         ),
         CheckConstraint(
-            "ack_status IN ('unacked', 'acked')",
+            "ack_status IN ('unacked', 'acked', 'decline_pending', 'declined')",
             name="ck_order_request_deliveries_ack",
         ),
         Index("ix_order_request_deliveries_version", "version_id"),

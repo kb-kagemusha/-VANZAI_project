@@ -3565,7 +3565,9 @@ button {
 
 .order-cell-multiline {
   white-space: pre-line;
-  max-width: 18rem;
+  max-width: 16rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .order-field input::placeholder,

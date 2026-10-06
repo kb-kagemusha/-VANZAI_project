@@ -525,6 +525,17 @@ class OrderRequestService:
         filtered = [row for row in rows if self._matches_queue(row[1], queue)]
         return filtered[offset : offset + limit], len(filtered)
 
+    def list_sent_replies(self, *, limit: int = 200) -> list[tuple[OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion]]:
+        return (
+            self.session.query(OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion)
+            .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
+            .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
+            .filter(OrderRequestDelivery.send_status != SEND_UNSENT)
+            .order_by(OrderRequestDelivery.updated_at.desc())
+            .limit(limit)
+            .all()
+        )
+
     def _matches_queue(self, version: OrderRequestVersion, queue: str) -> bool:
         if queue == "all":
             return True

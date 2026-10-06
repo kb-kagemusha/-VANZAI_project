@@ -5,7 +5,7 @@ import base64
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -14,7 +14,8 @@ from src.models.base import generate_ulid
 from src.models.enums import UserRole
 from src.models.line_order import LineWorkerLink
 from src.models.master import Worker
-from src.models.order_request import OrderRequestDelivery
+from src.models.order_request import OrderRequestDelivery, OrderRequestVersion
+from src.services.line_order import ACCEPT_REPLY, DECLINE_PROMPT, DECLINE_RECORDED, REMINDER_TEXT, LineOrderService
 from src.services.line_messaging import LineCallResult
 
 
@@ -132,7 +133,7 @@ def _webhook(api_client, payload: dict, *, secret: str = "test-secret", event_id
     )
 
 
-def _link(api_client, ops_user, worker_id: str, line_user_id: str = "U123"):
+def _link(api_client, ops_user, worker_id: str, line_user_id: str = "U123", event_id: str = "event-1"):
     issued = api_client.post(
         "/api/order-requests/line-links/codes",
         json={"worker_id": worker_id},
@@ -152,6 +153,7 @@ def _link(api_client, ops_user, worker_id: str, line_user_id: str = "U123"):
                 }
             ]
         },
+        event_id=event_id,
     )
     assert response.status_code == 200, response.text
     return issued.json()
@@ -222,8 +224,14 @@ def test_send_test_document_to_one_linked_worker_and_record_ack(
     assert body["deliveries"][0]["send_status"] == "accepted"
     assert body["deliveries"][0]["ack_status"] == "unacked"
     assert fake_line.pushes[0][0] == "U123"
-    pdf_url = fake_line.pushes[0][1][1]["template"]["actions"][0]["uri"]
-    assert pdf_url.startswith("https://api.example.test/api/line/order-request-files/")
+    text = fake_line.pushes[0][1][0]["text"]
+    assert "PDF: https://api.example.test/api/line/order-request-files/" in text
+    pdf_url = text.split("PDF: ", 1)[1].strip()
+    actions = fake_line.pushes[0][1][1]["template"]["actions"]
+    assert actions[0]["label"] == "依頼の案件、受諾します"
+    assert actions[0]["data"] == f"or_accept:{delivery_id}"
+    assert actions[1]["label"] == "今回は辞退します"
+    assert actions[1]["inputOption"] == "openKeyboard"
     token = pdf_url.rsplit("/", 1)[-1]
     pdf = api_client.get(f"/api/line/order-request-files/{token}")
     assert pdf.status_code == 200
@@ -352,3 +360,116 @@ def test_revoke_stops_sending(api_client, db_session, ops_user, pdf_root, line_e
     )
     assert response.status_code == 409
     assert fake_line.pushes == []
+
+
+def test_accept_and_decline_with_reason(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
+    worker = _worker(db_session, "稼働者A")
+    confirmed = _confirm(api_client, ops_user, worker.id)
+    delivery_id = confirmed["deliveries"][0]["id"]
+    _link(api_client, ops_user, worker.id, "U123")
+    sent = api_client.post(
+        f"/api/order-requests/deliveries/{delivery_id}/line-send",
+        headers=_auth(ops_user.username),
+    )
+    assert sent.status_code == 200, sent.text
+
+    declined = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "postback",
+                    "replyToken": "reply-decline",
+                    "source": {"type": "user", "userId": "U123"},
+                    "postback": {"data": f"or_decline:{delivery_id}"},
+                }
+            ]
+        },
+        event_id="decline-1",
+    )
+    assert declined.status_code == 200
+    assert fake_line.replies[-1][1] == DECLINE_PROMPT
+    db_session.expire_all()
+    assert db_session.get(OrderRequestDelivery, delivery_id).ack_status == "decline_pending"
+
+    reason = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "reply-reason",
+                    "source": {"type": "user", "userId": "U123"},
+                    "message": {"type": "text", "text": "その日は別件です"},
+                }
+            ]
+        },
+        event_id="decline-reason",
+    )
+    assert reason.status_code == 200
+    assert fake_line.replies[-1][1] == DECLINE_RECORDED
+    db_session.expire_all()
+    stored = db_session.get(OrderRequestDelivery, delivery_id)
+    assert stored.ack_status == "declined"
+    assert stored.decline_reason == "その日は別件です"
+
+    other = _worker(db_session, "稼働者B")
+    confirmed_b = _confirm(api_client, ops_user, other.id)
+    other_id = confirmed_b["deliveries"][0]["id"]
+    _link(api_client, ops_user, other.id, "U456", event_id="link-b")
+    sent_b = api_client.post(
+        f"/api/order-requests/deliveries/{other_id}/line-send",
+        headers=_auth(ops_user.username),
+    )
+    assert sent_b.status_code == 200, sent_b.text
+    accepted = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "postback",
+                    "replyToken": "reply-accept",
+                    "source": {"type": "user", "userId": "U456"},
+                    "postback": {"data": f"or_accept:{other_id}"},
+                }
+            ]
+        },
+        event_id="accept-1",
+    )
+    assert accepted.status_code == 200
+    assert fake_line.replies[-1][1] == ACCEPT_REPLY
+    db_session.expire_all()
+    assert db_session.get(OrderRequestDelivery, other_id).ack_status == "acked"
+
+    listed = api_client.get("/api/order-requests/replies", headers=_auth(ops_user.username))
+    assert listed.status_code == 200, listed.text
+    by_worker = {row["worker_name"]: row for row in listed.json()["items"]}
+    assert by_worker["稼働者A"]["ack_status"] == "declined"
+    assert by_worker["稼働者A"]["decline_reason"] == "その日は別件です"
+    assert by_worker["稼働者B"]["ack_status"] == "acked"
+
+
+def test_reminder_is_sent_once_after_the_due_date(
+    api_client, db_session, ops_user, pdf_root, line_env, fake_line
+):
+    worker = _worker(db_session, "稼働者A")
+    confirmed = _confirm(api_client, ops_user, worker.id)
+    delivery_id = confirmed["deliveries"][0]["id"]
+    _link(api_client, ops_user, worker.id, "U123")
+    sent = api_client.post(
+        f"/api/order-requests/deliveries/{delivery_id}/line-send",
+        headers=_auth(ops_user.username),
+    )
+    assert sent.status_code == 200, sent.text
+    version = db_session.get(OrderRequestVersion, confirmed["id"])
+    version.follow_up_due_on = date(2026, 10, 6)
+    db_session.commit()
+
+    service = LineOrderService(db_session)
+    assert service.send_due_reminders(today=date(2026, 10, 6)) == 0
+    assert service.send_due_reminders(today=date(2026, 10, 7)) == 1
+    db_session.commit()
+    assert fake_line.pushes[-1][1][0]["text"] == REMINDER_TEXT
+    db_session.expire_all()
+    assert service.send_due_reminders(today=date(2026, 10, 8)) == 0
+    assert db_session.get(OrderRequestDelivery, delivery_id).ack_reminded_at is not None

@@ -121,6 +121,7 @@ import type {
   LineLinkCode,
   LineLinkList,
   OrderRequestListResponse,
+  OrderRequestReplyList,
   OrderRequestVersion,
   OrderRequestWrite,
 } from "../../types/orderRequest";
@@ -1444,6 +1445,10 @@ export function downloadOrderRequestPdf(versionId: string, documentNumber: strin
     `/api/order-requests/versions/${versionId}/pdf`,
     `${documentNumber}-v${versionNo}.pdf`,
   );
+}
+
+export function listOrderRequestReplies() {
+  return apiFetch<OrderRequestReplyList>("/api/order-requests/replies");
 }
 
 export function listLineLinks() {

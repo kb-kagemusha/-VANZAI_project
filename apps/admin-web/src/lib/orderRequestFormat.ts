@@ -132,13 +132,25 @@ function legacyFee(data: Record<string, unknown>): string {
   return `ベース：${amount}`;
 }
 
+export function siteLabelForList(value: string): string {
+  const text = value
+    .split("\n")
+    .map((line) => line.replace(/https?:\/\/\S+/g, "").trim())
+    .filter(Boolean)
+    .join("\n");
+  return text || "—";
+}
+
 export function withFullwidthTilde(value: string): string {
   return value.replace(/~/g, "～");
 }
 
 /** 公式LINEのテスト送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
 export const LINE_TEST_BANNER = "テスト・正式な発注ではありません";
-export const LINE_PDF_BUTTON_TEXT = "PDFを開き、受け取りましたを押してください。開いただけでは受領になりません。";
+export const LINE_ACCEPT_LABEL = "依頼の案件、受諾します";
+export const LINE_DECLINE_LABEL = "今回は辞退します";
+export const LINE_BUTTON_TEXT = "内容を確認して、受諾または辞退を押してください。";
+export const LINE_DECLINE_PROMPT = "辞退理由を簡単にお聞かせください";
 export const LINE_LAYOUT_PENDING = "弁護士確認済み書式のレイアウトは未適用です。このPDFは入力内容の保存です。";
 
 export function linePushPreviewText(input: {
@@ -155,6 +167,7 @@ export function linePushPreviewText(input: {
     `稼働日: ${withFullwidthTilde(input.workDateLabel)}`.slice(0, 80),
     `現場: ${withFullwidthTilde(input.siteName)}`.slice(0, 80),
     "このメッセージはテスト送信です。",
+    "PDF: （送信時にリンクが付きます）",
   ].join("\n");
   return detail.slice(0, 500);
 }

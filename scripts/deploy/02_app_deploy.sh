@@ -239,6 +239,13 @@ else
     OCR_WORKER_STARTED=1
 fi
 
+echo "  受領期限の案内..."
+mkdir -p "${APP_DIR}/logs"
+REMIND_MARKER="# vanzai-order-ack-reminder"
+REMIND_CRON="${REMIND_MARKER} 15 * * * * cd ${APP_DIR} && ${VENV_DIR}/bin/python ${APP_DIR}/scripts/line/remind_order_acks.py >> ${APP_DIR}/logs/order-ack-reminder.log 2>&1"
+(crontab -l 2>/dev/null | grep -v "${REMIND_MARKER}" || true
+ echo "${REMIND_CRON}") | crontab -
+
 echo ""
 echo "=============================="
 echo "  デプロイ完了!"

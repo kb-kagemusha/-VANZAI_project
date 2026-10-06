@@ -134,6 +134,8 @@ def _delivery_out(
         "send_status": row.send_status,
         "ack_status": row.ack_status,
         "acked_at": row.acked_at,
+        "decline_reason": row.decline_reason,
+        "ack_reminded_at": row.ack_reminded_at,
         "view_revoked": row.view_revoked,
         "line_linked": row.worker_id in links,
         "line_display_name": links.get(row.worker_id),
@@ -437,6 +439,36 @@ def add_order_request_note(
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)
     return _version_out(db, document, version)
+
+
+@router.get("/replies")
+def list_order_request_replies(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    rows = _service(db).list_sent_replies()
+    return {
+        "items": [
+            {
+                "delivery_id": delivery.id,
+                "version_id": version.id,
+                "document_number": document.document_number,
+                "version_no": version.version_no,
+                "kind": document.kind,
+                "site_name": version.site_name,
+                "work_date_label": version.work_date_label,
+                "worker_name": delivery.worker_name_snapshot,
+                "send_status": delivery.send_status,
+                "ack_status": delivery.ack_status,
+                "decline_reason": delivery.decline_reason,
+                "acked_at": delivery.acked_at,
+                "follow_up_due_on": version.follow_up_due_on,
+                "ack_reminded_at": delivery.ack_reminded_at,
+            }
+            for delivery, document, version in rows
+        ]
+    }
 
 
 @router.get("/line-links")
