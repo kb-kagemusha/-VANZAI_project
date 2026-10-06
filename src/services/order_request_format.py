@@ -12,6 +12,7 @@ _SECTION_KEYS = (
     "content",
     "belongings",
     "fee",
+    "incentive",
     "notes",
 )
 _LEGACY_KEYS = (
@@ -47,6 +48,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
         notes = f"・{notes}"
     hours = _text(sections.get("hours")) or _legacy_hours(sections)
     fee = _text(sections.get("fee")) or _legacy_fee(sections)
+    incentive = _text(sections.get("incentive"))
     return "\n".join(
         [
             DOCUMENT_TITLE,
@@ -75,6 +77,9 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
             "■単価：",
             fee,
             "",
+            "■インセンティブ：",
+            incentive,
+            "",
             "■備考：",
             notes,
         ]
@@ -91,7 +96,7 @@ def apply_template_fields(request_conditions: str, body: str, *, work_date_label
     """新しい書式なら本文を見出し順に組み直す。古い自由文はそのまま残す。"""
     sections = parse_sections(request_conditions)
     if sections is None:
-        return request_conditions or "", body or ""
+        return _text(request_conditions), _text(body)
     return (
         canonical_conditions(sections),
         compose_document(sections, work_date_label=work_date_label, site_name=site_name),
@@ -113,19 +118,15 @@ def _legacy_hours(sections: dict) -> str:
 
 
 def _legacy_fee(sections: dict) -> str:
-    lines = []
     base = _text(sections.get("base_fee"))
-    incentive = _text(sections.get("incentive"))
-    if base:
-        if not base.startswith(("¥", "￥")):
-            base = f"¥{base}"
-        lines.append(f"ベース：{base}")
-    if incentive:
-        lines.append(f"インセンティブ：{incentive}")
-    return "\n".join(lines)
+    if not base:
+        return ""
+    if not base.startswith(("¥", "￥")):
+        base = f"¥{base}"
+    return f"ベース：{base}"
 
 
 def _text(value) -> str:
     if value is None:
         return ""
-    return str(value).strip()
+    return str(value).strip().replace("~", "～")

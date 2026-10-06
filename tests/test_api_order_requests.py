@@ -334,7 +334,8 @@ def test_additional_request_format_replaces_condition_and_body_blob(api_client, 
         "名札",
         "■単価：",
         "ベース：¥12000",
-        "インセンティブ：達成時",
+        "■インセンティブ：",
+        "達成時",
         "■備考：",
         "・報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
     ]
@@ -378,7 +379,7 @@ def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops
         ]
     )
     site = "横浜赤レンガ倉庫 イベント広場\n（神奈川県横浜市中区新港1-1）\n※具体的な集合場所は追って。"
-    work_dates = "10/8(木)　前日準備\n10/9(金)~10/13(火)　実施日"
+    work_dates = "10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"
     conditions = json.dumps(
         {
             "format": "additional-request-v1",
@@ -405,16 +406,38 @@ def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops
     )
     assert created.status_code == 200, created.text
     data = created.json()
+    expected_hours = hours.replace("~", "～")
     assert data["site_name"] == site
     assert data["work_date_label"] == work_dates
     stored = json.loads(data["request_conditions"])
-    assert stored["hours"] == hours
+    assert stored["hours"] == expected_hours
     assert stored["fee"] == fee
     body = data["body"]
     assert "集合時間：" not in body
     assert "ベース：" not in body
-    for line in (hours, fee, site, work_dates, "・商品販売促進", "・ipad"):
+    assert "~" not in stored["hours"]
+    for line in (expected_hours, fee, site, work_dates, "・商品販売促進", "・ipad"):
         assert line in body
+
+
+def test_ascii_tilde_becomes_fullwidth_on_save(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label="10/9(金)~10/13(火)",
+            site_name="会場A~会場B",
+            contact_name="担当~次郎",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()
+    assert data["work_date_label"] == "10/9(金)～10/13(火)"
+    assert data["site_name"] == "会場A～会場B"
+    assert data["contact_name"] == "担当～次郎"
+    assert "~" not in data["work_date_label"]
 
 
 def test_legacy_free_text_stays_until_rewritten(api_client, db_session, ops_user):

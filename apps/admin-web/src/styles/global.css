@@ -3489,6 +3489,7 @@ button {
 }
 
 .order-span-4 { grid-column: span 4; }
+.order-span-gap { grid-column: span 4; }
 .order-span-6 { grid-column: span 6; }
 .order-span-8 { grid-column: span 8; }
 .order-span-12 { grid-column: span 12; }
@@ -3840,4 +3841,150 @@ button {
   .order-span-8 {
     grid-column: span 12;
   }
+
+  .order-span-gap {
+    display: none;
+  }
+}
+
+.order-line-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(29, 39, 49, 0.46);
+}
+
+.order-line-dialog {
+  width: min(440px, 100%);
+  max-height: min(860px, calc(100vh - 2.5rem));
+  overflow: auto;
+  padding: 1rem 1rem 1.15rem;
+  border-radius: 18px;
+  background: #f6f1e8;
+  box-shadow: 0 18px 50px rgba(29, 39, 49, 0.28);
+}
+
+.order-line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.order-line-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.order-line-note {
+  margin: 0.55rem 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.order-line-chat {
+  padding: 0.9rem 0.75rem 1rem;
+  border-radius: 16px;
+  background: #8cabd9;
+}
+
+.order-line-who {
+  margin: 0 0 0.35rem;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.order-line-bubble,
+.order-line-template {
+  width: min(100%, 320px);
+  margin: 0 0 0.55rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px;
+  background: #fff;
+  color: #1d2731;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.order-line-template p {
+  margin: 0 0 0.65rem;
+}
+
+.order-line-actions {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.order-line-actions span {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: #06c755;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+.order-line-pdf {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.9rem 0.2rem;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.order-line-pdf h4,
+.order-line-doctitle {
+  margin: 0 0 0.45rem;
+}
+
+.order-line-pdf h4 {
+  font-size: 0.95rem;
+}
+
+.order-line-banner {
+  margin: 0 0 0.45rem;
+  color: #8a1c1c;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.order-line-docno {
+  margin: 0 0 0.55rem;
+}
+
+.order-line-pdf pre {
+  margin: 0 0 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.order-line-pdf dl {
+  margin: 0;
+}
+
+.order-line-pdf dl div {
+  margin-bottom: 0.55rem;
+}
+
+.order-line-pdf dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.order-line-pdf dd {
+  margin: 0.1rem 0 0;
+  white-space: pre-wrap;
 }

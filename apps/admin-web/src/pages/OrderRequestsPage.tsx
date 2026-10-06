@@ -30,8 +30,14 @@ import {
 import {
   composeOrderDocument,
   EMPTY_ORDER_SECTIONS,
+  LINE_LAYOUT_PENDING,
+  LINE_PDF_BUTTON_TEXT,
+  LINE_TEST_BANNER,
+  linePushPreviewText,
+  ORDER_DOCUMENT_TITLE,
   sectionsFromStored,
   serializeOrderSections,
+  withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
 import type {
@@ -95,6 +101,7 @@ export function OrderRequestsPage() {
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [linePreviewOpen, setLinePreviewOpen] = useState(false);
   const [linkWorkerId, setLinkWorkerId] = useState("");
   const [issuedCode, setIssuedCode] = useState<LineLinkCode | null>(null);
   const [unlinkReason, setUnlinkReason] = useState("");
@@ -166,6 +173,30 @@ export function OrderRequestsPage() {
     setForm(formFromVersion(detail));
     setSections(sectionsFromStored(detail.request_conditions, detail.body));
   }, [creating, detail]);
+
+  useEffect(() => {
+    if (!linePreviewOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setLinePreviewOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [linePreviewOpen]);
+
+  const previewDocumentNumber = detail?.document_number ?? "未採番";
+  const previewVersionNo = detail?.version_no ?? 1;
+  const previewLineText = linePushPreviewText({
+    documentNumber: previewDocumentNumber,
+    versionNo: previewVersionNo,
+    workDateLabel: form.work_date_label,
+    siteName: form.site_name,
+  });
+  const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
+  const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
+  const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
+  const previewPdfBody = previewDocument.startsWith(ORDER_DOCUMENT_TITLE)
+    ? previewDocument.slice(ORDER_DOCUMENT_TITLE.length).replace(/^\n+/, "")
+    : previewDocument;
 
   function refresh() {
     return queryClient.invalidateQueries({ queryKey: ["order-requests"] });
@@ -536,7 +567,7 @@ export function OrderRequestsPage() {
                       value={sections.projectName}
                       disabled={!editable}
                       placeholder={"【イベント名】\nhttps://example.com/event"}
-                      onChange={(event) => setSections({ ...sections, projectName: event.target.value })}
+                      onChange={(event) => setSections({ ...sections, projectName: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-6">
@@ -545,7 +576,7 @@ export function OrderRequestsPage() {
                       className="is-short"
                       value={sections.background}
                       disabled={!editable}
-                      onChange={(event) => setSections({ ...sections, background: event.target.value })}
+                      onChange={(event) => setSections({ ...sections, background: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-4">
@@ -555,7 +586,7 @@ export function OrderRequestsPage() {
                       value={form.site_name}
                       disabled={!editable}
                       placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
-                      onChange={(event) => setForm({ ...form, site_name: event.target.value })}
+                      onChange={(event) => setForm({ ...form, site_name: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-4">
@@ -564,10 +595,11 @@ export function OrderRequestsPage() {
                       className="is-short"
                       value={form.work_date_label}
                       disabled={!editable}
-                      placeholder={"10/8(木)　前日準備\n10/9(金)〜10/13(火)　実施日"}
-                      onChange={(event) => setForm({ ...form, work_date_label: event.target.value })}
+                      placeholder={"10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"}
+                      onChange={(event) => setForm({ ...form, work_date_label: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
+                  <div className="order-span-gap" />
                   <label className="order-field order-span-4">
                     <span className="order-field-label">
                       稼働時間
@@ -577,8 +609,8 @@ export function OrderRequestsPage() {
                       className="is-tall"
                       value={sections.hours}
                       disabled={!editable}
-                      placeholder={"10/9(金)　※初日30分前集合\n　8:30　集合・準備\n　10:00~18:00　実施\n　19:00　片付け・解散\n\n10/10(土)〜10/13(火)\n　9:00　集合・準備\n　10:00~18:00　実施\n　19:00　片付け・解散"}
-                      onChange={(event) => setSections({ ...sections, hours: event.target.value })}
+                      placeholder={"10/9(金)　※初日30分前集合\n　8:30　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散\n\n10/10(土)～10/13(火)\n　9:00　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散"}
+                      onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-4">
@@ -586,7 +618,7 @@ export function OrderRequestsPage() {
                     <textarea
                       value={sections.content}
                       disabled={!editable}
-                      onChange={(event) => setSections({ ...sections, content: event.target.value })}
+                      onChange={(event) => setSections({ ...sections, content: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-4">
@@ -594,7 +626,7 @@ export function OrderRequestsPage() {
                     <textarea
                       value={sections.belongings}
                       disabled={!editable}
-                      onChange={(event) => setSections({ ...sections, belongings: event.target.value })}
+                      onChange={(event) => setSections({ ...sections, belongings: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-4">
@@ -606,8 +638,18 @@ export function OrderRequestsPage() {
                       className="is-tall"
                       value={sections.fee}
                       disabled={!editable}
-                      placeholder={"10/9(金)\n報酬：¥20,500(税抜)\n　(昼食代、交通費込み)\n\n10/10(土)〜10/13(火)\n報酬：¥19,500(税抜)\n　(昼食代、交通費込み)"}
-                      onChange={(event) => setSections({ ...sections, fee: event.target.value })}
+                      placeholder={"10/9(金)\n報酬：¥20,500(税抜)\n　(昼食代、交通費込み)\n\n10/10(土)～10/13(火)\n報酬：¥19,500(税抜)\n　(昼食代、交通費込み)"}
+                      onChange={(event) => setSections({ ...sections, fee: withFullwidthTilde(event.target.value) })}
+                    />
+                  </label>
+                  <label className="order-field order-span-4">
+                    <span className="order-field-label">インセンティブ</span>
+                    <textarea
+                      className="is-tall"
+                      value={sections.incentive}
+                      disabled={!editable}
+                      placeholder={"※インセン無し\nまたは日ごとの金額"}
+                      onChange={(event) => setSections({ ...sections, incentive: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <label className="order-field order-span-12">
@@ -616,7 +658,7 @@ export function OrderRequestsPage() {
                       className="is-short"
                       value={sections.notes}
                       disabled={!editable}
-                      onChange={(event) => setSections({ ...sections, notes: event.target.value })}
+                      onChange={(event) => setSections({ ...sections, notes: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                 </div>
@@ -626,23 +668,23 @@ export function OrderRequestsPage() {
             <section className="order-draft-section">
               <h4>連絡先</h4>
               <div className="order-draft-grid">
-                <label className="order-field order-span-6">
+                <label className="order-field order-span-4">
                   <span className="order-field-label">担当者</span>
                   <input
                     value={form.contact_name}
                     disabled={!editable}
-                    onChange={(event) => setForm({ ...form, contact_name: event.target.value })}
+                    onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <label className="order-field order-span-6">
+                <label className="order-field order-span-4">
                   <span className="order-field-label">業務用窓口</span>
                   <input
                     value={form.contact_desk}
                     disabled={!editable}
-                    onChange={(event) => setForm({ ...form, contact_desk: event.target.value })}
+                    onChange={(event) => setForm({ ...form, contact_desk: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <label className="order-field order-span-12">
+                <label className="order-field order-span-4">
                   <span className="order-field-label">
                     取引相手メモ
                     <span className="order-field-hint">下請の正式宛先です。共通PDFの宛名には差し込みません。</span>
@@ -651,7 +693,7 @@ export function OrderRequestsPage() {
                     className="is-short"
                     value={form.counterparty_note ?? ""}
                     disabled={!editable}
-                    onChange={(event) => setForm({ ...form, counterparty_note: event.target.value })}
+                    onChange={(event) => setForm({ ...form, counterparty_note: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
               </div>
@@ -675,7 +717,7 @@ export function OrderRequestsPage() {
                     value={form.phone_note ?? ""}
                     disabled={!editable}
                     placeholder="電話した内容があれば"
-                    onChange={(event) => setForm({ ...form, phone_note: event.target.value })}
+                    onChange={(event) => setForm({ ...form, phone_note: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
               </div>
@@ -891,6 +933,9 @@ export function OrderRequestsPage() {
                 ) : null}
               </div>
               <div className="order-draft-foot-end">
+                <button type="button" className="btn btn-ghost" onClick={() => setLinePreviewOpen(true)}>
+                  送付内容を確認
+                </button>
                 {editable ? (
                   <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
                     下書きを保存
@@ -919,6 +964,76 @@ export function OrderRequestsPage() {
           ) : null}
         </form>
       )}
+
+      {linePreviewOpen ? (
+        <div className="order-line-backdrop" onClick={() => setLinePreviewOpen(false)}>
+          <div
+            className="order-line-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-line-preview-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="order-line-head">
+              <h3 id="order-line-preview-title">送付内容の確認</h3>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLinePreviewOpen(false)}>
+                閉じる
+              </button>
+            </header>
+            <p className="order-line-note">
+              {form.kind === "test"
+                ? "テスト区分で送る公式LINEの画面です。この確認では送信しません。"
+                : "いまの区分は正式です。公式LINEには送りません。下はテスト区分にしたときに送る画面です。送信はしません。"}
+            </p>
+            <div className="order-line-chat" aria-label="LINEのトーク画面">
+              <p className="order-line-who">公式LINE</p>
+              <div className="order-line-bubble">{previewLineText}</div>
+              <div className="order-line-template">
+                <p>{LINE_PDF_BUTTON_TEXT}</p>
+                <div className="order-line-actions">
+                  <span>PDFを開く</span>
+                  <span>受け取りました</span>
+                </div>
+              </div>
+            </div>
+            {previewDateCut || previewSiteCut ? (
+              <p className="order-line-note">稼働日と現場は、LINEの文面ではそれぞれ80文字までです。続きはPDFに入ります。</p>
+            ) : null}
+            <p className="order-line-note">
+              通知に出る文面は「テストの発注依頼書です。受け取りましたを押すと受領になります。」です。「PDFを開く」のリンクは送信時に発行されます。保存前の文書番号は未採番です。
+            </p>
+            <section className="order-line-pdf" aria-label="PDFを開いたとき">
+              <h4>PDFを開いたとき</h4>
+              {form.kind === "test" ? <p className="order-line-banner">{LINE_TEST_BANNER}</p> : null}
+              <p className="order-line-banner">{LINE_LAYOUT_PENDING}</p>
+              <p className="order-line-docno">
+                {previewDocumentNumber}　第{previewVersionNo}版
+              </p>
+              <p className="order-line-doctitle">{ORDER_DOCUMENT_TITLE}</p>
+              <pre>{previewPdfBody}</pre>
+              <dl>
+                <div>
+                  <dt>担当者</dt>
+                  <dd>{form.contact_name || "—"}</dd>
+                </div>
+                <div>
+                  <dt>業務用窓口</dt>
+                  <dd>{form.contact_desk || "—"}</dd>
+                </div>
+                <div>
+                  <dt>取引相手メモ</dt>
+                  <dd>{form.counterparty_note || "—"}</dd>
+                </div>
+                <div>
+                  <dt>送付先（確定時の氏名）</dt>
+                  <dd>{selectedWorkers.map((worker) => worker.name).join("、") || "—"}</dd>
+                </div>
+              </dl>
+              <p className="order-line-note">受領は本人の「受け取りました」操作で記録します。このPDFを開いたことは受領ではありません。</p>
+            </section>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

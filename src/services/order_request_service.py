@@ -60,6 +60,10 @@ def _clean(value: str | None) -> str:
     return (value or "").strip()
 
 
+def _case_text(value: str | None) -> str:
+    return _clean(value).replace("~", "～")
+
+
 def _user_label(user: User | None) -> str | None:
     if user is None:
         return None
@@ -563,8 +567,8 @@ class OrderRequestService:
         tracker_user_id = fields.pop("tracker_user_id")
         if tracker_user_id:
             self._ensure_user(tracker_user_id)
-        version.work_date_label = _clean(fields["work_date_label"])
-        version.site_name = _clean(fields["site_name"])
+        version.work_date_label = _case_text(fields["work_date_label"])
+        version.site_name = _case_text(fields["site_name"])
         version.site_id = fields["site_id"]
         version.site_address = fields["site_address"]
         request_conditions, body = apply_template_fields(
@@ -575,13 +579,15 @@ class OrderRequestService:
         )
         version.request_conditions = request_conditions
         version.body = body
-        version.contact_name = _clean(fields["contact_name"])
-        version.contact_desk = _clean(fields["contact_desk"])
-        version.counterparty_note = fields["counterparty_note"]
+        version.contact_name = _case_text(fields["contact_name"])
+        version.contact_desk = _case_text(fields["contact_desk"])
+        note = fields["counterparty_note"]
+        version.counterparty_note = None if note is None else _case_text(note)
         version.draft_worker_ids = worker_ids
         version.phone_first = bool(fields["phone_first"])
         version.phone_contacted_at = fields["phone_contacted_at"]
-        version.phone_note = fields["phone_note"]
+        phone_note = fields["phone_note"]
+        version.phone_note = None if phone_note is None else _case_text(phone_note)
         version.tracker_user_id = tracker_user_id
         version.follow_up_due_on = fields["follow_up_due_on"]
 

@@ -11,6 +11,7 @@ export interface OrderDocumentSections {
   content: string;
   belongings: string;
   fee: string;
+  incentive: string;
   notes: string;
 }
 
@@ -21,6 +22,7 @@ export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   content: "",
   belongings: "",
   fee: "",
+  incentive: "",
   notes: DEFAULT_ORDER_NOTES,
 };
 
@@ -42,13 +44,14 @@ export function sectionsFromStored(requestConditions: string, body: string): Ord
 export function serializeOrderSections(sections: OrderDocumentSections): string {
   return JSON.stringify({
     format: ORDER_FORMAT_ID,
-    project_name: sections.projectName.trim(),
-    background: sections.background.trim(),
-    hours: sections.hours.trim(),
-    content: sections.content.trim(),
-    belongings: sections.belongings.trim(),
-    fee: sections.fee.trim(),
-    notes: sections.notes.trim(),
+    project_name: wavy(sections.projectName.trim()),
+    background: wavy(sections.background.trim()),
+    hours: wavy(sections.hours.trim()),
+    content: wavy(sections.content.trim()),
+    belongings: wavy(sections.belongings.trim()),
+    fee: wavy(sections.fee.trim()),
+    incentive: wavy(sections.incentive.trim()),
+    notes: wavy(sections.notes.trim()),
   });
 }
 
@@ -57,33 +60,36 @@ export function composeOrderDocument(
   workDateLabel: string,
   siteName: string,
 ): string {
-  const notes = withBullet(sections.notes.trim());
+  const notes = withBullet(wavy(sections.notes.trim()));
   return [
     ORDER_DOCUMENT_TITLE,
     "",
     "■案件名",
-    sections.projectName.trim(),
+    wavy(sections.projectName.trim()),
     "",
     "■背景",
-    sections.background.trim(),
+    wavy(sections.background.trim()),
     "",
     "■稼働場所",
-    siteName.trim(),
+    wavy(siteName.trim()),
     "",
     "■稼働日",
-    workDateLabel.trim(),
+    wavy(workDateLabel.trim()),
     "",
     "■稼働時間",
-    sections.hours.trim(),
+    wavy(sections.hours.trim()),
     "",
     "■内容：",
-    sections.content.trim(),
+    wavy(sections.content.trim()),
     "",
     "■持ち物：",
-    sections.belongings.trim(),
+    wavy(sections.belongings.trim()),
     "",
     "■単価：",
-    sections.fee.trim(),
+    wavy(sections.fee.trim()),
+    "",
+    "■インセンティブ：",
+    wavy(sections.incentive.trim()),
     "",
     "■備考：",
     notes,
@@ -103,6 +109,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       content: textOf(data.content),
       belongings: textOf(data.belongings),
       fee: textOf(data.fee) || legacyFee(data),
+      incentive: textOf(data.incentive),
       notes: textOf(data.notes),
     };
   } catch {
@@ -120,14 +127,34 @@ function legacyHours(data: Record<string, unknown>): string {
 
 function legacyFee(data: Record<string, unknown>): string {
   const base = textOf(data.base_fee);
-  const incentive = textOf(data.incentive);
-  const lines = [];
-  if (base) {
-    const amount = base.startsWith("¥") || base.startsWith("￥") ? base : `¥${base}`;
-    lines.push(`ベース：${amount}`);
-  }
-  if (incentive) lines.push(`インセンティブ：${incentive}`);
-  return lines.join("\n");
+  if (!base) return "";
+  const amount = base.startsWith("¥") || base.startsWith("￥") ? base : `¥${base}`;
+  return `ベース：${amount}`;
+}
+
+export function withFullwidthTilde(value: string): string {
+  return value.replace(/~/g, "～");
+}
+
+/** 公式LINEのテスト送信文。src/services/line_order.py の _push_messages と同じ切り方。 */
+export const LINE_TEST_BANNER = "テスト・正式な発注ではありません";
+export const LINE_PDF_BUTTON_TEXT = "PDFを開き、受け取りましたを押してください。開いただけでは受領になりません。";
+export const LINE_LAYOUT_PENDING = "弁護士確認済み書式のレイアウトは未適用です。このPDFは入力内容の保存です。";
+
+export function linePushPreviewText(input: {
+  documentNumber: string;
+  versionNo: number;
+  workDateLabel: string;
+  siteName: string;
+}): string {
+  const detail = [
+    LINE_TEST_BANNER,
+    `発注依頼書 ${input.documentNumber}（版${input.versionNo}）`,
+    `稼働日: ${withFullwidthTilde(input.workDateLabel)}`.slice(0, 80),
+    `現場: ${withFullwidthTilde(input.siteName)}`.slice(0, 80),
+    "このメッセージはテスト送信です。",
+  ].join("\n");
+  return detail.slice(0, 500);
 }
 
 function labeled(label: string, value: string): string {
@@ -135,7 +162,11 @@ function labeled(label: string, value: string): string {
 }
 
 function textOf(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? wavy(value.trim()) : "";
+}
+
+function wavy(value: string): string {
+  return withFullwidthTilde(value);
 }
 
 function withBullet(notes: string): string {
