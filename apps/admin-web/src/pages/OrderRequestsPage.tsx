@@ -499,11 +499,37 @@ export function OrderRequestsPage() {
 
           <div className="order-draft-body">
             <section className="order-draft-section">
+              <div className="order-draft-grid">
+                <div className="order-field order-span-4">
+                  <span className="order-field-label">区分</span>
+                  <div className="order-segment" role="group" aria-label="区分">
+                    <button
+                      type="button"
+                      className={form.kind === "formal" ? "is-active" : ""}
+                      disabled={!editable}
+                      onClick={() => setForm({ ...form, kind: "formal" })}
+                    >
+                      正式
+                    </button>
+                    <button
+                      type="button"
+                      className={form.kind === "test" ? "is-active is-test" : ""}
+                      disabled={!editable}
+                      onClick={() => setForm({ ...form, kind: "test" })}
+                    >
+                      テスト
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="order-draft-section">
               <h4>追加案件依頼</h4>
               <div className="order-document">
                 <p className="order-document-title">【追加案件依頼】</p>
                 <div className="order-draft-grid">
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-6">
                     <span className="order-field-label">案件名</span>
                     <textarea
                       className="is-short"
@@ -513,7 +539,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, projectName: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-6">
                     <span className="order-field-label">背景</span>
                     <textarea
                       className="is-short"
@@ -522,7 +548,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, background: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">稼働場所</span>
                     <textarea
                       className="is-short"
@@ -532,7 +558,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setForm({ ...form, site_name: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">稼働日</span>
                     <textarea
                       className="is-short"
@@ -542,7 +568,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setForm({ ...form, work_date_label: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">
                       稼働時間
                       <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
@@ -555,7 +581,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
                     <textarea
                       value={sections.content}
@@ -563,7 +589,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, content: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">持ち物</span>
                     <textarea
                       value={sections.belongings}
@@ -571,7 +597,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, belongings: event.target.value })}
                     />
                   </label>
-                  <label className="order-field order-span-12">
+                  <label className="order-field order-span-4">
                     <span className="order-field-label">
                       単価
                       <span className="order-field-hint">日によって違うときは、日付ごとに改行して書いてください。</span>
@@ -600,28 +626,7 @@ export function OrderRequestsPage() {
             <section className="order-draft-section">
               <h4>連絡先</h4>
               <div className="order-draft-grid">
-                <div className="order-field order-span-4">
-                  <span className="order-field-label">区分</span>
-                  <div className="order-segment" role="group" aria-label="区分">
-                    <button
-                      type="button"
-                      className={form.kind === "formal" ? "is-active" : ""}
-                      disabled={!editable}
-                      onClick={() => setForm({ ...form, kind: "formal" })}
-                    >
-                      正式
-                    </button>
-                    <button
-                      type="button"
-                      className={form.kind === "test" ? "is-active is-test" : ""}
-                      disabled={!editable}
-                      onClick={() => setForm({ ...form, kind: "test" })}
-                    >
-                      テスト
-                    </button>
-                  </div>
-                </div>
-                <label className="order-field order-span-4">
+                <label className="order-field order-span-6">
                   <span className="order-field-label">担当者</span>
                   <input
                     value={form.contact_name}
@@ -629,7 +634,7 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, contact_name: event.target.value })}
                   />
                 </label>
-                <label className="order-field order-span-4">
+                <label className="order-field order-span-6">
                   <span className="order-field-label">業務用窓口</span>
                   <input
                     value={form.contact_desk}

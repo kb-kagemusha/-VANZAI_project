@@ -3493,6 +3493,12 @@ button {
 .order-span-8 { grid-column: span 8; }
 .order-span-12 { grid-column: span 12; }
 
+.order-draft-grid > .order-field {
+  height: 100%;
+  align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .order-field {
   display: grid;
   gap: 0.4rem;
@@ -3531,6 +3537,7 @@ button {
 
 .order-field textarea {
   min-height: 8.5rem;
+  height: 100%;
   resize: vertical;
   line-height: 1.6;
 }
