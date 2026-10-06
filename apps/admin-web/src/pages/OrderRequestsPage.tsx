@@ -680,7 +680,6 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <div className="order-span-gap" aria-hidden="true" />
                 <label className="order-field order-span-4">
                   <span className="order-field-label">
                     取引相手メモ

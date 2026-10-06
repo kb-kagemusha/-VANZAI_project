@@ -517,3 +517,27 @@ def test_line_push_text_includes_project_name():
     assert "発注依頼書 OR-1（版1）" in text
     assert "案件名: 横浜おいも万博" in text
     assert text.index("発注依頼書") < text.index("案件名:") < text.index("稼働日:")
+
+
+def test_order_pdf_embeds_japanese_font():
+    from src.services.order_request_pdf import render_order_request_pdf
+    from src.services.pdf_generator import DEFAULT_FONT
+
+    pdf = render_order_request_pdf(
+        document_number="OR-1",
+        version_no=1,
+        kind="formal",
+        work_date_label="10/5～10/8",
+        site_name="有楽町",
+        site_address=None,
+        request_conditions='{"format":"additional-request-v1","project_name":"有楽町交通会館"}',
+        body="【追加案件依頼】\n■案件名\n有楽町交通会館",
+        contact_name="山田",
+        contact_desk="",
+        counterparty_note=None,
+        worker_names=["山田"],
+    )
+    assert pdf.startswith(b"%PDF")
+    assert DEFAULT_FONT == "IPAexGothic"
+    assert b"IPAexGothic" in pdf
+    assert len(pdf) > 20000

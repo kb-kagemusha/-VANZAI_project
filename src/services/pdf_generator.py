@@ -31,15 +31,20 @@ def _safe_amount(value: Decimal | None) -> str:
     return f"¥{value:,.0f}" if value is not None else "-"
 
 
-# 日本語フォント設定（システムフォントを使用）
-# Windows環境を想定
-try:
-    font_path = "C:/Windows/Fonts/msgothic.ttc"  # MSゴシック
-    pdfmetrics.registerFont(TTFont("MSGothic", font_path))
-    DEFAULT_FONT = "MSGothic"
-except Exception:
-    # フォントが見つからない場合はHelveticaを使用
-    DEFAULT_FONT = "Helvetica"
+def _register_japanese_font() -> str:
+    """同梱の IPAexゴシックを使う。サーバーに日本語フォントが無いと、PDFの和文が欠ける。"""
+    bundled = Path(__file__).resolve().parents[2] / "assets" / "fonts" / "ipaexg.ttf"
+    if bundled.is_file():
+        pdfmetrics.registerFont(TTFont("IPAexGothic", str(bundled)))
+        return "IPAexGothic"
+    windows = Path("C:/Windows/Fonts/msgothic.ttc")
+    if windows.is_file():
+        pdfmetrics.registerFont(TTFont("MSGothic", str(windows), subfontIndex=0))
+        return "MSGothic"
+    return "Helvetica"
+
+
+DEFAULT_FONT = _register_japanese_font()
 
 
 class PDFGenerator:

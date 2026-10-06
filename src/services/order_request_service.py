@@ -473,7 +473,33 @@ class OrderRequestService:
             raise OrderRequestError(404, "確定済みのPDFがありません")
         if not self.storage.exists(version.pdf_object_key):
             raise OrderRequestError(404, "PDFファイルが見つかりません")
-        return self.storage.read_bytes(version.pdf_object_key)
+        payload = self.storage.read_bytes(version.pdf_object_key)
+        if b"IPAexGothic" in payload:
+            return payload
+        payload = self._render_stored_pdf(version)
+        self.storage.save_bytes(version.pdf_object_key, payload)
+        return payload
+
+    def _render_stored_pdf(self, version: OrderRequestVersion) -> bytes:
+        document = self._document(version)
+        snapshot = version.snapshot_json if isinstance(version.snapshot_json, dict) else {}
+        names = snapshot.get("worker_names")
+        if not isinstance(names, list) or not names:
+            names = [row.worker_name_snapshot for row in self._deliveries(version.id)]
+        return render_order_request_pdf(
+            document_number=document.document_number,
+            version_no=version.version_no,
+            kind=document.kind,
+            work_date_label=version.work_date_label,
+            site_name=version.site_name,
+            site_address=version.site_address,
+            request_conditions=version.request_conditions or "",
+            body=version.body or "",
+            contact_name=version.contact_name,
+            contact_desk=version.contact_desk,
+            counterparty_note=version.counterparty_note,
+            worker_names=[str(name) for name in names],
+        )
 
     def get_version(self, version_id: str) -> OrderRequestVersion:
         version = self.session.get(OrderRequestVersion, version_id)

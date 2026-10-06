@@ -310,7 +310,9 @@ class LineOrderService:
             or not version.pdf_object_key
         ):
             raise OrderRequestError(404, "PDFのリンクは無効です")
-        return self.storage.read_bytes(version.pdf_object_key)
+        from src.services.order_request_service import OrderRequestService
+
+        return OrderRequestService(self.session, self.storage).read_pdf(version)
 
     def handle_webhook(self, payload: dict) -> None:
         events = payload.get("events") if isinstance(payload, dict) else None
