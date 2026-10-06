@@ -582,6 +582,7 @@ def test_order_pdf_embeds_japanese_font():
         worker_names=["山田"],
     )
     assert pdf.startswith(b"%PDF")
+    assert len(__import__("re").findall(rb"/Type\s*/Page(?!s)", pdf)) == 1
     assert DEFAULT_FONT == "IPAexGothic"
     assert b"IPAexGothic" in pdf
     assert PDF_LAYOUT_ID.encode("ascii") in pdf

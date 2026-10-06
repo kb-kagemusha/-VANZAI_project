@@ -24,8 +24,8 @@ from src.services.pdf_generator import DEFAULT_FONT
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
 TEMPLATE_LAYOUT_APPLIED = False
 
-# 保存済みPDFを開いたとき、この印が無いものは見出し配置の版へ作り直す。
-PDF_LAYOUT_ID = "order-request-branded-v2"
+# 保存済みPDFを開いたとき、この印が無いものは返事の欄を1枚目へ固定した版へ作り直す。
+PDF_LAYOUT_ID = "order-request-branded-v3"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -69,17 +69,23 @@ def render_order_request_pdf(
     left = 16 * mm
     right = 16 * mm
     content_width = page_width - left - right
+    styles = _styles()
+    note = Paragraph(escape(REPLY_NOTE), styles["note"])
+    note_pad_x = 3 * mm
+    note_pad_y = 1.6 * mm
+    _note_w, note_h = note.wrap(content_width - note_pad_x * 2, 40 * mm)
+    note_box_h = note_h + note_pad_y * 2
+    note_bottom = 11 * mm
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
         leftMargin=left,
         rightMargin=right,
-        topMargin=14 * mm,
-        bottomMargin=16 * mm,
+        topMargin=12 * mm,
+        bottomMargin=note_bottom + note_box_h + 2.5 * mm,
         title=_download_stem(work_date_label, project_name_from_document(request_conditions, body)),
         subject=PDF_LAYOUT_ID,
     )
-    styles = _styles()
     story: list = []
     if kind == "test":
         story.append(_banner(TEST_BANNER, content_width, styles))
@@ -108,16 +114,18 @@ def render_order_request_pdf(
         counterparty_note=counterparty_note,
         worker_names=worker_names,
     ), content_width, styles))
-    story.append(Spacer(1, 4 * mm))
-    story.append(_note_box(REPLY_NOTE, content_width, styles))
-
     def _decorate(canvas, _doc):
         canvas.saveState()
+        canvas.setFillColor(_PAPER)
+        canvas.setStrokeColor(_LINE)
+        canvas.setLineWidth(0.6)
+        canvas.rect(left, note_bottom, content_width, note_box_h, fill=1, stroke=1)
+        note.drawOn(canvas, left + note_pad_x, note_bottom + note_pad_y)
         canvas.setFillColor(_INK)
         canvas.setFont(DEFAULT_FONT, 8)
-        canvas.drawRightString(page_width - right, 8 * mm, COMPANY_NAME)
+        canvas.drawRightString(page_width - right, 6 * mm, COMPANY_NAME)
         canvas.setFillColor(_MUTED)
-        canvas.drawString(left, 8 * mm, f"{document_number}　第{version_no}版")
+        canvas.drawString(left, 6 * mm, f"{document_number}　第{version_no}版")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=_decorate, onLaterPages=_decorate)
@@ -388,8 +396,8 @@ def _field_table(fields: list[tuple[str, str]], width: float, styles: dict) -> T
         ("RIGHTPADDING", (1, 0), (1, -1), 4),
         ("LEFTPADDING", (2, 0), (2, -1), 8),
         ("RIGHTPADDING", (2, 0), (2, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
     ]))
     return table
 
@@ -407,14 +415,3 @@ def _banner(text: str, width: float, styles: dict) -> Table:
     return table
 
 
-def _note_box(text: str, width: float, styles: dict) -> Table:
-    table = Table([[_paragraph(text, styles["note"])]], colWidths=[width])
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), _PAPER),
-        ("BOX", (0, 0), (-1, -1), 0.6, _LINE),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    return table
