@@ -541,9 +541,32 @@ def test_line_push_text_includes_project_name():
 
 
 def test_order_pdf_embeds_japanese_font():
-    from src.services.order_request_pdf import render_order_request_pdf
+    from src.services.order_request_pdf import PDF_LAYOUT_ID, _headed_fields, render_order_request_pdf
     from src.services.pdf_generator import DEFAULT_FONT
 
+    body = "\n".join([
+        "【追加案件依頼】",
+        "■案件名",
+        "有楽町交通会館",
+        "■背景",
+        "交通量の多い時間帯の案内",
+        "■稼働場所",
+        "有楽町",
+        "■稼働日",
+        "10/5～10/8",
+        "■稼働時間",
+        "集合時間：9:00\n実施時間：10:00～18:00",
+        "■内容：",
+        "受付と誘導",
+        "■持ち物：",
+        "動きやすい服装",
+        "■単価：",
+        "ベース：¥12000",
+        "■インセンティブ：",
+        "",
+        "■備考：",
+        "・報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+    ])
     pdf = render_order_request_pdf(
         document_number="OR-1",
         version_no=1,
@@ -552,7 +575,7 @@ def test_order_pdf_embeds_japanese_font():
         site_name="有楽町",
         site_address=None,
         request_conditions='{"format":"additional-request-v1","project_name":"有楽町交通会館"}',
-        body="【追加案件依頼】\n■案件名\n有楽町交通会館",
+        body=body,
         contact_name="山田",
         contact_desk="",
         counterparty_note=None,
@@ -561,4 +584,19 @@ def test_order_pdf_embeds_japanese_font():
     assert pdf.startswith(b"%PDF")
     assert DEFAULT_FONT == "IPAexGothic"
     assert b"IPAexGothic" in pdf
+    assert PDF_LAYOUT_ID.encode("ascii") in pdf
     assert len(pdf) > 20000
+    fields = _headed_fields(body.split("【追加案件依頼】", 1)[1])
+    assert [caption for caption, _text in fields] == [
+        "案件名",
+        "背景",
+        "稼働場所",
+        "稼働日",
+        "稼働時間",
+        "内容",
+        "持ち物",
+        "単価",
+        "インセンティブ",
+        "備考",
+    ]
+    assert fields[4][1].startswith("集合時間：9:00")

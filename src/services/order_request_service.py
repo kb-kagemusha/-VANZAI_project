@@ -36,7 +36,7 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
-from src.services.order_request_pdf import TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
+from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
 DEFAULT_DUE_TIME = "21:00"
@@ -508,7 +508,7 @@ class OrderRequestService:
         if not self.storage.exists(version.pdf_object_key):
             raise OrderRequestError(404, "PDFファイルが見つかりません")
         payload = self.storage.read_bytes(version.pdf_object_key)
-        if b"IPAexGothic" in payload:
+        if b"IPAexGothic" in payload and PDF_LAYOUT_ID.encode("ascii") in payload:
             return payload
         payload = self._render_stored_pdf(version)
         self.storage.save_bytes(version.pdf_object_key, payload)
