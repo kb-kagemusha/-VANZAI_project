@@ -1371,7 +1371,7 @@ export function OrderRequestsPage() {
                 {editable ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="btn btn-pdf"
                     disabled={saveMutation.isPending || pdfReview?.phase === "loading"}
                     onClick={() => {
                       void openPdfReview();
@@ -1407,10 +1407,14 @@ export function OrderRequestsPage() {
       )}
 
       {pdfReview ? (
-        <div className="order-pdf-review" role="dialog" aria-modal="true" aria-labelledby="order-pdf-review-title">
-          <div className="order-pdf-review-sheet">
-            <header className="order-pdf-review-head">
-              <h3 id="order-pdf-review-title">発注依頼書のPDF</h3>
+        <div className="order-create-backdrop is-front" role="dialog" aria-modal="true" aria-labelledby="order-pdf-review-title">
+          <div className="order-draft is-modal order-pdf-review-card">
+            <header className="order-draft-head">
+              <div>
+                <p className="order-draft-kicker">発注依頼書</p>
+                <h3 id="order-pdf-review-title">PDFの確認</h3>
+                <p className="order-draft-lead">内容を確認してから送付します。</p>
+              </div>
             </header>
             <div className="order-pdf-review-frame">
               {pdfReview.phase === "ready" && pdfReview.url ? (
@@ -1421,27 +1425,30 @@ export function OrderRequestsPage() {
             </div>
             {pdfReviewError ? <ErrorState title="送付できませんでした" description={pdfReviewError} /> : null}
             {pdfReview.phase === "ready" ? (
-              <footer className="order-pdf-review-foot">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={pdfSending}
-                  onClick={() => {
-                    void saveDraftAndCloseReview();
-                  }}
-                >
-                  下書きを保存して閉じる
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={pdfSending}
-                  onClick={() => {
-                    void sendReviewedOrder();
-                  }}
-                >
-                  {pdfSending ? "送付しています" : "この情報で送付する"}
-                </button>
+              <footer className="order-draft-foot">
+                <div className="order-draft-foot-start" />
+                <div className="order-draft-foot-end">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={pdfSending}
+                    onClick={() => {
+                      void saveDraftAndCloseReview();
+                    }}
+                  >
+                    下書きを保存して閉じる
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={pdfSending}
+                    onClick={() => {
+                      void sendReviewedOrder();
+                    }}
+                  >
+                    {pdfSending ? "送付しています" : "この情報で送付する"}
+                  </button>
+                </div>
               </footer>
             ) : null}
           </div>
