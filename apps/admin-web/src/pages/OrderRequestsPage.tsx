@@ -877,11 +877,6 @@ export function OrderRequestsPage() {
           }}
         >
           <header className="order-draft-head">
-            {createModal ? (
-              <button type="button" className="btn btn-ghost order-draft-close" onClick={closeCreateModal}>
-                保存せずに閉じる
-              </button>
-            ) : null}
             <div className="order-draft-head-lead">
               <p className="order-draft-kicker">
                 {creating
@@ -1408,6 +1403,11 @@ export function OrderRequestsPage() {
           {editable || detail?.status === "draft" || detail?.has_pdf || canSend ? (
             <footer className="order-draft-foot">
               <div className="order-draft-foot-start">
+                {createModal ? (
+                  <button type="button" className="btn btn-ghost order-draft-close" onClick={closeCreateModal}>
+                    保存せずに閉じる
+                  </button>
+                ) : null}
                 {detail?.has_pdf ? (
                   <button
                     type="button"

@@ -4232,6 +4232,7 @@ button {
   width: min(1120px, 100%);
   min-height: calc(100vh - 2.5rem);
   margin: 0 auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .order-draft.is-modal.order-pdf-review-card {
