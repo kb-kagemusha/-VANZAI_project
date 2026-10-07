@@ -23,7 +23,7 @@ import {
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 280;
 const CHART_INSET = { left: 56, right: 16, top: 28, bottom: 28 };
-const DRAW_EASING = "cubic-bezier(0.42, 0, 1, 1)";
+const DRAW_EASING = "cubic-bezier(0, 0, 0.58, 1)";
 const DRAW_MS = 1300;
 
 function useAccelerateDraw(ref: RefObject<SVGPathElement | null>, signature: string) {
@@ -51,7 +51,7 @@ function useAccelerateDraw(ref: RefObject<SVGPathElement | null>, signature: str
 function Sparkline({ values, color, insetLeft = 8 }: { values: number[]; color: string; insetLeft?: number }) {
   const gradientId = useId().replace(/:/g, "");
   const width = 240;
-  const height = 72;
+  const height = 100;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const points = plotPoints(values, width, height, { left: insetLeft, right: 6, top: 10, bottom: 4 }, { min, max });
@@ -98,14 +98,16 @@ function TrendCard({
       <div className="apex-preview__stat-top">
         <div>
           <p className="apex-preview__kpi-label">{label}</p>
-          <p className="apex-preview__kpi-value">
-            {value}
-            <small>{unit}</small>
-          </p>
-          <p className={positive ? "apex-preview__delta is-up" : "apex-preview__delta is-down"}>
-            {positive ? <TrendingUp size={14} aria-hidden="true" /> : <TrendingDown size={14} aria-hidden="true" />}
-            {delta}
-          </p>
+          <div className="apex-preview__kpi-line">
+            <p className="apex-preview__kpi-value">
+              {value}
+              <small>{unit}</small>
+            </p>
+            <p className={positive ? "apex-preview__delta is-up" : "apex-preview__delta is-down"}>
+              {positive ? <TrendingUp size={14} aria-hidden="true" /> : <TrendingDown size={14} aria-hidden="true" />}
+              {delta}
+            </p>
+          </div>
         </div>
         <span className="apex-preview__stat-icon" style={{ color, background: `${color}1a` }}>{icon}</span>
       </div>
@@ -129,11 +131,17 @@ function DaysCard() {
           </div>
           <div className="apex-preview__day-grid">
             <div>
-              <p className="apex-preview__day-value">{day.workers}</p>
+              <p className="apex-preview__day-value">
+                {day.workers}
+                <small>人</small>
+              </p>
               <p className="apex-preview__day-caption">稼働者数</p>
             </div>
             <div>
-              <p className="apex-preview__day-value">{day.projects}</p>
+              <p className="apex-preview__day-value">
+                {day.projects}
+                <small>件</small>
+              </p>
               <p className="apex-preview__day-caption">遂行案件数</p>
             </div>
           </div>
@@ -383,14 +391,14 @@ export function PreviewDemoBoard() {
       <p className="apex-preview__note">グラフとリストの数値はデモです。点や区分を指すと内訳が出ます。</p>
       <section className="apex-preview__demo-top" aria-label="概況">
         <TrendCard label="月間の案件数" value="48" unit="件" delta="+12.5%" values={DEMO_PROJECT_TREND} color="#16a34a" icon={<Briefcase size={16} aria-hidden="true" />} />
-        <TrendCard label="稼働者数" value="186" unit="名" delta="+8.2%" values={DEMO_WORKER_TREND} color="#2563eb" icon={<Users size={16} aria-hidden="true" />} insetLeft={36} />
+        <TrendCard label="稼働者数" value="186" unit="名" delta="+8.2%" values={DEMO_WORKER_TREND} color="#2563eb" icon={<Users size={16} aria-hidden="true" />} insetLeft={72} />
         <DaysCard />
       </section>
       <section className="apex-preview__demo-mid">
         <article className="apex-preview__card is-live">
           <div className="apex-preview__card-head">
             <div>
-              <h2 className="apex-preview__section-title">売上・人件費・粗利益</h2>
+              <h2 className="apex-preview__section-title">粗利益・売上・人件費</h2>
               <p className="apex-preview__subtitle">今年の月次</p>
             </div>
             <div className="apex-preview__segment" role="tablist" aria-label="表示する金額">
