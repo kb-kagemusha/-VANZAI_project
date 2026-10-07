@@ -9,6 +9,7 @@ import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
 import { AvailabilityCalendarPage } from "../pages/AvailabilityCalendarPage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { DashboardPreviewPage } from "../pages/DashboardPreviewPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { InvoicesPage } from "../pages/InvoicesPage";
@@ -38,6 +39,14 @@ export function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/403" element={<ForbiddenPage />} />
+        <Route
+          path="/dashboard/preview"
+          element={
+            <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
+              <DashboardPreviewPage />
+            </PermissionRoute>
+          }
+        />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route

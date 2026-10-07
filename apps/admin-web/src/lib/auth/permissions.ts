@@ -17,6 +17,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: DASHBOARD_ROLES,
   },
   {
+    to: "/dashboard/preview",
+    label: "見た目プレビュー",
+    description: "参考デザインとの比較用。締め操作は現行ダッシュボードで行う",
+    allowedRoles: DASHBOARD_ROLES,
+  },
+  {
     to: "/operations/availability-calendar",
     label: "出勤可能日カレンダー",
     description: "スタッフの出勤可能日とシフト担当を確認",

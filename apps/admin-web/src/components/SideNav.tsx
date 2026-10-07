@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   MessageSquare,
   ScanLine,
+  Eye,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -30,6 +31,7 @@ import { BrandMark } from "./BrandMark";
 
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
+  "/dashboard/preview": Eye,
   "/operations/availability-calendar": CalendarDays,
   "/operations/csv-import": Upload,
   "/operations/ocr": ScanLine,
