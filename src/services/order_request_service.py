@@ -6,12 +6,13 @@ LINEへの push はこのサービスでは行わない。
 """
 from __future__ import annotations
 
-import secrets
+import re
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, object_session
 
 from src.models.base import generate_ulid
 from src.models.enums import AuditAction
@@ -40,6 +41,13 @@ from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIE
 
 JST = ZoneInfo("Asia/Tokyo")
 DEFAULT_DUE_TIME = "21:00"
+# OR-YYYYMMDD-001A。連番は日付ごと 001〜999、変更の文字は A〜Z。
+# document_number は String(40) で足りる。Z の次を AA にはしない。
+_NEW_DOCUMENT_NUMBER = re.compile(r"^OR-(\d{8})-(\d{3})([A-Z])$")
+_MAX_DAILY_SEQUENCE = 999
+_NUMBER_LOCK_KEY = 90261008
+_SEQUENCE_EXHAUSTED = "この日の発注依頼書は999件までです。これ以上は作成できません"
+_LETTER_EXHAUSTED = "この依頼書の変更はZまでです。これ以上の変更文書は作れません"
 
 
 def follow_up_moment(due_on: date, due_time: str | None) -> datetime:
@@ -88,6 +96,24 @@ def _user_label(user: User | None) -> str | None:
     return user.display_name or user.username
 
 
+def _parse_new_document_number(number: str | None) -> tuple[str, int, str] | None:
+    if not number:
+        return None
+    match = _NEW_DOCUMENT_NUMBER.fullmatch(number)
+    if match is None:
+        return None
+    return match.group(1), int(match.group(2)), match.group(3)
+
+
+def _is_document_number_conflict(exc: IntegrityError) -> bool:
+    return "document_number" in str(getattr(exc, "orig", exc)).lower()
+
+
+def _drop_pending(session: Session, obj: object) -> None:
+    if object_session(obj) is session:
+        session.expunge(obj)
+
+
 class OrderRequestService:
     def __init__(self, session: Session, storage: DocumentStorage | None = None):
         self.session = session
@@ -125,25 +151,13 @@ class OrderRequestService:
         if site_id:
             self._ensure_site(site_id)
         source = self.get_version(based_on_version_id) if based_on_version_id else None
-
-        document = OrderRequestDocument(
-            id=generate_ulid(),
-            document_number=self._new_document_number(),
+        source_number = self._document(source).document_number if source is not None else None
+        document, version = self._insert_numbered_draft(
+            actor=actor,
             kind=kind,
-            created_by_user_id=actor.id,
-        )
-        version = OrderRequestVersion(
-            id=generate_ulid(),
-            document_id=document.id,
-            version_no=1,
-            status=STATUS_DRAFT,
-            revision_of_version_id=source.id if source else None,
-            revision_reason="変更を作成" if source else None,
-            created_by_user_id=actor.id,
-            draft_worker_ids=worker_ids,
-        )
-        self._apply_draft_fields(
-            version,
+            source=source,
+            source_number=source_number,
+            worker_ids=worker_ids,
             work_date_label=work_date_label,
             site_name=site_name,
             site_id=site_id,
@@ -153,7 +167,6 @@ class OrderRequestService:
             contact_name=contact_name,
             contact_desk=contact_desk,
             counterparty_note=counterparty_note,
-            worker_ids=worker_ids,
             phone_first=phone_first,
             phone_contacted_at=phone_contacted_at,
             phone_note=phone_note,
@@ -161,9 +174,6 @@ class OrderRequestService:
             follow_up_due_on=follow_up_due_on,
             follow_up_due_time=follow_up_due_time,
         )
-        self.session.add(document)
-        self.session.add(version)
-        self.session.flush()
         if source is not None:
             source_document = self._document(source)
             self.audit.log(
@@ -878,15 +888,128 @@ class OrderRequestService:
             raise OrderRequestError(400, "現場が見つかりません")
         return site
 
-    def _new_document_number(self) -> str:
-        day = datetime.now(JST).strftime("%Y%m%d")
-        for _ in range(5):
-            number = f"OR-{day}-{secrets.token_hex(3).upper()}"
-            exists = (
-                self.session.query(OrderRequestDocument.id)
-                .filter(OrderRequestDocument.document_number == number)
-                .first()
+    def _insert_numbered_draft(
+        self,
+        *,
+        actor: User,
+        kind: str,
+        source: OrderRequestVersion | None,
+        source_number: str | None,
+        worker_ids: list[str],
+        work_date_label: str,
+        site_name: str,
+        site_id: str | None,
+        site_address: str | None,
+        request_conditions: str,
+        body: str,
+        contact_name: str,
+        contact_desk: str,
+        counterparty_note: str | None,
+        phone_first: bool,
+        phone_contacted_at: datetime | None,
+        phone_note: str | None,
+        tracker_user_id: str | None,
+        follow_up_due_on: date | None,
+        follow_up_due_time: str | None,
+    ) -> tuple[OrderRequestDocument, OrderRequestVersion]:
+        self._lock_document_numbers()
+        for _attempt in range(5):
+            document = OrderRequestDocument(
+                id=generate_ulid(),
+                document_number=self._propose_document_number(source_number),
+                kind=kind,
+                created_by_user_id=actor.id,
             )
-            if exists is None:
-                return number
+            version = OrderRequestVersion(
+                id=generate_ulid(),
+                document_id=document.id,
+                version_no=1,
+                status=STATUS_DRAFT,
+                revision_of_version_id=source.id if source else None,
+                revision_reason="変更を作成" if source else None,
+                created_by_user_id=actor.id,
+                draft_worker_ids=worker_ids,
+            )
+            self._apply_draft_fields(
+                version,
+                work_date_label=work_date_label,
+                site_name=site_name,
+                site_id=site_id,
+                site_address=site_address,
+                request_conditions=request_conditions,
+                body=body,
+                contact_name=contact_name,
+                contact_desk=contact_desk,
+                counterparty_note=counterparty_note,
+                worker_ids=worker_ids,
+                phone_first=phone_first,
+                phone_contacted_at=phone_contacted_at,
+                phone_note=phone_note,
+                tracker_user_id=tracker_user_id,
+                follow_up_due_on=follow_up_due_on,
+                follow_up_due_time=follow_up_due_time,
+            )
+            try:
+                with self.session.begin_nested():
+                    self.session.add(document)
+                    self.session.add(version)
+                    self.session.flush()
+                return document, version
+            except IntegrityError as exc:
+                if not _is_document_number_conflict(exc):
+                    raise
+                _drop_pending(self.session, document)
+                _drop_pending(self.session, version)
         raise OrderRequestError(500, "文書番号を発行できませんでした")
+
+    def _lock_document_numbers(self) -> None:
+        """採番からコミットまでを直列化する。PostgreSQL ではトランザクション終了まで待つ。"""
+        bind = self.session.get_bind()
+        if bind is None or bind.dialect.name != "postgresql":
+            return
+        self.session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": _NUMBER_LOCK_KEY},
+        )
+
+    def _propose_document_number(self, source_number: str | None) -> str:
+        parsed = _parse_new_document_number(source_number)
+        if parsed is not None:
+            day, sequence, _letter = parsed
+            return self._next_family_number(day, sequence)
+        return self._next_original_number()
+
+    def _next_original_number(self) -> str:
+        day = datetime.now(JST).strftime("%Y%m%d")
+        max_sequence = 0
+        for number in self._numbers_starting(f"OR-{day}-"):
+            parsed = _parse_new_document_number(number)
+            if parsed is None or parsed[0] != day:
+                continue
+            max_sequence = max(max_sequence, parsed[1])
+        if max_sequence >= _MAX_DAILY_SEQUENCE:
+            raise OrderRequestError(409, _SEQUENCE_EXHAUSTED)
+        return f"OR-{day}-{max_sequence + 1:03d}A"
+
+    def _next_family_number(self, day: str, sequence: int) -> str:
+        stem = f"OR-{day}-{sequence:03d}"
+        letters: list[str] = []
+        for number in self._numbers_starting(stem):
+            parsed = _parse_new_document_number(number)
+            if parsed is None or parsed[0] != day or parsed[1] != sequence:
+                continue
+            letters.append(parsed[2])
+        if not letters:
+            raise OrderRequestError(409, "変更元の文書番号が見つかりません")
+        last = max(letters)
+        if last == "Z":
+            raise OrderRequestError(409, _LETTER_EXHAUSTED)
+        return f"{stem}{chr(ord(last) + 1)}"
+
+    def _numbers_starting(self, prefix: str) -> list[str]:
+        rows = (
+            self.session.query(OrderRequestDocument.document_number)
+            .filter(OrderRequestDocument.document_number.startswith(prefix))
+            .all()
+        )
+        return [row[0] for row in rows]

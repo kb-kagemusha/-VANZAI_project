@@ -1,5 +1,6 @@
 """発注依頼書の保存・確定・履歴。LINE送信は未接続。"""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -7,7 +8,7 @@ from src.api.jwt_auth import create_access_token, create_user_with_hashed_passwo
 from src.models.base import generate_ulid
 from src.models.enums import UserRole
 from src.models.master import Worker
-from src.models.order_request import OrderRequestDelivery, OrderRequestVersion
+from src.models.order_request import OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion
 from src.services.document_storage import DocumentStorage
 
 
@@ -314,7 +315,8 @@ def test_change_creates_a_new_document_from_a_sent_request(api_client, db_sessio
     assert changed.status_code == 200, changed.text
     draft = changed.json()
     assert draft["status"] == "draft"
-    assert draft["document_number"] != source_number
+    assert draft["document_number"] == f"{source_number[:-1]}B"
+    assert source_number.endswith("A")
     assert draft["version_no"] == 1
     assert draft["revision_of_version_id"] == source_id
     assert draft["revision_reason"] == "変更を作成"
@@ -903,6 +905,195 @@ def test_admin_hides_an_order_request_from_the_list(api_client, db_session, ops_
     assert deleted.json()["total"] == 1
     assert deleted.json()["items"][0]["document_number"] == document_number
     assert deleted.json()["items"][0]["deleted_by_name"]
+
+
+def _today_stamp() -> str:
+    return datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
+
+
+def _seed_document(db_session, user, number: str) -> str:
+    document = OrderRequestDocument(
+        id=generate_ulid(),
+        document_number=number,
+        kind="formal",
+        created_by_user_id=user.id,
+    )
+    version = OrderRequestVersion(
+        id=generate_ulid(),
+        document_id=document.id,
+        version_no=1,
+        status="confirmed",
+        work_date_label="2026-01-01",
+        site_name="既存現場",
+        request_conditions="9時集合",
+        body="通常稼働",
+        contact_name="依頼担当",
+        contact_desk="03-0000-0000",
+        created_by_user_id=user.id,
+        follow_up_due_on=date(2026, 10, 20),
+    )
+    db_session.add(document)
+    db_session.add(version)
+    db_session.commit()
+    return version.id
+
+
+def test_document_numbers_use_daily_sequence_and_revision_letters(api_client, db_session, ops_user, pdf_root):
+    day = _today_stamp()
+    _seed_document(db_session, ops_user, "OR-20260101-007A")
+    past_b = _seed_document(db_session, ops_user, "OR-20260101-007B")
+    worker = _worker(db_session, "稼働者A")
+
+    first = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["document_number"] == f"OR-{day}-001A"
+
+    second = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="二件目"),
+        headers=_auth(ops_user.username),
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["document_number"] == f"OR-{day}-002A"
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=first.json()["id"]),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["document_number"] == f"OR-{day}-001B"
+    assert changed.json()["based_on_document_number"] == f"OR-{day}-001A"
+
+    changed_again = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=first.json()["id"]),
+        headers=_auth(ops_user.username),
+    )
+    assert changed_again.status_code == 200, changed_again.text
+    assert changed_again.json()["document_number"] == f"OR-{day}-001C"
+
+    third = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="三件目"),
+        headers=_auth(ops_user.username),
+    )
+    assert third.status_code == 200, third.text
+    assert third.json()["document_number"] == f"OR-{day}-003A"
+
+    kept = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=past_b),
+        headers=_auth(ops_user.username),
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["document_number"] == "OR-20260101-007C"
+    assert kept.json()["based_on_document_number"] == "OR-20260101-007B"
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
+    numbers = {item["document_number"] for item in listed.json()["items"]}
+    assert numbers == {
+        f"OR-{day}-001A",
+        f"OR-{day}-001B",
+        f"OR-{day}-001C",
+        f"OR-{day}-002A",
+        f"OR-{day}-003A",
+        "OR-20260101-007A",
+        "OR-20260101-007B",
+        "OR-20260101-007C",
+    }
+    detail = api_client.get(
+        f"/api/order-requests/versions/{changed_again.json()['id']}",
+        headers=_auth(ops_user.username),
+    )
+    assert detail.json()["document_number"] == f"OR-{day}-001C"
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{first.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["document_number"] == f"OR-{day}-001A"
+
+
+def test_legacy_document_number_stays_and_change_starts_a_new_family(api_client, db_session, ops_user):
+    day = _today_stamp()
+    legacy_number = "OR-20261008-4D0E97"
+    legacy_id = _seed_document(db_session, ops_user, legacy_number)
+    worker = _worker(db_session, "稼働者A")
+
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["document_number"] == f"OR-{day}-001A"
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=legacy_id),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["document_number"] == f"OR-{day}-002A"
+    assert changed.json()["based_on_document_number"] == legacy_number
+
+    stored = (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == legacy_number)
+        .one()
+    )
+    assert stored.document_number == legacy_number
+
+
+def test_document_number_stops_at_z_and_at_999(api_client, db_session, ops_user):
+    day = _today_stamp()
+    zee = _seed_document(db_session, ops_user, "OR-20260101-004Z")
+    full = _seed_document(db_session, ops_user, f"OR-{day}-999A")
+    worker = _worker(db_session, "稼働者A")
+
+    past_z = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=zee),
+        headers=_auth(ops_user.username),
+    )
+    assert past_z.status_code == 409
+    assert "Z" in past_z.json()["detail"]
+    assert (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == "OR-20260101-004Z")
+        .count()
+        == 1
+    )
+    assert db_session.query(OrderRequestDocument).count() == 2
+
+    past_999 = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert past_999.status_code == 409
+    assert "999" in past_999.json()["detail"]
+    assert db_session.query(OrderRequestDocument).count() == 2
+
+    revised = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=full),
+        headers=_auth(ops_user.username),
+    )
+    assert revised.status_code == 200, revised.text
+    assert revised.json()["document_number"] == f"OR-{day}-999B"
+    assert (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == f"OR-{day}-999A")
+        .count()
+        == 1
+    )
 
 
 def test_changed_field_captions_marks_only_differences():
