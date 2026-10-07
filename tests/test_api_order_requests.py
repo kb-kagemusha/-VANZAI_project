@@ -118,6 +118,54 @@ def test_confirm_creates_one_pdf_and_delivery_rows(api_client, db_session, ops_u
     assert "attachment" in pdf.headers["content-disposition"]
 
 
+def test_draft_pdf_preview_keeps_the_draft(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    version_id = created.json()["id"]
+
+    preview = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf-preview",
+        headers=_auth(ops_user.username),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.content.startswith(b"%PDF")
+    assert preview.headers["content-type"].startswith("application/pdf")
+    assert "inline" in preview.headers["content-disposition"]
+
+    stored = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    )
+    assert stored.status_code == 200
+    assert stored.json()["status"] == "draft"
+    assert stored.json()["has_pdf"] is False
+    assert stored.json()["deliveries"] == []
+
+
+def test_confirmed_pdf_preview_is_rejected(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    version_id = created.json()["id"]
+    assert api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    ).status_code == 200
+    preview = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf-preview",
+        headers=_auth(ops_user.username),
+    )
+    assert preview.status_code == 409
+
+
 def test_confirm_without_business_desk(api_client, db_session, ops_user, pdf_root, monkeypatch):
     monkeypatch.delenv("LINE_CHANNEL_ID", raising=False)
     monkeypatch.delenv("LINE_CHANNEL_SECRET", raising=False)

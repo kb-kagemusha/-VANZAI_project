@@ -525,6 +525,31 @@ class OrderRequestService:
         self.session.flush()
         return delivery
 
+    def render_draft_preview(self, version: OrderRequestVersion) -> bytes:
+        if version.status != STATUS_DRAFT:
+            raise OrderRequestError(409, "下書きだけを画面で確認できます")
+        document = self._document(version)
+        worker_ids = [worker_id for worker_id in (version.draft_worker_ids or []) if worker_id]
+        names: list[str] = []
+        if worker_ids:
+            workers = self._load_workers(worker_ids)
+            names = [workers[worker_id].name for worker_id in worker_ids]
+        return render_order_request_pdf(
+            document_number=document.document_number,
+            version_no=version.version_no,
+            kind=document.kind,
+            work_date_label=version.work_date_label,
+            site_name=version.site_name,
+            site_address=version.site_address,
+            request_conditions=version.request_conditions or "",
+            body=version.body or "",
+            contact_name=version.contact_name,
+            contact_desk=version.contact_desk,
+            counterparty_note=version.counterparty_note,
+            worker_names=names,
+            created_at=version.created_at,
+        )
+
     def read_pdf(self, version: OrderRequestVersion) -> bytes:
         if not version.pdf_object_key:
             raise OrderRequestError(404, "確定済みのPDFがありません")

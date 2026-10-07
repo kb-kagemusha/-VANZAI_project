@@ -1563,6 +1563,23 @@ export function downloadOrderRequestPdf(versionId: string, fallbackFileName: str
   );
 }
 
+export async function fetchOrderRequestPdfPreview(versionId: string): Promise<Blob> {
+  const response = await fetchAuthorized(
+    buildUrl(`/api/order-requests/versions/${versionId}/pdf-preview`),
+  );
+  if (!response.ok) {
+    const payload = await readResponse(response);
+    const message =
+      typeof payload === "object" && payload !== null && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "object" && payload !== null && "detail" in payload
+          ? String(payload.detail)
+          : response.statusText;
+    throw new ApiError(response.status, message || "PDFを表示できませんでした", payload);
+  }
+  return response.blob();
+}
+
 export function listOrderRequestReplies() {
   return apiFetch<OrderRequestReplyList>("/api/order-requests/replies");
 }

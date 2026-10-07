@@ -16,8 +16,10 @@ import {
   confirmOrderRequest,
   createOrderRequest,
   downloadOrderRequestPdf,
+  fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
   getWorkers,
+  listLineLinks,
   listOrderRequestReplies,
   listOrderRequests,
   revokeOrderRequestView,
@@ -138,6 +140,12 @@ export function OrderRequestsPage() {
   const [linePreviewOpen, setLinePreviewOpen] = useState(false);
   const linePreviewOpenRef = useRef(linePreviewOpen);
   linePreviewOpenRef.current = linePreviewOpen;
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
+  const [pdfReview, setPdfReview] = useState<{ phase: "loading" | "ready"; versionId: string | null; url: string | null } | null>(null);
+  const [pdfReviewError, setPdfReviewError] = useState("");
+  const [pdfSending, setPdfSending] = useState(false);
+  const pdfReviewRef = useRef(false);
+  pdfReviewRef.current = pdfReview !== null;
   const [sendingSelected, setSendingSelected] = useState(false);
   const [basedOn, setBasedOn] = useState<{ versionId: string; documentNumber: string; versionNo: number } | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
@@ -239,7 +247,7 @@ export function OrderRequestsPage() {
       draftRef.current?.focus();
     });
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape" || linePreviewOpenRef.current) return;
+      if (event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
       setCreating(false);
       setActionError("");
     }
@@ -294,6 +302,7 @@ export function OrderRequestsPage() {
     setActionMessage("");
     setReason("");
     setNote("");
+    setSavedDraftId(null);
   }
 
   function startNewDraft() {
@@ -307,6 +316,7 @@ export function OrderRequestsPage() {
     setActionMessage("");
     setReason("");
     setNote("");
+    setSavedDraftId(null);
   }
 
   function closeCreateModal() {
@@ -325,6 +335,7 @@ export function OrderRequestsPage() {
         : version.draft_worker_ids;
       setCreating(true);
       setSelectedId(null);
+      setSavedDraftId(null);
       setBasedOn({
         versionId: version.id,
         documentNumber: version.document_number,
@@ -482,6 +493,124 @@ export function OrderRequestsPage() {
       setActionMessage(`${targets.length - failed.length}人へ送信しました。`);
     } else {
       setActionMessage(`${targets.length}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
+    }
+  }
+
+  function missingSendFields(): string[] {
+    const missing: string[] = [];
+    if (!sections.projectName.trim()) missing.push("案件名");
+    if (!form.work_date_label.trim()) missing.push("稼働日");
+    if (!form.site_name.trim()) missing.push("稼働場所");
+    if (!form.contact_name.trim()) missing.push("担当者");
+    if (!form.follow_up_due_on) missing.push("期限の案内");
+    if (form.worker_ids.length === 0) missing.push("送付先");
+    if (form.worker_ids.length > 30) missing.push("送付先は30人まで");
+    return missing;
+  }
+
+  async function persistCurrentDraft() {
+    const payload = draftPayload();
+    const existingId = savedDraftId ?? (!creating && detail ? detail.id : null);
+    if (existingId) return updateOrderRequestVersion(existingId, payload);
+    return createOrderRequest(
+      basedOn ? { ...payload, based_on_version_id: basedOn.versionId } : payload,
+    );
+  }
+
+  function dismissPdfReview(nextSelectedId: string | null) {
+    setPdfReview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    setPdfReviewError("");
+    setCreating(false);
+    setBasedOn(null);
+    setSavedDraftId(null);
+    setSelectedId(nextSelectedId);
+  }
+
+  async function openPdfReview() {
+    const missing = missingSendFields();
+    if (missing.length > 0) {
+      setActionError(`送付前に入力してください: ${missing.join("、")}`);
+      return;
+    }
+    setActionError("");
+    setPdfReviewError("");
+    setPdfReview({ phase: "loading", versionId: null, url: null });
+    try {
+      const saved = await persistCurrentDraft();
+      setSavedDraftId(saved.id);
+      const blob = await fetchOrderRequestPdfPreview(saved.id);
+      const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
+      const url = URL.createObjectURL(pdfBlob);
+      setPdfReview({ phase: "ready", versionId: saved.id, url });
+      await refresh();
+    } catch (error) {
+      setPdfReview(null);
+      setActionError(messageOf(error));
+    }
+  }
+
+  async function saveDraftAndCloseReview() {
+    if (!pdfReview?.versionId) return;
+    setPdfSending(true);
+    setPdfReviewError("");
+    try {
+      await persistCurrentDraft();
+      dismissPdfReview(null);
+      setActionMessage("下書きを保存しました。確定するまで送付は始まりません。");
+      await refresh();
+    } catch (error) {
+      setPdfReviewError(messageOf(error));
+    } finally {
+      setPdfSending(false);
+    }
+  }
+
+  async function sendReviewedOrder() {
+    if (!pdfReview?.versionId) return;
+    setPdfSending(true);
+    setPdfReviewError("");
+    try {
+      const links = await listLineLinks();
+      if (!links.line_send_available) {
+        setPdfReviewError("送信には、サーバーへのチャネル設定がまだ必要です。");
+        return;
+      }
+      const linked = new Set(links.items.map((item) => item.worker_id));
+      if (!form.worker_ids.some((id) => linked.has(id))) {
+        setPdfReviewError("選んだ送付先に、公式LINEと紐付いた人がいません。稼働者登録・一覧で本人紐付けを確認してください。");
+        return;
+      }
+      const confirmed = await confirmOrderRequest(pdfReview.versionId);
+      const targets = confirmed.deliveries.filter((row) => (
+        row.line_linked && !row.view_revoked && row.ack_status === "unacked"
+      ));
+      const failed: string[] = [];
+      for (const row of targets) {
+        try {
+          await sendOrderRequestLine(row.id);
+        } catch (error) {
+          failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
+        }
+      }
+      const sentCount = targets.length - failed.length;
+      dismissPdfReview(confirmed.id);
+      if (targets.length === 0) {
+        setActionError("送れる紐付け済みの送付先がありません。稼働者登録・一覧で本人紐付けを確認してください。");
+      } else if (failed.length > 0) {
+        setActionError(failed.join(" / "));
+        if (sentCount > 0) setActionMessage(`${sentCount}人へ送信しました。`);
+      } else {
+        setActionMessage(`${sentCount}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
+      }
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["order-request", confirmed.id] });
+    } catch (error) {
+      setPdfReviewError(messageOf(error));
+    } finally {
+      setPdfSending(false);
     }
   }
 
@@ -1235,8 +1364,20 @@ export function OrderRequestsPage() {
                   </button>
                 ) : null}
                 {editable ? (
-                  <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
+                  <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending || pdfReview?.phase === "loading"}>
                     下書きを保存
+                  </button>
+                ) : null}
+                {editable ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={saveMutation.isPending || pdfReview?.phase === "loading"}
+                    onClick={() => {
+                      void openPdfReview();
+                    }}
+                  >
+                    {pdfReview?.phase === "loading" ? "PDFを作成しています" : "PDFを確認して送付する"}
                   </button>
                 ) : null}
                 {detail?.status === "draft" ? (
@@ -1264,6 +1405,48 @@ export function OrderRequestsPage() {
         </form>
         </div>
       )}
+
+      {pdfReview ? (
+        <div className="order-pdf-review" role="dialog" aria-modal="true" aria-labelledby="order-pdf-review-title">
+          <div className="order-pdf-review-sheet">
+            <header className="order-pdf-review-head">
+              <h3 id="order-pdf-review-title">発注依頼書のPDF</h3>
+            </header>
+            <div className="order-pdf-review-frame">
+              {pdfReview.phase === "ready" && pdfReview.url ? (
+                <iframe title="発注依頼書のPDF" src={pdfReview.url} />
+              ) : (
+                <p className="order-pdf-review-wait">PDFを作成しています</p>
+              )}
+            </div>
+            {pdfReviewError ? <ErrorState title="送付できませんでした" description={pdfReviewError} /> : null}
+            {pdfReview.phase === "ready" ? (
+              <footer className="order-pdf-review-foot">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={pdfSending}
+                  onClick={() => {
+                    void saveDraftAndCloseReview();
+                  }}
+                >
+                  下書きを保存して閉じる
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={pdfSending}
+                  onClick={() => {
+                    void sendReviewedOrder();
+                  }}
+                >
+                  {pdfSending ? "送付しています" : "この情報で送付する"}
+                </button>
+              </footer>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {linePreviewOpen ? (
         <div className="order-line-backdrop" onClick={() => setLinePreviewOpen(false)}>

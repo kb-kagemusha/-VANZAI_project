@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -661,6 +662,32 @@ def revoke_order_request_view(
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)
     return _version_out(db, document, version)
+
+
+@router.get("/versions/{version_id}/pdf-preview")
+def preview_order_request_pdf(
+    version_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    service = _service(db)
+    try:
+        version = service.get_version(version_id)
+        payload = service.render_draft_preview(version)
+    except OrderRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    filename = order_request_pdf_filename(
+        work_date_label=version.work_date_label,
+        project_name=project_name_from_document(version.request_conditions, version.body),
+    )
+    return Response(
+        content=payload,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"order-request.pdf\"; filename*=UTF-8''{quote(filename)}",
+        },
+    )
 
 
 @router.get("/versions/{version_id}/pdf")
