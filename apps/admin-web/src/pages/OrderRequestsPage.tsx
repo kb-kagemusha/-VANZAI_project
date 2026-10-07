@@ -237,7 +237,7 @@ export function OrderRequestsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [linePreviewOpen]);
 
-  const createModal = creating && !basedOn;
+  const createModal = creating;
 
   useEffect(() => {
     if (!createModal) return;
@@ -249,6 +249,7 @@ export function OrderRequestsPage() {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
       setCreating(false);
+      setBasedOn(null);
       setActionError("");
     }
     window.addEventListener("keydown", onKey);
@@ -326,6 +327,7 @@ export function OrderRequestsPage() {
 
   function closeCreateModal() {
     setCreating(false);
+    setBasedOn(null);
     setActionError("");
   }
 
@@ -355,7 +357,6 @@ export function OrderRequestsPage() {
       setSections(sectionsFromStored(version.request_conditions, version.body));
       setReason("");
       setNote("");
-      window.setTimeout(() => draftRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (error) {
       setActionError(messageOf(error));
     } finally {
