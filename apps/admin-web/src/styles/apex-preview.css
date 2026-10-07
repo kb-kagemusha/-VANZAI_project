@@ -99,6 +99,7 @@
 .apex-preview__brand {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   min-height: 64px;
   padding: 12px 16px;
@@ -115,6 +116,37 @@
   margin: 0;
   color: #a3aab8;
   font-size: 12px;
+}
+
+.apex-preview__version-update {
+  flex-basis: 100%;
+  margin-top: 0;
+  padding: 2px 8px;
+  border: 1px solid #4ade80;
+  border-radius: 999px;
+  background: transparent;
+  color: #4ade80;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.apex-preview.is-collapsed .apex-preview__version-update {
+  flex-basis: auto;
+  width: 36px;
+  padding: 2px 0;
+  overflow: hidden;
+  font-size: 0;
+}
+
+.apex-preview.is-collapsed .apex-preview__version-update::after {
+  content: "更新";
+  font-size: 11px;
+}
+
+.apex-preview__brand-copy {
+  display: grid;
+  justify-items: start;
 }
 
 .apex-preview__sidebar-tools {

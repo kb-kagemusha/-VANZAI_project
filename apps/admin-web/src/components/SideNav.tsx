@@ -64,7 +64,7 @@ type SideNavProps = {
 
 export function SideNav({ collapsed, onToggleCollapsed, onEditProfile }: SideNavProps) {
   const { user, logout } = useAuth();
-  const { currentVersion } = useAppVersion();
+  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const [menuOpen, setMenuOpen] = useState(false);
   const userRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -107,6 +107,11 @@ export function SideNav({ collapsed, onToggleCollapsed, onEditProfile }: SideNav
               <h2>VANZAI</h2>
               <p className="side-nav-version">ver.{currentVersion}</p>
             </div>
+          ) : null}
+          {hasUpdate ? (
+            <button type="button" className="side-nav-version-update" onClick={refreshNow} aria-label="新しい版を反映">
+              {collapsed ? "更新" : "新しい版を反映"}
+            </button>
           ) : null}
         </div>
         <div className="side-nav-toggle-bar">

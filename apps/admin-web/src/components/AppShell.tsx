@@ -5,7 +5,6 @@ import { SideNav } from "./SideNav";
 import { useAuth } from "../lib/auth/auth-context";
 import { canAccess } from "../lib/auth/permissions";
 import { updateProfile, ApiError } from "../lib/api/client";
-import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 const NAV_COLLAPSED_KEY = "vanzai.admin.navCollapsed";
 
@@ -25,7 +24,6 @@ export function AppShell() {
   const [urlCopyMessage, setUrlCopyMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
-  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const canCheckRegistrationUrls = canAccess(user?.role, ["admin", "ops", "accounting"]);
   const registrationFormUrls = REGISTRATION_FORM_DEFINITIONS.map((item) => ({
     ...item,
@@ -86,14 +84,6 @@ export function AppShell() {
           <div className="topbar-heading">
             <div className="topbar-kicker">
               <p className="eyebrow">VANZAI 管理画面</p>
-              <div className="topbar-version">
-                <span className="topbar-version-label">Ver.{currentVersion}</span>
-                {hasUpdate && (
-                  <button type="button" className="topbar-version-update" onClick={refreshNow}>
-                    新しい版を反映
-                  </button>
-                )}
-              </div>
             </div>
             <h1 className="topbar-title">案件・シフト・実績 一元管理</h1>
           </div>

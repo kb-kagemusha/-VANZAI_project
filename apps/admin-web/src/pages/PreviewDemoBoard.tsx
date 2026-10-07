@@ -441,6 +441,7 @@ export function PreviewDemoBoard() {
             <p className="apex-preview__subtitle">月間の到達状況</p>
             <GoalBar label="月間案件数" current={48} target={55} unit="件" color="#16a34a" />
             <GoalBar label="新規契約（稼働者）" current={12} target={20} unit="人" color="#2563eb" />
+            <GoalBar label="販売台数" current={86} target={120} unit="台" color="#d97706" />
           </article>
         </div>
       </section>

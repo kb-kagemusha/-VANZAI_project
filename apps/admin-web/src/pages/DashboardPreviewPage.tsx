@@ -122,7 +122,7 @@ function setInert(element: HTMLElement | null, inert: boolean) {
 
 export function DashboardPreviewPage() {
   const { user, logout } = useAuth();
-  const { currentVersion } = useAppVersion();
+  const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const location = useLocation();
   const isNarrow = useMatchMedia(NARROW_QUERY);
   const [collapsed, setCollapsed] = useState(false);
@@ -270,6 +270,11 @@ export function DashboardPreviewPage() {
             <p className="apex-preview__brand-name">VANZAI</p>
             <p className="apex-preview__brand-meta">Ver.{currentVersion}</p>
           </div>
+          {hasUpdate ? (
+            <button type="button" className="apex-preview__version-update" onClick={refreshNow}>
+              新しい版を反映
+            </button>
+          ) : null}
         </div>
         <div className="apex-preview__sidebar-tools">
           {isNarrow ? (
