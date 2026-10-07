@@ -21,6 +21,7 @@ import {
   Receipt,
   ScanLine,
   ScrollText,
+  Settings,
   ShieldCheck,
   Sun,
   Tag,
@@ -48,6 +49,8 @@ import {
 } from "./dashboardPreviewModel";
 import type { DashboardClosingStatus, DashboardUnprocessedItem, DashboardVarianceAlert } from "../types/api";
 import { PreviewDemoBoard } from "./PreviewDemoBoard";
+import { PreviewProfile } from "./PreviewProfile";
+import { readSealColor, SEAL_KEY } from "./previewSeal";
 import "../styles/apex-preview.css";
 
 const THEME_KEY = "vanzai.preview.theme";
@@ -127,11 +130,14 @@ export function DashboardPreviewPage() {
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [showBilling, setShowBilling] = useState(false);
   const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(THEME_KEY) === "dark");
+  const [sealColor, setSealColor] = useState(readSealColor);
+  const [accountOpen, setAccountOpen] = useState(false);
   const periodKey = toPeriodKey(monthValue);
   const sidebarRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
   const drawerWasOpen = useRef(false);
   const sidebarId = useId();
   const sidebarTitleId = useId();
@@ -149,6 +155,8 @@ export function DashboardPreviewPage() {
     items: visibleItems.filter((item) => navGroupFor(item.to) === group),
   })).filter((section) => section.items.length > 0);
   const displayedName = user?.display_name || user?.username || "";
+  const initial = displayedName.slice(0, 1) || "V";
+  const showProfile = location.pathname.startsWith("/dashboard/preview/profile");
   const rootClass = [
     "apex-preview",
     !isNarrow && collapsed ? "is-collapsed" : "",
@@ -162,6 +170,22 @@ export function DashboardPreviewPage() {
       setDrawerOpen(false);
     }
   }, [isNarrow]);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [accountOpen]);
 
   useEffect(() => {
     setInert(mainRef.current, isNarrow && drawerOpen);
@@ -244,7 +268,7 @@ export function DashboardPreviewPage() {
           <BrandMark size={36} />
           <div className="apex-preview__brand-copy">
             <p className="apex-preview__brand-name">VANZAI</p>
-            <p className="apex-preview__brand-meta">管理画面</p>
+            <p className="apex-preview__brand-meta">Ver.{currentVersion}</p>
           </div>
         </div>
         <div className="apex-preview__sidebar-tools">
@@ -289,14 +313,14 @@ export function DashboardPreviewPage() {
             </div>
           ))}
         </nav>
-        <div className="apex-preview__user">
-          <span className="apex-preview__avatar" aria-hidden="true">{displayedName.slice(0, 1) || "V"}</span>
+        <Link to="/dashboard/preview/profile" className="apex-preview__user" aria-current={showProfile ? "page" : undefined}>
+          <span className="apex-preview__avatar" style={{ background: sealColor }} aria-hidden="true">{initial}</span>
           <div className="apex-preview__user-copy">
             <p className="apex-preview__user-name">{displayedName}</p>
             <p className="apex-preview__user-role">{formatRole(user?.role)}</p>
           </div>
           <span className="apex-preview__tooltip" aria-hidden="true">{displayedName}</span>
-        </div>
+        </Link>
       </aside>
       <div ref={mainRef} className="apex-preview__main">
         <header className="apex-preview__header">
@@ -311,19 +335,14 @@ export function DashboardPreviewPage() {
             <Menu size={18} aria-hidden="true" />
             <span className="apex-preview__sr">メニュー</span>
           </button>
-          <label className="apex-preview__month">
-            対象月
-            <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
-          </label>
+          {showProfile ? null : (
+            <label className="apex-preview__month">
+              対象月
+              <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
+            </label>
+          )}
           <div className="apex-preview__header-actions">
-            <span className="apex-preview__version">Ver.{currentVersion}</span>
             <Link className="apex-preview__header-link" to="/dashboard">現行のダッシュボード</Link>
-            <Link className="apex-preview__header-link" to="/account/change-password">パスワード変更</Link>
-            <button type="button" className="apex-preview__logout" onClick={logout}>
-              <LogOut size={16} aria-hidden="true" />
-              ログアウト
-            </button>
-            <span className="apex-preview__identity">{displayedName} / {formatRole(user?.role)}</span>
             <button
               type="button"
               className="apex-preview__theme"
@@ -339,38 +358,76 @@ export function DashboardPreviewPage() {
               {darkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
               {darkMode ? "ライト" : "ダーク"}
             </button>
+            <div className="apex-preview__account" ref={accountRef}>
+              <button
+                type="button"
+                className="apex-preview__account-button"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-label={`${displayedName || "ユーザー"}のメニュー`}
+                onClick={() => setAccountOpen((current) => !current)}
+              >
+                <span className="apex-preview__avatar" style={{ background: sealColor }} aria-hidden="true">{initial}</span>
+              </button>
+              {accountOpen ? (
+                <div className="apex-preview__account-menu" role="menu">
+                  <Link role="menuitem" to="/dashboard/preview/profile" onClick={() => setAccountOpen(false)}>
+                    <Settings size={16} aria-hidden="true" />
+                    設定
+                  </Link>
+                  <button type="button" role="menuitem" onClick={logout}>
+                    <LogOut size={16} aria-hidden="true" />
+                    ログアウト
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
         <div className="apex-preview__content">
-          <div className="apex-preview__heading-block">
-            <div className="apex-preview__title-row">
-              <h1 className="apex-preview__title">見た目プレビュー</h1>
-              <button
-                type="button"
-                className={showBilling ? "apex-preview__billing is-active" : "apex-preview__billing"}
-                aria-pressed={showBilling}
-                onClick={() => setShowBilling((current) => !current)}
-              >
-                請求
-              </button>
-            </div>
-            <p className="apex-preview__lead">
-              {showBilling ? "上段は選択月で優先して処理する残件" : "通常は概況のグラフです。請求を開くと、今の件数と締めを表示します。"}
-            </p>
-            <p className="apex-preview__note">締めと月次生成は現行のダッシュボードで行います。</p>
-          </div>
-          {showBilling ? (
-            <PreviewBody
-              periodKey={periodKey}
-              isLoading={!dashboardQuery.isSuccess && !dashboardQuery.isError}
-              isError={dashboardQuery.isError}
-              errorMessage={dashboardQuery.error instanceof ApiError ? dashboardQuery.error.message : "ダッシュボードを取得できませんでした。"}
-              items={dashboardQuery.isSuccess ? dashboardQuery.data.unprocessed_items : null}
-              closingRows={dashboardQuery.isSuccess ? dashboardQuery.data.closing_status : null}
-              varianceAlerts={dashboardQuery.isSuccess ? dashboardQuery.data.variance_alerts : null}
+          {showProfile ? (
+            <PreviewProfile
+              user={user}
+              displayedName={displayedName}
+              sealColor={sealColor}
+              onSealColor={(color) => {
+                setSealColor(color);
+                window.localStorage.setItem(SEAL_KEY, color);
+              }}
             />
           ) : (
-            <PreviewDemoBoard />
+            <>
+              <div className="apex-preview__heading-block">
+                <div className="apex-preview__title-row">
+                  <h1 className="apex-preview__title">見た目プレビュー</h1>
+                  <button
+                    type="button"
+                    className={showBilling ? "apex-preview__billing is-active" : "apex-preview__billing"}
+                    aria-pressed={showBilling}
+                    onClick={() => setShowBilling((current) => !current)}
+                  >
+                    請求
+                  </button>
+                </div>
+                <p className="apex-preview__lead">
+                  {showBilling ? "上段は選択月で優先して処理する残件" : "通常は概況のグラフです。請求を開くと、今の件数と締めを表示します。"}
+                </p>
+                <p className="apex-preview__note">締めと月次生成は現行のダッシュボードで行います。</p>
+              </div>
+              {showBilling ? (
+                <PreviewBody
+                  periodKey={periodKey}
+                  isLoading={!dashboardQuery.isSuccess && !dashboardQuery.isError}
+                  isError={dashboardQuery.isError}
+                  errorMessage={dashboardQuery.error instanceof ApiError ? dashboardQuery.error.message : "ダッシュボードを取得できませんでした。"}
+                  items={dashboardQuery.isSuccess ? dashboardQuery.data.unprocessed_items : null}
+                  closingRows={dashboardQuery.isSuccess ? dashboardQuery.data.closing_status : null}
+                  varianceAlerts={dashboardQuery.isSuccess ? dashboardQuery.data.variance_alerts : null}
+                />
+              ) : (
+                <PreviewDemoBoard />
+              )}
+            </>
           )}
         </div>
       </div>

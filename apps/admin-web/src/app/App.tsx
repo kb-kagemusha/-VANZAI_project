@@ -47,6 +47,14 @@ export function App() {
             </PermissionRoute>
           }
         />
+        <Route
+          path="/dashboard/preview/profile"
+          element={
+            <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
+              <DashboardPreviewPage />
+            </PermissionRoute>
+          }
+        />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route

@@ -305,11 +305,24 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #1c2b22;
-  color: var(--apex-green-soft);
+  background: #22c55e;
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+a.apex-preview__user {
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.apex-preview__user:hover,
+.apex-preview__user:focus-visible,
+.apex-preview__user[aria-current="page"] {
+  background: #1c2b22;
+  outline: none;
 }
 
 .apex-preview__user-name {
@@ -364,6 +377,58 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-left: auto;
+}
+
+.apex-preview__account {
+  position: relative;
+}
+
+.apex-preview__account-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.apex-preview__account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--apex-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+}
+
+.apex-preview__account-menu a,
+.apex-preview__account-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--apex-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.apex-preview__account-menu a:hover,
+.apex-preview__account-menu a:focus-visible,
+.apex-preview__account-menu button:hover,
+.apex-preview__account-menu button:focus-visible {
+  background: #f4f6f8;
+  outline: none;
 }
 
 .apex-preview__header-link,
@@ -661,6 +726,132 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.apex-preview__profile {
+  display: grid;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.apex-preview__profile-hero {
+  padding: 0 0 20px;
+  overflow: hidden;
+}
+
+.apex-preview__cover {
+  height: 96px;
+  background: linear-gradient(120deg, #16a34a, #86efac);
+}
+
+.apex-preview__avatar.is-large {
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 20px;
+  border: 4px solid #fff;
+  font-size: 28px;
+}
+
+.apex-preview__profile-name {
+  margin: 12px 20px 0;
+  font-size: 22px;
+}
+
+.apex-preview__profile-hero .apex-preview__subtitle,
+.apex-preview__profile-bio,
+.apex-preview__profile-facts,
+.apex-preview__profile-stats {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.apex-preview__profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.apex-preview__profile-stats div {
+  display: grid;
+  gap: 2px;
+}
+
+.apex-preview__profile-stats dt {
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__profile-stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.apex-preview__profile-bio {
+  margin-top: 16px;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__profile-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin-top: 16px;
+}
+
+.apex-preview__profile-facts dt {
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__profile-facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.apex-preview__seal-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.apex-preview__seal-choice {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--apex-line);
+}
+
+.apex-preview__seal-choice.is-active {
+  box-shadow: 0 0 0 2px var(--apex-ink);
+}
+
+.apex-preview__password {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+  margin-top: 16px;
+}
+
+.apex-preview__field {
+  display: grid;
+  gap: 6px;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--apex-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--apex-ink);
 }
 
 .apex-preview__demo {
@@ -1074,6 +1265,8 @@
   background: #0f1218;
 }
 
+.apex-preview.is-dark .apex-preview__account-menu,
+.apex-preview.is-dark .apex-preview__field input,
 .apex-preview.is-dark .apex-preview__card,
 .apex-preview.is-dark .apex-preview__header,
 .apex-preview.is-dark .apex-preview__header-link,
@@ -1113,6 +1306,13 @@
 .apex-preview.is-dark .apex-preview__legend button:hover,
 .apex-preview.is-dark .apex-preview__legend button.is-active,
 .apex-preview.is-dark .apex-preview__demo .apex-preview__table tbody tr:hover {
+  background: #222833;
+}
+
+.apex-preview.is-dark .apex-preview__account-menu a:hover,
+.apex-preview.is-dark .apex-preview__account-menu a:focus-visible,
+.apex-preview.is-dark .apex-preview__account-menu button:hover,
+.apex-preview.is-dark .apex-preview__account-menu button:focus-visible {
   background: #222833;
 }
 
