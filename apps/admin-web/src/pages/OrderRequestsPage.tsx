@@ -268,7 +268,7 @@ export function OrderRequestsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [linePreviewOpen]);
 
-  const createModal = creating;
+  const createModal = creating || Boolean(selectedId);
 
   useEffect(() => {
     if (!createModal) return;
@@ -281,6 +281,8 @@ export function OrderRequestsPage() {
       if (event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
       setCreating(false);
       setBasedOn(null);
+      setSelectedId(null);
+      setSavedDraftId(null);
       setActionError("");
     }
     window.addEventListener("keydown", onKey);
@@ -363,6 +365,8 @@ export function OrderRequestsPage() {
   function closeCreateModal() {
     setCreating(false);
     setBasedOn(null);
+    setSelectedId(null);
+    setSavedDraftId(null);
     setActionError("");
   }
 
@@ -858,15 +862,16 @@ export function OrderRequestsPage() {
 
       {detailQuery.isLoading ? <LoadingOverlay /> : null}
 
-      {(creating || detail) && (
-        <div className={createModal ? "order-create-backdrop" : undefined}>
+      {(creating || selectedId) && (
+        <div className="order-create-backdrop">
+        {creating || detail ? (
         <form
           ref={draftRef}
-          className={createModal ? "order-draft is-modal" : "order-draft"}
-          role={createModal ? "dialog" : undefined}
-          aria-modal={createModal ? true : undefined}
+          className="order-draft is-modal"
+          role="dialog"
+          aria-modal="true"
           aria-labelledby="order-draft-title"
-          tabIndex={createModal ? -1 : undefined}
+          tabIndex={-1}
           onSubmit={(event) => {
             event.preventDefault();
             if (editable) {
@@ -1478,6 +1483,11 @@ export function OrderRequestsPage() {
             </footer>
           ) : null}
         </form>
+        ) : (
+          <div className="order-draft is-modal" role="dialog" aria-busy="true" aria-labelledby="order-draft-title">
+            <p id="order-draft-title" className="order-pdf-review-wait">読み込んでいます</p>
+          </div>
+        )}
         </div>
       )}
 
