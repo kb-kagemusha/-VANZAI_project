@@ -26,11 +26,11 @@ export const DEMO_TYPE_SHARE: DemoSlice[] = [
 ];
 
 export const DEMO_STAFF_ORDERS = [
-  { name: "佐藤 美咲", count: 8 },
-  { name: "鈴木 蓮", count: 6 },
-  { name: "高橋 陽菜", count: 5 },
-  { name: "田中 隼", count: 4 },
-  { name: "伊藤 葵", count: 3 },
+  { name: "佐藤 美咲", count: 8, color: "#16a34a" },
+  { name: "鈴木 蓮", count: 6, color: "#2563eb" },
+  { name: "高橋 陽菜", count: 5, color: "#d97706" },
+  { name: "田中 隼", count: 4, color: "#7c3aed" },
+  { name: "伊藤 葵", count: 3, color: "#0f766e" },
 ];
 
 export const DEMO_EQUIPMENT = [
@@ -47,12 +47,64 @@ export const FINANCE_LABELS = {
   profit: "粗利益",
 } as const;
 
+export const FINANCE_COLORS: Record<keyof typeof FINANCE_LABELS, string> = {
+  sales: "#16a34a",
+  labor: "#2563eb",
+  profit: "#0f766e",
+};
+
 export type FinanceKey = keyof typeof FINANCE_LABELS;
 
 const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
 export function demoMonthLabels(): string[] {
   return MONTHS;
+}
+
+export type ChartPoint = { x: number; y: number; value: number };
+
+export function axisTicks(maxValue: number): number[] {
+  const rough = Math.max(maxValue, 1) / 4;
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough) ?? rough;
+  const ticks: number[] = [];
+  for (let value = 0; value <= maxValue + step * 0.01; value += step) {
+    ticks.push(Math.round(value));
+  }
+  return ticks;
+}
+
+export function plotPoints(
+  values: number[],
+  width: number,
+  height: number,
+  inset: { left: number; right: number; top: number; bottom: number },
+  scale: { min: number; max: number },
+): ChartPoint[] {
+  const span = scale.max - scale.min || 1;
+  return values.map((value, index) => ({
+    value,
+    x: inset.left + (index / Math.max(values.length - 1, 1)) * (width - inset.left - inset.right),
+    y: inset.top + (1 - (value - scale.min) / span) * (height - inset.top - inset.bottom),
+  }));
+}
+
+export function smoothLine(points: ChartPoint[]): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[index - 1] ?? points[index];
+    const current = points[index];
+    const next = points[index + 1];
+    const after = points[index + 2] ?? next;
+    const control1x = current.x + (next.x - previous.x) / 6;
+    const control1y = current.y + (next.y - previous.y) / 6;
+    const control2x = next.x - (after.x - current.x) / 6;
+    const control2y = next.y - (after.y - current.y) / 6;
+    path += ` C ${control1x} ${control1y}, ${control2x} ${control2y}, ${next.x} ${next.y}`;
+  }
+  return path;
 }
 
 export function linePoints(values: number[], width: number, height: number, pad = 8): string {
