@@ -877,7 +877,12 @@ export function OrderRequestsPage() {
           }}
         >
           <header className="order-draft-head">
-            <div>
+            {createModal ? (
+              <button type="button" className="btn btn-ghost order-draft-close" onClick={closeCreateModal}>
+                保存せずに閉じる
+              </button>
+            ) : null}
+            <div className="order-draft-head-lead">
               <p className="order-draft-kicker">
                 {creating
                   ? (basedOn ? `${basedOn.documentNumber} の変更` : "発注依頼書")

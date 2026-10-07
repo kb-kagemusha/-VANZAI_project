@@ -3653,6 +3653,16 @@ button {
     linear-gradient(180deg, rgba(255, 252, 246, 0.4), rgba(255, 247, 235, 0));
 }
 
+.order-draft-head-lead {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-draft-close {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .order-draft-kicker {
   margin: 0 0 0.2rem;
   font-size: 0.75rem;
