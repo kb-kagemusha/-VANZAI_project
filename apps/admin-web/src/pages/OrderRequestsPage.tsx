@@ -503,7 +503,7 @@ export function OrderRequestsPage() {
                     <div className="order-row-actions">
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
+                        className="btn btn-change btn-sm"
                         disabled={changeLoading}
                         onClick={() => startChange(row.version_id)}
                       >
@@ -622,7 +622,7 @@ export function OrderRequestsPage() {
                   <div className="order-row-actions">
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-change btn-sm"
                       disabled={changeLoading}
                       onClick={() => startChange(item.version_id)}
                     >
@@ -708,7 +708,7 @@ export function OrderRequestsPage() {
               {!creating && detail ? (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-change btn-sm"
                   disabled={changeLoading}
                   onClick={() => startChange(detail.id)}
                 >

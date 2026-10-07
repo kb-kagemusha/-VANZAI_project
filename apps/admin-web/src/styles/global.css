@@ -878,6 +878,18 @@ button {
   box-shadow: 0 4px 16px rgba(180, 35, 24, 0.3);
 }
 
+.btn-change {
+  background: linear-gradient(135deg, #1a5278, #2170a3);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(26, 82, 120, 0.24);
+}
+
+.btn-change:hover:not(:disabled) {
+  opacity: 0.92;
+  box-shadow: 0 4px 16px rgba(29, 92, 138, 0.3);
+}
+
 .btn-sm {
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
