@@ -9,6 +9,7 @@
   --line: #e6e8ee;
   --accent: #16a34a;
   --accent-soft: rgba(22, 163, 74, 0.12);
+  --vanzai-seal: #22c55e;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
   --radius-lg: 12px;
   --radius-md: 12px;
@@ -160,10 +161,10 @@ button {
   flex-basis: 100%;
   margin-top: 0;
   padding: 0.2rem 0.55rem;
-  border: 1px solid #4ade80;
+  border: 1px solid var(--vanzai-seal, #22c55e);
   border-radius: 999px;
   background: transparent;
-  color: #4ade80;
+  color: var(--vanzai-seal, #22c55e);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -241,10 +242,11 @@ button {
 }
 
 .nav-link:hover,
+.nav-link:focus-visible,
 .nav-link.active {
   transform: none;
   background: #1c2b22;
-  color: #4ade80;
+  color: var(--vanzai-seal, #22c55e);
 }
 
 .nav-link-label {
@@ -294,7 +296,7 @@ button {
   height: 32px;
   flex-shrink: 0;
   border-radius: 999px;
-  background: #16a34a;
+  background: var(--vanzai-seal, #22c55e);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -416,20 +418,20 @@ button {
 }
 
 .side-nav.is-collapsed .nav-link:hover,
+.side-nav.is-collapsed .nav-link:focus-visible,
 .side-nav.is-collapsed .nav-link.active {
   transform: none;
-}
-
-.side-nav.is-collapsed .nav-link.active {
   background: #1c2b22;
   border-color: transparent;
   box-shadow: none;
-  color: #4ade80;
+  color: var(--vanzai-seal, #22c55e);
 }
 
+.side-nav.is-collapsed .nav-link:hover .nav-link-icon,
+.side-nav.is-collapsed .nav-link:focus-visible .nav-link-icon,
 .side-nav.is-collapsed .nav-link.active .nav-link-icon {
   opacity: 1;
-  color: #4ade80;
+  color: var(--vanzai-seal, #22c55e);
   filter: none;
 }
 
@@ -1067,7 +1069,7 @@ a.primary-button {
   width: 64px;
   height: 64px;
   border-radius: 999px;
-  background: #16a34a;
+  background: var(--vanzai-seal, #22c55e);
   color: #fff;
   font-size: 24px;
   font-weight: 700;
@@ -1104,6 +1106,26 @@ a.primary-button {
   margin: 0;
   color: #16a34a;
   font-weight: 600;
+}
+
+.account-seal-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.account-seal-choice {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px #e6e8ee;
+  cursor: pointer;
+}
+
+.account-seal-choice.is-active {
+  box-shadow: 0 0 0 2px #1d2731;
 }
 
 /* ---- btn ユーティリティ（NoticesPage等で使用） ---- */

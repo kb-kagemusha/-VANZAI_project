@@ -50,7 +50,7 @@ import {
 import type { DashboardClosingStatus, DashboardUnprocessedItem, DashboardVarianceAlert } from "../types/api";
 import { PreviewDemoBoard } from "./PreviewDemoBoard";
 import { PreviewProfile } from "./PreviewProfile";
-import { readSealColor, SEAL_KEY } from "./previewSeal";
+import { useSealColor } from "./previewSeal";
 import "../styles/apex-preview.css";
 
 const THEME_KEY = "vanzai.preview.theme";
@@ -130,7 +130,7 @@ export function DashboardPreviewPage() {
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [showBilling, setShowBilling] = useState(false);
   const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(THEME_KEY) === "dark");
-  const [sealColor, setSealColor] = useState(readSealColor);
+  const [sealColor, setSealColor] = useSealColor();
   const [accountOpen, setAccountOpen] = useState(false);
   const periodKey = toPeriodKey(monthValue);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -395,10 +395,7 @@ export function DashboardPreviewPage() {
               user={user}
               displayedName={displayedName}
               sealColor={sealColor}
-              onSealColor={(color) => {
-                setSealColor(color);
-                window.localStorage.setItem(SEAL_KEY, color);
-              }}
+              onSealColor={setSealColor}
             />
           ) : (
             <>

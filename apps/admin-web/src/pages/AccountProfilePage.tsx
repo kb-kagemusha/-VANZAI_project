@@ -5,12 +5,14 @@ import { PageHeader } from "../components/PageHeader";
 import { ApiError, changePassword, updateProfile } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { formatRole } from "../lib/formatters";
+import { SEAL_COLORS, useSealColor } from "./previewSeal";
 
 export function AccountProfilePage() {
   const { user, logout, refreshUser } = useAuth();
   const displayedName = user?.display_name || user?.username || "";
   const initial = displayedName.slice(0, 1) || "V";
   const isAdmin = user?.role === "admin";
+  const [sealColor, setSealColor] = useSealColor();
 
   const [displayName, setDisplayName] = useState(displayedName);
 
@@ -95,6 +97,25 @@ export function AccountProfilePage() {
               <dd>{user?.username || "未設定"}</dd>
             </div>
           </dl>
+        </div>
+      </article>
+
+      <article className="card">
+        <h2>シールの色</h2>
+        <p className="account-profile-note">丸いシール、選択中のメニュー、「新しい版を反映」に反映します。</p>
+        <div className="account-seal-choices" role="radiogroup" aria-label="シールの色">
+          {SEAL_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              role="radio"
+              aria-checked={sealColor === color}
+              aria-label={color}
+              className={sealColor === color ? "account-seal-choice is-active" : "account-seal-choice"}
+              style={{ background: color }}
+              onClick={() => setSealColor(color)}
+            />
+          ))}
         </div>
       </article>
 

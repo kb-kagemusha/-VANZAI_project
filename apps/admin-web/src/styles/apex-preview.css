@@ -118,17 +118,23 @@
   font-size: 12px;
 }
 
-.apex-preview__version-update {
+button.apex-preview__version-update {
   flex-basis: 100%;
   margin-top: 0;
   padding: 2px 8px;
-  border: 1px solid #4ade80;
+  border: 1px solid var(--vanzai-seal, #22c55e);
   border-radius: 999px;
   background: transparent;
-  color: #4ade80;
+  color: var(--vanzai-seal, #22c55e);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.apex-preview__version-update:hover,
+.apex-preview__version-update:focus-visible {
+  background: #1c2b22;
+  color: var(--vanzai-seal, #22c55e);
 }
 
 .apex-preview.is-collapsed .apex-preview__version-update {
@@ -259,9 +265,11 @@
   flex-shrink: 0;
 }
 
+.apex-preview__nav-link:hover,
+.apex-preview__nav-link:focus-visible,
 .apex-preview__nav-link.is-active {
   background: #1c2b22;
-  color: var(--apex-green-soft);
+  color: var(--vanzai-seal, #22c55e);
 }
 
 .apex-preview__nav-label {
@@ -337,7 +345,7 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #22c55e;
+  background: var(--vanzai-seal, #22c55e);
   color: #fff;
   font-size: 12px;
   font-weight: 700;

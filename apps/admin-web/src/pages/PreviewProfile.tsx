@@ -96,7 +96,7 @@ export function PreviewProfile({
       </article>
       <article className="apex-preview__card">
         <h2 className="apex-preview__section-title">シールの色</h2>
-        <p className="apex-preview__subtitle">サイドバーと右上の丸いシールに反映します。</p>
+        <p className="apex-preview__subtitle">丸いシール、選択中のメニュー、「新しい版を反映」に反映します。</p>
         <div className="apex-preview__seal-choices" role="radiogroup" aria-label="シールの色">
           {SEAL_COLORS.map((color) => (
             <button
