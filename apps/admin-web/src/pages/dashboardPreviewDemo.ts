@@ -14,15 +14,15 @@ export const DEMO_FINANCE = {
 } as const;
 
 export const DEMO_CLIENT_SHARE: DemoSlice[] = [
-  { label: "北斗興業", value: 35, color: "#16a34a" },
-  { label: "青葉フーズ", value: 28, color: "#2563eb" },
-  { label: "みどり企画", value: 22, color: "#d97706" },
-  { label: "その他", value: 15, color: "#94a3b8" },
+  { label: "北斗興業", value: 42, color: "#16a34a" },
+  { label: "青葉フーズ", value: 33, color: "#2563eb" },
+  { label: "みどり企画", value: 26, color: "#d97706" },
+  { label: "その他", value: 18, color: "#94a3b8" },
 ];
 
 export const DEMO_TYPE_SHARE: DemoSlice[] = [
-  { label: "イベント", value: 62, color: "#16a34a" },
-  { label: "飲食", value: 38, color: "#2563eb" },
+  { label: "イベント", value: 74, color: "#16a34a" },
+  { label: "飲食", value: 45, color: "#2563eb" },
 ];
 
 export const DEMO_STAFF_ORDERS = [
@@ -64,13 +64,16 @@ export function demoMonthLabels(): string[] {
 export type ChartPoint = { x: number; y: number; value: number };
 
 export function axisTicks(maxValue: number): number[] {
-  const rough = Math.max(maxValue, 1) / 4;
+  const target = Math.max(maxValue, 1) * 1.18;
+  const rough = target / 4;
   const power = 10 ** Math.floor(Math.log10(rough));
   const step = [1, 2, 2.5, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough) ?? rough;
   const ticks: number[] = [];
-  for (let value = 0; value <= maxValue + step * 0.01; value += step) {
+  for (let value = 0; value <= target + step * 0.01; value += step) {
     ticks.push(Math.round(value));
   }
+  const last = ticks[ticks.length - 1] ?? 0;
+  if (last <= maxValue) ticks.push(Math.round(last + step));
   return ticks;
 }
 
@@ -89,9 +92,10 @@ export function plotPoints(
   }));
 }
 
-export function smoothLine(points: ChartPoint[]): string {
+export function smoothLine(points: ChartPoint[], yMin = Number.NEGATIVE_INFINITY, yMax = Number.POSITIVE_INFINITY): string {
   if (points.length === 0) return "";
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  const clampY = (y: number) => Math.min(yMax, Math.max(yMin, y));
   let path = `M ${points[0].x} ${points[0].y}`;
   for (let index = 0; index < points.length - 1; index += 1) {
     const previous = points[index - 1] ?? points[index];
@@ -99,9 +103,9 @@ export function smoothLine(points: ChartPoint[]): string {
     const next = points[index + 1];
     const after = points[index + 2] ?? next;
     const control1x = current.x + (next.x - previous.x) / 6;
-    const control1y = current.y + (next.y - previous.y) / 6;
+    const control1y = clampY(current.y + (next.y - previous.y) / 6);
     const control2x = next.x - (after.x - current.x) / 6;
-    const control2y = next.y - (after.y - current.y) / 6;
+    const control2y = clampY(next.y - (after.y - current.y) / 6);
     path += ` C ${control1x} ${control1y}, ${control2x} ${control2y}, ${next.x} ${next.y}`;
   }
   return path;

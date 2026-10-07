@@ -22,6 +22,11 @@
   --apex-sidebar: 72px;
 }
 
+.apex-preview.is-collapsed .apex-preview__sidebar,
+.apex-preview.is-collapsed .apex-preview__nav {
+  overflow: visible;
+}
+
 .apex-preview.is-narrow {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -61,20 +66,21 @@
   min-height: 100vh;
   background: #111318;
   color: #a3aab8;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #2a2f3a transparent;
+  overflow: hidden;
 }
 
-.apex-preview__sidebar::-webkit-scrollbar {
+.apex-preview__sidebar::-webkit-scrollbar,
+.apex-preview__nav::-webkit-scrollbar {
   width: 8px;
 }
 
-.apex-preview__sidebar::-webkit-scrollbar-track {
+.apex-preview__sidebar::-webkit-scrollbar-track,
+.apex-preview__nav::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.apex-preview__sidebar::-webkit-scrollbar-thumb {
+.apex-preview__sidebar::-webkit-scrollbar-thumb,
+.apex-preview__nav::-webkit-scrollbar-thumb {
   border-radius: 8px;
   background: #2a2f3a;
 }
@@ -173,10 +179,21 @@
   display: none;
 }
 
+.apex-preview__brand,
+.apex-preview__sidebar-tools,
+.apex-preview__user {
+  flex-shrink: 0;
+}
+
 .apex-preview__nav {
   display: grid;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
   padding: 8px 12px 16px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f3a transparent;
 }
 
 .apex-preview__group {
@@ -277,7 +294,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: auto;
   padding: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -529,7 +545,7 @@
   height: 100%;
   border-radius: inherit;
   background: var(--apex-green);
-  transition: width 0.8s ease;
+  transition: width 1.6s cubic-bezier(0.42, 0, 1, 1);
 }
 
 .apex-preview__counts {
@@ -582,8 +598,13 @@
 @media (max-width: 639px) {
   .apex-preview__kpis,
   .apex-preview__split,
-  .apex-preview__demo-top {
+  .apex-preview__demo-top,
+  .apex-preview__days {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .apex-preview__days {
+    grid-column: auto;
   }
 }
 
@@ -748,6 +769,22 @@
   font-size: 12px;
 }
 
+.apex-preview__days {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  padding: 16px 0;
+}
+
+.apex-preview__day-pane {
+  min-width: 0;
+  padding: 0 16px;
+}
+
+.apex-preview__day-pane + .apex-preview__day-pane {
+  border-left: 1px solid var(--apex-line);
+}
+
 .apex-preview__chart {
   position: relative;
   margin-top: 8px;
@@ -757,6 +794,7 @@
   display: block;
   width: 100%;
   height: auto;
+  overflow: hidden;
   cursor: crosshair;
 }
 
@@ -783,14 +821,13 @@
 }
 
 .apex-preview__draw {
-  stroke-dasharray: 2400;
-  stroke-dashoffset: 2400;
-  animation: apex-draw 0.9s ease forwards;
+  stroke-dasharray: var(--draw-length, 1);
+  stroke-dashoffset: var(--draw-length, 1);
 }
 
 .apex-preview__area-fill {
   opacity: 0;
-  animation: apex-fade 0.7s ease 0.15s forwards;
+  animation: apex-fade 1.8s cubic-bezier(0.42, 0, 1, 1) forwards;
 }
 
 .apex-preview__cursor {
@@ -876,6 +913,12 @@
 .apex-preview__donut-center span {
   color: var(--apex-muted);
   font-size: 11px;
+}
+
+.apex-preview__donut-center small {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .apex-preview__legend {

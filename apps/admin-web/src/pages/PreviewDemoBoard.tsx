@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Briefcase, CalendarDays, Sun, TrendingDown, TrendingUp, Users } from "lucide-react";
 
 import {
@@ -22,16 +22,42 @@ import {
 
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 280;
-const CHART_INSET = { left: 46, right: 12, top: 16, bottom: 28 };
+const CHART_INSET = { left: 56, right: 16, top: 28, bottom: 28 };
+const DRAW_EASING = "cubic-bezier(0.42, 0, 1, 1)";
+const DRAW_MS = 1800;
+
+function useAccelerateDraw(ref: RefObject<SVGPathElement | null>, signature: string) {
+  useLayoutEffect(() => {
+    const shape = ref.current;
+    if (!shape) return;
+    const length = shape.getTotalLength();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    shape.style.strokeDasharray = `${length}`;
+    if (reduced) {
+      shape.style.transition = "none";
+      shape.style.strokeDashoffset = "0";
+      return;
+    }
+    shape.style.transition = "none";
+    shape.style.strokeDashoffset = `${length}`;
+    const frame = window.requestAnimationFrame(() => {
+      shape.style.transition = `stroke-dashoffset ${DRAW_MS}ms ${DRAW_EASING}`;
+      shape.style.strokeDashoffset = "0";
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [ref, signature]);
+}
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   const gradientId = useId().replace(/:/g, "");
+  const lineRef = useRef<SVGPathElement>(null);
   const width = 240;
   const height = 72;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const points = plotPoints(values, width, height, { left: 0, right: 0, top: 8, bottom: 2 }, { min, max });
-  const line = smoothLine(points);
+  const points = plotPoints(values, width, height, { left: 2, right: 2, top: 10, bottom: 4 }, { min, max });
+  const line = smoothLine(points, 8, height - 2);
+  useAccelerateDraw(lineRef, line);
   const last = points[points.length - 1];
   const first = points[0];
   const area = `${line} L ${last?.x ?? 0} ${height} L ${first?.x ?? 0} ${height} Z`;
@@ -44,7 +70,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
         </linearGradient>
       </defs>
       <path d={area} fill={`url(#${gradientId})`} />
-      <path d={line} fill="none" stroke={color} strokeWidth="2" />
+      <path ref={lineRef} d={line} fill="none" stroke={color} strokeWidth="2" />
     </svg>
   );
 }
@@ -83,40 +109,37 @@ function TrendCard({
   );
 }
 
-function DayCard({
-  title,
-  workers,
-  projects,
-  icon,
-  color,
-}: {
-  title: string;
-  workers: number;
-  projects: number;
-  icon: ReactNode;
-  color: string;
-}) {
+function DaysCard() {
+  const days = [
+    { title: "今日", workers: 42, projects: 11, color: "#d97706", icon: <Sun size={16} aria-hidden="true" /> },
+    { title: "明日", workers: 38, projects: 9, color: "#7c3aed", icon: <CalendarDays size={16} aria-hidden="true" /> },
+  ];
   return (
-    <article className="apex-preview__card apex-preview__stat is-live">
-      <div className="apex-preview__stat-top">
-        <p className="apex-preview__kpi-label">{title}</p>
-        <span className="apex-preview__stat-icon" style={{ color, background: `${color}1a` }}>{icon}</span>
-      </div>
-      <div className="apex-preview__day-grid">
-        <div>
-          <p className="apex-preview__day-value">{workers}</p>
-          <p className="apex-preview__day-caption">稼働者数</p>
+    <article className="apex-preview__card apex-preview__days is-live">
+      {days.map((day) => (
+        <div key={day.title} className="apex-preview__day-pane">
+          <div className="apex-preview__stat-top">
+            <p className="apex-preview__kpi-label">{day.title}</p>
+            <span className="apex-preview__stat-icon" style={{ color: day.color, background: `${day.color}1a` }}>{day.icon}</span>
+          </div>
+          <div className="apex-preview__day-grid">
+            <div>
+              <p className="apex-preview__day-value">{day.workers}</p>
+              <p className="apex-preview__day-caption">稼働者数</p>
+            </div>
+            <div>
+              <p className="apex-preview__day-value">{day.projects}</p>
+              <p className="apex-preview__day-caption">遂行案件数</p>
+            </div>
+          </div>
         </div>
-        <div>
-          <p className="apex-preview__day-value">{projects}</p>
-          <p className="apex-preview__day-caption">遂行案件数</p>
-        </div>
-      </div>
+      ))}
     </article>
   );
 }
 
 function FinanceChart({ values, color }: { values: readonly number[]; color: string }) {
+  const lineRef = useRef<SVGPathElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
   const gradientId = useId().replace(/:/g, "");
@@ -124,10 +147,11 @@ function FinanceChart({ values, color }: { values: readonly number[]; color: str
   const ticks = axisTicks(Math.max(...values));
   const scaleMax = ticks[ticks.length - 1] ?? 1;
   const points = plotPoints([...values], CHART_WIDTH, CHART_HEIGHT, CHART_INSET, { min: 0, max: scaleMax });
-  const line = smoothLine(points);
+  const baseline = CHART_HEIGHT - CHART_INSET.bottom;
+  const line = smoothLine(points, CHART_INSET.top + 6, baseline);
+  useAccelerateDraw(lineRef, line);
   const first = points[0];
   const last = points[points.length - 1];
-  const baseline = CHART_HEIGHT - CHART_INSET.bottom;
   const area = `${line} L ${last?.x ?? 0} ${baseline} L ${first?.x ?? 0} ${baseline} Z`;
   const active = hover == null ? null : points[hover];
 
@@ -176,7 +200,7 @@ function FinanceChart({ values, color }: { values: readonly number[]; color: str
           );
         })}
         <path className="apex-preview__area-fill" d={area} fill={`url(#${gradientId})`} />
-        <path className="apex-preview__area-line apex-preview__draw" d={line} stroke={color} />
+        <path ref={lineRef} className="apex-preview__area-line" d={line} stroke={color} />
         {labels.map((label, index) => {
           const point = points[index];
           if (!point) return null;
@@ -217,14 +241,37 @@ function FinanceChart({ values, color }: { values: readonly number[]; color: str
 
 function Donut({ slices }: { slices: DemoSlice[] }) {
   const [active, setActive] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const radius = 46;
   const circumference = 2 * Math.PI * radius;
   const segments = donutSegments(slices, radius);
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const selected = active == null ? null : segments[active];
+  const signature = slices.map((slice) => `${slice.label}:${slice.value}`).join("|");
+
+  useLayoutEffect(() => {
+    const circles = svgRef.current?.querySelectorAll("circle");
+    if (!circles) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frames: number[] = [];
+    circles.forEach((circle) => {
+      const finalDash = circle.getAttribute("stroke-dasharray") ?? "";
+      const [dash = "0", gap = "0"] = finalDash.split(/[\s,]+/);
+      if (reduced) return;
+      circle.style.transition = "none";
+      circle.style.strokeDasharray = `0 ${gap}`;
+      frames.push(window.requestAnimationFrame(() => {
+        circle.style.transition = `stroke-dasharray ${DRAW_MS}ms ${DRAW_EASING}`;
+        circle.style.strokeDasharray = `${dash} ${gap}`;
+      }));
+    });
+    return () => frames.forEach((frame) => window.cancelAnimationFrame(frame));
+  }, [signature]);
+
   return (
     <div className="apex-preview__donut-wrap">
       <div className="apex-preview__donut-stage">
-        <svg className="apex-preview__donut" viewBox="0 0 140 140" role="img" aria-label="割合">
+        <svg ref={svgRef} className="apex-preview__donut" viewBox="0 0 140 140" role="img" aria-label="件数の割合">
           <g transform="rotate(-90 70 70)">
             {segments.map((segment, index) => (
               <circle
@@ -245,7 +292,10 @@ function Donut({ slices }: { slices: DemoSlice[] }) {
           </g>
         </svg>
         <div className="apex-preview__donut-center">
-          <strong>{selected ? `${selected.share}%` : "100%"}</strong>
+          <strong>
+            {(selected?.value ?? total).toLocaleString("ja-JP")}
+            <small>件</small>
+          </strong>
           <span>{selected?.label ?? "合計"}</span>
         </div>
       </div>
@@ -329,8 +379,7 @@ export function PreviewDemoBoard() {
       <section className="apex-preview__demo-top" aria-label="概況">
         <TrendCard label="月間の案件数" value="48" delta="+12.5%" values={DEMO_PROJECT_TREND} color="#16a34a" icon={<Briefcase size={16} aria-hidden="true" />} />
         <TrendCard label="稼働者数" value="186" delta="+8.2%" values={DEMO_WORKER_TREND} color="#2563eb" icon={<Users size={16} aria-hidden="true" />} />
-        <DayCard title="今日" workers={42} projects={11} color="#d97706" icon={<Sun size={16} aria-hidden="true" />} />
-        <DayCard title="明日" workers={38} projects={9} color="#7c3aed" icon={<CalendarDays size={16} aria-hidden="true" />} />
+        <DaysCard />
       </section>
       <section className="apex-preview__demo-mid">
         <article className="apex-preview__card is-live">
