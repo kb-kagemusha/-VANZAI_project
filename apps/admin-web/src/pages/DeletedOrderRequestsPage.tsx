@@ -1,6 +1,6 @@
 /**
  * 一覧から外した発注依頼書。行は残し、通常の一覧には出さない。
- * 管理者のアカウントメニューからのみ開く。
+ * 管理者のプロフィールからのみ開く。
  */
 import { useQuery } from "@tanstack/react-query";
 
@@ -39,7 +39,7 @@ export function DeletedOrderRequestsPage() {
       <PageHeader
         eyebrow="管理者"
         title="削除済み案件一覧"
-        description="発注依頼書の一覧から外した案件です。データは残っています。このページは、管理者のアカウントメニューからのみ開けます。"
+        description="発注依頼書の一覧から外した案件です。データは残っています。このページは、管理者のプロフィールからのみ開けます。"
       />
       {listQuery.isLoading ? <LoadingOverlay /> : null}
       {listQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(listQuery.error)} /> : null}

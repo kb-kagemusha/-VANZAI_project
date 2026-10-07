@@ -4,7 +4,6 @@ import { useState } from "react";
 import { SideNav } from "./SideNav";
 import { useAuth } from "../lib/auth/auth-context";
 import { canAccess } from "../lib/auth/permissions";
-import { updateProfile, ApiError } from "../lib/api/client";
 
 const NAV_COLLAPSED_KEY = "vanzai.admin.navCollapsed";
 
@@ -16,25 +15,15 @@ const REGISTRATION_FORM_DEFINITIONS = [
 ] as const;
 
 export function AppShell() {
-  const { user, refreshUser } = useAuth();
-  const [showEdit, setShowEdit] = useState(false);
+  const { user } = useAuth();
   const [showRegistrationUrls, setShowRegistrationUrls] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
   const [urlCopyMessage, setUrlCopyMessage] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
   const canCheckRegistrationUrls = canAccess(user?.role, ["admin", "ops", "accounting"]);
   const registrationFormUrls = REGISTRATION_FORM_DEFINITIONS.map((item) => ({
     ...item,
     url: `${window.location.origin}${item.path}`,
   }));
-
-  function openEdit() {
-    setEditName(user?.display_name || user?.username || "");
-    setEditError(null);
-    setShowEdit(true);
-  }
 
   function openRegistrationUrls() {
     setUrlCopyMessage(null);
@@ -58,27 +47,9 @@ export function AppShell() {
     });
   }
 
-  async function handleSave() {
-    if (!editName.trim()) {
-      setEditError("表示名を入力してください");
-      return;
-    }
-    setSaving(true);
-    setEditError(null);
-    try {
-      await updateProfile({ display_name: editName.trim() });
-      await refreshUser();
-      setShowEdit(false);
-    } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "更新に失敗しました");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className={`app-shell${navCollapsed ? " app-shell--nav-collapsed" : ""}`}>
-      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} onEditProfile={openEdit} />
+      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} />
       <main className="app-main">
         <header className="topbar">
           <div className="topbar-heading">
@@ -97,70 +68,6 @@ export function AppShell() {
         </header>
         <Outlet />
       </main>
-
-      {/* プロフィール編集モーダル */}
-      {showEdit && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.35)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowEdit(false); }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: "24px 28px",
-              minWidth: 320,
-              boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-            }}
-          >
-            <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>プロフィール更新</h3>
-            {editError && (
-              <p style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>{editError}</p>
-            )}
-            <div style={{ display: "grid", gap: 14 }}>
-              <label style={{ fontSize: 13, color: "#374151", display: "grid", gap: 4 }}>
-                表示名
-                <input
-                  className="form-input"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="例: Sample User"
-                  autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-                />
-              </label>
-              <p style={{ fontSize: 11, color: "#9ca3af", margin: 0 }}>
-                ログインID（{user?.username}）は変わりません。
-              </p>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setShowEdit(false)}
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={saving}
-                  onClick={handleSave}
-                >
-                  {saving ? "保存中..." : "保存"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showRegistrationUrls && (
         <div

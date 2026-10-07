@@ -20,6 +20,7 @@ import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
+import { AccountProfilePage } from "../pages/AccountProfilePage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
 import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
@@ -195,6 +196,7 @@ export function App() {
               </PermissionRoute>
             }
           />
+          <Route path="/account/profile" element={<AccountProfilePage />} />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
           <Route
             path="/operations/order-requests"

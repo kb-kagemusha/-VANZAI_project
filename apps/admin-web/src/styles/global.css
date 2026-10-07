@@ -275,12 +275,13 @@ button {
   background: transparent;
   color: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
 .side-nav-user-button:hover,
 .side-nav-user-button:focus-visible,
-.side-nav-user-button[aria-expanded="true"] {
+.side-nav-user-button.is-active {
   background: #1c2b22;
   outline: none;
 }
@@ -1025,6 +1026,84 @@ button {
 .primary-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+a.primary-button {
+  display: inline-flex;
+  width: fit-content;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-profile {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.account-profile .card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #e6e8ee;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.account-profile .card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.account-profile-hero {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.account-profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.account-profile-hero h2 {
+  font-size: 22px;
+}
+
+.account-profile-hero p,
+.account-profile-note {
+  margin: 0;
+  color: #667085;
+}
+
+.account-profile-hero dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.account-profile-hero dt {
+  color: #667085;
+  font-size: 12px;
+}
+
+.account-profile-hero dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.account-profile-status {
+  margin: 0;
+  color: #16a34a;
+  font-weight: 600;
 }
 
 /* ---- btn ユーティリティ（NoticesPage等で使用） ---- */
