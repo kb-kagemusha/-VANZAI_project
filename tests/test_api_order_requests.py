@@ -374,6 +374,75 @@ def test_default_list_hides_test_documents(api_client, db_session, ops_user, pdf
     assert tests.json()["items"][0]["kind"] == "test"
 
 
+def test_draft_save_keeps_phone_first_note_and_tracker(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            phone_first=True,
+            phone_note="なんか色々",
+            assign_tracker_self=True,
+            tracker_user_id=None,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    created_body = created.json()
+    version_id = created_body["id"]
+    assert created_body["phone_first"] is True
+    assert created_body["phone_note"] == "なんか色々"
+    assert created_body["tracker_user_id"] == ops_user.id
+
+    updated = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json=_body(
+            [worker.id],
+            phone_first=True,
+            phone_note="電話した内容",
+            assign_tracker_self=True,
+            tracker_user_id=None,
+            site_name="更新後の現場",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["phone_first"] is True
+    assert updated.json()["phone_note"] == "電話した内容"
+    assert updated.json()["tracker_user_id"] == ops_user.id
+    assert updated.json()["site_name"] == "更新後の現場"
+
+    fetched = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    )
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["phone_first"] is True
+    assert fetched.json()["phone_note"] == "電話した内容"
+    assert fetched.json()["tracker_user_id"] == ops_user.id
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
+    item = next(row for row in listed.json()["items"] if row["version_id"] == version_id)
+    assert item["phone_first"] is True
+    assert item["tracker_name"]
+
+    cleared = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json=_body(
+            [worker.id],
+            phone_first=False,
+            phone_note=None,
+            assign_tracker_self=False,
+            tracker_user_id=None,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["phone_first"] is False
+    assert cleared.json()["phone_note"] is None
+    assert cleared.json()["tracker_user_id"] is None
+
+
 def test_phone_first_does_not_mark_sent_and_overdue_stays_unsent(api_client, db_session, ops_user, pdf_root):
     worker = _worker(db_session, "稼働者A")
     created = api_client.post(

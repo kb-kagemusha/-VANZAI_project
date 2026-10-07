@@ -203,6 +203,7 @@ class OrderRequestService:
         phone_first: bool | None = None,
         phone_contacted_at: datetime | None = None,
         phone_note: str | None = None,
+        phone_note_set: bool = False,
         tracker_user_id: str | None = None,
         clear_tracker: bool = False,
         follow_up_due_on: date | None = None,
@@ -273,7 +274,7 @@ class OrderRequestService:
             worker_ids=list(ids or []),
             phone_first=version.phone_first if phone_first is None else phone_first,
             phone_contacted_at=version.phone_contacted_at if phone_contacted_at is None else phone_contacted_at,
-            phone_note=version.phone_note if phone_note is None else phone_note,
+            phone_note=version.phone_note if not phone_note_set else phone_note,
             tracker_user_id=None if clear_tracker else (
                 version.tracker_user_id if tracker_user_id is None else tracker_user_id
             ),

@@ -445,6 +445,7 @@ def update_order_request_version(
             phone_first=fields.get("phone_first"),
             phone_contacted_at=fields.get("phone_contacted_at") if "phone_contacted_at" in fields else None,
             phone_note=fields.get("phone_note") if "phone_note" in fields else None,
+            phone_note_set="phone_note" in fields,
             tracker_user_id=fields.get("tracker_user_id"),
             clear_tracker="tracker_user_id" in fields and fields.get("tracker_user_id") is None,
             follow_up_due_on=fields.get("follow_up_due_on"),

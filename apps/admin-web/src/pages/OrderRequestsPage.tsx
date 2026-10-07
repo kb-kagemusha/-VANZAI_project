@@ -150,6 +150,11 @@ export function OrderRequestsPage() {
   const [basedOn, setBasedOn] = useState<{ versionId: string; documentNumber: string; versionNo: number } | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
   const draftRef = useRef<HTMLFormElement>(null);
+  const formRef = useRef(form);
+  const sectionsRef = useRef(sections);
+  const loadedForRef = useRef<string | null>(null);
+  formRef.current = form;
+  sectionsRef.current = sections;
 
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue],
@@ -203,29 +208,55 @@ export function OrderRequestsPage() {
   }
 
   function draftPayload(): OrderRequestWrite {
+    const current = formRef.current;
+    const currentSections = sectionsRef.current;
+    const phoneNote = current.phone_note?.trim() ? current.phone_note : null;
     return {
-      ...form,
-      request_conditions: serializeOrderSections(sections),
-      body: composeOrderDocument(sections, form.work_date_label, form.site_name),
+      ...current,
+      request_conditions: serializeOrderSections(currentSections),
+      body: composeOrderDocument(currentSections, current.work_date_label, current.site_name),
       contact_desk: "",
-      counterparty_note: form.counterparty_note || null,
-      phone_note: form.phone_note || null,
-      site_address: form.site_address || null,
-      follow_up_due_on: form.follow_up_due_on || null,
-      follow_up_due_time: form.follow_up_due_time || "21:00",
+      counterparty_note: current.counterparty_note || null,
+      phone_first: Boolean(current.phone_first),
+      assign_tracker_self: Boolean(current.assign_tracker_self),
+      phone_note: phoneNote,
+      site_address: current.site_address || null,
+      follow_up_due_on: current.follow_up_due_on || null,
+      follow_up_due_time: current.follow_up_due_time || "21:00",
     };
   }
 
+  function pinSavedVersion(version: OrderRequestVersion) {
+    loadedForRef.current = version.id;
+    queryClient.setQueryData(["order-request", version.id], version);
+  }
+
+  function rememberSavedVersion(version: OrderRequestVersion) {
+    pinSavedVersion(version);
+    const nextForm = formFromVersion(version);
+    const nextSections = sectionsFromStored(version.request_conditions, version.body);
+    formRef.current = nextForm;
+    sectionsRef.current = nextSections;
+    setForm(nextForm);
+    setSections(nextSections);
+  }
+
   function dueMissing(): boolean {
-    if (form.follow_up_due_on) return false;
+    if (formRef.current.follow_up_due_on) return false;
     setActionError("期限の案内の日付を入れてください");
     return true;
   }
 
   useEffect(() => {
     if (!detail || creating) return;
-    setForm(formFromVersion(detail));
-    setSections(sectionsFromStored(detail.request_conditions, detail.body));
+    if (loadedForRef.current === detail.id) return;
+    loadedForRef.current = detail.id;
+    const nextForm = formFromVersion(detail);
+    const nextSections = sectionsFromStored(detail.request_conditions, detail.body);
+    formRef.current = nextForm;
+    sectionsRef.current = nextSections;
+    setForm(nextForm);
+    setSections(nextSections);
   }, [creating, detail]);
 
   useEffect(() => {
@@ -301,6 +332,7 @@ export function OrderRequestsPage() {
   }
 
   function showDetail(versionId: string) {
+    if (creating || selectedId !== versionId) loadedForRef.current = null;
     setCreating(false);
     setBasedOn(null);
     setSelectedId(versionId);
@@ -312,6 +344,9 @@ export function OrderRequestsPage() {
   }
 
   function startNewDraft() {
+    loadedForRef.current = null;
+    formRef.current = EMPTY_FORM;
+    sectionsRef.current = EMPTY_ORDER_SECTIONS;
     setCreating(true);
     setBasedOn(null);
     setSelectedId(null);
@@ -340,6 +375,7 @@ export function OrderRequestsPage() {
       const workerIds = version.deliveries.length > 0
         ? version.deliveries.map((row) => row.worker_id)
         : version.draft_worker_ids;
+      loadedForRef.current = null;
       setCreating(true);
       setSelectedId(null);
       setSavedDraftId(null);
@@ -348,13 +384,17 @@ export function OrderRequestsPage() {
         documentNumber: version.document_number,
         versionNo: version.version_no,
       });
-      setForm({
+      const nextForm = {
         ...formFromVersion(version),
         worker_ids: workerIds,
         phone_first: false,
         phone_note: "",
-      });
-      setSections(sectionsFromStored(version.request_conditions, version.body));
+      };
+      const nextSections = sectionsFromStored(version.request_conditions, version.body);
+      formRef.current = nextForm;
+      sectionsRef.current = nextSections;
+      setForm(nextForm);
+      setSections(nextSections);
       setReason("");
       setNote("");
     } catch (error) {
@@ -383,6 +423,7 @@ export function OrderRequestsPage() {
       return updateOrderRequestVersion(detail.id, payload);
     },
     onSuccess: async (version) => {
+      rememberSavedVersion(version);
       setCreating(false);
       setBasedOn(null);
       setSelectedId(version.id);
@@ -546,6 +587,7 @@ export function OrderRequestsPage() {
     setPdfReview({ phase: "loading", versionId: null, url: null });
     try {
       const saved = await persistCurrentDraft();
+      pinSavedVersion(saved);
       setSavedDraftId(saved.id);
       const blob = await fetchOrderRequestPdfPreview(saved.id);
       const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
@@ -563,7 +605,8 @@ export function OrderRequestsPage() {
     setPdfSending(true);
     setPdfReviewError("");
     try {
-      await persistCurrentDraft();
+      const saved = await persistCurrentDraft();
+      rememberSavedVersion(saved);
       dismissPdfReview(null);
       setActionMessage("下書きを保存しました。確定するまで送付は始まりません。");
       await refresh();
@@ -1116,7 +1159,14 @@ export function OrderRequestsPage() {
                     value={form.phone_note ?? ""}
                     disabled={!editable}
                     placeholder="電話した内容があれば"
-                    onChange={(event) => setForm({ ...form, phone_note: withFullwidthTilde(event.target.value) })}
+                    onChange={(event) => {
+                      const phoneNote = withFullwidthTilde(event.target.value);
+                      setForm((current) => {
+                        const next = { ...current, phone_note: phoneNote };
+                        formRef.current = next;
+                        return next;
+                      });
+                    }}
                   />
                 </label>
               </div>
@@ -1126,7 +1176,14 @@ export function OrderRequestsPage() {
                     type="checkbox"
                     checked={form.phone_first}
                     disabled={!editable}
-                    onChange={(event) => setForm({ ...form, phone_first: event.target.checked })}
+                    onChange={(event) => {
+                      const phoneFirst = event.target.checked;
+                      setForm((current) => {
+                        const next = { ...current, phone_first: phoneFirst };
+                        formRef.current = next;
+                        return next;
+                      });
+                    }}
                   />
                   <span>
                     <span className="order-choice-title">電話先行</span>
@@ -1138,7 +1195,14 @@ export function OrderRequestsPage() {
                     type="checkbox"
                     checked={form.assign_tracker_self}
                     disabled={!editable}
-                    onChange={(event) => setForm({ ...form, assign_tracker_self: event.target.checked })}
+                    onChange={(event) => {
+                      const assignTrackerSelf = event.target.checked;
+                      setForm((current) => {
+                        const next = { ...current, assign_tracker_self: assignTrackerSelf };
+                        formRef.current = next;
+                        return next;
+                      });
+                    }}
                   />
                   <span>
                     <span className="order-choice-title">追跡担当は自分</span>
