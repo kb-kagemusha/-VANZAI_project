@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "../components/AppShell";
+import { AppDialogHost } from "../lib/appDialog";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
 import { CsvImportPage } from "../pages/CsvImportPage";
 import { ActualsPage } from "../pages/ActualsPage";
@@ -34,6 +35,8 @@ import { ProtectedRoute } from "../routes/ProtectedRoute";
 
 export function App() {
   return (
+    <>
+    <AppDialogHost />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
@@ -235,5 +238,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </>
   );
 }

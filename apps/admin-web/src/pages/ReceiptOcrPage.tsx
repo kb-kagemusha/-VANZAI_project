@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { confirmApp, promptApp } from "../lib/appDialog";
 import { DataTable } from "../components/DataTable";
 import { AppNotification, type AppNotificationState } from "../components/AppNotification";
 import { ErrorState } from "../components/ErrorState";
@@ -1666,11 +1667,12 @@ export function ReceiptOcrPage({
     },
   });
 
-  const handleVoidRow = (row: OcrExtractedRowItem) => {
-    const reason = window.prompt(
-      "この精算行を無効化します。理由を入力してください（誤アップロード・誤確定など）。",
-      "",
-    );
+  const handleVoidRow = async (row: OcrExtractedRowItem) => {
+    const reason = await promptApp({
+      title: "精算行の無効化",
+      message: "この精算行を無効化します。理由を入力してください（誤アップロード・誤確定など）。",
+      confirmLabel: "無効化する",
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       setFormError("無効化には理由の入力が必須です");
@@ -1679,12 +1681,13 @@ export function ReceiptOcrPage({
     voidRowMutation.mutate({ rowId: row.id, reason: reason.trim() });
   };
 
-  const handleToggleReconciliationEligibility = (row: OcrExtractedRowItem) => {
+  const handleToggleReconciliationEligibility = async (row: OcrExtractedRowItem) => {
     if (row.reconciliation_eligible) {
-      const reason = window.prompt(
-        "この行を在庫照合対象から除外します。理由を入力してください（途中精算・重複など）。",
-        "",
-      );
+      const reason = await promptApp({
+        title: "在庫照合の対象外",
+        message: "この行を在庫照合対象から除外します。理由を入力してください（途中精算・重複など）。",
+        confirmLabel: "除外する",
+      });
       if (reason === null) return;
       if (!reason.trim()) {
         setFormError("在庫照合対象から除外するには理由の入力が必須です");
@@ -3441,9 +3444,15 @@ export function ReceiptOcrPage({
                       className="ghost-button ocr-inline-delete"
                       disabled={deleteSnapshotMutation.isPending}
                       onClick={() => {
-                        if (window.confirm("この実在庫記録を削除しますか？")) {
-                          deleteSnapshotMutation.mutate(s.id);
-                        }
+                        void (async () => {
+                          const confirmed = await confirmApp({
+                            title: "実在庫記録の削除",
+                            message: "この実在庫記録を削除しますか？",
+                            confirmLabel: "削除",
+                            tone: "danger",
+                          });
+                          if (confirmed) deleteSnapshotMutation.mutate(s.id);
+                        })();
                       }}
                     >
                       削除

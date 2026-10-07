@@ -19,6 +19,7 @@ import {
   releaseSoftCloseProject,
   softCloseProject,
 } from "../lib/api/client";
+import { confirmApp } from "../lib/appDialog";
 import { currentMonthInput, formatDate, formatDateTime, minutesToHours, toPeriodKey } from "../lib/formatters";
 
 type ClosingRowDraft = {
@@ -290,13 +291,17 @@ export function DashboardPage() {
     return `${scopeLabel} ${affectedRows.length}件の入力を上書きします。対象: ${names.join("、")}${suffix}`;
   };
 
-  const copySelectedInputsToRows = () => {
+  const copySelectedInputsToRows = async () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const confirmationMessage = buildCopyConfirmationMessage(closingRows, "全行");
+    if (!confirmationMessage) return;
 
-    if (!confirmationMessage || !window.confirm(confirmationMessage)) {
-      return;
-    }
+    const confirmed = await confirmApp({
+      title: "一覧へ入力コピー",
+      message: confirmationMessage,
+      confirmLabel: "上書きする",
+    });
+    if (!confirmed) return;
 
     setRowDrafts((current) => {
       const nextDrafts = { ...current };
@@ -310,14 +315,18 @@ export function DashboardPage() {
     });
   };
 
-  const copySelectedInputsToCheckedRows = () => {
+  const copySelectedInputsToCheckedRows = async () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const targetRows = closingRows.filter((row) => selectedClosingRows[row.project_id]);
     const confirmationMessage = buildCopyConfirmationMessage(targetRows, "選択行");
+    if (!confirmationMessage) return;
 
-    if (!confirmationMessage || !window.confirm(confirmationMessage)) {
-      return;
-    }
+    const confirmed = await confirmApp({
+      title: "選択行へ入力コピー",
+      message: confirmationMessage,
+      confirmLabel: "上書きする",
+    });
+    if (!confirmed) return;
 
     setRowDrafts((current) => {
       const nextDrafts = { ...current };

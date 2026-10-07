@@ -285,8 +285,9 @@ test("phase1 admin can manage assignment operations", async ({ page }) => {
   await expect(rowCheckbox).toBeChecked();
 
   await page.getByLabel("変更先状態").last().selectOption("tentative");
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "選択中アサインを更新" }).click();
+  const statusDialog = page.getByRole("dialog", { name: "配置の状態更新" });
+  await statusDialog.getByRole("button", { name: "更新する" }).click();
   await expect(assignmentRow).toContainText("仮確定");
 
   await assignmentRow.getByRole("button", { name: "状態変更" }).click();

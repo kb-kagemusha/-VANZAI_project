@@ -9,6 +9,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { StatusBadge } from "../components/StatusBadge";
+import { confirmApp } from "../lib/appDialog";
 import { ApiError, bulkUpdateAssignmentStatus, createAssignment, createAssignmentSelectionSet, deleteAssignmentSelectionSet, getAssignmentCancellationHistory, getAssignmentSelectionSets, getAssignments, getProjects, getRoles, getShiftSlots, getWorkers, searchAuditLogs, updateAssignment, updateAssignmentStatus } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { currentMonthInput, formatAuditAction, formatAuditSummary, formatCurrency, formatDate, formatDateTime, periodKeyToDateRange, toPeriodKey } from "../lib/formatters";
@@ -381,7 +382,7 @@ export function AssignmentsPage() {
     deleteSelectionSetMutation.mutate(selectionSetId);
   };
 
-  const submitBulkStatusUpdate = () => {
+  const submitBulkStatusUpdate = async () => {
     if (selectedAssignmentIds.length === 0) {
       return;
     }
@@ -396,9 +397,12 @@ export function AssignmentsPage() {
     const previewText = previewLabels.length > 0 ? previewLabels.join("、") : "他ページで選択された配置";
     const confirmationMessage = `選択中 ${selectedAssignmentIds.length} 件を ${targetLabel} に更新します。対象: ${previewText}${suffix}`;
 
-    if (!window.confirm(confirmationMessage)) {
-      return;
-    }
+    const confirmed = await confirmApp({
+      title: "配置の状態更新",
+      message: confirmationMessage,
+      confirmLabel: "更新する",
+    });
+    if (!confirmed) return;
 
     bulkStatusMutation.mutate(selectedAssignmentIds);
   };

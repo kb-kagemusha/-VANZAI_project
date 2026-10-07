@@ -5,6 +5,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
+import { alertApp } from "../lib/appDialog";
 import { getAvailabilityCalendar, getWorkerTags, patchWorkerQuals } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import type { CalendarDayInfo, CalendarWorkerRow, WorkerQualsUpdateRequest } from "../types/api";
@@ -240,7 +241,10 @@ export function AvailabilityCalendarPage() {
       setShowEditModal(false);
       calendarQuery.refetch();
     } catch {
-      alert("保存に失敗しました");
+      await alertApp({
+        title: "出勤可能日カレンダー",
+        message: "保存に失敗しました",
+      });
     } finally {
       setIsSaving(false);
     }

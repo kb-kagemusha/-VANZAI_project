@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { MobileShell } from "../components/MobileShell";
+import { AppDialogHost } from "../lib/appDialog";
 import { ActualsPage } from "../pages/ActualsPage";
 import { AvailabilityPage } from "../pages/AvailabilityPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
@@ -15,6 +16,8 @@ import { WorkerOnlyRoute } from "../routes/WorkerOnlyRoute";
 
 export function App() {
   return (
+    <>
+    <AppDialogHost />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
@@ -36,5 +39,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/today" replace />} />
     </Routes>
+    </>
   );
 }

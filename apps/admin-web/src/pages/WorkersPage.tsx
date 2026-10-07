@@ -9,6 +9,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { WorkerTagList, WorkerTagPicker } from "../components/WorkerTags";
+import { confirmApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
@@ -433,8 +434,14 @@ export function WorkersPage() {
     },
   });
 
-  function handleDelete(worker: WorkerListItem) {
-    if (!window.confirm(`「${worker.name}」を削除します。\nこの操作は元に戻せません（論理削除）。\n員を削除しますか？`)) return;
+  async function handleDelete(worker: WorkerListItem) {
+    const confirmed = await confirmApp({
+      title: "稼働者の削除",
+      message: `「${worker.name}」を削除します。\nこの操作は元に戻せません（論理削除）。\n員を削除しますか？`,
+      confirmLabel: "削除",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     deleteMutation.mutate(worker.id);
   }
 

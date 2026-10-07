@@ -48,6 +48,7 @@ import {
   withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
+import { confirmApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import type {
   OrderRequestChangeLink,
@@ -380,7 +381,12 @@ export function OrderRequestsPage() {
   }
 
   async function hideDocument(documentId: string) {
-    if (!window.confirm("この依頼書を一覧から外します。データは残し、管理者の削除済み案件一覧にだけ表示します。")) return;
+    const confirmed = await confirmApp({
+      title: "依頼書を一覧から外す",
+      message: "この依頼書を一覧から外します。データは残し、管理者の削除済み案件一覧にだけ表示します。",
+      confirmLabel: "一覧から外す",
+    });
+    if (!confirmed) return;
     setActionError("");
     try {
       await hideOrderRequest(documentId);

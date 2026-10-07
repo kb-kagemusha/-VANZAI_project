@@ -31,6 +31,7 @@ import type {
   NoticeType,
   WorkerListItem,
 } from "../types/api";
+import { confirmApp } from "../lib/appDialog";
 import { formatDateTime } from "../lib/formatters";
 
 const NOTICE_TYPE_LABELS: Record<NoticeType, string> = {
@@ -517,9 +518,15 @@ export function NoticesPage() {
                         className="btn btn-ghost btn-sm"
                         style={{ color: "var(--color-error, #d32f2f)" }}
                         onClick={() => {
-                          if (confirm(`「${n.title}」を削除しますか？`)) {
-                            deleteMutation.mutate(n.id);
-                          }
+                          void (async () => {
+                            const confirmed = await confirmApp({
+                              title: "スタッフ通知の削除",
+                              message: `「${n.title}」を削除しますか？`,
+                              confirmLabel: "削除",
+                              tone: "danger",
+                            });
+                            if (confirmed) deleteMutation.mutate(n.id);
+                          })();
                         }}
                         disabled={deleteMutation.isPending}
                       >
