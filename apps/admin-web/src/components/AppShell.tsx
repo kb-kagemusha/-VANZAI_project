@@ -4,7 +4,6 @@ import { useState } from "react";
 import { SideNav } from "./SideNav";
 import { useAuth } from "../lib/auth/auth-context";
 import { canAccess } from "../lib/auth/permissions";
-import { formatRole } from "../lib/formatters";
 import { updateProfile, ApiError } from "../lib/api/client";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 
@@ -18,7 +17,7 @@ const REGISTRATION_FORM_DEFINITIONS = [
 ] as const;
 
 export function AppShell() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [showEdit, setShowEdit] = useState(false);
   const [showRegistrationUrls, setShowRegistrationUrls] = useState(false);
   const [editName, setEditName] = useState("");
@@ -27,8 +26,6 @@ export function AppShell() {
   const [saving, setSaving] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
-
-  const displayedName = user?.display_name || user?.username;
   const canCheckRegistrationUrls = canAccess(user?.role, ["admin", "ops", "accounting"]);
   const registrationFormUrls = REGISTRATION_FORM_DEFINITIONS.map((item) => ({
     ...item,
@@ -83,7 +80,7 @@ export function AppShell() {
 
   return (
     <div className={`app-shell${navCollapsed ? " app-shell--nav-collapsed" : ""}`}>
-      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} />
+      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} onEditProfile={openEdit} />
       <main className="app-main">
         <header className="topbar">
           <div className="topbar-heading">
@@ -101,24 +98,11 @@ export function AppShell() {
             <h1 className="topbar-title">案件・シフト・実績 一元管理</h1>
           </div>
           <div className="topbar-actions">
-            <div className="identity-card">
-              <span className="identity-name">{displayedName}</span>
-              <span className="identity-role">{formatRole(user?.role)}</span>
-            </div>
             {canCheckRegistrationUrls ? (
               <button type="button" className="ghost-button" onClick={openRegistrationUrls}>
                 登録画面のURL確認
               </button>
             ) : null}
-            <button type="button" className="ghost-button" onClick={openEdit}>
-              更新
-            </button>
-            <Link to="/account/change-password" className="ghost-button" style={{ textDecoration: "none" }}>
-              パスワード変更
-            </Link>
-            <button type="button" className="ghost-button" onClick={logout}>
-              ログアウト
-            </button>
           </div>
         </header>
         <Outlet />
