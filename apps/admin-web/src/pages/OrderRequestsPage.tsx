@@ -136,6 +136,8 @@ export function OrderRequestsPage() {
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [linePreviewOpen, setLinePreviewOpen] = useState(false);
+  const linePreviewOpenRef = useRef(linePreviewOpen);
+  linePreviewOpenRef.current = linePreviewOpen;
   const [sendingSelected, setSendingSelected] = useState(false);
   const [basedOn, setBasedOn] = useState<{ versionId: string; documentNumber: string; versionNo: number } | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
@@ -227,6 +229,28 @@ export function OrderRequestsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [linePreviewOpen]);
 
+  const createModal = creating && !basedOn;
+
+  useEffect(() => {
+    if (!createModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      draftRef.current?.focus();
+    });
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape" || linePreviewOpenRef.current) return;
+      setCreating(false);
+      setActionError("");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [createModal]);
+
   const previewDocumentNumber = detail?.document_number ?? "未採番";
   const previewVersionNo = detail?.version_no ?? 1;
   const previewLineText = linePushPreviewText({
@@ -270,6 +294,24 @@ export function OrderRequestsPage() {
     setActionMessage("");
     setReason("");
     setNote("");
+  }
+
+  function startNewDraft() {
+    setCreating(true);
+    setBasedOn(null);
+    setSelectedId(null);
+    setForm(EMPTY_FORM);
+    setSections(EMPTY_ORDER_SECTIONS);
+    setWorkerSearch("");
+    setActionError("");
+    setActionMessage("");
+    setReason("");
+    setNote("");
+  }
+
+  function closeCreateModal() {
+    setCreating(false);
+    setActionError("");
   }
 
   async function startChange(versionId: string) {
@@ -449,6 +491,11 @@ export function OrderRequestsPage() {
         eyebrow="発注依頼"
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
+        titleAction={(
+          <button type="button" className="btn btn-primary" onClick={startNewDraft}>
+            新規の依頼書を作成
+          </button>
+        )}
       />
       <p className="card" style={{ padding: "0.9rem 1rem" }}>
         {layoutPending
@@ -459,8 +506,8 @@ export function OrderRequestsPage() {
           : " 送信には、サーバーへのチャネル設定がまだ必要です。紐付けは稼働者登録・一覧で行います。"}
       </p>
 
-      {actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
-      {actionMessage ? <p>{actionMessage}</p> : null}
+      {!createModal && actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
+      {!createModal && actionMessage ? <p>{actionMessage}</p> : null}
       {listQuery.isLoading ? <LoadingOverlay /> : null}
       {listQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(listQuery.error)} /> : null}
 
@@ -532,27 +579,8 @@ export function OrderRequestsPage() {
       </section>
 
       <section className="order-list-frame is-created">
-        <div className="order-list-head">
-          <div>
-            <h3>作成した依頼書</h3>
-            <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から「変更を作成」で、内容を写した新しい依頼書を作れます。</p>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setCreating(true);
-              setBasedOn(null);
-              setSelectedId(null);
-              setForm(EMPTY_FORM);
-              setSections(EMPTY_ORDER_SECTIONS);
-              setActionError("");
-              setActionMessage("");
-            }}
-          >
-            新規の下書き
-          </button>
-        </div>
+        <h3>作成した依頼書</h3>
+        <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から「変更を作成」で、内容を写した新しい依頼書を作れます。</p>
         <div className="order-list-filters">
           <label>
             区分
@@ -653,9 +681,14 @@ export function OrderRequestsPage() {
       {detailQuery.isLoading ? <LoadingOverlay /> : null}
 
       {(creating || detail) && (
+        <div className={createModal ? "order-create-backdrop" : undefined}>
         <form
           ref={draftRef}
-          className="order-draft"
+          className={createModal ? "order-draft is-modal" : "order-draft"}
+          role={createModal ? "dialog" : undefined}
+          aria-modal={createModal ? true : undefined}
+          aria-labelledby="order-draft-title"
+          tabIndex={createModal ? -1 : undefined}
           onSubmit={(event) => {
             event.preventDefault();
             if (editable) {
@@ -672,7 +705,7 @@ export function OrderRequestsPage() {
                   ? (basedOn ? `${basedOn.documentNumber} の変更` : "発注依頼書")
                   : detail?.document_number}
               </p>
-              <h3>{creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
+              <h3 id="order-draft-title">{creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
               <p className="order-draft-lead">{detailLead}</p>
               {!creating && detail && detail.change_documents.length > 0 ? (
                 <div className="order-row-actions">
@@ -690,6 +723,11 @@ export function OrderRequestsPage() {
               ) : null}
             </div>
             <div className="order-draft-head-side">
+              {createModal ? (
+                <button type="button" className="btn btn-ghost" onClick={closeCreateModal}>
+                  閉じる
+                </button>
+              ) : null}
               {canSend ? (
                 <button
                   type="button"
@@ -724,6 +762,8 @@ export function OrderRequestsPage() {
           </header>
 
           <div className="order-draft-body">
+            {createModal && actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
+            {createModal && actionMessage ? <p>{actionMessage}</p> : null}
             <section className="order-draft-section">
               <div className="order-draft-grid">
                 <div className="order-field order-span-4">
@@ -1222,6 +1262,7 @@ export function OrderRequestsPage() {
             </footer>
           ) : null}
         </form>
+        </div>
       )}
 
       {linePreviewOpen ? (

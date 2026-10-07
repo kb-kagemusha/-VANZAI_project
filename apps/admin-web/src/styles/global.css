@@ -556,6 +556,13 @@ button {
   margin: 0;
 }
 
+.page-header-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
 .page-description {
   max-width: 520px;
   margin: 0;
@@ -4157,10 +4164,25 @@ button {
   }
 }
 
+.order-create-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  padding: 1.25rem;
+  overflow: auto;
+  background: rgba(17, 19, 24, 0.62);
+}
+
+.order-draft.is-modal {
+  width: min(1120px, 100%);
+  min-height: calc(100vh - 2.5rem);
+  margin: 0 auto;
+}
+
 .order-line-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 90;
   display: grid;
   place-items: center;
   padding: 1.25rem;
