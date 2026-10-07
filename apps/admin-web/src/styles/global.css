@@ -77,6 +77,24 @@ button {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: var(--side-nav-bg);
   color: #a3aab8;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f3a transparent;
+}
+
+.side-nav::-webkit-scrollbar,
+.side-nav-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.side-nav::-webkit-scrollbar-track,
+.side-nav-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.side-nav::-webkit-scrollbar-thumb,
+.side-nav-body::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: #2a2f3a;
 }
 
 .side-nav-toggle-bar {

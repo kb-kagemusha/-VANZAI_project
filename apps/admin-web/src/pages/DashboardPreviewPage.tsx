@@ -16,11 +16,13 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   MessageSquare,
   Receipt,
   ScanLine,
   ScrollText,
   ShieldCheck,
+  Sun,
   Tag,
   Upload,
   UserRound,
@@ -45,7 +47,10 @@ import {
   unprocessedCount,
 } from "./dashboardPreviewModel";
 import type { DashboardClosingStatus, DashboardUnprocessedItem, DashboardVarianceAlert } from "../types/api";
+import { PreviewDemoBoard } from "./PreviewDemoBoard";
 import "../styles/apex-preview.css";
+
+const THEME_KEY = "vanzai.preview.theme";
 
 const NARROW_QUERY = "(max-width: 1099px)";
 const FOCUSABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
@@ -120,6 +125,8 @@ export function DashboardPreviewPage() {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [monthValue, setMonthValue] = useState(currentMonthInput());
+  const [showBilling, setShowBilling] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(THEME_KEY) === "dark");
   const periodKey = toPeriodKey(monthValue);
   const sidebarRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -147,6 +154,7 @@ export function DashboardPreviewPage() {
     !isNarrow && collapsed ? "is-collapsed" : "",
     isNarrow ? "is-narrow" : "",
     isNarrow && drawerOpen ? "is-drawer-open" : "",
+    darkMode ? "is-dark" : "",
   ].filter(Boolean).join(" ");
 
   useEffect(() => {
@@ -316,23 +324,54 @@ export function DashboardPreviewPage() {
               ログアウト
             </button>
             <span className="apex-preview__identity">{displayedName} / {formatRole(user?.role)}</span>
+            <button
+              type="button"
+              className="apex-preview__theme"
+              aria-pressed={darkMode}
+              onClick={() => {
+                setDarkMode((current) => {
+                  const next = !current;
+                  window.localStorage.setItem(THEME_KEY, next ? "dark" : "light");
+                  return next;
+                });
+              }}
+            >
+              {darkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+              {darkMode ? "ライト" : "ダーク"}
+            </button>
           </div>
         </header>
         <div className="apex-preview__content">
           <div className="apex-preview__heading-block">
-            <h1 className="apex-preview__title">見た目プレビュー</h1>
-            <p className="apex-preview__lead">上段は選択月で優先して処理する残件</p>
+            <div className="apex-preview__title-row">
+              <h1 className="apex-preview__title">見た目プレビュー</h1>
+              <button
+                type="button"
+                className={showBilling ? "apex-preview__billing is-active" : "apex-preview__billing"}
+                aria-pressed={showBilling}
+                onClick={() => setShowBilling((current) => !current)}
+              >
+                請求
+              </button>
+            </div>
+            <p className="apex-preview__lead">
+              {showBilling ? "上段は選択月で優先して処理する残件" : "通常は概況のグラフです。請求を開くと、今の件数と締めを表示します。"}
+            </p>
             <p className="apex-preview__note">締めと月次生成は現行のダッシュボードで行います。</p>
           </div>
-          <PreviewBody
-            periodKey={periodKey}
-            isLoading={!dashboardQuery.isSuccess && !dashboardQuery.isError}
-            isError={dashboardQuery.isError}
-            errorMessage={dashboardQuery.error instanceof ApiError ? dashboardQuery.error.message : "ダッシュボードを取得できませんでした。"}
-            items={dashboardQuery.isSuccess ? dashboardQuery.data.unprocessed_items : null}
-            closingRows={dashboardQuery.isSuccess ? dashboardQuery.data.closing_status : null}
-            varianceAlerts={dashboardQuery.isSuccess ? dashboardQuery.data.variance_alerts : null}
-          />
+          {showBilling ? (
+            <PreviewBody
+              periodKey={periodKey}
+              isLoading={!dashboardQuery.isSuccess && !dashboardQuery.isError}
+              isError={dashboardQuery.isError}
+              errorMessage={dashboardQuery.error instanceof ApiError ? dashboardQuery.error.message : "ダッシュボードを取得できませんでした。"}
+              items={dashboardQuery.isSuccess ? dashboardQuery.data.unprocessed_items : null}
+              closingRows={dashboardQuery.isSuccess ? dashboardQuery.data.closing_status : null}
+              varianceAlerts={dashboardQuery.isSuccess ? dashboardQuery.data.variance_alerts : null}
+            />
+          ) : (
+            <PreviewDemoBoard />
+          )}
         </div>
       </div>
     </div>
