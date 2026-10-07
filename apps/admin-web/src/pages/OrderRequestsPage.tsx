@@ -273,6 +273,11 @@ export function OrderRequestsPage() {
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
   const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
   const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
+  const pdfNotice = !creating && detail?.status === "cancelled"
+    ? "cancel"
+    : (basedOn || detail?.based_on_document_number)
+      ? "change"
+      : "new";
   const parsedWorkDates = parseWorkDateRange(form.work_date_label);
   const workDateFrom = parsedWorkDates?.from ?? "";
   const workDateTo = parsedWorkDates?.to ?? "";
@@ -1499,9 +1504,12 @@ export function OrderRequestsPage() {
               <h4>PDFを開いたとき</h4>
               {form.kind === "test" ? <p className="order-line-banner">{LINE_TEST_BANNER}</p> : null}
               <div className="order-line-heading">
-                <p className="order-line-doctitle">{orderRequestDocumentTitle(form.work_date_label, sections.projectName)}</p>
+                <p className={`order-line-doctitle${pdfNotice === "cancel" ? " is-cancel" : ""}`}>{orderRequestDocumentTitle(form.work_date_label, sections.projectName, pdfNotice)}</p>
                 <p className="order-line-docno">文書番号　{previewDocumentNumber}　第{previewVersionNo}版</p>
-                <p className="order-line-created">作成日　{formatCreatedOn(creating ? null : detail?.created_at)}</p>
+                <p className="order-line-created">
+                  {pdfNotice === "change" ? <span className="order-line-change-note">＊赤文字が前回からの変更部分です</span> : null}
+                  <span>作成日　{formatCreatedOn(creating ? null : detail?.created_at)}</span>
+                </p>
               </div>
               <pre>{previewPdfBody}</pre>
               <dl>

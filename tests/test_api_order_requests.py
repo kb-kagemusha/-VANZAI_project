@@ -763,15 +763,38 @@ def test_order_pdf_filename_is_date_plus_project():
     )
 
     name = order_request_pdf_filename(work_date_label="2026年10月8日～2026年10月13日", project_name="有楽町交通会館")
-    assert name == "稼働日（2026年10月8日～2026年10月13日）：有楽町交通会館.pdf"
+    assert name == "2026年10月8日～2026年10月13日：有楽町交通会館.pdf"
+    wrapped = order_request_pdf_filename(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="【横浜おいも万博2026】",
+    )
+    assert wrapped == "2026年10月8日～2026年10月13日：横浜おいも万博2026.pdf"
     assert order_request_document_title(
         work_date_label="2026年10月8日～2026年10月13日",
-        project_name="有楽町交通会館",
-    ) == "稼働日（2026年10月8日～2026年10月13日）：有楽町交通会館"
+        project_name="【横浜おいも万博2026】",
+    ) == "【新規発注依頼】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="横浜おいも万博2026",
+        notice="change",
+    ) == "【発注依頼の変更】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="横浜おいも万博2026",
+        notice="cancel",
+    ) == "【発注済み依頼のキャンセル】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
     legacy = order_request_pdf_filename(work_date_label="10/5～10/8", project_name="有楽町交通会館")
-    assert legacy == "稼働日（10／5～10／8）：有楽町交通会館.pdf"
+    assert legacy == "10／5～10／8：有楽町交通会館.pdf"
     header = attachment_content_disposition(legacy)
     assert "filename*=UTF-8''" in header
     assert "10%EF%BC%8F5" in header
     blank = order_request_pdf_filename(work_date_label="", project_name="")
     assert blank == "発注依頼書.pdf"
+
+
+def test_changed_field_captions_marks_only_differences():
+    from src.services.order_request_pdf import changed_field_captions
+
+    current = [("案件名", "横浜おいも万博2026"), ("内容", "新しい内容"), ("備考", "同じ")]
+    previous = [("案件名", "横浜おいも万博2026"), ("内容", "古い内容"), ("備考", "同じ")]
+    assert changed_field_captions(current, previous) == {"内容"}

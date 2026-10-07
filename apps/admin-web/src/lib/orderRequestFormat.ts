@@ -205,8 +205,18 @@ function isoDate(year: string, month: string, day: string): string {
 }
 
 /** PDFの見出し。src/services/order_request_pdf.py の order_request_document_title と同じ切り方。 */
-export function orderRequestDocumentTitle(workDateLabel: string, projectName: string): string {
-  return composeTitle(datePiece(workDateLabel), projectPiece(projectName), "追加案件依頼書");
+export function orderRequestDocumentTitle(
+  workDateLabel: string,
+  projectName: string,
+  notice: "new" | "change" | "cancel" = "new",
+): string {
+  const line = composeTitle(datePiece(workDateLabel), projectPiece(projectName), "");
+  const head = notice === "cancel"
+    ? "【発注済み依頼のキャンセル】"
+    : notice === "change"
+      ? "【発注依頼の変更】"
+      : "【新規発注依頼】";
+  return line ? `${head}\n${line}` : head;
 }
 
 /** ダウンロード名。src/services/order_request_pdf.py の order_request_pdf_filename と同じ切り方。 */
@@ -216,8 +226,8 @@ export function orderRequestPdfFileName(workDateLabel: string, projectName: stri
 }
 
 function composeTitle(date: string, project: string, empty: string): string {
-  if (date && project) return `稼働日（${date}）：${project}`;
-  if (date) return `稼働日（${date}）`;
+  if (date && project) return `${date}：${project}`;
+  if (date) return date;
   return project || empty;
 }
 
@@ -227,7 +237,15 @@ function datePiece(value: string): string {
 
 function projectPiece(value: string): string {
   const first = value.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
-  return withFullwidthTilde(first).replace(/\s+/g, " ").trim();
+  return stripWrappedBrackets(withFullwidthTilde(first).replace(/\s+/g, " ").trim());
+}
+
+function stripWrappedBrackets(value: string): string {
+  if (value.startsWith("【") && value.endsWith("】") && value.length > 2) {
+    const inner = value.slice(1, -1).trim();
+    if (inner) return inner;
+  }
+  return value;
 }
 
 function filePiece(value: string): string {

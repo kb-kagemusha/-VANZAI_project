@@ -361,6 +361,7 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=names,
             created_at=version.created_at,
+            **self._notice_pdf_kwargs(version),
         )
         object_key = (
             f"order-requests/{document.document_number}/v{version.version_no}.pdf"
@@ -548,6 +549,7 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=names,
             created_at=version.created_at,
+            **self._notice_pdf_kwargs(version),
         )
 
     def read_pdf(self, version: OrderRequestVersion) -> bytes:
@@ -582,7 +584,28 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=[str(name) for name in names],
             created_at=version.created_at,
+            **self._notice_pdf_kwargs(version),
         )
+
+    def _notice_pdf_kwargs(self, version: OrderRequestVersion) -> dict:
+        if version.status == STATUS_CANCELLED:
+            return {"notice": "cancel"}
+        if not version.revision_of_version_id:
+            return {"notice": "new"}
+        previous = self.session.get(OrderRequestVersion, version.revision_of_version_id)
+        if previous is None:
+            return {"notice": "change"}
+        return {
+            "notice": "change",
+            "previous_work_date_label": previous.work_date_label or "",
+            "previous_site_name": previous.site_name or "",
+            "previous_site_address": previous.site_address,
+            "previous_request_conditions": previous.request_conditions or "",
+            "previous_body": previous.body or "",
+            "previous_contact_name": previous.contact_name or "",
+            "previous_contact_desk": previous.contact_desk or "",
+            "previous_counterparty_note": previous.counterparty_note,
+        }
 
     def get_version(self, version_id: str) -> OrderRequestVersion:
         version = self.session.get(OrderRequestVersion, version_id)

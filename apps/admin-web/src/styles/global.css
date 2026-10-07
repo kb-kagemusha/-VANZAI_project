@@ -4383,6 +4383,17 @@ button {
   text-align: center;
   font-size: 1.15rem;
   font-weight: 700;
+  white-space: pre-line;
+}
+
+.order-line-heading .order-line-doctitle.is-cancel {
+  color: #e61f19;
+}
+
+.order-line-change-note {
+  color: #e61f19;
+  font-size: 0.78rem;
+  text-align: left;
 }
 
 .order-line-heading .order-line-docno,
@@ -4391,6 +4402,13 @@ button {
   text-align: right;
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.order-line-heading .order-line-created {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
 }
 
 .order-line-docno {

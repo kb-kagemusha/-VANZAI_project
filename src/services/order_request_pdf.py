@@ -24,8 +24,12 @@ from src.services.pdf_generator import DEFAULT_FONT
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
 TEMPLATE_LAYOUT_APPLIED = False
 
-# 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は1枚目の下。複数人の氏名は出さない）。
-PDF_LAYOUT_ID = "order-request-branded-v7"
+# 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は本文の直後。複数人の氏名は出さない）。
+PDF_LAYOUT_ID = "order-request-branded-v8"
+NEW_HEADING = "【新規発注依頼】"
+CHANGE_HEADING = "【発注依頼の変更】"
+CANCEL_HEADING = "【発注済み依頼のキャンセル】"
+CHANGE_NOTE = "＊赤文字が前回からの変更部分です"
 _JST = ZoneInfo("Asia/Tokyo")
 COMPANY_NAME = "株式会社VANZAI"
 _LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "brand" / "vanzai-logo.png"
@@ -63,6 +67,15 @@ def render_order_request_pdf(
     counterparty_note: str | None,
     worker_names: list[str],
     created_at: datetime | None = None,
+    notice: str = "new",
+    previous_work_date_label: str = "",
+    previous_site_name: str = "",
+    previous_site_address: str | None = None,
+    previous_request_conditions: str = "",
+    previous_body: str = "",
+    previous_contact_name: str = "",
+    previous_contact_desk: str = "",
+    previous_counterparty_note: str | None = None,
 ) -> bytes:
     buffer = BytesIO()
     page_width, _page_height = A4
@@ -70,44 +83,8 @@ def render_order_request_pdf(
     right = 16 * mm
     content_width = page_width - left - right
     styles = _styles()
-    note = Paragraph(escape(REPLY_NOTE), styles["note"])
-    note_pad_x = 3 * mm
-    note_pad_y = 1.6 * mm
-    _note_w, note_h = note.wrap(content_width - note_pad_x * 2, 40 * mm)
-    note_box_h = note_h + note_pad_y * 2
-    note_bottom = 11 * mm
     project_name = project_name_from_document(request_conditions, body)
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=left,
-        rightMargin=right,
-        topMargin=12 * mm,
-        bottomMargin=note_bottom + note_box_h + 2.5 * mm,
-        title=_download_stem(work_date_label, project_name),
-        subject=PDF_LAYOUT_ID,
-    )
-    story: list = []
-    if kind == "test":
-        story.append(_banner(TEST_BANNER, content_width, styles))
-        story.append(Spacer(1, 3 * mm))
-
-    title = (
-        order_request_document_title(work_date_label=work_date_label, project_name=project_name)
-        if _is_template(request_conditions, body)
-        else "発注依頼書"
-    )
-    story.append(_brand(content_width))
-    story.append(Spacer(1, 4 * mm))
-    story.extend(_title_block(
-        title,
-        document_number,
-        version_no,
-        format_created_on(created_at),
-        content_width,
-        styles,
-    ))
-    story.append(_field_table(_document_fields(
+    fields = _document_fields(
         request_conditions=request_conditions,
         body=body,
         work_date_label=work_date_label,
@@ -117,14 +94,64 @@ def render_order_request_pdf(
         contact_desk=contact_desk,
         counterparty_note=counterparty_note,
         worker_names=worker_names,
-    ), content_width, styles))
+    )
+    changed: set[str] = set()
+    if notice == "change":
+        previous_fields = _document_fields(
+            request_conditions=previous_request_conditions,
+            body=previous_body,
+            work_date_label=previous_work_date_label,
+            site_name=previous_site_name,
+            site_address=previous_site_address,
+            contact_name=previous_contact_name,
+            contact_desk=previous_contact_desk,
+            counterparty_note=previous_counterparty_note,
+            worker_names=[],
+        )
+        changed = changed_field_captions(fields, previous_fields)
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=left,
+        rightMargin=right,
+        topMargin=12 * mm,
+        bottomMargin=14 * mm,
+        title=_download_stem(work_date_label, project_name),
+        subject=PDF_LAYOUT_ID,
+    )
+    story: list = []
+    if kind == "test":
+        story.append(_banner(TEST_BANNER, content_width, styles))
+        story.append(Spacer(1, 3 * mm))
+
+    if not _is_template(request_conditions, body):
+        title_markup = "発注依頼書"
+        notice_for_title = "new"
+    else:
+        title_markup = _title_markup(
+            notice=notice,
+            work_date_label=work_date_label,
+            project_name=project_name,
+            previous_work_date_label=previous_work_date_label,
+            previous_project_name=project_name_from_document(previous_request_conditions, previous_body),
+        )
+        notice_for_title = notice
+    story.append(_brand(content_width))
+    story.append(Spacer(1, 4 * mm))
+    story.extend(_title_block(
+        title_markup,
+        document_number,
+        version_no,
+        format_created_on(created_at),
+        content_width,
+        styles,
+        notice=notice_for_title,
+    ))
+    story.append(_field_table(fields, content_width, styles, changed))
+    story.append(Spacer(1, 3 * mm))
+    story.append(_reply_note(content_width, styles))
     def _decorate(canvas, _doc):
         canvas.saveState()
-        canvas.setFillColor(_PAPER)
-        canvas.setStrokeColor(_LINE)
-        canvas.setLineWidth(0.6)
-        canvas.rect(left, note_bottom, content_width, note_box_h, fill=1, stroke=1)
-        note.drawOn(canvas, left + note_pad_x, note_bottom + note_pad_y)
         canvas.setFillColor(_INK)
         canvas.setFont(DEFAULT_FONT, 8)
         canvas.drawRightString(page_width - right, 6 * mm, COMPANY_NAME)
@@ -257,8 +284,22 @@ def _styles() -> dict[str, ParagraphStyle]:
         "note": ParagraphStyle(
             "or_note",
             fontSize=8.5,
-            leading=12,
+            leading=11.5,
             textColor=_MUTED,
+            **common,
+        ),
+        "value_changed": ParagraphStyle(
+            "or_value_changed",
+            fontSize=11,
+            leading=16,
+            textColor=_BRAND_RED,
+            **common,
+        ),
+        "change_note": ParagraphStyle(
+            "or_change_note",
+            fontSize=8,
+            leading=11,
+            textColor=_BRAND_RED,
             **common,
         ),
     }
@@ -280,14 +321,16 @@ def format_created_on(value: datetime | None) -> str:
 
 
 def _title_block(
-    title: str,
+    title_markup: str,
     document_number: str,
     version_no: int,
     created_label: str,
     width: float,
     styles: dict,
+    *,
+    notice: str,
 ) -> list:
-    heading = Table([[_paragraph(title, styles["title"])]], colWidths=[width])
+    heading = Table([[Paragraph(title_markup, styles["title"])]], colWidths=[width])
     heading.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -295,16 +338,19 @@ def _title_block(
         ("TOPPADDING", (0, 0), (-1, -1), 1),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
     ]))
+    number = Paragraph(f"文書番号　{escape(document_number)}　第{version_no}版", styles["meta"])
+    created = Paragraph(f"作成日　{escape(created_label)}", styles["meta"])
+    note = Paragraph(CHANGE_NOTE if notice == "change" else "", styles["change_note"])
     meta = Table(
-        [
-            [Paragraph(f"文書番号　{escape(document_number)}　第{version_no}版", styles["meta"])],
-            [Paragraph(f"作成日　{escape(created_label)}", styles["meta"])],
-        ],
-        colWidths=[width],
+        [[number, ""], [note, created]],
+        colWidths=[width * 0.62, width * 0.38],
     )
     meta.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("SPAN", (0, 0), (1, 0)),
+        ("ALIGN", (0, 0), (1, 0), "RIGHT"),
+        ("ALIGN", (1, 1), (1, 1), "RIGHT"),
+        ("ALIGN", (0, 1), (0, 1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -343,9 +389,11 @@ def project_name_from_document(request_conditions: str | None, body: str | None)
     return ""
 
 
-def order_request_document_title(*, work_date_label: str, project_name: str) -> str:
-    """PDFの見出し。稼働日（◯年◯月◯日～◯年◯月◯日）：案件名"""
-    return _compose_title(_plain_piece(work_date_label), _plain_piece(project_name), empty="追加案件依頼書")
+def order_request_document_title(*, work_date_label: str, project_name: str, notice: str = "new") -> str:
+    """PDFの見出し。1行目が依頼の種類、2行目が稼働日：案件名。"""
+    line = _compose_title(_plain_piece(work_date_label), _display_project_name(project_name), empty="")
+    head = {"change": CHANGE_HEADING, "cancel": CANCEL_HEADING}.get(notice, NEW_HEADING)
+    return f"{head}\n{line}" if line else head
 
 
 def order_request_pdf_filename(*, work_date_label: str, project_name: str) -> str:
@@ -367,10 +415,66 @@ def _download_stem(work_date_label: str, project_name: str) -> str:
 
 def _compose_title(date: str, project: str, *, empty: str) -> str:
     if date and project:
-        return f"稼働日（{date}）：{project}"
+        return f"{date}：{project}"
     if date:
-        return f"稼働日（{date}）"
+        return date
     return project or empty
+
+
+def _display_project_name(project_name: str) -> str:
+    text = _plain_piece(project_name)
+    if len(text) > 2 and text.startswith("【") and text.endswith("】"):
+        inner = text[1:-1].strip()
+        if inner:
+            return inner
+    return text
+
+
+def _title_markup(
+    *,
+    notice: str,
+    work_date_label: str,
+    project_name: str,
+    previous_work_date_label: str,
+    previous_project_name: str,
+) -> str:
+    date = _plain_piece(work_date_label)
+    project = _display_project_name(project_name)
+    line = _compose_title(date, project, empty="")
+    if notice == "cancel":
+        head = f'<font color="#E61F19">{CANCEL_HEADING}</font>'
+    elif notice == "change":
+        head = CHANGE_HEADING
+    else:
+        head = NEW_HEADING
+    if not line:
+        return head
+    shown = escape(line)
+    if notice == "change":
+        previous_line = _compose_title(
+            _plain_piece(previous_work_date_label),
+            _display_project_name(previous_project_name),
+            empty="",
+        )
+        if line != previous_line:
+            shown = f'<font color="#E61F19">{shown}</font>'
+    return f"{head}<br/>{shown}"
+
+
+def changed_field_captions(
+    current: list[tuple[str, str]],
+    previous: list[tuple[str, str]],
+) -> set[str]:
+    before = {caption: _norm_field(text) for caption, text in previous}
+    changed: set[str] = set()
+    for caption, text in current:
+        if before.get(caption) != _norm_field(text):
+            changed.add(caption)
+    return changed
+
+
+def _norm_field(value: str) -> str:
+    return (value or "").replace("\r\n", "\n").strip()
 
 
 def _plain_piece(value: str) -> str:
@@ -379,6 +483,7 @@ def _plain_piece(value: str) -> str:
 
 
 def _filename_piece(value: str) -> str:
+    value = _display_project_name(value)
     text = (value or "").translate(str.maketrans({
         "\\": "／",
         "/": "／",
@@ -397,18 +502,39 @@ def _filename_piece(value: str) -> str:
     return text[:80]
 
 
-def _field_table(fields: list[tuple[str, str]], width: float, styles: dict) -> Table:
+def _reply_note(width: float, styles: dict) -> Table:
+    table = Table([[_paragraph(REPLY_NOTE, styles["note"])]], colWidths=[width])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _PAPER),
+        ("BOX", (0, 0), (-1, -1), 0.6, _LINE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    return table
+
+
+def _field_table(
+    fields: list[tuple[str, str]],
+    width: float,
+    styles: dict,
+    changed: set[str] | None = None,
+) -> Table:
+    changed = changed or set()
     label_width = 32 * mm
     accent_width = 1.8 * mm
     value_width = width - label_width - accent_width
-    rows = [
-        [
+    rows = []
+    for caption, text in fields:
+        value_style = styles["value_changed"] if caption in changed else styles["value"]
+        empty_style = value_style if caption in changed else styles["empty"]
+        rows.append([
             "",
             _paragraph(caption, styles["label"]),
-            _paragraph(text, styles["value"], styles["empty"]),
-        ]
-        for caption, text in fields
-    ]
+            _paragraph(text, value_style, empty_style),
+        ])
     table = Table(rows, colWidths=[accent_width, label_width, value_width])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (0, -1), _ACCENT),
