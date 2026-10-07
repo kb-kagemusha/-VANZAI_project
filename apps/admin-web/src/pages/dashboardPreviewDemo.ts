@@ -42,9 +42,9 @@ export const DEMO_EQUIPMENT = [
 ];
 
 export const FINANCE_LABELS = {
+  profit: "粗利益",
   sales: "売上",
   labor: "人件費",
-  profit: "粗利益",
 } as const;
 
 export const FINANCE_COLORS: Record<keyof typeof FINANCE_LABELS, string> = {

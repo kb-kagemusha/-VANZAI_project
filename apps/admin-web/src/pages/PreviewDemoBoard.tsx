@@ -24,7 +24,7 @@ const CHART_WIDTH = 720;
 const CHART_HEIGHT = 280;
 const CHART_INSET = { left: 56, right: 16, top: 28, bottom: 28 };
 const DRAW_EASING = "cubic-bezier(0.42, 0, 1, 1)";
-const DRAW_MS = 1800;
+const DRAW_MS = 1300;
 
 function useAccelerateDraw(ref: RefObject<SVGPathElement | null>, signature: string) {
   useLayoutEffect(() => {
@@ -48,19 +48,17 @@ function useAccelerateDraw(ref: RefObject<SVGPathElement | null>, signature: str
   }, [ref, signature]);
 }
 
-function Sparkline({ values, color }: { values: number[]; color: string }) {
+function Sparkline({ values, color, insetLeft = 8 }: { values: number[]; color: string; insetLeft?: number }) {
   const gradientId = useId().replace(/:/g, "");
-  const lineRef = useRef<SVGPathElement>(null);
   const width = 240;
   const height = 72;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const points = plotPoints(values, width, height, { left: 2, right: 2, top: 10, bottom: 4 }, { min, max });
+  const points = plotPoints(values, width, height, { left: insetLeft, right: 6, top: 10, bottom: 4 }, { min, max });
   const line = smoothLine(points, 8, height - 2);
-  useAccelerateDraw(lineRef, line);
   const last = points[points.length - 1];
   const first = points[0];
-  const area = `${line} L ${last?.x ?? 0} ${height} L ${first?.x ?? 0} ${height} Z`;
+  const area = `${line} L ${last?.x ?? width} ${height} L ${first?.x ?? 0} ${height} Z`;
   return (
     <svg className="apex-preview__spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
       <defs>
@@ -70,7 +68,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
         </linearGradient>
       </defs>
       <path d={area} fill={`url(#${gradientId})`} />
-      <path ref={lineRef} d={line} fill="none" stroke={color} strokeWidth="2" />
+      <path d={line} fill="none" stroke={color} strokeWidth="2" />
     </svg>
   );
 }
@@ -78,17 +76,21 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 function TrendCard({
   label,
   value,
+  unit,
   delta,
   values,
   color,
   icon,
+  insetLeft,
 }: {
   label: string;
   value: string;
+  unit: string;
   delta: string;
   values: number[];
   color: string;
   icon: ReactNode;
+  insetLeft?: number;
 }) {
   const positive = !delta.startsWith("-");
   return (
@@ -96,7 +98,10 @@ function TrendCard({
       <div className="apex-preview__stat-top">
         <div>
           <p className="apex-preview__kpi-label">{label}</p>
-          <p className="apex-preview__kpi-value">{value}</p>
+          <p className="apex-preview__kpi-value">
+            {value}
+            <small>{unit}</small>
+          </p>
           <p className={positive ? "apex-preview__delta is-up" : "apex-preview__delta is-down"}>
             {positive ? <TrendingUp size={14} aria-hidden="true" /> : <TrendingDown size={14} aria-hidden="true" />}
             {delta}
@@ -104,7 +109,7 @@ function TrendCard({
         </div>
         <span className="apex-preview__stat-icon" style={{ color, background: `${color}1a` }}>{icon}</span>
       </div>
-      <Sparkline values={values} color={color} />
+      <Sparkline values={values} color={color} insetLeft={insetLeft} />
     </article>
   );
 }
@@ -368,7 +373,7 @@ function initials(name: string): string {
 
 
 export function PreviewDemoBoard() {
-  const [finance, setFinance] = useState<FinanceKey>("sales");
+  const [finance, setFinance] = useState<FinanceKey>("profit");
   const [share, setShare] = useState<"client" | "type">("client");
   const financeValues = DEMO_FINANCE[finance];
   const financeColor = FINANCE_COLORS[finance];
@@ -377,8 +382,8 @@ export function PreviewDemoBoard() {
     <div className="apex-preview__demo">
       <p className="apex-preview__note">グラフとリストの数値はデモです。点や区分を指すと内訳が出ます。</p>
       <section className="apex-preview__demo-top" aria-label="概況">
-        <TrendCard label="月間の案件数" value="48" delta="+12.5%" values={DEMO_PROJECT_TREND} color="#16a34a" icon={<Briefcase size={16} aria-hidden="true" />} />
-        <TrendCard label="稼働者数" value="186" delta="+8.2%" values={DEMO_WORKER_TREND} color="#2563eb" icon={<Users size={16} aria-hidden="true" />} />
+        <TrendCard label="月間の案件数" value="48" unit="件" delta="+12.5%" values={DEMO_PROJECT_TREND} color="#16a34a" icon={<Briefcase size={16} aria-hidden="true" />} />
+        <TrendCard label="稼働者数" value="186" unit="名" delta="+8.2%" values={DEMO_WORKER_TREND} color="#2563eb" icon={<Users size={16} aria-hidden="true" />} insetLeft={36} />
         <DaysCard />
       </section>
       <section className="apex-preview__demo-mid">
