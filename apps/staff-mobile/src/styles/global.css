@@ -211,6 +211,9 @@ button {
 }
 
 .mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -1089,6 +1092,85 @@ button {
 
 .app-version-update-btn:hover {
   background: var(--accent-deep, #2563eb);
+  color: #fff;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: #182029;
+  flex: 0 0 auto;
+}
+
+.mobile-header-meta .theme-toggle {
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  border-color: #16a34a;
+  color: #16a34a;
+  outline: none;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  color: #f4f6f8;
+  background: #1b1f27;
+  --surface: #242833;
+  --surface-strong: #2c3140;
+  --border: rgba(255, 255, 255, 0.12);
+  --text-subtle: #a3aab8;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme="dark"] .theme-toggle {
+  color: #f4f6f8;
+  background: var(--surface-strong);
+}
+
+html[data-theme="dark"] .theme-toggle:hover,
+html[data-theme="dark"] .theme-toggle:focus-visible {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .mobile-header,
+html[data-theme="dark"] .mobile-nav,
+html[data-theme="dark"] .mobile-status-band,
+html[data-theme="dark"] .mobile-status-card,
+html[data-theme="dark"] .hero-panel.sunrise,
+html[data-theme="dark"] .hero-panel.tide,
+html[data-theme="dark"] .accent-orange,
+html[data-theme="dark"] .accent-blue,
+html[data-theme="dark"] .accent-green,
+html[data-theme="dark"] .accent-sand,
+html[data-theme="dark"] .push-settings-card {
+  background: var(--surface);
+  color: inherit;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] button:not(.primary-button):not(.theme-toggle):not(.mobile-version-refresh):not(.app-dialog-button) {
+  background: #1c212b;
+  color: #f4f6f8;
+  border-color: #3a4150;
+}
+
+html[data-theme="dark"] .primary-button {
   color: #fff;
 }
 

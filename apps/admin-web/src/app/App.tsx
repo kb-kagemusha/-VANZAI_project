@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "../components/AppShell";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { AppDialogHost } from "../lib/appDialog";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
 import { CsvImportPage } from "../pages/CsvImportPage";
@@ -33,17 +34,30 @@ import { OcrPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
+function StandaloneFrame() {
+  return (
+    <>
+      <ThemeToggle placement="fixed" />
+      <Outlet />
+    </>
+  );
+}
+
 export function App() {
   return (
     <>
     <AppDialogHost />
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
-      <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
+      <Route element={<StandaloneFrame />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
+        <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
+      </Route>
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/403" element={<ForbiddenPage />} />
+        <Route element={<StandaloneFrame />}>
+          <Route path="/403" element={<ForbiddenPage />} />
+        </Route>
         <Route
           path="/dashboard/preview"
           element={

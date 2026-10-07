@@ -516,6 +516,9 @@ button {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -549,6 +552,8 @@ button {
   display: flex;
   gap: 0.8rem;
   align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .identity-card {
@@ -4570,4 +4575,163 @@ a.primary-button {
 .order-line-pdf dd {
   margin: 0.1rem 0 0;
   white-space: pre-wrap;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  border-color: #16a34a;
+  color: #16a34a;
+  outline: none;
+}
+
+.theme-toggle--fixed {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 80;
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1b1f27;
+  --bg-strong: #14171d;
+  --panel: #242833;
+  --panel-strong: #2c3140;
+  --ink: #f4f6f8;
+  --muted: #a3aab8;
+  --line: #3a4150;
+  --accent: #4ade80;
+  --accent-soft: rgba(74, 222, 128, 0.16);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+html[data-theme="dark"] .app-shell {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .theme-toggle:hover,
+html[data-theme="dark"] .theme-toggle:focus-visible {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .side-nav-user-menu,
+html[data-theme="dark"] .account-profile .card,
+html[data-theme="dark"] .public-ocr-upload-overlay-panel,
+html[data-theme="dark"] .ocr-image-preview-popover,
+html[data-theme="dark"] .ocr-image-preview-popover--portal,
+html[data-theme="dark"] .ocr-image-lightbox-panel,
+html[data-theme="dark"] .ocr-row-review-panel,
+html[data-theme="dark"] .ocr-row-review-data-footer,
+html[data-theme="dark"] .ocr-modal-card,
+html[data-theme="dark"] .ocr-data-section-shell,
+html[data-theme="dark"] .ocr-data-section-panel,
+html[data-theme="dark"] .ocr-source-type-panel,
+html[data-theme="dark"] .ocr-saved-data-tab.is-active,
+html[data-theme="dark"] .confirm-dialog-panel,
+html[data-theme="dark"] .ocr-rename-prompt-panel,
+html[data-theme="dark"] .order-list-table,
+html[data-theme="dark"] .order-segment button.is-active,
+html[data-theme="dark"] .order-pdf-review-frame,
+html[data-theme="dark"] .order-line-bubble,
+html[data-theme="dark"] .order-line-template,
+html[data-theme="dark"] .order-line-pdf,
+html[data-theme="dark"] .app-dialog-card,
+html[data-theme="dark"] .ocr-image-card,
+html[data-theme="dark"] .ocr-image-row {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+html[data-theme="dark"] .side-nav-user-menu button,
+html[data-theme="dark"] .side-nav-user-menu a,
+html[data-theme="dark"] .order-line-bubble,
+html[data-theme="dark"] .order-line-template,
+html[data-theme="dark"] .ocr-saved-data-tab.is-active,
+html[data-theme="dark"] .app-dialog-title,
+html[data-theme="dark"] .app-dialog-message,
+html[data-theme="dark"] .app-dialog-button-ghost,
+html[data-theme="dark"] .public-ocr-upload-memo {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .ocr-saved-data-tab.is-active {
+  border-bottom-color: var(--panel);
+}
+
+html[data-theme="dark"] .side-nav-user-menu button:hover,
+html[data-theme="dark"] .side-nav-user-menu button:focus-visible,
+html[data-theme="dark"] .side-nav-user-menu a:hover,
+html[data-theme="dark"] .side-nav-user-menu a:focus-visible,
+html[data-theme="dark"] .app-dialog-button-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .ghost-button,
+html[data-theme="dark"] .btn-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .ghost-button:hover:not(:disabled),
+html[data-theme="dark"] .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .data-table th {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme="dark"] .data-table th,
+html[data-theme="dark"] .data-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .data-table--striped tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: #1c212b;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+html[data-theme="dark"] .app-dialog-button-ghost {
+  border-color: var(--line);
+  background: transparent;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .topbar-heading {
+    flex: 1;
+    min-width: 0;
+  }
 }

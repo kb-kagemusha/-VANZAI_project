@@ -384,6 +384,9 @@ a.apex-preview__user {
 }
 
 .apex-preview__header {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   display: flex;
   align-items: center;
   gap: 8px 12px;

@@ -16,14 +16,12 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Moon,
   MessageSquare,
   Receipt,
   ScanLine,
   ScrollText,
   Settings,
   ShieldCheck,
-  Sun,
   Tag,
   Upload,
   UserRound,
@@ -32,11 +30,13 @@ import {
 } from "lucide-react";
 
 import { BrandMark } from "../components/BrandMark";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { ApiError, getDashboard } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
 import { currentMonthInput, formatDate, formatPeriodKey, formatRole, formatStatus, minutesToHours, toPeriodKey } from "../lib/formatters";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
+import { useColorTheme } from "../lib/theme";
 import {
   KPI_ITEMS,
   NAV_GROUP_ORDER,
@@ -52,8 +52,6 @@ import { PreviewDemoBoard } from "./PreviewDemoBoard";
 import { PreviewProfile } from "./PreviewProfile";
 import { useSealColor } from "./previewSeal";
 import "../styles/apex-preview.css";
-
-const THEME_KEY = "vanzai.preview.theme";
 
 const NARROW_QUERY = "(max-width: 1099px)";
 const FOCUSABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
@@ -129,7 +127,7 @@ export function DashboardPreviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [showBilling, setShowBilling] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(THEME_KEY) === "dark");
+  const { theme } = useColorTheme();
   const [sealColor, setSealColor] = useSealColor();
   const [accountOpen, setAccountOpen] = useState(false);
   const periodKey = toPeriodKey(monthValue);
@@ -162,7 +160,7 @@ export function DashboardPreviewPage() {
     !isNarrow && collapsed ? "is-collapsed" : "",
     isNarrow ? "is-narrow" : "",
     isNarrow && drawerOpen ? "is-drawer-open" : "",
-    darkMode ? "is-dark" : "",
+    theme === "dark" ? "is-dark" : "",
   ].filter(Boolean).join(" ");
 
   useEffect(() => {
@@ -348,21 +346,6 @@ export function DashboardPreviewPage() {
           )}
           <div className="apex-preview__header-actions">
             <Link className="apex-preview__header-link" to="/dashboard">現行のダッシュボード</Link>
-            <button
-              type="button"
-              className="apex-preview__theme"
-              aria-pressed={darkMode}
-              onClick={() => {
-                setDarkMode((current) => {
-                  const next = !current;
-                  window.localStorage.setItem(THEME_KEY, next ? "dark" : "light");
-                  return next;
-                });
-              }}
-            >
-              {darkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-              {darkMode ? "ライト" : "ダーク"}
-            </button>
             <div className="apex-preview__account" ref={accountRef}>
               <button
                 type="button"
@@ -387,6 +370,7 @@ export function DashboardPreviewPage() {
                 </div>
               ) : null}
             </div>
+            <ThemeToggle />
           </div>
         </header>
         <div className="apex-preview__content">

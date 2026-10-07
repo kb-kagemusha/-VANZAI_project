@@ -2,6 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 import { useState } from "react";
 
 import { SideNav } from "./SideNav";
+import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "../lib/auth/auth-context";
 import { canAccess } from "../lib/auth/permissions";
 
@@ -64,6 +65,7 @@ export function AppShell() {
                 登録画面のURL確認
               </button>
             ) : null}
+            <ThemeToggle />
           </div>
         </header>
         <Outlet />
@@ -85,7 +87,8 @@ export function AppShell() {
         >
           <div
             style={{
-              background: "#fff",
+              background: "var(--panel)",
+              color: "var(--ink)",
               borderRadius: 12,
               padding: "24px 28px",
               width: "min(100%, 760px)",
@@ -96,7 +99,7 @@ export function AppShell() {
           >
             <div style={{ display: "grid", gap: 4 }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>登録画面のURL一覧</h3>
-              <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
+              <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
                 実際の運用では token と PIN を含む公開リンクを発行して使用してください。下のURLは画面パス確認用です。
               </p>
             </div>
@@ -106,7 +109,7 @@ export function AppShell() {
                 <div
                   key={item.key}
                   style={{
-                    border: "1px solid #e5e7eb",
+                    border: "1px solid var(--line)",
                     borderRadius: 10,
                     padding: "12px 14px",
                     display: "grid",
@@ -124,7 +127,7 @@ export function AppShell() {
                       </a>
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: "#475467", wordBreak: "break-all" }}>{item.url}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", wordBreak: "break-all" }}>{item.url}</div>
                 </div>
               ))}
             </div>

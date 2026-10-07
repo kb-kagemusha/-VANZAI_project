@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { MobileStatusBand } from "./MobileStatusBand";
+import { ThemeToggle } from "./ThemeToggle";
 import { getActuals, getAssignments, getWorkerAvailability, getWorkerAvailabilityPreferences, getWorkerNotices } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { currentDateInput } from "../lib/formatters";
@@ -137,6 +138,7 @@ export function MobileShell() {
               {refreshing ? "…" : "↺"}
             </button>
             <button type="button" onClick={logout}>ログアウト</button>
+            <ThemeToggle />
           </div>
         </div>
       </header>

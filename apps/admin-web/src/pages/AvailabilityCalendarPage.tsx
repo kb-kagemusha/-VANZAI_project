@@ -498,12 +498,12 @@ export function AvailabilityCalendarPage() {
         >
           <div
             style={{
-              background: "#fff", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+              background: "var(--panel)", color: "var(--ink)", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
               width: "min(96vw, 860px)", maxHeight: "80vh",
               display: "flex", flexDirection: "column",
             }}
           >
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontWeight: 700, fontSize: 16 }}>資格情報の編集</span>
               <button
                 style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#6b7280" }}
@@ -513,7 +513,7 @@ export function AvailabilityCalendarPage() {
             <div style={{ overflowY: "auto", flex: 1, padding: "12px 0" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: "#f9fafb" }}>
+                  <tr style={{ background: "var(--bg-strong)" }}>
                     <th style={{ padding: "6px 12px", textAlign: "left", fontWeight: 600, borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>スタッフ</th>
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>喫煙所</th>
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>Pシャツ</th>
@@ -529,11 +529,11 @@ export function AvailabilityCalendarPage() {
                       smoking_area_ok: null, p_shirt_count: null, has_best: null,
                       stores_training_done: null, pioneer_training_done: null, license_type: null,
                     };
-                    const rowBg = i % 2 === 0 ? "#fff" : "#f9fafb";
+                    const rowBg = i % 2 === 0 ? "var(--panel)" : "var(--bg-strong)";
                     function update<K extends keyof WorkerQualsUpdateRequest>(field: K, val: WorkerQualsUpdateRequest[K]) {
                       setEditQualsMap((prev) => ({ ...prev, [w.id]: { ...prev[w.id], [field]: val } }));
                     }
-                    const selStyle: React.CSSProperties = { fontSize: 12, padding: "2px 4px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff" };
+                    const selStyle: React.CSSProperties = { fontSize: 12, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 4, background: "var(--panel)", color: "var(--ink)" };
                     return (
                       <tr key={w.id} style={{ background: rowBg }}>
                         <td style={{ padding: "6px 12px", borderBottom: "1px solid #f3f4f6", whiteSpace: "nowrap", fontWeight: 500 }}>
@@ -601,7 +601,7 @@ export function AvailabilityCalendarPage() {
                 </tbody>
               </table>
             </div>
-            <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e7eb", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <div style={{ padding: "12px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn btn-outline" onClick={() => setShowEditModal(false)} disabled={isSaving}>キャンセル</button>
               <button className="btn btn-primary" onClick={saveQuals} disabled={isSaving}>
                 {isSaving ? "保存中..." : "保存"}
