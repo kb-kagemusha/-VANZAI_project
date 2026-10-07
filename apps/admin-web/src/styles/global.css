@@ -4735,3 +4735,247 @@ html[data-theme="dark"] .app-dialog-button-ghost {
     min-width: 0;
   }
 }
+
+/* 発注依頼書だけ。ライトモードの色は上の定義のまま */
+html[data-theme="dark"] .order-list-frame {
+  color: #f4f6f8;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="dark"] .order-list-frame.is-sent,
+html[data-theme="dark"] .order-list-frame.is-created {
+  background: #1c212b;
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-list-frame.is-sent {
+  border-color: rgba(74, 222, 128, 0.28);
+}
+
+html[data-theme="dark"] .order-list-frame.is-created {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .order-list-frame h3,
+html[data-theme="dark"] .order-draft-head h3,
+html[data-theme="dark"] .order-document-title,
+html[data-theme="dark"] .order-choice-title,
+html[data-theme="dark"] .order-line-head h3 {
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-list-lead,
+html[data-theme="dark"] .order-change-note,
+html[data-theme="dark"] .order-draft-lead,
+html[data-theme="dark"] .order-draft-kicker,
+html[data-theme="dark"] .order-field-hint,
+html[data-theme="dark"] .order-choice-hint,
+html[data-theme="dark"] .order-line-note,
+html[data-theme="dark"] .order-recipients-head p,
+html[data-theme="dark"] .order-recipient-empty {
+  color: #c5cad3;
+}
+
+html[data-theme="dark"] .order-list-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: #c5cad3;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .order-list-filters select {
+  appearance: none;
+  min-width: 9rem;
+  padding: 0.48rem 2.1rem 0.48rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background-color: #141820;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #c5cad3 50%),
+    linear-gradient(135deg, #c5cad3 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 55%,
+    calc(100% - 0.72rem) 55%;
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  color: #f4f6f8;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .order-list-filters select option {
+  background: #1c212b;
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-list-table,
+html[data-theme="dark"] .order-draft-table {
+  background: #242833;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme="dark"] .order-list-table .data-table th,
+html[data-theme="dark"] .order-draft-table .data-table th {
+  color: #d0d5de;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme="dark"] .order-list-table .data-table td,
+html[data-theme="dark"] .order-draft-table .data-table td {
+  color: #f4f6f8;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="dark"] .order-list-table .btn-ghost,
+html[data-theme="dark"] .order-draft .btn-ghost,
+html[data-theme="dark"] .order-line-dialog .btn-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f6f8;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="dark"] .order-list-table .btn-ghost:hover:not(:disabled),
+html[data-theme="dark"] .order-draft .btn-ghost:hover:not(:disabled),
+html[data-theme="dark"] .order-line-dialog .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .order-draft {
+  background: #242833;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-draft-head {
+  background: #2c3140;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .order-draft-foot {
+  background: #1e2430;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .order-draft-badge {
+  background: rgba(74, 222, 128, 0.16);
+  color: #86efac;
+}
+
+html[data-theme="dark"] .order-draft-badge.is-test {
+  background: rgba(217, 143, 43, 0.2);
+  color: #fcd34d;
+  border-color: rgba(240, 212, 138, 0.35);
+}
+
+html[data-theme="dark"] .order-document,
+html[data-theme="dark"] .order-choice,
+html[data-theme="dark"] .order-recipients,
+html[data-theme="dark"] .order-note-list li {
+  background: #1c212b;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-choice.is-on {
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+html[data-theme="dark"] .order-field input,
+html[data-theme="dark"] .order-field textarea,
+html[data-theme="dark"] .order-recipients-search input {
+  background: #141820;
+  color: #f4f6f8;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+html[data-theme="dark"] .order-field input::placeholder,
+html[data-theme="dark"] .order-field textarea::placeholder,
+html[data-theme="dark"] .order-recipients-search input::placeholder {
+  color: rgba(197, 202, 211, 0.72);
+}
+
+html[data-theme="dark"] .order-field input:focus,
+html[data-theme="dark"] .order-field textarea:focus,
+html[data-theme="dark"] .order-recipients-search input:focus {
+  border-color: rgba(74, 222, 128, 0.75);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+}
+
+html[data-theme="dark"] .order-field input:disabled,
+html[data-theme="dark"] .order-field textarea:disabled,
+html[data-theme="dark"] .order-recipients-search input:disabled {
+  background: rgba(255, 255, 255, 0.04);
+  color: #a3aab8;
+}
+
+html[data-theme="dark"] .order-segment {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="dark"] .order-segment button {
+  color: #c5cad3;
+}
+
+html[data-theme="dark"] .order-segment button.is-active {
+  background: #343b4a;
+  color: #f4f6f8;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .order-segment button.is-test.is-active {
+  background: rgba(217, 143, 43, 0.24);
+  color: #fcd34d;
+}
+
+html[data-theme="dark"] .order-choice input,
+html[data-theme="dark"] .order-recipient input {
+  accent-color: #4ade80;
+}
+
+html[data-theme="dark"] .order-count {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f6f8;
+}
+
+html[data-theme="dark"] .order-count.is-over {
+  background: rgba(217, 143, 43, 0.22);
+  color: #fcd34d;
+}
+
+html[data-theme="dark"] .order-pick {
+  background: rgba(74, 222, 128, 0.14);
+  color: #bbf7d0;
+}
+
+html[data-theme="dark"] .order-recipient-list {
+  background: #181c24;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .order-recipient:hover,
+html[data-theme="dark"] .order-recipient.is-on {
+  background: rgba(74, 222, 128, 0.12);
+}
+
+html[data-theme="dark"] .order-pdf-review-frame {
+  background: #1c212b;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme="dark"] .order-line-backdrop {
+  background: rgba(17, 19, 24, 0.72);
+}
+
+html[data-theme="dark"] .order-line-dialog {
+  background: #242833;
+  color: #f4f6f8;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme="dark"] .order-line-banner {
+  color: #fca5a5;
+}
