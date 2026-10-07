@@ -523,7 +523,9 @@ class LineOrderService:
         rows = (
             self.session.query(OrderRequestDelivery)
             .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
+            .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
             .filter(
+                OrderRequestDocument.deleted_at.is_(None),
                 OrderRequestVersion.follow_up_due_at.is_not(None),
                 OrderRequestVersion.status != STATUS_CANCELLED,
                 OrderRequestVersion.dispatch_stopped.is_(False),

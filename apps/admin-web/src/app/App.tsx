@@ -22,6 +22,7 @@ import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
+import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
@@ -200,6 +201,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops"]}>
                 <OrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/order-requests/deleted"
+            element={
+              <PermissionRoute allowedRoles={["admin"]}>
+                <DeletedOrderRequestsPage />
               </PermissionRoute>
             }
           />

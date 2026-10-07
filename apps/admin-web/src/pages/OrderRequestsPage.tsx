@@ -19,6 +19,7 @@ import {
   fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
   getWorkers,
+  hideOrderRequest,
   listLineLinks,
   listOrderRequestReplies,
   listOrderRequests,
@@ -47,6 +48,7 @@ import {
   withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
+import { useAuth } from "../lib/auth/auth-context";
 import type {
   OrderRequestChangeLink,
   OrderRequestKind,
@@ -93,6 +95,11 @@ function basedOnNote(
   return `${sourceNumber} の変更`;
 }
 
+function kindLabel(kind: string, changes: OrderRequestChangeLink[] | undefined): string {
+  if ((changes ?? []).length > 0) return "変更";
+  return kind === "test" ? "テスト" : "正式";
+}
+
 function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink): string {
   if (change.document_number === documentNumber) return `変更 第${change.version_no}版`;
   return `変更 ${change.document_number}`;
@@ -126,6 +133,8 @@ function messageOf(error: unknown): string {
 
 export function OrderRequestsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [kind, setKind] = useState<OrderRequestKind | "all">("formal");
   const [queue, setQueue] = useState<OrderRequestQueue>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -368,6 +377,20 @@ export function OrderRequestsPage() {
     setSelectedId(null);
     setSavedDraftId(null);
     setActionError("");
+  }
+
+  async function hideDocument(documentId: string) {
+    if (!window.confirm("この依頼書を一覧から外します。データは残し、管理者の削除済み案件一覧にだけ表示します。")) return;
+    setActionError("");
+    try {
+      await hideOrderRequest(documentId);
+      if (detail?.document_id === documentId) closeCreateModal();
+      setActionMessage("一覧から外しました。削除済み案件一覧で確認できます。");
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["order-requests-deleted"] });
+    } catch (error) {
+      setActionError(messageOf(error));
+    }
   }
 
   async function startChange(versionId: string) {
@@ -730,14 +753,16 @@ export function OrderRequestsPage() {
                   </td>
                   <td>
                     <div className="order-row-actions">
-                      <button
-                        type="button"
-                        className="btn btn-change btn-sm"
-                        disabled={changeLoading}
-                        onClick={() => startChange(row.version_id)}
-                      >
-                        変更を作成
-                      </button>
+                      {(row.change_documents ?? []).length > 0 ? null : (
+                        <button
+                          type="button"
+                          className="btn btn-change btn-sm"
+                          disabled={changeLoading}
+                          onClick={() => startChange(row.version_id)}
+                        >
+                          変更を作成
+                        </button>
+                      )}
                       {(row.change_documents ?? []).map((change) => (
                         <button
                           key={change.version_id}
@@ -816,7 +841,7 @@ export function OrderRequestsPage() {
                 </td>
                 <td className="order-cell-multiline">{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
-                <td>{item.kind === "test" ? "テスト" : "正式"}</td>
+                <td>{kindLabel(item.kind, item.change_documents)}</td>
                 <td>
                   {STATUS_LABEL[item.status]}
                   {item.phone_first ? " / 電話先行" : ""}
@@ -830,14 +855,16 @@ export function OrderRequestsPage() {
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
                   <div className="order-row-actions">
-                    <button
-                      type="button"
-                      className="btn btn-change btn-sm"
-                      disabled={changeLoading}
-                      onClick={() => startChange(item.version_id)}
-                    >
-                      変更を作成
-                    </button>
+                    {(item.change_documents ?? []).length > 0 ? null : (
+                      <button
+                        type="button"
+                        className="btn btn-change btn-sm"
+                        disabled={changeLoading}
+                        onClick={() => startChange(item.version_id)}
+                      >
+                        変更を作成
+                      </button>
+                    )}
                     {(item.change_documents ?? []).map((change) => (
                       <button
                         key={change.version_id}
@@ -848,6 +875,17 @@ export function OrderRequestsPage() {
                         {changeLinkLabel(item.document_number, change)}
                       </button>
                     ))}
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        onClick={() => {
+                          void hideDocument(item.document_id);
+                        }}
+                      >
+                        削除
+                      </button>
+                    ) : null}
                   </div>
                 </td>
               </tr>

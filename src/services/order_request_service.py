@@ -652,16 +652,71 @@ class OrderRequestService:
         )
         if kind != "all":
             query = query.filter(OrderRequestDocument.kind == kind)
+        query = query.filter(OrderRequestDocument.deleted_at.is_(None))
         rows = query.order_by(OrderRequestVersion.created_at.desc()).all()
         filtered = [row for row in rows if self._matches_queue(row[1], queue)]
         return filtered[offset : offset + limit], len(filtered)
+
+    def list_hidden(
+        self,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[tuple[OrderRequestDocument, OrderRequestVersion]], int]:
+        latest_no = (
+            self.session.query(
+                OrderRequestVersion.document_id.label("document_id"),
+                func.max(OrderRequestVersion.version_no).label("version_no"),
+            )
+            .group_by(OrderRequestVersion.document_id)
+            .subquery()
+        )
+        rows = (
+            self.session.query(OrderRequestDocument, OrderRequestVersion)
+            .join(OrderRequestVersion, OrderRequestVersion.document_id == OrderRequestDocument.id)
+            .join(
+                latest_no,
+                (OrderRequestVersion.document_id == latest_no.c.document_id)
+                & (OrderRequestVersion.version_no == latest_no.c.version_no),
+            )
+            .filter(OrderRequestDocument.deleted_at.is_not(None))
+            .order_by(OrderRequestDocument.deleted_at.desc())
+            .all()
+        )
+        return rows[offset : offset + limit], len(rows)
+
+    def hide_document(self, document: OrderRequestDocument, *, actor: User) -> OrderRequestDocument:
+        if document.deleted_at is not None:
+            return document
+        document.deleted_at = _now()
+        document.deleted_by_user_id = actor.id
+        self.audit.log(
+            AuditAction.ORDER_REQUEST_HIDDEN,
+            target_type="order_request_document",
+            target_id=document.id,
+            actor=_user_label(actor),
+            actor_role=actor.role,
+            reason="一覧から外した",
+            after_value={"document_number": document.document_number},
+        )
+        self.session.flush()
+        return document
+
+    def get_document(self, document_id: str) -> OrderRequestDocument:
+        document = self.session.get(OrderRequestDocument, document_id)
+        if document is None:
+            raise OrderRequestError(404, "発注依頼書が見つかりません")
+        return document
 
     def list_sent_replies(self, *, limit: int = 200) -> list[tuple[OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion]]:
         return (
             self.session.query(OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion)
             .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
             .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
-            .filter(OrderRequestDelivery.send_status != SEND_UNSENT)
+            .filter(
+                OrderRequestDelivery.send_status != SEND_UNSENT,
+                OrderRequestDocument.deleted_at.is_(None),
+            )
             .order_by(OrderRequestDelivery.updated_at.desc())
             .limit(limit)
             .all()

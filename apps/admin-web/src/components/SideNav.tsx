@@ -166,6 +166,11 @@ export function SideNav({ collapsed, onToggleCollapsed, onEditProfile }: SideNav
             <Link role="menuitem" to="/account/change-password" onClick={() => setMenuOpen(false)}>
               パスワード変更
             </Link>
+            {user?.role === "admin" ? (
+              <Link role="menuitem" to="/operations/order-requests/deleted" onClick={() => setMenuOpen(false)}>
+                削除済み案件一覧
+              </Link>
+            ) : null}
             <button type="button" role="menuitem" onClick={logout}>
               ログアウト
             </button>

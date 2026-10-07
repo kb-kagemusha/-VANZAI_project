@@ -115,6 +115,12 @@ def _ensure(user: User) -> None:
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
 
 
+def _ensure_admin(user: User) -> None:
+    _ensure(user)
+    if user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="この操作は管理者だけができます")
+
+
 def _service(db: Session) -> OrderRequestService:
     return OrderRequestService(db)
 
@@ -262,7 +268,10 @@ def _changes_by_source(db: Session, version_ids: set[str]) -> dict[str, list[dic
     rows = (
         db.query(OrderRequestVersion, OrderRequestDocument)
         .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
-        .filter(OrderRequestVersion.revision_of_version_id.in_(version_ids))
+        .filter(
+            OrderRequestVersion.revision_of_version_id.in_(version_ids),
+            OrderRequestDocument.deleted_at.is_(None),
+        )
         .order_by(OrderRequestVersion.created_at.asc())
         .all()
     )
@@ -371,6 +380,46 @@ def list_order_requests(
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
         "line_send_available": line_settings().configured,
     }
+
+
+@router.get("/deleted")
+def list_deleted_order_requests(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_admin(current_user)
+    rows, total = _service(db).list_hidden(limit=limit, offset=offset)
+    user_ids = {doc.created_by_user_id for doc, _version in rows}
+    user_ids.update(doc.deleted_by_user_id for doc, _version in rows if doc.deleted_by_user_id)
+    user_ids.update(version.tracker_user_id for _doc, version in rows if version.tracker_user_id)
+    names = _user_map(db, user_ids)
+    sources = _source_labels(db, {version.revision_of_version_id for _doc, version in rows})
+    changes = _changes_by_source(db, {version.id for _doc, version in rows})
+    items = []
+    for doc, version in rows:
+        item = _list_item(db, doc, version, names, sources, changes)
+        item["deleted_at"] = doc.deleted_at
+        item["deleted_by_name"] = names.get(doc.deleted_by_user_id or "")
+        items.append(item)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.post("/documents/{document_id}/hide")
+def hide_order_request(
+    document_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_admin(current_user)
+
+    def action():
+        service = _service(db)
+        return service.hide_document(service.get_document(document_id), actor=current_user)
+
+    document = _call(db, action)
+    return {"document_id": document.id, "document_number": document.document_number, "deleted_at": document.deleted_at}
 
 
 @router.post("")

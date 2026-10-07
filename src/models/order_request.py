@@ -58,6 +58,10 @@ class OrderRequestDocument(Base, TimestampMixin):
     created_by_user_id: Mapped[str] = mapped_column(
         String(26), ForeignKey("users.id"), nullable=False
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("users.id"), nullable=True
+    )
 
     versions: Mapped[list["OrderRequestVersion"]] = relationship(
         back_populates="document",
@@ -67,6 +71,7 @@ class OrderRequestDocument(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint("kind IN ('formal', 'test')", name="ck_order_request_documents_kind"),
         Index("ix_order_request_documents_kind", "kind"),
+        Index("ix_order_request_documents_deleted_at", "deleted_at"),
     )
 
 

@@ -174,6 +174,7 @@ class AuditAction(str, Enum):
     ORDER_REQUEST_CONFIRMED = "order_request_confirmed"
     ORDER_REQUEST_REVISED = "order_request_revised"
     ORDER_REQUEST_CANCELLED = "order_request_cancelled"
+    ORDER_REQUEST_HIDDEN = "order_request_hidden"
     ORDER_REQUEST_VIEW_REVOKED = "order_request_view_revoked"
     ORDER_REQUEST_LINE_LINKED = "order_request_line_linked"
     ORDER_REQUEST_LINE_UNLINKED = "order_request_line_unlinked"

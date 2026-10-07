@@ -130,6 +130,18 @@ export interface OrderRequestListItem {
   confirmed_at: string | null;
 }
 
+export interface DeletedOrderRequestListItem extends OrderRequestListItem {
+  deleted_at: string | null;
+  deleted_by_name: string | null;
+}
+
+export interface DeletedOrderRequestListResponse {
+  items: DeletedOrderRequestListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface OrderRequestListResponse {
   items: OrderRequestListItem[];
   total: number;

@@ -861,6 +861,50 @@ def test_order_pdf_filename_is_date_plus_project():
     assert blank == "発注依頼書.pdf"
 
 
+def test_admin_hides_an_order_request_from_the_list(api_client, db_session, ops_user):
+    admin = create_user_with_hashed_password(
+        db=db_session,
+        username="order_admin",
+        email="order_admin@example.com",
+        password="pass123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="隠す現場"),
+        headers=_auth(admin.username),
+    )
+    assert created.status_code == 200, created.text
+    document_id = created.json()["document_id"]
+    document_number = created.json()["document_number"]
+
+    denied = api_client.post(
+        f"/api/order-requests/documents/{document_id}/hide",
+        headers=_auth(ops_user.username),
+    )
+    assert denied.status_code == 403
+
+    hidden = api_client.post(
+        f"/api/order-requests/documents/{document_id}/hide",
+        headers=_auth(admin.username),
+    )
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["document_number"] == document_number
+
+    listed = api_client.get("/api/order-requests", headers=_auth(admin.username))
+    assert all(item["document_id"] != document_id for item in listed.json()["items"])
+
+    ops_deleted = api_client.get("/api/order-requests/deleted", headers=_auth(ops_user.username))
+    assert ops_deleted.status_code == 403
+    deleted = api_client.get("/api/order-requests/deleted", headers=_auth(admin.username))
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["total"] == 1
+    assert deleted.json()["items"][0]["document_number"] == document_number
+    assert deleted.json()["items"][0]["deleted_by_name"]
+
+
 def test_changed_field_captions_marks_only_differences():
     from src.services.order_request_pdf import changed_field_captions
 

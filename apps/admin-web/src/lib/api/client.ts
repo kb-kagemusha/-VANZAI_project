@@ -121,6 +121,7 @@ import type {
 import type {
   LineLinkCode,
   LineLinkList,
+  DeletedOrderRequestListResponse,
   OrderRequestListResponse,
   OrderRequestReplyList,
   OrderRequestVersion,
@@ -1495,6 +1496,17 @@ export function listOrderRequests(params: {
     "/api/order-requests",
     undefined,
     params,
+  );
+}
+
+export function listDeletedOrderRequests(params: { limit?: number; offset?: number } = {}) {
+  return apiFetch<DeletedOrderRequestListResponse>("/api/order-requests/deleted", undefined, params);
+}
+
+export function hideOrderRequest(documentId: string) {
+  return apiFetch<{ document_id: string; document_number: string; deleted_at: string | null }>(
+    `/api/order-requests/documents/${documentId}/hide`,
+    { method: "POST" },
   );
 }
 
