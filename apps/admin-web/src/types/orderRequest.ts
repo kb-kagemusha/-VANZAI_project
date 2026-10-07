@@ -41,6 +41,13 @@ export interface LineLinkCode {
   unlink_notice: string;
 }
 
+export interface OrderRequestChangeLink {
+  version_id: string;
+  document_number: string;
+  version_no: number;
+  status: OrderRequestStatus;
+}
+
 export interface OrderRequestNote {
   id: string;
   author_user_id: string;
@@ -58,6 +65,9 @@ export interface OrderRequestVersion {
   status: OrderRequestStatus;
   revision_of_version_id: string | null;
   revision_reason: string | null;
+  based_on_document_number: string | null;
+  based_on_version_no: number | null;
+  change_documents: OrderRequestChangeLink[];
   work_date_label: string;
   site_id: string | null;
   site_name: string;
@@ -94,6 +104,9 @@ export interface OrderRequestListItem {
   document_id: string;
   document_number: string;
   kind: OrderRequestKind;
+  based_on_document_number: string | null;
+  based_on_version_no: number | null;
+  change_documents: OrderRequestChangeLink[];
   version_id: string;
   version_no: number;
   status: OrderRequestStatus;
@@ -131,6 +144,9 @@ export interface OrderRequestReplyItem {
   version_id: string;
   document_number: string;
   version_no: number;
+  based_on_document_number: string | null;
+  based_on_version_no: number | null;
+  change_documents: OrderRequestChangeLink[];
   kind: string;
   project_name: string;
   site_name: string;
@@ -166,4 +182,5 @@ export interface OrderRequestWrite {
   follow_up_due_on: string | null;
   follow_up_due_time: string;
   assign_tracker_self: boolean;
+  based_on_version_id?: string | null;
 }

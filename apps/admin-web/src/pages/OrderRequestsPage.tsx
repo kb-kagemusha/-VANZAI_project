@@ -2,7 +2,7 @@
  * 発注依頼書の作成・確定・共有一覧。
  * 確定した版は、稼働者登録・一覧で紐付けた送付先へ公式LINEで送る。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "../components/EmptyState";
@@ -46,6 +46,7 @@ import {
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
 import type {
+  OrderRequestChangeLink,
   OrderRequestKind,
   OrderRequestQueue,
   OrderRequestStatus,
@@ -79,6 +80,21 @@ const STATUS_LABEL: Record<OrderRequestStatus, string> = {
   confirmed: "確定",
   cancelled: "取消",
 };
+
+function basedOnNote(
+  documentNumber: string,
+  sourceNumber: string | null | undefined,
+  sourceVersion: number | null | undefined,
+): string | null {
+  if (!sourceNumber || sourceVersion == null) return null;
+  if (sourceNumber === documentNumber) return `第${sourceVersion}版の変更`;
+  return `${sourceNumber} の変更`;
+}
+
+function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink): string {
+  if (change.document_number === documentNumber) return `変更 第${change.version_no}版`;
+  return `変更 ${change.document_number}`;
+}
 
 const EMPTY_FORM: OrderRequestWrite = {
   kind: "formal",
@@ -121,6 +137,9 @@ export function OrderRequestsPage() {
   const [actionMessage, setActionMessage] = useState("");
   const [linePreviewOpen, setLinePreviewOpen] = useState(false);
   const [sendingSelected, setSendingSelected] = useState(false);
+  const [basedOn, setBasedOn] = useState<{ versionId: string; documentNumber: string; versionNo: number } | null>(null);
+  const [changeLoading, setChangeLoading] = useState(false);
+  const draftRef = useRef<HTMLFormElement>(null);
 
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue],
@@ -245,11 +264,45 @@ export function OrderRequestsPage() {
 
   function showDetail(versionId: string) {
     setCreating(false);
+    setBasedOn(null);
     setSelectedId(versionId);
     setActionError("");
     setActionMessage("");
     setReason("");
     setNote("");
+  }
+
+  async function startChange(versionId: string) {
+    setChangeLoading(true);
+    setActionError("");
+    setActionMessage("");
+    try {
+      const version = await getOrderRequestVersion(versionId);
+      const workerIds = version.deliveries.length > 0
+        ? version.deliveries.map((row) => row.worker_id)
+        : version.draft_worker_ids;
+      setCreating(true);
+      setSelectedId(null);
+      setBasedOn({
+        versionId: version.id,
+        documentNumber: version.document_number,
+        versionNo: version.version_no,
+      });
+      setForm({
+        ...formFromVersion(version),
+        worker_ids: workerIds,
+        phone_first: false,
+        phone_note: "",
+      });
+      setSections(sectionsFromStored(version.request_conditions, version.body));
+      setReason("");
+      setNote("");
+      window.setTimeout(() => draftRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    } catch (error) {
+      setActionError(messageOf(error));
+    } finally {
+      setChangeLoading(false);
+    }
   }
 
   function loadFormFromDetail() {
@@ -262,14 +315,23 @@ export function OrderRequestsPage() {
     mutationFn: async () => {
       if (dueMissing()) throw new Error("期限の案内の日付を入れてください");
       const payload = draftPayload();
-      if (creating) return createOrderRequest(payload);
+      if (creating) {
+        return createOrderRequest(
+          basedOn ? { ...payload, based_on_version_id: basedOn.versionId } : payload,
+        );
+      }
       if (!detail) throw new Error("版が選ばれていません");
       return updateOrderRequestVersion(detail.id, payload);
     },
     onSuccess: async (version) => {
       setCreating(false);
+      setBasedOn(null);
       setSelectedId(version.id);
-      setActionMessage("下書きを保存しました。確定するまで送付は始まりません。");
+      setActionMessage(
+        version.based_on_document_number
+          ? `${version.based_on_document_number} を基にした下書きを保存しました。確定するまで送付は始まりません。`
+          : "下書きを保存しました。確定するまで送付は始まりません。",
+      );
       setActionError("");
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", version.id] });
@@ -333,6 +395,15 @@ export function OrderRequestsPage() {
     onError: (error) => setActionError(messageOf(error)),
   });
 
+  const detailSourceNote = detail
+    ? basedOnNote(detail.document_number, detail.based_on_document_number, detail.based_on_version_no)
+    : null;
+  const detailLead = creating
+    ? basedOn
+      ? `${basedOn.documentNumber} 第${basedOn.versionNo}版を基に、新しい依頼書を作成します。確定するまで送付は始まりません。`
+      : "追加案件依頼の項目で下書きします。確定するまで送付は始まりません。"
+    : [detailSourceNote, detail ? STATUS_LABEL[detail.status] : "", detail?.created_by_name].filter(Boolean).join(" · ");
+
   const canSend = Boolean(
     detail
     && detail.status === "confirmed"
@@ -395,7 +466,7 @@ export function OrderRequestsPage() {
 
       <section className="order-list-frame is-sent">
         <h3>送信した依頼</h3>
-        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。</p>
+        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。内容を変えるときは「変更を作成」で、この依頼を基にした新しい依頼書を作れます。</p>
         <div className="order-list-table">
           <table className="data-table">
             <thead>
@@ -405,6 +476,7 @@ export function OrderRequestsPage() {
                 <th>日付</th>
                 <th>送付先</th>
                 <th>返事</th>
+                <th>変更</th>
               </tr>
             </thead>
             <tbody>
@@ -414,6 +486,11 @@ export function OrderRequestsPage() {
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(row.version_id)}>
                       {row.document_number}
                     </button>
+                    {basedOnNote(row.document_number, row.based_on_document_number, row.based_on_version_no) ? (
+                      <span className="order-change-note">
+                        {basedOnNote(row.document_number, row.based_on_document_number, row.based_on_version_no)}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="order-cell-multiline">{siteLabelForList(row.project_name)}</td>
                   <td className="order-cell-multiline">{row.work_date_label}</td>
@@ -421,6 +498,28 @@ export function OrderRequestsPage() {
                   <td>
                     {REPLY_LABEL[row.ack_status] ?? row.ack_status}
                     {row.decline_reason ? <div className="order-cell-multiline">{row.decline_reason}</div> : null}
+                  </td>
+                  <td>
+                    <div className="order-row-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={changeLoading}
+                        onClick={() => startChange(row.version_id)}
+                      >
+                        変更を作成
+                      </button>
+                      {(row.change_documents ?? []).map((change) => (
+                        <button
+                          key={change.version_id}
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => showDetail(change.version_id)}
+                        >
+                          {changeLinkLabel(row.document_number, change)}
+                        </button>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -436,13 +535,14 @@ export function OrderRequestsPage() {
         <div className="order-list-head">
           <div>
             <h3>作成した依頼書</h3>
-            <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。</p>
+            <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から「変更を作成」で、内容を写した新しい依頼書を作れます。</p>
           </div>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => {
               setCreating(true);
+              setBasedOn(null);
               setSelectedId(null);
               setForm(EMPTY_FORM);
               setSections(EMPTY_ORDER_SECTIONS);
@@ -488,6 +588,7 @@ export function OrderRequestsPage() {
               <th>追跡</th>
               <th>送付先</th>
               <th>期限</th>
+              <th>変更</th>
             </tr>
           </thead>
           <tbody>
@@ -497,6 +598,11 @@ export function OrderRequestsPage() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(item.version_id)}>
                     {item.document_number}
                   </button>
+                  {basedOnNote(item.document_number, item.based_on_document_number, item.based_on_version_no) ? (
+                    <span className="order-change-note">
+                      {basedOnNote(item.document_number, item.based_on_document_number, item.based_on_version_no)}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="order-cell-multiline">{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
@@ -512,6 +618,28 @@ export function OrderRequestsPage() {
                 <td>{item.tracker_name ?? "—"}</td>
                 <td>{item.recipient_count}</td>
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
+                <td>
+                  <div className="order-row-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={changeLoading}
+                      onClick={() => startChange(item.version_id)}
+                    >
+                      変更を作成
+                    </button>
+                    {(item.change_documents ?? []).map((change) => (
+                      <button
+                        key={change.version_id}
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => showDetail(change.version_id)}
+                      >
+                        {changeLinkLabel(item.document_number, change)}
+                      </button>
+                    ))}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -526,6 +654,7 @@ export function OrderRequestsPage() {
 
       {(creating || detail) && (
         <form
+          ref={draftRef}
           className="order-draft"
           onSubmit={(event) => {
             event.preventDefault();
@@ -538,13 +667,27 @@ export function OrderRequestsPage() {
         >
           <header className="order-draft-head">
             <div>
-              <p className="order-draft-kicker">{creating ? "発注依頼書" : detail?.document_number}</p>
-              <h3>{creating ? "新規の下書き" : `第${detail?.version_no}版`}</h3>
-              <p className="order-draft-lead">
+              <p className="order-draft-kicker">
                 {creating
-                  ? "追加案件依頼の項目で下書きします。確定するまで送付は始まりません。"
-                  : `${detail ? STATUS_LABEL[detail.status] : ""}${detail?.created_by_name ? ` · ${detail.created_by_name}` : ""}`}
+                  ? (basedOn ? `${basedOn.documentNumber} の変更` : "発注依頼書")
+                  : detail?.document_number}
               </p>
+              <h3>{creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
+              <p className="order-draft-lead">{detailLead}</p>
+              {!creating && detail && detail.change_documents.length > 0 ? (
+                <div className="order-row-actions">
+                  {detail.change_documents.map((change) => (
+                    <button
+                      key={change.version_id}
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => showDetail(change.version_id)}
+                    >
+                      {changeLinkLabel(detail.document_number, change)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="order-draft-head-side">
               {canSend ? (
@@ -562,6 +705,16 @@ export function OrderRequestsPage() {
               ) : (
                 <span className="order-draft-badge">正式</span>
               )}
+              {!creating && detail ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={changeLoading}
+                  onClick={() => startChange(detail.id)}
+                >
+                  変更を作成
+                </button>
+              ) : null}
               {!creating && detail && detail.status !== "draft" ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={loadFormFromDetail}>
                   この版の内容をフォームに表示

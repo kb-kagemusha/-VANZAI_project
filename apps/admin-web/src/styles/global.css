@@ -3902,6 +3902,20 @@ button {
   gap: 0.55rem;
 }
 
+.order-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.order-change-note {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted, #6d6458);
+  font-size: 0.75rem;
+}
+
 .order-note-list {
   display: grid;
   gap: 0.45rem;

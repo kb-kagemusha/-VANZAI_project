@@ -234,6 +234,74 @@ def test_kind_cannot_change_after_confirm_and_revision_keeps_old_version(api_cli
     assert original["work_date_label"] == "2026-10-05"
 
 
+def test_change_creates_a_new_document_from_a_sent_request(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], work_date_label="2026年10月5日～2026年10月6日", site_name="渋谷現場"),
+        headers=_auth(ops_user.username),
+    )
+    source_id = created.json()["id"]
+    source_number = created.json()["document_number"]
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{source_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    delivery = db_session.query(OrderRequestDelivery).one()
+    delivery.send_status = "accepted"
+    db_session.commit()
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label="2026年10月7日～2026年10月8日",
+            site_name="渋谷現場",
+            based_on_version_id=source_id,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    draft = changed.json()
+    assert draft["status"] == "draft"
+    assert draft["document_number"] != source_number
+    assert draft["version_no"] == 1
+    assert draft["revision_of_version_id"] == source_id
+    assert draft["revision_reason"] == "変更を作成"
+    assert draft["based_on_document_number"] == source_number
+    assert draft["based_on_version_no"] == 1
+    assert draft["work_date_label"] == "2026年10月7日～2026年10月8日"
+    assert draft["deliveries"] == []
+
+    original = api_client.get(
+        f"/api/order-requests/versions/{source_id}",
+        headers=_auth(ops_user.username),
+    ).json()
+    assert original["status"] == "confirmed"
+    assert original["work_date_label"] == "2026年10月5日～2026年10月6日"
+    assert original["change_documents"][0]["document_number"] == draft["document_number"]
+    assert original["change_documents"][0]["version_id"] == draft["id"]
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username)).json()
+    source_row = next(item for item in listed["items"] if item["version_id"] == source_id)
+    child_row = next(item for item in listed["items"] if item["version_id"] == draft["id"])
+    assert source_row["change_documents"][0]["document_number"] == draft["document_number"]
+    assert child_row["based_on_document_number"] == source_number
+
+    replies = api_client.get("/api/order-requests/replies", headers=_auth(ops_user.username)).json()
+    assert replies["items"][0]["version_id"] == source_id
+    assert replies["items"][0]["change_documents"][0]["version_id"] == draft["id"]
+
+    missing = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id="01NOTAVERSION000000000000"),
+        headers=_auth(ops_user.username),
+    )
+    assert missing.status_code == 404
+
+
 def test_default_list_hides_test_documents(api_client, db_session, ops_user, pdf_root):
     worker = _worker(db_session, "稼働者A")
     api_client.post("/api/order-requests", json=_body([worker.id], kind="test"), headers=_auth(ops_user.username))

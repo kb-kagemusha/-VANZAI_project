@@ -68,6 +68,7 @@ class OrderRequestWrite(BaseModel):
     follow_up_due_on: date | None = None
     follow_up_due_time: str | None = "21:00"
     assign_tracker_self: bool = False
+    based_on_version_id: str | None = None
 
 
 class OrderRequestUpdate(BaseModel):
@@ -196,6 +197,8 @@ def _version_out(
     )
     links = active_line_labels(db, {row.worker_id for row in deliveries})
     errors = latest_send_errors(db, {row.id for row in deliveries})
+    sources = _source_labels(db, {version.revision_of_version_id})
+    changes = _changes_by_source(db, {version.id})
     return {
         "document_id": document.id,
         "document_number": document.document_number,
@@ -205,6 +208,7 @@ def _version_out(
         "status": version.status,
         "revision_of_version_id": version.revision_of_version_id,
         "revision_reason": version.revision_reason,
+        **_relation_fields(version, sources, changes),
         "work_date_label": version.work_date_label,
         "site_id": version.site_id,
         "site_name": version.site_name,
@@ -238,6 +242,56 @@ def _version_out(
     }
 
 
+def _source_labels(db: Session, version_ids: set[str | None]) -> dict[str, tuple[str, int]]:
+    ids = {version_id for version_id in version_ids if version_id}
+    if not ids:
+        return {}
+    rows = (
+        db.query(OrderRequestVersion, OrderRequestDocument)
+        .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
+        .filter(OrderRequestVersion.id.in_(ids))
+        .all()
+    )
+    return {version.id: (document.document_number, version.version_no) for version, document in rows}
+
+
+def _changes_by_source(db: Session, version_ids: set[str]) -> dict[str, list[dict]]:
+    if not version_ids:
+        return {}
+    rows = (
+        db.query(OrderRequestVersion, OrderRequestDocument)
+        .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
+        .filter(OrderRequestVersion.revision_of_version_id.in_(version_ids))
+        .order_by(OrderRequestVersion.created_at.asc())
+        .all()
+    )
+    grouped: dict[str, list[dict]] = {}
+    for version, document in rows:
+        grouped.setdefault(version.revision_of_version_id or "", []).append(
+            {
+                "version_id": version.id,
+                "document_number": document.document_number,
+                "version_no": version.version_no,
+                "status": version.status,
+            }
+        )
+    grouped.pop("", None)
+    return grouped
+
+
+def _relation_fields(
+    version: OrderRequestVersion,
+    sources: dict[str, tuple[str, int]],
+    changes: dict[str, list[dict]],
+) -> dict:
+    source = sources.get(version.revision_of_version_id or "")
+    return {
+        "based_on_document_number": source[0] if source else None,
+        "based_on_version_no": source[1] if source else None,
+        "change_documents": changes.get(version.id, []),
+    }
+
+
 def _project_name(request_conditions: str | None) -> str:
     sections = parse_sections(request_conditions)
     if not sections:
@@ -245,7 +299,14 @@ def _project_name(request_conditions: str | None) -> str:
     return str(sections.get("project_name") or "")
 
 
-def _list_item(db: Session, document: OrderRequestDocument, version: OrderRequestVersion, names: dict[str, str]) -> dict:
+def _list_item(
+    db: Session,
+    document: OrderRequestDocument,
+    version: OrderRequestVersion,
+    names: dict[str, str],
+    sources: dict[str, tuple[str, int]],
+    changes: dict[str, list[dict]],
+) -> dict:
     deliveries = (
         db.query(OrderRequestDelivery)
         .filter(OrderRequestDelivery.version_id == version.id)
@@ -256,6 +317,7 @@ def _list_item(db: Session, document: OrderRequestDocument, version: OrderReques
         "document_id": document.id,
         "document_number": document.document_number,
         "kind": document.kind,
+        **_relation_fields(version, sources, changes),
         "version_id": version.id,
         "version_no": version.version_no,
         "status": version.status,
@@ -298,8 +360,10 @@ def list_order_requests(
     user_ids = {doc.created_by_user_id for doc, _version in rows}
     user_ids.update(version.tracker_user_id for _doc, version in rows if version.tracker_user_id)
     names = _user_map(db, user_ids)
+    sources = _source_labels(db, {version.revision_of_version_id for _doc, version in rows})
+    changes = _changes_by_source(db, {version.id for _doc, version in rows})
     return {
-        "items": [_list_item(db, doc, version, names) for doc, version in rows],
+        "items": [_list_item(db, doc, version, names, sources, changes) for doc, version in rows],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -471,6 +535,8 @@ def list_order_request_replies(
 ):
     _ensure(current_user)
     rows = _service(db).list_sent_replies()
+    sources = _source_labels(db, {version.revision_of_version_id for _delivery, _document, version in rows})
+    changes = _changes_by_source(db, {version.id for _delivery, _document, version in rows})
     return {
         "items": [
             {
@@ -478,6 +544,7 @@ def list_order_request_replies(
                 "version_id": version.id,
                 "document_number": document.document_number,
                 "version_no": version.version_no,
+                **_relation_fields(version, sources, changes),
                 "kind": document.kind,
                 "project_name": _project_name(version.request_conditions),
                 "site_name": version.site_name,

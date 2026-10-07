@@ -115,6 +115,7 @@ class OrderRequestService:
         tracker_user_id: str | None,
         follow_up_due_on: date | None,
         follow_up_due_time: str | None = DEFAULT_DUE_TIME,
+        based_on_version_id: str | None = None,
     ) -> OrderRequestVersion:
         self._validate_kind(kind)
         worker_ids = self._normalize_worker_ids(worker_ids)
@@ -123,6 +124,7 @@ class OrderRequestService:
             self._ensure_user(tracker_user_id)
         if site_id:
             self._ensure_site(site_id)
+        source = self.get_version(based_on_version_id) if based_on_version_id else None
 
         document = OrderRequestDocument(
             id=generate_ulid(),
@@ -135,6 +137,8 @@ class OrderRequestService:
             document_id=document.id,
             version_no=1,
             status=STATUS_DRAFT,
+            revision_of_version_id=source.id if source else None,
+            revision_reason="変更を作成" if source else None,
             created_by_user_id=actor.id,
             draft_worker_ids=worker_ids,
         )
@@ -160,6 +164,24 @@ class OrderRequestService:
         self.session.add(document)
         self.session.add(version)
         self.session.flush()
+        if source is not None:
+            source_document = self._document(source)
+            self.audit.log(
+                AuditAction.ORDER_REQUEST_REVISED,
+                target_type="order_request_version",
+                target_id=version.id,
+                actor=_user_label(actor),
+                actor_role=actor.role,
+                reason="変更を作成",
+                after_value={
+                    "document_number": document.document_number,
+                    "version_no": version.version_no,
+                    "based_on_document_number": source_document.document_number,
+                    "based_on_version_id": source.id,
+                    "based_on_version_no": source.version_no,
+                    "kind": document.kind,
+                },
+            )
         return version
 
     def update_draft(
