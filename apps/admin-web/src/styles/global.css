@@ -1040,7 +1040,8 @@ a.primary-button {
 .account-profile {
   display: grid;
   gap: 16px;
-  max-width: 640px;
+  width: 100%;
+  min-width: 0;
 }
 
 .account-profile .card {
@@ -1060,6 +1061,10 @@ a.primary-button {
 .account-profile-hero {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+}
+
+.account-profile-hero > div {
+  min-width: 0;
 }
 
 .account-profile-avatar {
@@ -1092,6 +1097,10 @@ a.primary-button {
   margin: 12px 0 0;
 }
 
+.account-profile-hero dl > div {
+  min-width: 0;
+}
+
 .account-profile-hero dt {
   color: #667085;
   font-size: 12px;
@@ -1099,7 +1108,15 @@ a.primary-button {
 
 .account-profile-hero dd {
   margin: 0;
+  min-width: 0;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .account-profile-hero dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .account-profile-status {
