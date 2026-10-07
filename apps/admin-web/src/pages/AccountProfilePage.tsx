@@ -102,7 +102,7 @@ export function AccountProfilePage() {
 
       <article className="card">
         <h2>シールの色</h2>
-        <p className="account-profile-note">丸いシール、選択中のメニュー、「新しい版を反映」に反映します。</p>
+        <p className="account-profile-note">丸いシール、選択中のメニュー、「新しい版を反映」、ダークモードの切り替えに反映します。</p>
         <div className="account-seal-choices" role="radiogroup" aria-label="シールの色">
           {SEAL_COLORS.map((color) => (
             <button

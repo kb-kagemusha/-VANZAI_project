@@ -1330,10 +1330,34 @@ a.apex-preview__user {
   color: inherit;
 }
 
+.apex-preview.is-dark .apex-preview__nav-link:hover,
+.apex-preview.is-dark .apex-preview__nav-link:focus-visible,
+.apex-preview.is-dark .apex-preview__nav-link.is-active {
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark button.apex-preview__version-update,
+.apex-preview.is-dark .apex-preview__version-update:hover,
+.apex-preview.is-dark .apex-preview__version-update:focus-visible {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark .theme-toggle:hover,
+.apex-preview.is-dark .theme-toggle:focus-visible,
+.apex-preview.is-dark .theme-toggle[aria-pressed="true"] {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
+}
+
 .apex-preview.is-dark .apex-preview__billing.is-active,
-.apex-preview.is-dark .apex-preview__switch button.is-active,
-.apex-preview.is-dark .apex-preview__theme[aria-pressed="true"] {
+.apex-preview.is-dark .apex-preview__switch button.is-active {
   background: var(--apex-green);
+  color: #fff;
+}
+
+.apex-preview.is-dark .apex-preview__theme[aria-pressed="true"] {
+  background: var(--vanzai-seal, #22c55e);
   color: #fff;
 }
 
@@ -1359,8 +1383,17 @@ a.apex-preview__user {
   background: #222833;
 }
 
+.apex-preview.is-dark .apex-preview__icon-button:hover,
+.apex-preview.is-dark .apex-preview__icon-button:focus-visible,
+.apex-preview.is-dark .apex-preview__menu:hover,
+.apex-preview.is-dark .apex-preview__menu:focus-visible,
+.apex-preview.is-dark .apex-preview__header-link:hover,
+.apex-preview.is-dark .apex-preview__header-link:focus-visible {
+  outline-color: var(--vanzai-seal, #22c55e);
+}
+
 .apex-preview.is-dark .apex-preview__card.is-live:hover {
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: color-mix(in srgb, var(--vanzai-seal, #22c55e) 35%, transparent);
   box-shadow: none;
 }
 

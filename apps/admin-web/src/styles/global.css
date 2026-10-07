@@ -4592,9 +4592,10 @@ a.primary-button {
 }
 
 .theme-toggle:hover,
-.theme-toggle:focus-visible {
-  border-color: #16a34a;
-  color: #16a34a;
+.theme-toggle:focus-visible,
+.theme-toggle[aria-pressed="true"] {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
   outline: none;
 }
 
@@ -4628,9 +4629,29 @@ html[data-theme="dark"] .app-shell {
 }
 
 html[data-theme="dark"] .theme-toggle:hover,
-html[data-theme="dark"] .theme-toggle:focus-visible {
-  border-color: #4ade80;
-  color: #4ade80;
+html[data-theme="dark"] .theme-toggle:focus-visible,
+html[data-theme="dark"] .theme-toggle[aria-pressed="true"] {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
+}
+
+html[data-theme="dark"] .nav-link:hover,
+html[data-theme="dark"] .nav-link:focus-visible,
+html[data-theme="dark"] .nav-link.active,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link:hover,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link:focus-visible,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link.active,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link:hover .nav-link-icon,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link:focus-visible .nav-link-icon,
+html[data-theme="dark"] .side-nav.is-collapsed .nav-link.active .nav-link-icon {
+  color: var(--vanzai-seal, #22c55e);
+}
+
+html[data-theme="dark"] .side-nav-version-update,
+html[data-theme="dark"] .side-nav-version-update:hover,
+html[data-theme="dark"] .side-nav-version-update:focus-visible {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
 }
 
 html[data-theme="dark"] .topbar,
