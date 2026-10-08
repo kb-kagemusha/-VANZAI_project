@@ -4667,6 +4667,11 @@ a.primary-button {
   gap: 0.75rem;
 }
 
+.worker-age-readout {
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
 .worker-day-card {
   width: 100%;
   text-align: left;

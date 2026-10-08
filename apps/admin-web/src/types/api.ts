@@ -623,10 +623,13 @@ export interface WorkerWorkHistoryItem {
 
 export type WorkerWeekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
+export type WorkerDayAvailability = "all_day" | "after_15" | "consult" | "unavailable";
+
 export interface WorkerDayHours {
   weekday: WorkerWeekday;
-  time_from: string;
-  time_to: string;
+  status?: WorkerDayAvailability | null;
+  time_from?: string | null;
+  time_to?: string | null;
 }
 
 export interface WorkerProfileInput {

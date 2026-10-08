@@ -230,8 +230,8 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
     assert body["work_history"] == [profile["work_history"][0]]
     assert body["postal_code"] == "1500043"
     assert body["available_day_hours"] == [
-        {"weekday": "mon", "time_from": "08:00", "time_to": "12:00"},
-        {"weekday": "fri", "time_from": "10:00", "time_to": "19:00"},
+        {"weekday": "mon", "status": None, "time_from": "08:00", "time_to": "12:00"},
+        {"weekday": "fri", "status": None, "time_from": "10:00", "time_to": "19:00"},
     ]
     assert body["available_weekdays"] == ["mon", "fri"]
     assert body["club_activity"] == "野球部"

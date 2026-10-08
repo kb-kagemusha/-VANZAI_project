@@ -945,12 +945,13 @@ class WorkerWorkHistoryItem(BaseModel):
 
 
 class WorkerDayHours(BaseModel):
-    """曜日ごとの稼働時間。時刻は HH:MM。"""
+    """曜日ごとの稼働区分。旧データは時刻のままでも読める。"""
     model_config = ConfigDict(extra="ignore")
 
     weekday: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-    time_from: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-    time_to: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    status: Optional[Literal["all_day", "after_15", "consult", "unavailable"]] = None
+    time_from: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    time_to: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 class WorkerProfileInput(BaseModel):
@@ -1042,6 +1043,7 @@ class WorkerProfileInput(BaseModel):
             cleaned["postal_code"] = digits or None
         hours = cleaned.get("available_day_hours")
         if isinstance(hours, list):
+            day_statuses = {"all_day", "after_15", "consult", "unavailable"}
             by_day: dict[str, dict] = {}
             for row in hours:
                 if not isinstance(row, dict):
@@ -1049,11 +1051,27 @@ class WorkerProfileInput(BaseModel):
                 weekday = row.get("weekday")
                 if weekday not in order:
                     continue
-                time_from = str(row.get("time_from") or "").strip()
-                time_to = str(row.get("time_to") or "").strip()
-                if not time_from or not time_to:
-                    continue
-                by_day[weekday] = {"weekday": weekday, "time_from": time_from, "time_to": time_to}
+                status = row.get("status")
+                if isinstance(status, str):
+                    status = status.strip() or None
+                if status not in day_statuses:
+                    status = None
+                time_from = str(row.get("time_from") or "").strip() or None
+                time_to = str(row.get("time_to") or "").strip() or None
+                if status:
+                    by_day[weekday] = {
+                        "weekday": weekday,
+                        "status": status,
+                        "time_from": None,
+                        "time_to": None,
+                    }
+                elif time_from and time_to:
+                    by_day[weekday] = {
+                        "weekday": weekday,
+                        "status": None,
+                        "time_from": time_from,
+                        "time_to": time_to,
+                    }
             cleaned["available_day_hours"] = [by_day[day] for day in order if day in by_day]
         return cleaned
 

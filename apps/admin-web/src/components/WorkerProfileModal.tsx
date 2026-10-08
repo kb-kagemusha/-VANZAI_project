@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { WorkerTagPicker } from "./WorkerTags";
-import type { WorkerListItem, WorkerProfileInput, WorkerTagOption, WorkerWeekday, WorkerWorkHistoryItem } from "../types/api";
+import type { WorkerDayAvailability, WorkerDayHours, WorkerListItem, WorkerProfileInput, WorkerTagOption, WorkerWeekday, WorkerWorkHistoryItem } from "../types/api";
 
 const WEEKDAYS: { code: WorkerWeekday; label: string }[] = [
   { code: "mon", label: "月曜" },
@@ -28,7 +28,15 @@ export interface WorkHistoryDraft {
   resignationReason: string;
 }
 
+const DAY_STATUSES: { value: WorkerDayAvailability; label: string }[] = [
+  { value: "all_day", label: "終日OK" },
+  { value: "after_15", label: "15時～OK" },
+  { value: "consult", label: "要相談" },
+  { value: "unavailable", label: "稼働不可" },
+];
+
 export interface DayHoursDraft {
+  status: WorkerDayAvailability | "";
   from: string;
   to: string;
 }
@@ -174,20 +182,40 @@ function postalDigits(value: string): string | null {
   return digits || null;
 }
 
+function isDayStatus(value: string | null | undefined): value is WorkerDayAvailability {
+  return DAY_STATUSES.some((option) => option.value === value);
+}
+
+function dayStatusLabel(status: WorkerDayAvailability): string {
+  return DAY_STATUSES.find((option) => option.value === status)?.label ?? status;
+}
+
+function daySummary(hours: DayHoursDraft | undefined): string {
+  if (!hours) return "未設定";
+  if (hours.status) return dayStatusLabel(hours.status);
+  if (hours.from && hours.to) return `${formatClock(hours.from)}〜${formatClock(hours.to)}`;
+  return "未設定";
+}
+
 function hoursFromProfile(profile: WorkerListItem["profile"]): Partial<Record<WorkerWeekday, DayHoursDraft>> {
   const stored = profile?.available_day_hours ?? [];
   if (stored.length > 0) {
     const hours: Partial<Record<WorkerWeekday, DayHoursDraft>> = {};
     for (const row of stored) {
-      hours[row.weekday] = { from: row.time_from, to: row.time_to };
+      if (isDayStatus(row.status)) {
+        hours[row.weekday] = { status: row.status, from: "", to: "" };
+      } else if (row.time_from && row.time_to) {
+        hours[row.weekday] = { status: "", from: row.time_from, to: row.time_to };
+      }
     }
     return hours;
   }
   const from = profile?.available_time_from ?? "";
   const to = profile?.available_time_to ?? "";
   const hours: Partial<Record<WorkerWeekday, DayHoursDraft>> = {};
+  if (!from || !to) return hours;
   for (const day of profile?.available_weekdays ?? []) {
-    hours[day] = { from, to };
+    hours[day] = { status: "", from, to };
   }
   return hours;
 }
@@ -301,14 +329,20 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
     life_goal: optionalText(form.lifeGoal),
     desired_income: optionalText(form.desiredIncome),
     available_days_per_week: optionalBoundedInt(form.availableDaysPerWeek, "稼働できる日数", 0, 7),
-    available_day_hours: WEEKDAYS.flatMap((day) => {
+    available_day_hours: WEEKDAYS.flatMap((day): WorkerDayHours[] => {
       const hours = form.availableDayHours[day.code];
-      if (!hours?.from || !hours.to) return [];
-      return [{ weekday: day.code, time_from: hours.from, time_to: hours.to }];
+      if (!hours) return [];
+      if (hours.status) {
+        return [{ weekday: day.code, status: hours.status, time_from: null, time_to: null }];
+      }
+      if (hours.from && hours.to) {
+        return [{ weekday: day.code, status: null, time_from: hours.from, time_to: hours.to }];
+      }
+      return [];
     }),
     available_weekdays: WEEKDAYS.map((day) => day.code).filter((code) => {
       const hours = form.availableDayHours[code];
-      return Boolean(hours?.from && hours.to);
+      return Boolean(hours?.status || (hours?.from && hours?.to));
     }),
     available_time_from: null,
     available_time_to: null,
@@ -455,8 +489,7 @@ export function WorkerProfileModal({
   children?: ReactNode;
 }) {
   const [activeDay, setActiveDay] = useState<WorkerWeekday | null>(null);
-  const [draftFrom, setDraftFrom] = useState("");
-  const [draftTo, setDraftTo] = useState("");
+  const [draftStatus, setDraftStatus] = useState<WorkerDayAvailability | "">("");
   const [dayMessage, setDayMessage] = useState("");
   const [postalMessage, setPostalMessage] = useState("");
   const formRef = useRef(form);
@@ -533,34 +566,22 @@ export function WorkerProfileModal({
   function openDay(code: WorkerWeekday) {
     const saved = form.availableDayHours[code];
     setActiveDay(code);
-    setDraftFrom(saved?.from ?? "");
-    setDraftTo(saved?.to ?? "");
+    setDraftStatus(saved?.status ?? "");
     setDayMessage("");
   }
 
   function confirmDay() {
     if (!activeDay) return;
-    if (!draftFrom || !draftTo) {
-      setDayMessage("開始と終了の時刻を入力してください");
+    if (!draftStatus) {
+      setDayMessage("区分を選んでください");
       return;
     }
     patch({
       availableDayHours: {
         ...form.availableDayHours,
-        [activeDay]: { from: draftFrom, to: draftTo },
+        [activeDay]: { status: draftStatus, from: "", to: "" },
       },
     });
-    setDayMessage("");
-    setActiveDay(null);
-  }
-
-  function clearDay() {
-    if (!activeDay) return;
-    const next = { ...form.availableDayHours };
-    delete next[activeDay];
-    patch({ availableDayHours: next });
-    setDraftFrom("");
-    setDraftTo("");
     setDayMessage("");
     setActiveDay(null);
   }
@@ -635,11 +656,14 @@ export function WorkerProfileModal({
             <h4>本人</h4>
             <div className="order-draft-grid">
               <label className="order-field order-span-6">
-                <span className="order-field-label">
-                  生年月日（年齢）
-                  <span className="order-field-hint">{formatBirthSentence(form.birthDate)}</span>
+                <span className="order-field-label">生年月日（年齢）</span>
+                <span className="worker-inline-input">
+                  <input type="date" max={todayInputValue()} value={form.birthDate} onChange={(event) => patch({ birthDate: event.target.value })} />
+                  <strong className="worker-age-readout">
+                    {form.birthDate && ageFromBirthDate(form.birthDate) !== null ? `${ageFromBirthDate(form.birthDate)}歳` : "〇〇歳"}
+                  </strong>
                 </span>
-                <input type="date" max={todayInputValue()} value={form.birthDate} onChange={(event) => patch({ birthDate: event.target.value })} />
+                <span className="order-field-hint">{formatBirthSentence(form.birthDate)}</span>
               </label>
               <ChoiceButtons
                 label="結婚有無"
@@ -886,8 +910,7 @@ export function WorkerProfileModal({
                 <div className="worker-preferences-card">
                   <div className="worker-preferences-grid">
                     {WEEKDAYS.map((day) => {
-                      const hours = form.availableDayHours[day.code];
-                      const sentence = hours?.from && hours.to ? `${formatClock(hours.from)}〜${formatClock(hours.to)}` : "未設定";
+                      const sentence = daySummary(form.availableDayHours[day.code]);
                       return (
                         <button
                           key={day.code}
@@ -903,21 +926,30 @@ export function WorkerProfileModal({
                   </div>
                   {activeDay ? (
                     <div className="worker-day-editor">
-                      <span className="order-field-label">{activeDayLabel}の時間</span>
-                      <span className="worker-inline-input">
-                        <input type="time" value={draftFrom} onChange={(event) => setDraftFrom(event.target.value)} aria-label={`${activeDayLabel}の開始時刻`} />
-                        <span>〜</span>
-                        <input type="time" value={draftTo} onChange={(event) => setDraftTo(event.target.value)} aria-label={`${activeDayLabel}の終了時刻`} />
-                      </span>
-                      <span className="order-field-hint">{draftFrom && draftTo ? `${formatClock(draftFrom)}〜${formatClock(draftTo)}` : "〇時〜〇時"}</span>
+                      <span className="order-field-label">{activeDayLabel}</span>
+                      <div className="worker-choice" role="group" aria-label={`${activeDayLabel}の区分`}>
+                        {DAY_STATUSES.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={draftStatus === option.value ? "is-on" : ""}
+                            aria-pressed={draftStatus === option.value}
+                            onClick={() => {
+                              setDraftStatus(option.value);
+                              setDayMessage("");
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
                       {dayMessage ? <p className="form-error">{dayMessage}</p> : null}
                       <div className="worker-day-editor-actions">
                         <button type="button" className="btn btn-primary" onClick={confirmDay}>決定</button>
-                        <button type="button" className="btn btn-ghost" onClick={clearDay}>この曜日を外す</button>
                       </div>
                     </div>
                   ) : (
-                    <p className="order-field-hint">曜日をクリックして、稼働できる時間を決めてください。</p>
+                    <p className="order-field-hint">曜日をクリックして、終日OK、15時～OK、要相談、稼働不可から選んでください。</p>
                   )}
                 </div>
               </div>
@@ -932,7 +964,7 @@ export function WorkerProfileModal({
                 </span>
               </label>
               <ChoiceButtons
-                label="支払いサイトに関して(月末締め→翌々月末~翌々々月10日で問題ないか？)"
+                label="支払いサイトに関して(月末締め→翌々月末～翌々々月10日で問題ないか？)"
                 span="order-span-12"
                 value={form.paymentTermsOk}
                 options={[{ value: "yes", label: "YES" }, { value: "no", label: "NO" }]}

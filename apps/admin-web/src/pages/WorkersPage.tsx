@@ -23,7 +23,6 @@ import {
   createWorker,
   createWorkerBankAccount,
   deleteWorker,
-  getWorkerAvailabilityPreferences,
   getWorkerBankAccounts,
   getSuppliers,
   getWorkerTags,
@@ -35,34 +34,10 @@ import {
   updateWorker,
 } from "../lib/api/client";
 import { formatDate, formatMaskedAccountNumber } from "../lib/formatters";
-import type { WorkerAvailabilityPreference, WorkerBankAccountItem, WorkerListItem } from "../types/api";
+import type { WorkerBankAccountItem, WorkerListItem } from "../types/api";
 import type { LineLinkCode } from "../types/orderRequest";
 
 const PAGE_SIZE = 30;
-
-const weekdayLabels = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
-
-const availabilityPreferenceLabels: Record<string, string> = {
-  available_all_day: "稼働OK（1日）",
-  available_after_15: "稼働OK（15時〜）",
-  unavailable: "稼働不可",
-  consult_required: "事前相談",
-};
-
-function formatAvailabilityPreference(value: string | null | undefined) {
-  if (!value) {
-    return "自動設定なし";
-  }
-
-  return availabilityPreferenceLabels[value] || value;
-}
-
-function buildAvailabilityPreferenceSummary(preferences: WorkerAvailabilityPreference | undefined) {
-  return weekdayLabels.map((label, index) => ({
-    label,
-    value: formatAvailabilityPreference(preferences?.weekly_default_statuses[String(index)]),
-  }));
-}
 
 function validateEffectiveRange(effectiveFrom: string, effectiveUntil: string): void {
   if (effectiveUntil && effectiveUntil < effectiveFrom) {
@@ -258,12 +233,6 @@ export function WorkersPage() {
     queryKey: ["suppliers-master-options"],
     queryFn: () => getSuppliers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
     enabled: user?.role === "admin",
-  });
-
-  const workerPreferencesQuery = useQuery({
-    queryKey: ["worker-availability-preferences", selectedWorker?.id],
-    queryFn: () => getWorkerAvailabilityPreferences(selectedWorker!.id),
-    enabled: Boolean(selectedWorker),
   });
 
   const workerBankAccountsQuery = useQuery({
@@ -481,7 +450,6 @@ export function WorkersPage() {
 
   const { items, total } = workersQuery.data;
   const supplierOptions = supplierOptionsQuery.data?.items ?? [];
-  const preferenceSummaryItems = buildAvailabilityPreferenceSummary(workerPreferencesQuery.data);
 
   return (
     <div className="page-stack">
@@ -544,38 +512,6 @@ export function WorkersPage() {
         >
           {editorMode === "edit" && selectedWorker ? (
             <>
-          <section className="worker-preferences-card">
-            <div className="worker-preferences-header">
-              <div>
-                <strong>基本スケジュール</strong>
-                <p>スタッフモバイルの自動候補に使っている既定設定です。</p>
-              </div>
-              <span className={`status-badge ${workerPreferencesQuery.data?.auto_apply_enabled ? "active" : "inactive"}`}>
-                {workerPreferencesQuery.data?.auto_apply_enabled ? "自動候補オン" : "自動候補オフ"}
-              </span>
-            </div>
-
-            {workerPreferencesQuery.isLoading ? <p style={{ margin: 0, color: "#6b7280" }}>基本スケジュールを読み込み中...</p> : null}
-            {workerPreferencesQuery.isError ? <p className="form-error">{workerPreferencesQuery.error instanceof ApiError ? workerPreferencesQuery.error.message : "基本スケジュールの取得に失敗しました"}</p> : null}
-
-            {!workerPreferencesQuery.isLoading && !workerPreferencesQuery.isError ? (
-              <>
-                <div className="worker-preferences-grid">
-                  {preferenceSummaryItems.map((item) => (
-                    <div key={item.label} className="worker-preference-item">
-                      <span className="worker-preference-label">{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <div className="worker-preferences-footer">
-                  <span>祝日: {formatAvailabilityPreference(workerPreferencesQuery.data?.holiday_default_status)}</span>
-                  <span>更新日時: {workerPreferencesQuery.data?.updated_at ? new Date(workerPreferencesQuery.data.updated_at).toLocaleString("ja-JP") : "未保存"}</span>
-                </div>
-              </>
-            ) : null}
-          </section>
-
           {/* 口座情報セクション */}
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
             <strong style={{ fontSize: "0.9rem" }}>振込先口座</strong>
