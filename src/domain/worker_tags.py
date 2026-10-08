@@ -20,6 +20,8 @@ WORKER_TAGS: tuple[tuple[str, str, str], ...] = (
 WORKER_TAG_LABELS: dict[str, str] = {code: label for code, label, _description in WORKER_TAGS}
 WORKER_TAG_DESCRIPTIONS: dict[str, str] = {code: description for code, _label, description in WORKER_TAGS}
 WORKER_TAG_CODES: tuple[str, ...] = tuple(code for code, _label, _description in WORKER_TAGS)
+EVENT_SIZE_CODES: tuple[str, ...] = ("event_small_d", "event_medium_d", "event_large_d")
+_EVENT_SIZE_CODE_SET = set(EVENT_SIZE_CODES)
 
 
 class UnknownWorkerTagError(ValueError):
@@ -40,9 +42,18 @@ def add_months(value: date, months: int) -> date:
     return date(year, month, day)
 
 
+def _with_single_event_size(selected: set[str], preferred: str | None) -> list[str]:
+    """小型・中型・大型イベDは同時に1つだけ残す。後から指定した方を優先する。"""
+    if preferred not in _EVENT_SIZE_CODE_SET:
+        preferred = None
+    kept = {code for code in selected if code not in _EVENT_SIZE_CODE_SET or code == preferred}
+    return [code for code in WORKER_TAG_CODES if code in kept]
+
+
 def normalize_worker_tags(tags: list[str] | None) -> list[str]:
     """定義済みコードだけを、定義順で重複なく返す。未知のコードは拒否する。"""
     selected: set[str] = set()
+    preferred_event_size: str | None = None
     for raw in tags or []:
         code = str(raw).strip()
         if not code:
@@ -50,15 +61,23 @@ def normalize_worker_tags(tags: list[str] | None) -> list[str]:
         if code not in WORKER_TAG_LABELS:
             raise UnknownWorkerTagError(code)
         selected.add(code)
-    return [code for code in WORKER_TAG_CODES if code in selected]
+        if code in _EVENT_SIZE_CODE_SET:
+            preferred_event_size = code
+    return _with_single_event_size(selected, preferred_event_size)
 
 
 def stored_worker_tags(tags: object) -> list[str]:
     """保存値から、今の定義に含まれるコードだけを定義順で取り出す。"""
     if not isinstance(tags, list):
         return []
-    selected = {item for item in tags if isinstance(item, str) and item in WORKER_TAG_LABELS}
-    return [code for code in WORKER_TAG_CODES if code in selected]
+    selected: set[str] = set()
+    preferred_event_size: str | None = None
+    for item in tags:
+        if isinstance(item, str) and item in WORKER_TAG_LABELS:
+            selected.add(item)
+            if item in _EVENT_SIZE_CODE_SET:
+                preferred_event_size = item
+    return _with_single_event_size(selected, preferred_event_size)
 
 
 def reconcile_worker_tags(

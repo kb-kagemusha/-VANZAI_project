@@ -978,3 +978,26 @@
   - なし
 - Spec Reference: DESIGN_SPEC_v0.3 セクション6.1、DEC-029
 
+---
+
+### DEC-031: イベント規模のタグは1つだけ（2026-10-08）
+- Date: 2026-10-08
+- Status: Confirmed
+- Decision: 小型イベD・中型イベD・大型イベDはタグ欄の2行目に並べ、同時に1つだけ付ける。新しく選んだ規模が残り、それまでの規模は外れる。どれも付けないことはできる。
+- Context:
+  - イベントの規模は重ならない
+- Options:
+  - A: 3つとも同時に付けられる
+  - B: 3つのうち1つだけ残す
+- Chosen: B
+- Why:
+  - 現場の人数帯は1人の稼働者に1つで足りる
+- Impact:
+  - Data model: 保存時も3つのうち後から指定した1つだけを残す
+  - UI/UX: 2行目の3枠
+  - Ops/Runbook: なし
+  - Migration: なし
+- Follow-ups:
+  - なし
+- Spec Reference: DEC-030
+

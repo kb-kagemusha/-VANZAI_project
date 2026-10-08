@@ -218,6 +218,14 @@ def test_worker_tags_are_predefined_only(api_client, db_session):
     db_session.expire_all()
     assert db_session.get(Worker, created.json()["id"]).newcomer_until == kept_until
 
+    exclusive = api_client.post(
+        "/api/workers",
+        json={"name": "Event Size Worker", "is_active": True, "tags": ["event_small_d", "event_medium_d", "food_d"]},
+        headers=headers,
+    )
+    assert exclusive.status_code == 200
+    assert exclusive.json()["tags"] == ["food_d", "event_medium_d"]
+
     rejected = api_client.post(
         "/api/workers",
         json={"name": "Free Tag Worker", "is_active": True, "tags": ["夜勤専門"]},

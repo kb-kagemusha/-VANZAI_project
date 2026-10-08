@@ -1022,10 +1022,25 @@ button {
   color: var(--muted);
 }
 
+.worker-tag-picker-rows {
+  display: grid;
+  gap: 0.5rem;
+}
+
 .worker-tag-picker-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.5rem;
+}
+
+.worker-tag-picker-options-event {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .worker-tag-picker-options-event {
+    grid-template-columns: 1fr;
+  }
 }
 
 .worker-tag-option {
