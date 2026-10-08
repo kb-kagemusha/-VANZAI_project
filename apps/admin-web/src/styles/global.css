@@ -957,32 +957,120 @@ button {
   font-size: 0.75rem;
 }
 
-.worker-tag-picker {
-  border: 1px solid #e5e7eb;
+.worker-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.worker-editor-fields label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.worker-editor-fields input:not([type="checkbox"]),
+.worker-editor-fields select,
+.worker-state-toggle {
+  width: 100%;
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0.55rem 0.75rem 0.7rem;
+  background: var(--panel);
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.worker-state-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.worker-state-toggle input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.worker-state-toggle.is-active {
+  border-color: rgba(22, 163, 74, 0.45);
+  background: var(--accent-soft);
+}
+
+.worker-tag-picker {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem 0.85rem;
   margin: 0;
 }
 
 .worker-tag-picker legend {
   padding: 0 0.25rem;
   font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .worker-tag-picker-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.5rem;
 }
 
-.worker-tag-picker-options label {
+.worker-tag-option {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
 }
 
-.worker-tag-picker-options input {
-  width: auto;
+.worker-tag-option.is-checked {
+  border-color: rgba(22, 163, 74, 0.45);
+  background: var(--accent-soft);
+}
+
+.worker-tag-option input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0.15rem 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.worker-tag-option-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.worker-tag-option-label {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.worker-tag-option-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
 .pagination-bar {

@@ -1,5 +1,8 @@
 """GET /api/workers, /api/suppliers, /api/clients, /api/sites, /api/project-types, /api/roles のAPIテスト"""
+from datetime import date
+
 from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
+from src.domain.worker_tags import add_months, tokyo_today
 from src.models.base import generate_ulid
 from src.models.enums import AvailabilityStatus, UserRole
 from src.models.master import Client, ProjectType, Role, Site, Supplier, Worker, WorkerAvailabilityPreference
@@ -181,16 +184,39 @@ def test_worker_tags_are_predefined_only(api_client, db_session):
 
     catalog = api_client.get("/api/worker-tags", headers=headers)
     assert catalog.status_code == 200
-    codes = [item["code"] for item in catalog.json()["items"]]
-    assert codes == ["regular", "spot", "leader", "newcomer"]
+    items = catalog.json()["items"]
+    codes = [item["code"] for item in items]
+    assert codes == [
+        "newcomer",
+        "food_d",
+        "commercial_d",
+        "shibuya_smoke_d",
+        "event_small_d",
+        "event_medium_d",
+        "event_large_d",
+    ]
+    assert items[0]["description"] == "付けてから3ヶ月で外れます"
 
     created = api_client.post(
         "/api/workers",
-        json={"name": "Tagged Worker", "is_active": True, "tags": ["newcomer", "regular", "regular"]},
+        json={"name": "Tagged Worker", "is_active": True, "tags": ["food_d", "newcomer", "newcomer"]},
         headers=headers,
     )
     assert created.status_code == 200
-    assert created.json()["tags"] == ["regular", "newcomer"]
+    assert created.json()["tags"] == ["newcomer", "food_d"]
+    tagged = db_session.get(Worker, created.json()["id"])
+    assert tagged is not None
+    assert tagged.newcomer_until == add_months(tokyo_today(), 3)
+    kept_until = tagged.newcomer_until
+
+    kept = api_client.put(
+        f"/api/workers/{created.json()['id']}",
+        json={"name": "Tagged Worker", "is_active": True, "tags": ["newcomer", "food_d"]},
+        headers=headers,
+    )
+    assert kept.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Worker, created.json()["id"]).newcomer_until == kept_until
 
     rejected = api_client.post(
         "/api/workers",
@@ -199,16 +225,28 @@ def test_worker_tags_are_predefined_only(api_client, db_session):
     )
     assert rejected.status_code == 422
 
-    listed = api_client.get("/api/workers", params={"tag": "regular"}, headers=headers)
+    listed = api_client.get("/api/workers", params={"tag": "food_d"}, headers=headers)
     assert listed.status_code == 200
     assert created.json()["id"] in [item["id"] for item in listed.json()["items"]]
 
-    hidden = api_client.get("/api/workers", params={"tag": "leader"}, headers=headers)
+    hidden = api_client.get("/api/workers", params={"tag": "commercial_d"}, headers=headers)
     assert hidden.status_code == 200
     assert created.json()["id"] not in [item["id"] for item in hidden.json()["items"]]
 
-    unknown = api_client.get("/api/workers", params={"tag": "custom"}, headers=headers)
+    unknown = api_client.get("/api/workers", params={"tag": "regular"}, headers=headers)
     assert unknown.status_code == 422
+
+    tagged.newcomer_until = date(2020, 1, 1)
+    db_session.commit()
+    expired = api_client.get("/api/workers", params={"tag": "newcomer"}, headers=headers)
+    assert expired.status_code == 200
+    assert created.json()["id"] not in [item["id"] for item in expired.json()["items"]]
+    db_session.expire_all()
+    dropped = db_session.get(Worker, created.json()["id"])
+    assert dropped is not None
+    assert "newcomer" not in (dropped.tags or [])
+    assert dropped.newcomer_until is None
+    assert "food_d" in dropped.tags
 
 
 def test_get_worker_availability_preferences_returns_saved_values(api_client, db_session, worker):

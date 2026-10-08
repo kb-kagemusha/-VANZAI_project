@@ -2768,10 +2768,12 @@ async def get_availability_calendar(
         raise HTTPException(status_code=400, detail="date range exceeds 60 days")
 
     from datetime import timedelta
-    from src.domain.worker_tags import stored_worker_tags
+    from src.domain.worker_tags import expire_elapsed_newcomer_tags, stored_worker_tags
     from src.models.master import Worker, Role
     from src.models.transaction import Assignment, ShiftSlot, WorkerAvailability
     from src.models.transaction import Project
+
+    expire_elapsed_newcomer_tags(db)
 
     # 稼働者一覧
     workers_q = db.query(Worker).filter(Worker.deleted_at.is_(None))
@@ -6122,7 +6124,10 @@ async def list_worker_tags(
     from src.domain.worker_tags import WORKER_TAGS
 
     return WorkerTagCatalogResponse(
-        items=[WorkerTagOption(code=code, label=label) for code, label in WORKER_TAGS]
+        items=[
+            WorkerTagOption(code=code, label=label, description=description)
+            for code, label, description in WORKER_TAGS
+        ]
     )
 
 
@@ -6140,8 +6145,17 @@ async def list_workers(
 
     from sqlalchemy import Text, cast
 
-    from src.domain.worker_tags import WORKER_TAG_LABELS, stored_worker_tags
+    from src.domain.worker_tags import (
+        NEWCOMER_CODE,
+        WORKER_TAG_LABELS,
+        expire_elapsed_newcomer_tags,
+        stored_worker_tags,
+        tokyo_today,
+    )
     from src.models.master import Worker, Supplier
+
+    today = tokyo_today()
+    expire_elapsed_newcomer_tags(db, today)
 
     sort_map = {
         "name": Worker.name,
@@ -6174,6 +6188,8 @@ async def list_workers(
         if query.tag not in WORKER_TAG_LABELS:
             raise HTTPException(status_code=422, detail=f"未定義のタグです: {query.tag}")
         stmt = stmt.filter(cast(Worker.tags, Text).like(f'%"{query.tag}"%'))
+        if query.tag == NEWCOMER_CODE:
+            stmt = stmt.filter((Worker.newcomer_until.is_(None)) | (Worker.newcomer_until > today))
 
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Worker.id.desc()).offset(query.offset).limit(query.limit).all()
@@ -6219,7 +6235,7 @@ async def create_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
-        from src.domain.worker_tags import stored_worker_tags
+        from src.domain.worker_tags import newcomer_until_for_assignment, stored_worker_tags, tokyo_today
         from src.models.master import Supplier, Worker
 
         supplier_name = None
@@ -6251,6 +6267,7 @@ async def create_worker_master(
             p_shirt_count=request.p_shirt_count,
             license_type=request.license_type,
             tags=request.tags,
+            newcomer_until=newcomer_until_for_assignment(None, None, request.tags, tokyo_today()),
         )
         db.add(worker)
 
@@ -6317,7 +6334,7 @@ async def update_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
-        from src.domain.worker_tags import stored_worker_tags
+        from src.domain.worker_tags import newcomer_until_for_assignment, stored_worker_tags, tokyo_today
         from src.models.master import Supplier, Worker
 
         worker = db.get(Worker, worker_id)
@@ -6368,6 +6385,12 @@ async def update_worker_master(
         worker.pioneer_training_done = request.pioneer_training_done
         worker.p_shirt_count = request.p_shirt_count
         worker.license_type = request.license_type
+        worker.newcomer_until = newcomer_until_for_assignment(
+            before_value["tags"],
+            worker.newcomer_until,
+            request.tags,
+            tokyo_today(),
+        )
         worker.tags = request.tags
 
         AuditService(db).log(

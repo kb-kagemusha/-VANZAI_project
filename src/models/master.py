@@ -91,6 +91,7 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     p_shirt_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0=✗, 1=1枚, 2=2枚
     license_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "hiace_ok"/"at_only"/"none"
     tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # 定義済みタグコードのみ
+    newcomer_until: Mapped[date | None] = mapped_column(Date, nullable=True)  # 新人タグが外れる日
 
     # Relationships
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="worker")

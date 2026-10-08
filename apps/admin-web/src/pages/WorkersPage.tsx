@@ -33,6 +33,75 @@ import type { LineLinkCode } from "../types/orderRequest";
 
 const PAGE_SIZE = 30;
 
+function WorkerEditorFields({
+  name,
+  email,
+  phone,
+  supplierId,
+  notes,
+  isActive,
+  suppliers,
+  nameRequired = false,
+  onName,
+  onEmail,
+  onPhone,
+  onSupplierId,
+  onNotes,
+  onIsActive,
+}: {
+  name: string;
+  email: string;
+  phone: string;
+  supplierId: string;
+  notes: string;
+  isActive: boolean;
+  suppliers: { id: string; name: string }[];
+  nameRequired?: boolean;
+  onName: (value: string) => void;
+  onEmail: (value: string) => void;
+  onPhone: (value: string) => void;
+  onSupplierId: (value: string) => void;
+  onNotes: (value: string) => void;
+  onIsActive: (value: boolean) => void;
+}) {
+  return (
+    <div className="worker-editor-fields">
+      <label>
+        名前{nameRequired ? <span style={{ color: "#dc2626" }}> *</span> : null}
+        <input value={name} onChange={(event) => onName(event.target.value)} placeholder="氏名" />
+      </label>
+      <label>
+        メール
+        <input type="email" value={email} onChange={(event) => onEmail(event.target.value)} placeholder="任意" />
+      </label>
+      <label>
+        電話
+        <input value={phone} onChange={(event) => onPhone(event.target.value)} placeholder="任意" />
+      </label>
+      <label>
+        紹介会社
+        <select value={supplierId} onChange={(event) => onSupplierId(event.target.value)}>
+          <option value="">未設定</option>
+          {suppliers.map((supplier) => (
+            <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        備考
+        <input value={notes} onChange={(event) => onNotes(event.target.value)} placeholder="任意" />
+      </label>
+      <label>
+        状態
+        <span className={isActive ? "worker-state-toggle is-active" : "worker-state-toggle"}>
+          <input type="checkbox" checked={isActive} onChange={(event) => onIsActive(event.target.checked)} />
+          {isActive ? "有効" : "無効"}
+        </span>
+      </label>
+    </div>
+  );
+}
+
 const weekdayLabels = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
 
 const availabilityPreferenceLabels: Record<string, string> = {
@@ -550,59 +619,22 @@ export function WorkersPage() {
       {user?.role === "admin" ? (
         <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>稼働者を追加</strong>
-          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-            <label>
-              名前 <span style={{ color: "#dc2626" }}>*</span>
-              <input
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                placeholder="氏名"
-              />
-            </label>
-            <label>
-              メール
-              <input
-                type="email"
-                value={createEmail}
-                onChange={(e) => setCreateEmail(e.target.value)}
-                placeholder="任意"
-              />
-            </label>
-            <label>
-              電話
-              <input
-                value={createPhone}
-                onChange={(e) => setCreatePhone(e.target.value)}
-                placeholder="任意"
-              />
-            </label>
-            <label>
-              紹介会社
-              <select value={createSupplierId} onChange={(e) => setCreateSupplierId(e.target.value)}>
-                <option value="">未設定</option>
-                {supplierOptions.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              備考
-              <input
-                value={createNotes}
-                onChange={(e) => setCreateNotes(e.target.value)}
-                placeholder="任意"
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column" }}>
-              有効
-              <input
-                type="checkbox"
-                checked={createIsActive}
-                onChange={(e) => setCreateIsActive(e.target.checked)}
-                style={{ marginTop: "0.5rem", width: "auto" }}
-              />
-            </label>
-          </div>
+          <WorkerEditorFields
+            name={createName}
+            email={createEmail}
+            phone={createPhone}
+            supplierId={createSupplierId}
+            notes={createNotes}
+            isActive={createIsActive}
+            suppliers={supplierOptions}
+            nameRequired
+            onName={setCreateName}
+            onEmail={setCreateEmail}
+            onPhone={setCreatePhone}
+            onSupplierId={setCreateSupplierId}
+            onNotes={setCreateNotes}
+            onIsActive={setCreateIsActive}
+          />
           <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{formMessage}</p> : null}
@@ -625,42 +657,21 @@ export function WorkersPage() {
             <strong>{selectedWorker.name} を編集</strong>
             <button type="button" onClick={closeEditor}>閉じる</button>
           </div>
-          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-            <label>
-              名前
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </label>
-            <label>
-              メール
-              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
-            </label>
-            <label>
-              電話
-              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
-            </label>
-            <label>
-              紹介会社
-              <select value={editSupplierId} onChange={(e) => setEditSupplierId(e.target.value)}>
-                <option value="">未設定</option>
-                {supplierOptions.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              備考
-              <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column" }}>
-              有効
-              <input
-                type="checkbox"
-                checked={editIsActive}
-                onChange={(e) => setEditIsActive(e.target.checked)}
-                style={{ marginTop: "0.5rem", width: "auto" }}
-              />
-            </label>
-          </div>
+          <WorkerEditorFields
+            name={editName}
+            email={editEmail}
+            phone={editPhone}
+            supplierId={editSupplierId}
+            notes={editNotes}
+            isActive={editIsActive}
+            suppliers={supplierOptions}
+            onName={setEditName}
+            onEmail={setEditEmail}
+            onPhone={setEditPhone}
+            onSupplierId={setEditSupplierId}
+            onNotes={setEditNotes}
+            onIsActive={setEditIsActive}
+          />
           <WorkerTagPicker options={workerTagOptions} selected={editTags} onChange={setEditTags} />
           {editError ? <p className="form-error">{editError}</p> : null}
           {editMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{editMessage}</p> : null}

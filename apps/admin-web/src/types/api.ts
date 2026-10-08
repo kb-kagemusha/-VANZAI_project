@@ -664,6 +664,7 @@ export interface WorkerCreateRequest {
 export interface WorkerTagOption {
   code: string;
   label: string;
+  description?: string;
 }
 
 export interface WorkerUpdateRequest extends WorkerCreateRequest {}

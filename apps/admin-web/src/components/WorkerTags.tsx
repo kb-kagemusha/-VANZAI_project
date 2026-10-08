@@ -18,7 +18,7 @@ export function WorkerTagPicker({
         {options.map((option) => {
           const checked = selected.includes(option.code);
           return (
-            <label key={option.code}>
+            <label key={option.code} className={checked ? "worker-tag-option is-checked" : "worker-tag-option"}>
               <input
                 type="checkbox"
                 checked={checked}
@@ -30,7 +30,10 @@ export function WorkerTagPicker({
                   );
                 }}
               />
-              {option.label}
+              <span className="worker-tag-option-text">
+                <span className="worker-tag-option-label">{option.label}</span>
+                {option.description ? <span className="worker-tag-option-note">{option.description}</span> : null}
+              </span>
             </label>
           );
         })}

@@ -942,6 +942,7 @@ class WorkerTagOption(BaseModel):
     """定義済み稼働者タグ"""
     code: str
     label: str
+    description: str = ""
 
 
 class WorkerTagCatalogResponse(BaseModel):
