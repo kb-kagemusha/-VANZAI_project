@@ -1,16 +1,16 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { WorkerTagPicker } from "./WorkerTags";
 import type { WorkerListItem, WorkerProfileInput, WorkerTagOption, WorkerWeekday, WorkerWorkHistoryItem } from "../types/api";
 
 const WEEKDAYS: { code: WorkerWeekday; label: string }[] = [
-  { code: "mon", label: "月" },
-  { code: "tue", label: "火" },
-  { code: "wed", label: "水" },
-  { code: "thu", label: "木" },
-  { code: "fri", label: "金" },
-  { code: "sat", label: "土" },
-  { code: "sun", label: "日" },
+  { code: "mon", label: "月曜" },
+  { code: "tue", label: "火曜" },
+  { code: "wed", label: "水曜" },
+  { code: "thu", label: "木曜" },
+  { code: "fri", label: "金曜" },
+  { code: "sat", label: "土曜" },
+  { code: "sun", label: "日曜" },
 ];
 
 const EMPLOYMENT_TYPES = ["正社員", "契約社員", "派遣", "アルバイト", "業務委託", "その他"];
@@ -28,6 +28,11 @@ export interface WorkHistoryDraft {
   resignationReason: string;
 }
 
+export interface DayHoursDraft {
+  from: string;
+  to: string;
+}
+
 export interface WorkerIntakeForm {
   name: string;
   email: string;
@@ -38,6 +43,7 @@ export interface WorkerIntakeForm {
   tags: string[];
   birthDate: string;
   maritalStatus: YesNo;
+  postalCode: string;
   address: string;
   hometown: string;
   nearestStation: string;
@@ -60,9 +66,7 @@ export interface WorkerIntakeForm {
   lifeGoal: string;
   desiredIncome: string;
   availableDaysPerWeek: string;
-  availableWeekdays: WorkerWeekday[];
-  availableTimeFrom: string;
-  availableTimeTo: string;
+  availableDayHours: Partial<Record<WorkerWeekday, DayHoursDraft>>;
   availableStartDate: string;
   paymentTermsOk: YesNo;
 }
@@ -90,6 +94,7 @@ export function emptyIntakeForm(): WorkerIntakeForm {
     tags: [],
     birthDate: "",
     maritalStatus: "",
+    postalCode: "",
     address: "",
     hometown: "",
     nearestStation: "",
@@ -112,9 +117,7 @@ export function emptyIntakeForm(): WorkerIntakeForm {
     lifeGoal: "",
     desiredIncome: "",
     availableDaysPerWeek: "",
-    availableWeekdays: [],
-    availableTimeFrom: "",
-    availableTimeTo: "",
+    availableDayHours: {},
     availableStartDate: "",
     paymentTermsOk: "",
   };
@@ -160,6 +163,53 @@ function optionalBoundedInt(value: string, label: string, min: number, max: numb
   return parsed;
 }
 
+function formatPostal(stored: string | null | undefined): string {
+  const digits = (stored ?? "").replace(/\D/g, "");
+  if (digits.length === 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return digits;
+}
+
+function postalDigits(value: string): string | null {
+  const digits = value.replace(/\D/g, "").slice(0, 7);
+  return digits || null;
+}
+
+function hoursFromProfile(profile: WorkerListItem["profile"]): Partial<Record<WorkerWeekday, DayHoursDraft>> {
+  const stored = profile?.available_day_hours ?? [];
+  if (stored.length > 0) {
+    const hours: Partial<Record<WorkerWeekday, DayHoursDraft>> = {};
+    for (const row of stored) {
+      hours[row.weekday] = { from: row.time_from, to: row.time_to };
+    }
+    return hours;
+  }
+  const from = profile?.available_time_from ?? "";
+  const to = profile?.available_time_to ?? "";
+  const hours: Partial<Record<WorkerWeekday, DayHoursDraft>> = {};
+  for (const day of profile?.available_weekdays ?? []) {
+    hours[day] = { from, to };
+  }
+  return hours;
+}
+
+function keepBuildingLine(current: string, previousAuto: string): string {
+  const trimmed = current.trim();
+  if (!trimmed) return "";
+  if (previousAuto && trimmed.startsWith(previousAuto)) {
+    return trimmed.slice(previousAuto.length).trim();
+  }
+  const newline = trimmed.indexOf("\n");
+  if (newline >= 0) return trimmed.slice(newline + 1).trim();
+  if (/[都道府県]/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function mergeLookedUpAddress(current: string, lookedUp: string, previousAuto: string): string {
+  const building = keepBuildingLine(current, previousAuto);
+  if (!building) return lookedUp;
+  return `${lookedUp}\n${building}`;
+}
+
 function historyFromItem(item: WorkerWorkHistoryItem): WorkHistoryDraft {
   return {
     periodFrom: item.period_from ?? "",
@@ -185,6 +235,7 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
     tags: worker.tags ?? [],
     birthDate: profile?.birth_date ?? "",
     maritalStatus: profile?.marital_status === "yes" || profile?.marital_status === "no" ? profile.marital_status : "",
+    postalCode: formatPostal(profile?.postal_code),
     address: profile?.address ?? "",
     hometown: profile?.hometown ?? "",
     nearestStation: profile?.nearest_station ?? "",
@@ -207,9 +258,7 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
     lifeGoal: profile?.life_goal ?? "",
     desiredIncome: profile?.desired_income ?? "",
     availableDaysPerWeek: profile?.available_days_per_week == null ? "" : String(profile.available_days_per_week),
-    availableWeekdays: profile?.available_weekdays ?? [],
-    availableTimeFrom: profile?.available_time_from ?? "",
-    availableTimeTo: profile?.available_time_to ?? "",
+    availableDayHours: hoursFromProfile(profile),
     availableStartDate: profile?.available_start_date ?? "",
     paymentTermsOk: yesNoFromBool(profile?.payment_terms_ok),
   };
@@ -219,6 +268,7 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
   const profile: WorkerProfileInput = {
     birth_date: form.birthDate || null,
     marital_status: form.maritalStatus || null,
+    postal_code: postalDigits(form.postalCode),
     address: optionalText(form.address),
     hometown: optionalText(form.hometown),
     nearest_station: optionalText(form.nearestStation),
@@ -251,9 +301,17 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
     life_goal: optionalText(form.lifeGoal),
     desired_income: optionalText(form.desiredIncome),
     available_days_per_week: optionalBoundedInt(form.availableDaysPerWeek, "稼働できる日数", 0, 7),
-    available_weekdays: WEEKDAYS.map((day) => day.code).filter((code) => form.availableWeekdays.includes(code)),
-    available_time_from: form.availableTimeFrom || null,
-    available_time_to: form.availableTimeTo || null,
+    available_day_hours: WEEKDAYS.flatMap((day) => {
+      const hours = form.availableDayHours[day.code];
+      if (!hours?.from || !hours.to) return [];
+      return [{ weekday: day.code, time_from: hours.from, time_to: hours.to }];
+    }),
+    available_weekdays: WEEKDAYS.map((day) => day.code).filter((code) => {
+      const hours = form.availableDayHours[code];
+      return Boolean(hours?.from && hours.to);
+    }),
+    available_time_from: null,
+    available_time_to: null,
     available_start_date: form.availableStartDate || null,
     payment_terms_ok: boolFromYesNo(form.paymentTermsOk),
   };
@@ -396,6 +454,17 @@ export function WorkerProfileModal({
   onDelete?: () => void;
   children?: ReactNode;
 }) {
+  const [activeDay, setActiveDay] = useState<WorkerWeekday | null>(null);
+  const [draftFrom, setDraftFrom] = useState("");
+  const [draftTo, setDraftTo] = useState("");
+  const [dayMessage, setDayMessage] = useState("");
+  const [postalMessage, setPostalMessage] = useState("");
+  const formRef = useRef(form);
+  const lastAutoAddress = useRef("");
+  const lastLookedUpZip = useRef("");
+  const postalTouched = useRef(false);
+  formRef.current = form;
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -406,6 +475,49 @@ export function WorkerProfileModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    const digits = form.postalCode.replace(/\D/g, "");
+    if (!postalTouched.current) return;
+    if (digits.length !== 7) {
+      setPostalMessage("");
+      return;
+    }
+    if (digits === lastLookedUpZip.current) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${digits}`, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("network");
+          return response.json() as Promise<{ status?: number; results?: { address1?: string; address2?: string; address3?: string }[] | null }>;
+        })
+        .then((data) => {
+          const result = data.results?.[0];
+          const lookedUp = `${result?.address1 ?? ""}${result?.address2 ?? ""}${result?.address3 ?? ""}`;
+          if (data.status !== 200 || !lookedUp) {
+            setPostalMessage("この郵便番号の住所は見つかりませんでした");
+            return;
+          }
+          const current = formRef.current;
+          const previousAuto = lastAutoAddress.current;
+          lastLookedUpZip.current = digits;
+          lastAutoAddress.current = lookedUp;
+          setPostalMessage("");
+          onChange({
+            ...current,
+            address: mergeLookedUpAddress(current.address, lookedUp, previousAuto),
+          });
+        })
+        .catch((caught: unknown) => {
+          if (caught instanceof DOMException && caught.name === "AbortError") return;
+          setPostalMessage("郵便番号から住所を取得できませんでした");
+        });
+    }, 400);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [form.postalCode, onChange]);
 
   function patch(partial: Partial<WorkerIntakeForm>) {
     onChange({ ...form, ...partial });
@@ -418,7 +530,42 @@ export function WorkerProfileModal({
     });
   }
 
-  const timeSentence = [formatClock(form.availableTimeFrom), formatClock(form.availableTimeTo)].filter(Boolean).join("〜");
+  function openDay(code: WorkerWeekday) {
+    const saved = form.availableDayHours[code];
+    setActiveDay(code);
+    setDraftFrom(saved?.from ?? "");
+    setDraftTo(saved?.to ?? "");
+    setDayMessage("");
+  }
+
+  function confirmDay() {
+    if (!activeDay) return;
+    if (!draftFrom || !draftTo) {
+      setDayMessage("開始と終了の時刻を入力してください");
+      return;
+    }
+    patch({
+      availableDayHours: {
+        ...form.availableDayHours,
+        [activeDay]: { from: draftFrom, to: draftTo },
+      },
+    });
+    setDayMessage("");
+    setActiveDay(null);
+  }
+
+  function clearDay() {
+    if (!activeDay) return;
+    const next = { ...form.availableDayHours };
+    delete next[activeDay];
+    patch({ availableDayHours: next });
+    setDraftFrom("");
+    setDraftTo("");
+    setDayMessage("");
+    setActiveDay(null);
+  }
+
+  const activeDayLabel = WEEKDAYS.find((day) => day.code === activeDay)?.label ?? "";
 
   return (
     <div className="order-create-backdrop">
@@ -500,8 +647,29 @@ export function WorkerProfileModal({
                 options={[{ value: "yes", label: "あり" }, { value: "no", label: "なし" }]}
                 onChange={(maritalStatus) => patch({ maritalStatus })}
               />
+              <label className="order-field order-span-4">
+                <span className="order-field-label">
+                  郵便番号
+                  <span className="order-field-hint">7桁で都道府県・市区町村まで入ります</span>
+                </span>
+                <input
+                  value={form.postalCode}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  placeholder="123-4567"
+                  maxLength={8}
+                  onChange={(event) => {
+                    postalTouched.current = true;
+                    patch({ postalCode: event.target.value });
+                  }}
+                />
+              </label>
+              {postalMessage ? <p className="form-error order-span-12">{postalMessage}</p> : null}
               <label className="order-field order-span-12">
-                <span className="order-field-label">住所</span>
+                <span className="order-field-label">
+                  住所
+                  <span className="order-field-hint">建物名・部屋番号は改行して続けてください</span>
+                </span>
                 <textarea className="is-short" value={form.address} onChange={(event) => patch({ address: event.target.value })} />
               </label>
               <label className="order-field order-span-6">
@@ -638,12 +806,13 @@ export function WorkerProfileModal({
           <section className="order-draft-section">
             <h4>経験と人物</h4>
             <div className="order-draft-grid">
-              <label className="order-field order-span-12">
+              <label className="order-field order-span-8">
                 <span className="order-field-label">PloomXの販売経験</span>
                 <textarea className="is-short" value={form.ploomxSalesExperience} onChange={(event) => patch({ ploomxSalesExperience: event.target.value })} />
               </label>
               <ChoiceButtons
                 label="喫煙可否"
+                span="order-span-4"
                 value={form.smoking}
                 options={[{ value: "yes", label: "可" }, { value: "no", label: "不可" }]}
                 onChange={(smoking) => patch({ smoking })}
@@ -712,40 +881,46 @@ export function WorkerProfileModal({
                   <span>日</span>
                 </span>
               </label>
-              <div className="order-field order-span-8">
+              <div className="order-field order-span-12">
                 <span className="order-field-label">稼働できる曜日</span>
-                <div className="worker-choice" role="group" aria-label="稼働できる曜日">
-                  {WEEKDAYS.map((day) => {
-                    const selected = form.availableWeekdays.includes(day.code);
-                    return (
-                      <button
-                        key={day.code}
-                        type="button"
-                        className={selected ? "is-on" : ""}
-                        aria-pressed={selected}
-                        onClick={() => patch({
-                          availableWeekdays: selected
-                            ? form.availableWeekdays.filter((code) => code !== day.code)
-                            : [...form.availableWeekdays, day.code],
-                        })}
-                      >
-                        {day.label}
-                      </button>
-                    );
-                  })}
+                <div className="worker-preferences-card">
+                  <div className="worker-preferences-grid">
+                    {WEEKDAYS.map((day) => {
+                      const hours = form.availableDayHours[day.code];
+                      const sentence = hours?.from && hours.to ? `${formatClock(hours.from)}〜${formatClock(hours.to)}` : "未設定";
+                      return (
+                        <button
+                          key={day.code}
+                          type="button"
+                          className={activeDay === day.code ? "worker-preference-item worker-day-card is-editing" : "worker-preference-item worker-day-card"}
+                          onClick={() => openDay(day.code)}
+                        >
+                          <span className="worker-preference-label">{day.label}</span>
+                          <strong>{sentence}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {activeDay ? (
+                    <div className="worker-day-editor">
+                      <span className="order-field-label">{activeDayLabel}の時間</span>
+                      <span className="worker-inline-input">
+                        <input type="time" value={draftFrom} onChange={(event) => setDraftFrom(event.target.value)} aria-label={`${activeDayLabel}の開始時刻`} />
+                        <span>〜</span>
+                        <input type="time" value={draftTo} onChange={(event) => setDraftTo(event.target.value)} aria-label={`${activeDayLabel}の終了時刻`} />
+                      </span>
+                      <span className="order-field-hint">{draftFrom && draftTo ? `${formatClock(draftFrom)}〜${formatClock(draftTo)}` : "〇時〜〇時"}</span>
+                      {dayMessage ? <p className="form-error">{dayMessage}</p> : null}
+                      <div className="worker-day-editor-actions">
+                        <button type="button" className="btn btn-primary" onClick={confirmDay}>決定</button>
+                        <button type="button" className="btn btn-ghost" onClick={clearDay}>この曜日を外す</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="order-field-hint">曜日をクリックして、稼働できる時間を決めてください。</p>
+                  )}
                 </div>
               </div>
-              <label className="order-field order-span-6">
-                <span className="order-field-label">
-                  稼働できる時間
-                  <span className="order-field-hint">{timeSentence || "〇時〜〇時"}</span>
-                </span>
-                <span className="worker-inline-input">
-                  <input type="time" value={form.availableTimeFrom} onChange={(event) => patch({ availableTimeFrom: event.target.value })} aria-label="稼働開始時刻" />
-                  <span>〜</span>
-                  <input type="time" value={form.availableTimeTo} onChange={(event) => patch({ availableTimeTo: event.target.value })} aria-label="稼働終了時刻" />
-                </span>
-              </label>
               <label className="order-field order-span-6">
                 <span className="order-field-label">
                   稼働開始日

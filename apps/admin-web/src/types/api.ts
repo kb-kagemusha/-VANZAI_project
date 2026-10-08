@@ -623,9 +623,16 @@ export interface WorkerWorkHistoryItem {
 
 export type WorkerWeekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
+export interface WorkerDayHours {
+  weekday: WorkerWeekday;
+  time_from: string;
+  time_to: string;
+}
+
 export interface WorkerProfileInput {
   birth_date: string | null;
   marital_status: "yes" | "no" | null;
+  postal_code: string | null;
   address: string | null;
   hometown: string | null;
   nearest_station: string | null;
@@ -649,6 +656,7 @@ export interface WorkerProfileInput {
   desired_income: string | null;
   available_days_per_week: number | null;
   available_weekdays: WorkerWeekday[];
+  available_day_hours: WorkerDayHours[];
   available_time_from: string | null;
   available_time_to: string | null;
   available_start_date: string | null;

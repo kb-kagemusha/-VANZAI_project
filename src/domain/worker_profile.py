@@ -6,6 +6,7 @@ WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _PROFILE_FIELDS = (
     "birth_date",
     "marital_status",
+    "postal_code",
     "address",
     "hometown",
     "nearest_station",
@@ -29,6 +30,7 @@ _PROFILE_FIELDS = (
     "desired_income",
     "available_days_per_week",
     "available_weekdays",
+    "available_day_hours",
     "available_time_from",
     "available_time_to",
     "available_start_date",
@@ -62,11 +64,13 @@ def read_worker_profile(worker):
     from src.api.schemas import WorkerProfile
 
     weekdays = worker.available_weekdays if isinstance(worker.available_weekdays, list) else []
+    day_hours = worker.available_day_hours if isinstance(worker.available_day_hours, list) else []
     history = worker.work_history if isinstance(worker.work_history, list) else []
     return WorkerProfile.model_validate(
         {
             "birth_date": worker.birth_date,
             "marital_status": worker.marital_status,
+            "postal_code": worker.postal_code,
             "address": worker.address,
             "hometown": worker.hometown,
             "nearest_station": worker.nearest_station,
@@ -90,6 +94,7 @@ def read_worker_profile(worker):
             "desired_income": worker.desired_income,
             "available_days_per_week": worker.available_days_per_week,
             "available_weekdays": [day for day in weekdays if day in WEEKDAYS],
+            "available_day_hours": [row for row in day_hours if isinstance(row, dict)],
             "available_time_from": worker.available_time_from,
             "available_time_to": worker.available_time_to,
             "available_start_date": worker.available_start_date,

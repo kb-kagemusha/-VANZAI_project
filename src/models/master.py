@@ -96,6 +96,7 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     # 登録時のプロフィール（稼働者登録ポップアップ）
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     marital_status: Mapped[str | None] = mapped_column(String(10), nullable=True)  # yes / no
+    postal_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     hometown: Mapped[str | None] = mapped_column(String(100), nullable=True)
     nearest_station: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -119,6 +120,7 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     desired_income: Mapped[str | None] = mapped_column(String(100), nullable=True)
     available_days_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     available_weekdays: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    available_day_hours: Mapped[list | None] = mapped_column(JSON, nullable=True)
     available_time_from: Mapped[str | None] = mapped_column(String(5), nullable=True)
     available_time_to: Mapped[str | None] = mapped_column(String(5), nullable=True)
     available_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)

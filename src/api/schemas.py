@@ -944,12 +944,22 @@ class WorkerWorkHistoryItem(BaseModel):
         return cleaned
 
 
+class WorkerDayHours(BaseModel):
+    """曜日ごとの稼働時間。時刻は HH:MM。"""
+    model_config = ConfigDict(extra="ignore")
+
+    weekday: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    time_from: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    time_to: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
 class WorkerProfileInput(BaseModel):
     """稼働者登録ポップアップの入力。未送信の更新では既存値を残す。"""
     model_config = ConfigDict(extra="ignore")
 
     birth_date: Optional[date] = None
     marital_status: Optional[Literal["yes", "no"]] = None
+    postal_code: Optional[str] = Field(None, max_length=8)
     address: Optional[str] = Field(None, max_length=500)
     hometown: Optional[str] = Field(None, max_length=100)
     nearest_station: Optional[str] = Field(None, max_length=100)
@@ -973,6 +983,7 @@ class WorkerProfileInput(BaseModel):
     desired_income: Optional[str] = Field(None, max_length=100)
     available_days_per_week: Optional[int] = Field(None, ge=0, le=7)
     available_weekdays: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(default_factory=list)
+    available_day_hours: list[WorkerDayHours] = Field(default_factory=list, max_length=7)
     available_time_from: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     available_time_to: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     available_start_date: Optional[date] = None
@@ -986,6 +997,7 @@ class WorkerProfileInput(BaseModel):
         cleaned = dict(value)
         text_keys = (
             "marital_status",
+            "postal_code",
             "address",
             "hometown",
             "nearest_station",
@@ -1021,9 +1033,28 @@ class WorkerProfileInput(BaseModel):
                 kept.append(row)
             cleaned["work_history"] = kept
         weekdays = cleaned.get("available_weekdays")
+        order = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
         if isinstance(weekdays, list):
-            order = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
             cleaned["available_weekdays"] = [day for day in order if day in weekdays]
+        postal = cleaned.get("postal_code")
+        if isinstance(postal, str):
+            digits = "".join(char for char in postal if char.isdigit())[:7]
+            cleaned["postal_code"] = digits or None
+        hours = cleaned.get("available_day_hours")
+        if isinstance(hours, list):
+            by_day: dict[str, dict] = {}
+            for row in hours:
+                if not isinstance(row, dict):
+                    continue
+                weekday = row.get("weekday")
+                if weekday not in order:
+                    continue
+                time_from = str(row.get("time_from") or "").strip()
+                time_to = str(row.get("time_to") or "").strip()
+                if not time_from or not time_to:
+                    continue
+                by_day[weekday] = {"weekday": weekday, "time_from": time_from, "time_to": time_to}
+            cleaned["available_day_hours"] = [by_day[day] for day in order if day in by_day]
         return cleaned
 
     @field_validator("birth_date")

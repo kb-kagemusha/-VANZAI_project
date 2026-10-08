@@ -166,6 +166,7 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
     profile = {
         "birth_date": "1998-01-15",
         "marital_status": "yes",
+        "postal_code": "150-0043",
         "address": "東京都渋谷区1-2-3",
         "hometown": "大阪",
         "nearest_station": "渋谷",
@@ -202,6 +203,11 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
         "life_goal": "独立",
         "desired_income": "月収30万円",
         "available_days_per_week": 4,
+        "available_day_hours": [
+            {"weekday": "fri", "time_from": "10:00", "time_to": "19:00"},
+            {"weekday": "mon", "time_from": "09:00", "time_to": "18:00"},
+            {"weekday": "mon", "time_from": "08:00", "time_to": "12:00"},
+        ],
         "available_weekdays": ["fri", "mon", "mon"],
         "available_time_from": "09:00",
         "available_time_to": "18:00",
@@ -222,6 +228,11 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
     assert body["station_walk_minutes"] == 8
     assert body["truck_drive"] == "2t"
     assert body["work_history"] == [profile["work_history"][0]]
+    assert body["postal_code"] == "1500043"
+    assert body["available_day_hours"] == [
+        {"weekday": "mon", "time_from": "08:00", "time_to": "12:00"},
+        {"weekday": "fri", "time_from": "10:00", "time_to": "19:00"},
+    ]
     assert body["available_weekdays"] == ["mon", "fri"]
     assert body["club_activity"] == "野球部"
     assert body["payment_terms_ok"] is True
@@ -234,6 +245,8 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
     assert kept.status_code == 200
     assert kept.json()["name"] == "Profile Worker Renamed"
     assert kept.json()["profile"]["address"] == "東京都渋谷区1-2-3"
+    assert kept.json()["profile"]["postal_code"] == "1500043"
+    assert kept.json()["profile"]["available_day_hours"][0]["weekday"] == "mon"
     assert kept.json()["profile"]["age"] == completed_years(birth)
 
     future = api_client.post(
