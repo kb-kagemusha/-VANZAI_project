@@ -1071,7 +1071,7 @@ export function MasterDataPage() {
             <button type="button" className="primary-button" onClick={handleUpdate} disabled={!editName.trim() || updateMutation.isPending}>
               {updateMutation.isPending ? "更新中..." : "更新する"}
             </button>
-            <button type="button" onClick={clearEditor}>編集を閉じる</button>
+            <button type="button" className="ghost-button" onClick={clearEditor}>編集を閉じる</button>
           </div>
           {selectedSupplier ? (
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.25rem", display: "grid", gap: "0.75rem" }}>
@@ -1163,13 +1163,13 @@ export function MasterDataPage() {
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     <button
                       type="button"
-                      style={{ fontSize: "0.8rem" }}
+                      className="primary-button"
                       onClick={() => updateSupplierBankAccountMutation.mutate()}
                       disabled={!supplierEditBankName.trim() || !supplierEditBranchName.trim() || !supplierEditAccountNumber.trim() || !supplierEditHolderKana.trim() || !supplierEditEffectiveFrom || updateSupplierBankAccountMutation.isPending}
                     >
                       {updateSupplierBankAccountMutation.isPending ? "更新中..." : "口座を更新"}
                     </button>
-                    <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => setSelectedSupplierBankAccount(null)}>
+                    <button type="button" className="ghost-button" onClick={() => setSelectedSupplierBankAccount(null)}>
                       編集を閉じる
                     </button>
                   </div>
@@ -1223,7 +1223,8 @@ export function MasterDataPage() {
                 {supplierBankFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.8rem" }}>{supplierBankFormMessage}</p> : null}
                 <button
                   type="button"
-                  style={{ marginTop: "0.5rem", fontSize: "0.8rem" }}
+                  className="primary-button"
+                  style={{ marginTop: "0.5rem" }}
                   onClick={() => createSupplierBankAccountMutation.mutate({
                     bank_name: supplierBankBankName,
                     branch_name: supplierBankBranchName,

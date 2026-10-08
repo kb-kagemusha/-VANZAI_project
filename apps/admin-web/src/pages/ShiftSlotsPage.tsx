@@ -221,7 +221,7 @@ export function ShiftSlotsPage() {
                 {editingShiftSlot.project_name} / {formatDate(editingShiftSlot.work_date)} / {formatTimeRange(editingShiftSlot)}
               </span>
             </div>
-            <button type="button" onClick={closeShiftSlotEditor} style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}>
+            <button type="button" className="ghost-button" onClick={closeShiftSlotEditor}>
               閉じる
             </button>
           </div>
@@ -336,8 +336,8 @@ export function ShiftSlotsPage() {
             render: (row) => (
               <button
                 type="button"
+                className="ghost-button"
                 onClick={() => openShiftSlotEditor(row)}
-                style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}
               >
                 編集
               </button>

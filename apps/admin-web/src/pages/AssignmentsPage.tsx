@@ -512,7 +512,7 @@ export function AssignmentsPage() {
             <input value={selectionSetName} onChange={(event) => setSelectionSetName(event.target.value)} placeholder="例: 4月前半の確定候補" />
           </label>
           <div style={{ alignSelf: "end" }}>
-            <button type="button" onClick={saveCurrentSelectionSet} disabled={!selectionSetName.trim() || selectedAssignmentIds.length === 0 || saveSelectionSetMutation.isPending}>現在の選択を保存</button>
+            <button type="button" className="primary-button" onClick={saveCurrentSelectionSet} disabled={!selectionSetName.trim() || selectedAssignmentIds.length === 0 || saveSelectionSetMutation.isPending}>現在の選択を保存</button>
           </div>
         </div>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -535,7 +535,7 @@ export function AssignmentsPage() {
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   <button type="button" onClick={() => restoreSelectionSet(selectionSet)}>読み込む</button>
-                  {selectionSet.editable ? <button type="button" onClick={() => deleteSelectionSet(selectionSet.id)} disabled={deleteSelectionSetMutation.isPending}>削除</button> : null}
+                  {selectionSet.editable ? <button type="button" className="danger-button" onClick={() => deleteSelectionSet(selectionSet.id)} disabled={deleteSelectionSetMutation.isPending}>削除</button> : null}
                 </div>
               </div>
             ))}

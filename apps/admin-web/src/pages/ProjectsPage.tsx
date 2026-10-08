@@ -303,7 +303,7 @@ export function ProjectsPage() {
                 {editingProject.name} / {editingProject.client_name}
               </span>
             </div>
-            <button type="button" onClick={closeProjectEditor} style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}>
+            <button type="button" className="ghost-button" onClick={closeProjectEditor}>
               閉じる
             </button>
           </div>
@@ -445,8 +445,8 @@ export function ProjectsPage() {
             render: (row) => (
               <button
                 type="button"
+                className="ghost-button"
                 onClick={() => openProjectEditor(row)}
-                style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem" }}
               >
                 編集
               </button>

@@ -1100,40 +1100,66 @@ button {
   gap: 0.75rem;
 }
 
+button:not([class]),
 .ghost-button,
-.primary-button {
-  padding: 0.6rem 1rem;
-  border-radius: 10px;
-  border: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: opacity 0.15s, box-shadow 0.15s;
+.primary-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  box-shadow: none;
 }
 
+button:not([class]),
 .ghost-button {
-  background: rgba(29, 39, 49, 0.09);
+  border-color: var(--line);
+  background: var(--panel);
   color: var(--ink);
 }
 
+button:not([class]):hover:not(:disabled),
 .ghost-button:hover:not(:disabled) {
-  background: rgba(29, 39, 49, 0.15);
+  background: var(--bg);
 }
 
 .primary-button {
   background: #16a34a;
-  color: white;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.24);
+  color: #fff;
 }
 
 .primary-button:hover:not(:disabled) {
-  opacity: 0.9;
-  box-shadow: 0 4px 16px rgba(200, 85, 61, 0.35);
+  background: #15803d;
 }
 
+.danger-button {
+  background: #dc2626;
+  color: #fff;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+button:not([class]):focus-visible,
+.ghost-button:focus-visible,
+.primary-button:focus-visible,
+.danger-button:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
+}
+
+button:not([class]):disabled,
 .ghost-button:disabled,
-.primary-button:disabled {
+.primary-button:disabled,
+.danger-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -1257,50 +1283,53 @@ a.primary-button {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
-  padding: 0.5rem 1.1rem;
-  border-radius: 10px;
-  border: none;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: opacity 0.15s, box-shadow 0.15s, background 0.15s;
+  box-shadow: none;
   text-decoration: none;
 }
 
 .btn-primary {
+  border-color: transparent;
   background: #16a34a;
   color: #fff;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.24);
 }
 
 .btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
-  box-shadow: 0 4px 16px rgba(200, 85, 61, 0.32);
+  background: #15803d;
 }
 
-.btn-ghost {
-  background: rgba(29, 39, 49, 0.07);
+.btn-ghost,
+.btn-outline {
+  border-color: var(--line);
+  background: var(--panel);
   color: var(--ink);
-  border: 1px solid rgba(29, 39, 49, 0.13);
 }
 
-.btn-ghost:hover:not(:disabled) {
-  background: rgba(29, 39, 49, 0.13);
+.btn-ghost:hover:not(:disabled),
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg);
 }
 
 .btn-danger {
-  background: linear-gradient(135deg, #b42318, #d92d20);
+  border-color: transparent;
+  background: #dc2626;
   color: #fff;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(180, 35, 24, 0.22);
 }
 
 .btn-danger:hover:not(:disabled) {
-  opacity: 0.92;
-  box-shadow: 0 4px 16px rgba(180, 35, 24, 0.3);
+  background: #b91c1c;
 }
 
 .btn-change {
@@ -1328,9 +1357,10 @@ a.primary-button {
 }
 
 .btn-sm {
-  padding: 0.3rem 0.7rem;
-  font-size: 0.8rem;
-  border-radius: 7px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 .btn:disabled {
@@ -4811,15 +4841,21 @@ html[data-theme="dark"] .app-dialog-button-ghost:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
+html[data-theme="dark"] button:not([class]),
 html[data-theme="dark"] .ghost-button,
-html[data-theme="dark"] .btn-ghost {
-  background: rgba(255, 255, 255, 0.08);
+html[data-theme="dark"] .btn,
+html[data-theme="dark"] .btn-ghost,
+html[data-theme="dark"] .btn-outline {
+  background: var(--panel);
   color: var(--ink);
+  border-color: var(--line);
 }
 
+html[data-theme="dark"] button:not([class]):hover:not(:disabled),
 html[data-theme="dark"] .ghost-button:hover:not(:disabled),
-html[data-theme="dark"] .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+html[data-theme="dark"] .btn-ghost:hover:not(:disabled),
+html[data-theme="dark"] .btn-outline:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="dark"] .data-table th {

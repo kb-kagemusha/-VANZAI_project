@@ -641,6 +641,7 @@ export function WorkersPage() {
           <div>
             <button
               type="button"
+              className="primary-button"
               onClick={() => createMutation.mutate()}
               disabled={!createName.trim() || createMutation.isPending}
             >
@@ -655,7 +656,7 @@ export function WorkersPage() {
         <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <strong>{selectedWorker.name} を編集</strong>
-            <button type="button" onClick={closeEditor}>閉じる</button>
+            <button type="button" className="ghost-button" onClick={closeEditor}>閉じる</button>
           </div>
           <WorkerEditorFields
             name={editName}
@@ -711,6 +712,7 @@ export function WorkersPage() {
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button
               type="button"
+              className="primary-button"
               onClick={() => updateMutation.mutate()}
               disabled={!editName.trim() || updateMutation.isPending || deleteMutation.isPending}
             >
@@ -718,9 +720,9 @@ export function WorkersPage() {
             </button>
             <button
               type="button"
+              className="danger-button"
               onClick={() => handleDelete(selectedWorker)}
               disabled={updateMutation.isPending || deleteMutation.isPending}
-              style={{ background: "rgba(220,38,38,0.1)", color: "#b91c1c", borderColor: "#fca5a5" }}
             >
               {deleteMutation.isPending ? "削除中..." : "削除"}
             </button>
@@ -757,7 +759,7 @@ export function WorkersPage() {
                       <td style={{ padding: "0.25rem 0.5rem" }}>{formatDate(acc.effective_until)}</td>
                       <td style={{ padding: "0.25rem 0.5rem" }}>{acc.is_primary ? "✓" : ""}</td>
                       <td style={{ padding: "0.25rem 0.5rem" }}>
-                        <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => openBankEditor(acc)}>編集</button>
+                        <button type="button" className="ghost-button" onClick={() => openBankEditor(acc)}>編集</button>
                       </td>
                     </tr>
                   ))}
@@ -817,13 +819,13 @@ export function WorkersPage() {
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    style={{ fontSize: "0.8rem" }}
+                    className="primary-button"
                     onClick={() => updateBankAccountMutation.mutate()}
                     disabled={!editBankName.trim() || !editBranchName.trim() || !editBankAccountNumber.trim() || !editBankHolderKana.trim() || !editBankEffectiveFrom || updateBankAccountMutation.isPending}
                   >
                     {updateBankAccountMutation.isPending ? "更新中..." : "口座を更新"}
                   </button>
-                  <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => setSelectedBankAccount(null)}>
+                  <button type="button" className="ghost-button" onClick={() => setSelectedBankAccount(null)}>
                     編集を閉じる
                   </button>
                 </div>
@@ -878,7 +880,8 @@ export function WorkersPage() {
               {bankFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.8rem" }}>{bankFormMessage}</p> : null}
               <button
                 type="button"
-                style={{ marginTop: "0.5rem", fontSize: "0.8rem" }}
+                className="primary-button"
+                style={{ marginTop: "0.5rem" }}
                 onClick={() => createBankAccountMutation.mutate()}
                 disabled={!bankBankName.trim() || !bankBranchName.trim() || !bankAccountNumber.trim() || !bankHolderKana.trim() || !bankEffectiveFrom || createBankAccountMutation.isPending}
               >
@@ -949,16 +952,16 @@ export function WorkersPage() {
                     <div style={{ display: "flex", gap: "0.375rem" }}>
                       <button
                         type="button"
+                        className="ghost-button"
                         onClick={(e) => { e.stopPropagation(); openEditor(row); }}
-                        style={{ fontSize: "0.8rem" }}
                       >
                         編集
                       </button>
                       <button
                         type="button"
+                        className="danger-button"
                         onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
                         disabled={deleteMutation.isPending}
-                        style={{ fontSize: "0.8rem", background: "rgba(220,38,38,0.1)", color: "#b91c1c", borderColor: "#fca5a5" }}
                       >
                         削除
                       </button>
