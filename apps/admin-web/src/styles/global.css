@@ -649,10 +649,6 @@ button {
 .upload-card input,
 .upload-card select {
   min-width: 180px;
-  padding: 0.8rem 0.95rem;
-  border-radius: 12px;
-  border: 1px solid rgba(29, 39, 49, 0.15);
-  background: rgba(255, 255, 255, 0.88);
 }
 
 .dashboard-period-bar {
@@ -774,6 +770,93 @@ button {
 .worker-preference-label {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.worker-preference-item strong,
+.worker-preferences-header strong {
+  color: var(--ink);
+}
+
+.page-stack .card label:not(.worker-tag-option) {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.page-stack .card label:has(> input[type="checkbox"]),
+.page-stack .card label:has(> input[type="radio"]) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+}
+
+.page-stack .card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+.page-stack .card select,
+.page-stack .card textarea,
+.order-list-filters select,
+.filter-bar input,
+.filter-bar select,
+.login-form input,
+.upload-card input,
+.upload-card select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.page-stack .card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+.page-stack .card select,
+.order-list-filters select,
+.filter-bar input,
+.filter-bar select,
+.login-form input,
+.upload-card input,
+.upload-card select {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+}
+
+.page-stack .card textarea {
+  min-height: 5.5rem;
+  height: auto;
+  padding: 0.6rem 0.75rem;
+  resize: vertical;
+}
+
+.page-stack .card select,
+.order-list-filters select,
+.filter-bar select {
+  appearance: none;
+  padding-right: 1.9rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #667085 50%),
+    linear-gradient(135deg, #667085 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 55%,
+    calc(100% - 0.72rem) 55%;
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+
+.order-list-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.order-list-filters select {
+  min-width: 9rem;
+  width: auto;
 }
 
 .upload-file-field input[type="file"] {
@@ -4874,9 +4957,38 @@ html[data-theme="dark"] .data-table--striped tbody tr:nth-child(even) {
 html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 html[data-theme="dark"] select,
 html[data-theme="dark"] textarea {
-  background: #1c212b;
+  background-color: #1c212b;
   color: var(--ink);
   border-color: var(--line);
+}
+
+html[data-theme="dark"] .worker-preferences-card {
+  background: #2a3140;
+  border-color: var(--line);
+}
+
+html[data-theme="dark"] .worker-preference-item {
+  background: #1c212b;
+  border-color: var(--line);
+}
+
+html[data-theme="dark"] .worker-preference-item strong,
+html[data-theme="dark"] .worker-preferences-header strong,
+html[data-theme="dark"] .worker-preferences-header p,
+html[data-theme="dark"] .worker-preferences-footer {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .worker-preference-label {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .page-stack .card select,
+html[data-theme="dark"] .order-list-filters select,
+html[data-theme="dark"] .filter-bar select {
+  background-image:
+    linear-gradient(45deg, transparent 50%, #c5cad3 50%),
+    linear-gradient(135deg, #c5cad3 50%, transparent 50%);
 }
 
 html[data-theme="dark"] .app-dialog-button-ghost {
