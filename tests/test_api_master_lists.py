@@ -148,6 +148,102 @@ def test_create_worker_succeeds_for_admin(api_client, db_session):
     assert payload["notes"] == "memo"
 
 
+def test_worker_intake_profile_round_trip(api_client, db_session):
+    from datetime import date as date_cls
+
+    from src.domain.worker_profile import completed_years
+
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_worker_profile",
+        email="admin_worker_profile@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+    headers = _auth_header(user.username)
+    birth = date_cls(1998, 1, 15)
+    profile = {
+        "birth_date": "1998-01-15",
+        "marital_status": "yes",
+        "address": "東京都渋谷区1-2-3",
+        "hometown": "大阪",
+        "nearest_station": "渋谷",
+        "station_walk_minutes": 8,
+        "final_education": "大学卒",
+        "licenses_qualifications": "普通自動車",
+        "car_drive_ok": True,
+        "hiace_drive_ok": False,
+        "truck_drive": "2t",
+        "work_history": [
+            {
+                "period_from": "2018-04",
+                "period_to": "2022-03",
+                "company_name": "株式会社例",
+                "employment_type": "正社員",
+                "industry": "販売",
+                "job_description": "店頭販売",
+                "resignation_reason": "転居",
+            },
+            {
+                "period_from": "",
+                "company_name": "  ",
+            },
+        ],
+        "ploomx_sales_experience": "半年",
+        "smoking_ok": False,
+        "lucky_self": "いいと思う",
+        "hobbies": "映画",
+        "personality_strengths": "継続",
+        "personality_weaknesses": "心配性",
+        "club_activity": "野球部",
+        "motivation": "現場が好き",
+        "self_pr": "接客",
+        "life_goal": "独立",
+        "desired_income": "月収30万円",
+        "available_days_per_week": 4,
+        "available_weekdays": ["fri", "mon", "mon"],
+        "available_time_from": "09:00",
+        "available_time_to": "18:00",
+        "available_start_date": "2026-11-01",
+        "payment_terms_ok": True,
+    }
+
+    created = api_client.post(
+        "/api/workers",
+        json={"name": "Profile Worker", "is_active": True, "profile": profile},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    body = created.json()["profile"]
+    assert body["age"] == completed_years(birth)
+    assert body["birth_date"] == "1998-01-15"
+    assert body["marital_status"] == "yes"
+    assert body["station_walk_minutes"] == 8
+    assert body["truck_drive"] == "2t"
+    assert body["work_history"] == [profile["work_history"][0]]
+    assert body["available_weekdays"] == ["mon", "fri"]
+    assert body["club_activity"] == "野球部"
+    assert body["payment_terms_ok"] is True
+
+    kept = api_client.put(
+        f"/api/workers/{created.json()['id']}",
+        json={"name": "Profile Worker Renamed", "is_active": True},
+        headers=headers,
+    )
+    assert kept.status_code == 200
+    assert kept.json()["name"] == "Profile Worker Renamed"
+    assert kept.json()["profile"]["address"] == "東京都渋谷区1-2-3"
+    assert kept.json()["profile"]["age"] == completed_years(birth)
+
+    future = api_client.post(
+        "/api/workers",
+        json={"name": "Future Birth", "is_active": True, "profile": {"birth_date": "2999-01-01"}},
+        headers=headers,
+    )
+    assert future.status_code == 422
+
+
 def test_update_worker_succeeds_for_admin(api_client, db_session, worker):
     user = create_user_with_hashed_password(
         db=db_session,

@@ -93,6 +93,37 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # 定義済みタグコードのみ
     newcomer_until: Mapped[date | None] = mapped_column(Date, nullable=True)  # 新人タグが外れる日
 
+    # 登録時のプロフィール（稼働者登録ポップアップ）
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    marital_status: Mapped[str | None] = mapped_column(String(10), nullable=True)  # yes / no
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hometown: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    nearest_station: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    station_walk_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    final_education: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    licenses_qualifications: Mapped[str | None] = mapped_column(Text, nullable=True)
+    car_drive_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    hiace_drive_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    truck_drive: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 2t / 3t / none
+    work_history: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    ploomx_sales_experience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smoking_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    lucky_self: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hobbies: Mapped[str | None] = mapped_column(Text, nullable=True)
+    personality_strengths: Mapped[str | None] = mapped_column(Text, nullable=True)
+    personality_weaknesses: Mapped[str | None] = mapped_column(Text, nullable=True)
+    club_activity: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    motivation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    self_pr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    life_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    desired_income: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    available_days_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    available_weekdays: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    available_time_from: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    available_time_to: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    available_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payment_terms_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     # Relationships
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="worker")
     actuals: Mapped[list["Actual"]] = relationship(back_populates="worker")

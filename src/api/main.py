@@ -6145,6 +6145,7 @@ async def list_workers(
 
     from sqlalchemy import Text, cast
 
+    from src.domain.worker_profile import read_worker_profile
     from src.domain.worker_tags import (
         NEWCOMER_CODE,
         WORKER_TAG_LABELS,
@@ -6219,6 +6220,7 @@ async def list_workers(
             p_shirt_count=w.p_shirt_count,
             license_type=w.license_type,
             tags=stored_worker_tags(w.tags),
+            profile=read_worker_profile(w),
         )
         for w, supplier_name in rows
     ]
@@ -6235,6 +6237,7 @@ async def create_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
+        from src.domain.worker_profile import read_worker_profile, write_worker_profile
         from src.domain.worker_tags import newcomer_until_for_assignment, stored_worker_tags, tokyo_today
         from src.models.master import Supplier, Worker
 
@@ -6269,6 +6272,8 @@ async def create_worker_master(
             tags=request.tags,
             newcomer_until=newcomer_until_for_assignment(None, None, request.tags, tokyo_today()),
         )
+        if request.profile is not None:
+            write_worker_profile(worker, request.profile)
         db.add(worker)
 
         AuditService(db).log(
@@ -6284,6 +6289,7 @@ async def create_worker_master(
                 "introducer_supplier_id": worker.introducer_supplier_id,
                 "is_active": worker.is_active,
                 "tags": worker.tags,
+                "profile": read_worker_profile(worker).model_dump(mode="json"),
             },
         )
         db.commit()
@@ -6313,6 +6319,7 @@ async def create_worker_master(
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
             tags=stored_worker_tags(worker.tags),
+            profile=read_worker_profile(worker),
         )
     except HTTPException:
         raise
@@ -6334,6 +6341,7 @@ async def update_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
+        from src.domain.worker_profile import read_worker_profile, write_worker_profile
         from src.domain.worker_tags import newcomer_until_for_assignment, stored_worker_tags, tokyo_today
         from src.models.master import Supplier, Worker
 
@@ -6392,6 +6400,8 @@ async def update_worker_master(
             tokyo_today(),
         )
         worker.tags = request.tags
+        if request.profile is not None:
+            write_worker_profile(worker, request.profile)
 
         AuditService(db).log(
             "worker_updated",
@@ -6415,6 +6425,7 @@ async def update_worker_master(
                 "notes": worker.notes,
                 "is_active": worker.is_active,
                 "tags": stored_worker_tags(worker.tags),
+                "profile": read_worker_profile(worker).model_dump(mode="json"),
             },
         )
         db.commit()
@@ -6444,6 +6455,7 @@ async def update_worker_master(
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
             tags=stored_worker_tags(worker.tags),
+            profile=read_worker_profile(worker),
         )
     except HTTPException:
         raise
@@ -6464,6 +6476,7 @@ async def patch_worker_quals(
     """稼働者資格情報のみ更新"""
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
+        from src.domain.worker_profile import read_worker_profile
         from src.domain.worker_tags import stored_worker_tags
         from src.models.master import Worker
         worker = db.get(Worker, worker_id)
@@ -6526,6 +6539,7 @@ async def patch_worker_quals(
             p_shirt_count=worker.p_shirt_count,
             license_type=worker.license_type,
             tags=stored_worker_tags(worker.tags),
+            profile=read_worker_profile(worker),
         )
     except HTTPException:
         raise

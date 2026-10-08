@@ -8,7 +8,14 @@ import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
-import { WorkerTagList, WorkerTagPicker } from "../components/WorkerTags";
+import { WorkerTagList } from "../components/WorkerTags";
+import {
+  WorkerProfileModal,
+  emptyIntakeForm,
+  intakeFromWorker,
+  intakeToRequest,
+  type WorkerIntakeForm,
+} from "../components/WorkerProfileModal";
 import { confirmApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import {
@@ -32,75 +39,6 @@ import type { WorkerAvailabilityPreference, WorkerBankAccountItem, WorkerListIte
 import type { LineLinkCode } from "../types/orderRequest";
 
 const PAGE_SIZE = 30;
-
-function WorkerEditorFields({
-  name,
-  email,
-  phone,
-  supplierId,
-  notes,
-  isActive,
-  suppliers,
-  nameRequired = false,
-  onName,
-  onEmail,
-  onPhone,
-  onSupplierId,
-  onNotes,
-  onIsActive,
-}: {
-  name: string;
-  email: string;
-  phone: string;
-  supplierId: string;
-  notes: string;
-  isActive: boolean;
-  suppliers: { id: string; name: string }[];
-  nameRequired?: boolean;
-  onName: (value: string) => void;
-  onEmail: (value: string) => void;
-  onPhone: (value: string) => void;
-  onSupplierId: (value: string) => void;
-  onNotes: (value: string) => void;
-  onIsActive: (value: boolean) => void;
-}) {
-  return (
-    <div className="worker-editor-fields">
-      <label>
-        名前{nameRequired ? <span style={{ color: "#dc2626" }}> *</span> : null}
-        <input value={name} onChange={(event) => onName(event.target.value)} placeholder="氏名" />
-      </label>
-      <label>
-        メール
-        <input type="email" value={email} onChange={(event) => onEmail(event.target.value)} placeholder="任意" />
-      </label>
-      <label>
-        電話
-        <input value={phone} onChange={(event) => onPhone(event.target.value)} placeholder="任意" />
-      </label>
-      <label>
-        紹介会社
-        <select value={supplierId} onChange={(event) => onSupplierId(event.target.value)}>
-          <option value="">未設定</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-          ))}
-        </select>
-      </label>
-      <label>
-        備考
-        <input value={notes} onChange={(event) => onNotes(event.target.value)} placeholder="任意" />
-      </label>
-      <label>
-        状態
-        <span className={isActive ? "worker-state-toggle is-active" : "worker-state-toggle"}>
-          <input type="checkbox" checked={isActive} onChange={(event) => onIsActive(event.target.checked)} />
-          {isActive ? "有効" : "無効"}
-        </span>
-      </label>
-    </div>
-  );
-}
 
 const weekdayLabels = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
 
@@ -262,26 +200,12 @@ export function WorkersPage() {
   const [tagFilter, setTagFilter] = useState("");
   const [page, setPage] = useState(0);
 
-  // 新規作成フォーム
-  const [createName, setCreateName] = useState("");
-  const [createEmail, setCreateEmail] = useState("");
-  const [createPhone, setCreatePhone] = useState("");
-  const [createSupplierId, setCreateSupplierId] = useState("");
-  const [createNotes, setCreateNotes] = useState("");
-  const [createIsActive, setCreateIsActive] = useState(true);
-  const [createTags, setCreateTags] = useState<string[]>([]);
+  const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
+  const [intakeForm, setIntakeForm] = useState<WorkerIntakeForm>(emptyIntakeForm);
+  const [intakeBaseline, setIntakeBaseline] = useState(() => JSON.stringify(emptyIntakeForm()));
+  const [pageNotice, setPageNotice] = useState("");
   const [formError, setFormError] = useState("");
-  const [formMessage, setFormMessage] = useState("");
-
-  // 編集フォーム
   const [selectedWorker, setSelectedWorker] = useState<WorkerListItem | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editSupplierId, setEditSupplierId] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  const [editIsActive, setEditIsActive] = useState(true);
-  const [editTags, setEditTags] = useState<string[]>([]);
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
 
@@ -410,84 +334,41 @@ export function WorkersPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      createWorker({
-        name: createName,
-        furigana: null,
-        email: createEmail || null,
-        phone: createPhone || null,
-        sole_proprietor_name: null,
-        emergency_contact_name_kana: null,
-        emergency_contact_phone: null,
-        gender: null,
-        invoice_registration_status: null,
-        invoice_number: null,
-        introducer_supplier_id: createSupplierId || null,
-        notes: createNotes || null,
-        is_active: createIsActive,
-        smoking_area_ok: null,
-        has_p_shirt: null,
-        has_best: null,
-        stores_training_done: null,
-        pioneer_training_done: null,
-        p_shirt_count: null,
-        license_type: null,
-        tags: createTags,
-      }),
+    mutationFn: () => createWorker(intakeToRequest(intakeForm, null)),
     onSuccess: async () => {
+      const next = emptyIntakeForm();
+      setIntakeForm(next);
+      setIntakeBaseline(JSON.stringify(next));
+      setEditorMode(null);
+      setSelectedWorker(null);
       setFormError("");
-      setFormMessage("稼働者を追加しました");
-      setCreateName("");
-      setCreateEmail("");
-      setCreatePhone("");
-      setCreateSupplierId("");
-      setCreateNotes("");
-      setCreateIsActive(true);
-      setCreateTags([]);
+      setPageNotice("稼働者を追加しました");
       setPage(0);
       await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
     },
     onError: (error: unknown) => {
-      setFormMessage("");
-      setFormError(error instanceof ApiError ? error.message : "稼働者の追加に失敗しました");
+      setPageNotice("");
+      setFormError(messageOf(error));
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!selectedWorker) throw new Error("対象稼働者を選択してください");
-      return updateWorker(selectedWorker.id, {
-        name: editName,
-        furigana: selectedWorker.furigana ?? null,
-        email: editEmail || null,
-        phone: editPhone || null,
-        sole_proprietor_name: selectedWorker.sole_proprietor_name ?? null,
-        emergency_contact_name_kana: selectedWorker.emergency_contact_name_kana ?? null,
-        emergency_contact_phone: selectedWorker.emergency_contact_phone ?? null,
-        gender: selectedWorker.gender ?? null,
-        invoice_registration_status: selectedWorker.invoice_registration_status ?? null,
-        invoice_number: selectedWorker.invoice_number ?? null,
-        introducer_supplier_id: editSupplierId || null,
-        notes: editNotes || null,
-        is_active: editIsActive,
-        smoking_area_ok: selectedWorker.smoking_area_ok ?? null,
-        has_p_shirt: selectedWorker.has_p_shirt ?? null,
-        has_best: selectedWorker.has_best ?? null,
-        stores_training_done: selectedWorker.stores_training_done ?? null,
-        pioneer_training_done: selectedWorker.pioneer_training_done ?? null,
-        p_shirt_count: selectedWorker.p_shirt_count ?? null,
-        license_type: selectedWorker.license_type ?? null,
-        tags: editTags,
-      });
+      return updateWorker(selectedWorker.id, intakeToRequest(intakeForm, selectedWorker));
     },
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      const next = intakeFromWorker(updated);
+      setSelectedWorker(updated);
+      setIntakeForm(next);
+      setIntakeBaseline(JSON.stringify(next));
       setEditError("");
       setEditMessage("更新しました");
       await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
     },
     onError: (error: unknown) => {
       setEditMessage("");
-      setEditError(error instanceof ApiError ? error.message : "更新に失敗しました");
+      setEditError(messageOf(error));
     },
   });
 
@@ -514,15 +395,37 @@ export function WorkersPage() {
     deleteMutation.mutate(worker.id);
   }
 
+  function rememberIntake(next: WorkerIntakeForm) {
+    setIntakeForm(next);
+    setIntakeBaseline(JSON.stringify(next));
+  }
+
+  function openCreate() {
+    rememberIntake(emptyIntakeForm());
+    setEditorMode("create");
+    setSelectedWorker(null);
+    setFormError("");
+    setPageNotice("");
+    setEditError("");
+    setEditMessage("");
+  }
+
   function openEditor(worker: WorkerListItem) {
+    rememberIntake(intakeFromWorker(worker));
     setSelectedWorker(worker);
-    setEditName(worker.name);
-    setEditEmail(worker.email ?? "");
-    setEditPhone(worker.phone ?? "");
-    setEditSupplierId(worker.introducer_supplier_id ?? "");
-    setEditNotes(worker.notes ?? "");
-    setEditIsActive(worker.is_active);
-    setEditTags(worker.tags ?? []);
+    setEditorMode("edit");
+    setEditError("");
+    setEditMessage("");
+    setPageNotice("");
+    setSelectedBankAccount(null);
+    setBankEditError("");
+    setBankEditMessage("");
+  }
+
+  function closeEditor() {
+    setEditorMode(null);
+    setSelectedWorker(null);
+    setFormError("");
     setEditError("");
     setEditMessage("");
     setSelectedBankAccount(null);
@@ -530,13 +433,17 @@ export function WorkersPage() {
     setBankEditMessage("");
   }
 
-  function closeEditor() {
-    setSelectedWorker(null);
-    setEditError("");
-    setEditMessage("");
-    setSelectedBankAccount(null);
-    setBankEditError("");
-    setBankEditMessage("");
+  async function requestClose() {
+    if (JSON.stringify(intakeForm) !== intakeBaseline) {
+      const confirmed = await confirmApp({
+        title: "入力を閉じる",
+        message: "入力中の内容は保存されません。閉じますか？",
+        confirmLabel: "閉じる",
+        cancelLabel: "入力を続ける",
+      });
+      if (!confirmed) return;
+    }
+    closeEditor();
   }
 
   function openBankEditor(account: WorkerBankAccountItem) {
@@ -580,7 +487,7 @@ export function WorkersPage() {
     <div className="page-stack">
       <PageHeader
         title="稼働者登録・一覧"
-        description="登録された稼働者（スタッフ）の一覧です。管理者と運用担当は、公式LINEの本人紐付けもここで行います。"
+        description="登録された稼働者（スタッフ）の一覧です。新規登録と編集はポップアップで入力します。管理者と運用担当は、公式LINEの本人紐付けもここで行います。"
         eyebrow="マスタ"
       />
 
@@ -615,68 +522,28 @@ export function WorkersPage() {
         </label>
       </FilterBar>
 
-      {/* 新規追加フォーム（admin のみ） */}
-      {user?.role === "admin" ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
-          <strong>稼働者を追加</strong>
-          <WorkerEditorFields
-            name={createName}
-            email={createEmail}
-            phone={createPhone}
-            supplierId={createSupplierId}
-            notes={createNotes}
-            isActive={createIsActive}
-            suppliers={supplierOptions}
-            nameRequired
-            onName={setCreateName}
-            onEmail={setCreateEmail}
-            onPhone={setCreatePhone}
-            onSupplierId={setCreateSupplierId}
-            onNotes={setCreateNotes}
-            onIsActive={setCreateIsActive}
-          />
-          <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
-          {formError ? <p className="form-error">{formError}</p> : null}
-          {formMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{formMessage}</p> : null}
-          <div>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => createMutation.mutate()}
-              disabled={!createName.trim() || createMutation.isPending}
-            >
-              {createMutation.isPending ? "追加中..." : "追加"}
-            </button>
-          </div>
-        </section>
-      ) : null}
+      {pageNotice ? <p style={{ margin: 0, color: "#16a34a" }}>{pageNotice}</p> : null}
 
-      {/* 編集パネル（admin のみ・行クリックで表示） */}
-      {user?.role === "admin" && selectedWorker ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>{selectedWorker.name} を編集</strong>
-            <button type="button" className="ghost-button" onClick={closeEditor}>閉じる</button>
-          </div>
-          <WorkerEditorFields
-            name={editName}
-            email={editEmail}
-            phone={editPhone}
-            supplierId={editSupplierId}
-            notes={editNotes}
-            isActive={editIsActive}
-            suppliers={supplierOptions}
-            onName={setEditName}
-            onEmail={setEditEmail}
-            onPhone={setEditPhone}
-            onSupplierId={setEditSupplierId}
-            onNotes={setEditNotes}
-            onIsActive={setEditIsActive}
-          />
-          <WorkerTagPicker options={workerTagOptions} selected={editTags} onChange={setEditTags} />
-          {editError ? <p className="form-error">{editError}</p> : null}
-          {editMessage ? <p style={{ margin: 0, color: "#16a34a" }}>{editMessage}</p> : null}
-
+      {user?.role === "admin" && editorMode ? (
+        <WorkerProfileModal
+          mode={editorMode}
+          form={intakeForm}
+          suppliers={supplierOptions}
+          tagOptions={workerTagOptions}
+          error={editorMode === "create" ? formError : editError}
+          message={editorMode === "edit" ? editMessage : ""}
+          pending={editorMode === "create" ? createMutation.isPending : updateMutation.isPending}
+          deletePending={deleteMutation.isPending}
+          onChange={setIntakeForm}
+          onClose={() => { void requestClose(); }}
+          onSubmit={() => {
+            if (editorMode === "create") createMutation.mutate();
+            else updateMutation.mutate();
+          }}
+          onDelete={editorMode === "edit" && selectedWorker ? () => { void handleDelete(selectedWorker); } : undefined}
+        >
+          {editorMode === "edit" && selectedWorker ? (
+            <>
           <section className="worker-preferences-card">
             <div className="worker-preferences-header">
               <div>
@@ -708,25 +575,6 @@ export function WorkersPage() {
               </>
             ) : null}
           </section>
-
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => updateMutation.mutate()}
-              disabled={!editName.trim() || updateMutation.isPending || deleteMutation.isPending}
-            >
-              {updateMutation.isPending ? "更新中..." : "更新"}
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              onClick={() => handleDelete(selectedWorker)}
-              disabled={updateMutation.isPending || deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "削除中..." : "削除"}
-            </button>
-          </div>
 
           {/* 口座情報セクション */}
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
@@ -889,7 +737,9 @@ export function WorkersPage() {
               </button>
             </details>
           </div>
-        </section>
+            </>
+          ) : null}
+        </WorkerProfileModal>
       ) : null}
 
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.5rem" }}>
@@ -897,6 +747,11 @@ export function WorkersPage() {
           <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>
             {total} 件中 {page * PAGE_SIZE + 1}〜{Math.min((page + 1) * PAGE_SIZE, total)} 件を表示
           </span>
+          {user?.role === "admin" ? (
+            <button type="button" className="primary-button" onClick={openCreate}>
+              新規登録
+            </button>
+          ) : null}
         </div>
 
         <DataTable
@@ -973,7 +828,7 @@ export function WorkersPage() {
           rows={items}
           getRowKey={(row) => row.id}
           emptyTitle="稼働者が見つかりません"
-          emptyDescription="条件を変えて検索するか、新規追加してください。"
+          emptyDescription="条件を変えて検索するか、新規登録してください。"
         />
       </section>
 

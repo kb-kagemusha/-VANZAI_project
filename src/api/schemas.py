@@ -4,7 +4,7 @@ APIリクエスト・レスポンスのPydanticスキーマ定義
 from datetime import date, datetime
 from typing import Generic, List, Literal, Optional, TypeVar
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from decimal import Decimal
 
 from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_short_id
@@ -910,6 +910,145 @@ class WorkerListQuery(PaginationQuery, SortQuery):
     tag: Optional[str] = Field(None, max_length=50)
 
 
+class WorkerWorkHistoryItem(BaseModel):
+    """職歴1件。期間は YYYY-MM。"""
+    model_config = ConfigDict(extra="ignore")
+
+    period_from: Optional[str] = Field(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    period_to: Optional[str] = Field(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    company_name: Optional[str] = Field(None, max_length=200)
+    employment_type: Optional[str] = Field(None, max_length=50)
+    industry: Optional[str] = Field(None, max_length=100)
+    job_description: Optional[str] = Field(None, max_length=2000)
+    resignation_reason: Optional[str] = Field(None, max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def blank_strings(cls, value):
+        if not isinstance(value, dict):
+            return value
+        cleaned = dict(value)
+        for key in (
+            "period_from",
+            "period_to",
+            "company_name",
+            "employment_type",
+            "industry",
+            "job_description",
+            "resignation_reason",
+        ):
+            raw = cleaned.get(key)
+            if isinstance(raw, str):
+                stripped = raw.strip()
+                cleaned[key] = stripped or None
+        return cleaned
+
+
+class WorkerProfileInput(BaseModel):
+    """稼働者登録ポップアップの入力。未送信の更新では既存値を残す。"""
+    model_config = ConfigDict(extra="ignore")
+
+    birth_date: Optional[date] = None
+    marital_status: Optional[Literal["yes", "no"]] = None
+    address: Optional[str] = Field(None, max_length=500)
+    hometown: Optional[str] = Field(None, max_length=100)
+    nearest_station: Optional[str] = Field(None, max_length=100)
+    station_walk_minutes: Optional[int] = Field(None, ge=0, le=300)
+    final_education: Optional[str] = Field(None, max_length=200)
+    licenses_qualifications: Optional[str] = Field(None, max_length=2000)
+    car_drive_ok: Optional[bool] = None
+    hiace_drive_ok: Optional[bool] = None
+    truck_drive: Optional[Literal["2t", "3t", "none"]] = None
+    work_history: list[WorkerWorkHistoryItem] = Field(default_factory=list, max_length=20)
+    ploomx_sales_experience: Optional[str] = Field(None, max_length=2000)
+    smoking_ok: Optional[bool] = None
+    lucky_self: Optional[str] = Field(None, max_length=500)
+    hobbies: Optional[str] = Field(None, max_length=1000)
+    personality_strengths: Optional[str] = Field(None, max_length=1000)
+    personality_weaknesses: Optional[str] = Field(None, max_length=1000)
+    club_activity: Optional[str] = Field(None, max_length=100)
+    motivation: Optional[str] = Field(None, max_length=2000)
+    self_pr: Optional[str] = Field(None, max_length=2000)
+    life_goal: Optional[str] = Field(None, max_length=1000)
+    desired_income: Optional[str] = Field(None, max_length=100)
+    available_days_per_week: Optional[int] = Field(None, ge=0, le=7)
+    available_weekdays: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(default_factory=list)
+    available_time_from: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    available_time_to: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    available_start_date: Optional[date] = None
+    payment_terms_ok: Optional[bool] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def blank_strings(cls, value):
+        if not isinstance(value, dict):
+            return value
+        cleaned = dict(value)
+        text_keys = (
+            "marital_status",
+            "address",
+            "hometown",
+            "nearest_station",
+            "final_education",
+            "licenses_qualifications",
+            "truck_drive",
+            "ploomx_sales_experience",
+            "lucky_self",
+            "hobbies",
+            "personality_strengths",
+            "personality_weaknesses",
+            "club_activity",
+            "motivation",
+            "self_pr",
+            "life_goal",
+            "desired_income",
+            "available_time_from",
+            "available_time_to",
+        )
+        for key in text_keys:
+            raw = cleaned.get(key)
+            if isinstance(raw, str):
+                stripped = raw.strip()
+                cleaned[key] = stripped or None
+        history = cleaned.get("work_history")
+        if isinstance(history, list):
+            kept = []
+            for row in history:
+                if not isinstance(row, dict):
+                    continue
+                if not any(str(item).strip() for item in row.values() if item is not None):
+                    continue
+                kept.append(row)
+            cleaned["work_history"] = kept
+        weekdays = cleaned.get("available_weekdays")
+        if isinstance(weekdays, list):
+            order = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+            cleaned["available_weekdays"] = [day for day in order if day in weekdays]
+        return cleaned
+
+    @field_validator("birth_date")
+    @classmethod
+    def birth_date_not_future(cls, value: Optional[date]) -> Optional[date]:
+        if value is None:
+            return None
+        from src.domain.worker_tags import tokyo_today
+
+        if value > tokyo_today():
+            raise ValueError("生年月日は今日以前を指定してください")
+        return value
+
+
+class WorkerProfile(WorkerProfileInput):
+    """稼働者プロフィール。年齢は生年月日から出す。"""
+
+    @computed_field
+    @property
+    def age(self) -> Optional[int]:
+        from src.domain.worker_profile import completed_years
+
+        return completed_years(self.birth_date)
+
+
 class WorkerListItem(BaseModel):
     """稼働者一覧の1行"""
     id: str
@@ -936,6 +1075,7 @@ class WorkerListItem(BaseModel):
     p_shirt_count: Optional[int] = None
     license_type: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    profile: WorkerProfile = Field(default_factory=WorkerProfile)
 
 
 class WorkerTagOption(BaseModel):
@@ -979,6 +1119,7 @@ class WorkerCreateRequest(BaseModel):
     p_shirt_count: Optional[int] = None
     license_type: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    profile: Optional[WorkerProfileInput] = None
 
     @field_validator("tags")
     @classmethod

@@ -4574,6 +4574,99 @@ a.primary-button {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.worker-profile-modal.order-draft.is-modal {
+  min-height: 0;
+  height: calc(100vh - 2.5rem);
+  max-height: calc(100vh - 2.5rem);
+}
+
+.worker-profile-modal .order-draft-body {
+  overflow: auto;
+}
+
+.worker-profile-modal .order-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.72rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 39, 49, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font: inherit;
+}
+
+.worker-profile-modal .order-field input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+}
+
+.worker-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.worker-choice button {
+  min-height: 2.5rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.worker-choice button.is-on {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.worker-inline-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.worker-profile-modal .worker-inline-input input {
+  width: 8.5rem;
+  flex: none;
+}
+
+.worker-profile-modal .worker-inline-input input[type="time"],
+.worker-profile-modal .worker-inline-input input[type="date"],
+.worker-profile-modal .worker-inline-input input[type="month"] {
+  width: 11rem;
+}
+
+.worker-drive-grid,
+.worker-history-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.worker-history-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.worker-history-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .order-draft.is-modal.order-pdf-review-card {
   min-height: 0;
 }
@@ -5157,10 +5250,23 @@ html[data-theme="dark"] .order-choice.is-on {
 
 html[data-theme="dark"] .order-field input,
 html[data-theme="dark"] .order-field textarea,
-html[data-theme="dark"] .order-recipients-search input {
+html[data-theme="dark"] .order-recipients-search input,
+html[data-theme="dark"] .worker-profile-modal .order-field select,
+html[data-theme="dark"] .worker-choice button {
   background: #141820;
   color: #f4f6f8;
   border-color: rgba(255, 255, 255, 0.16);
+}
+
+html[data-theme="dark"] .worker-choice button.is-on {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+html[data-theme="dark"] .worker-history-card {
+  background: #1c212b;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 html[data-theme="dark"] .order-field input::placeholder,

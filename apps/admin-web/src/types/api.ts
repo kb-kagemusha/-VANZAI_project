@@ -611,6 +611,54 @@ export interface PriceOutsourceCreateRequest {
 
 export interface PriceOutsourceUpdateRequest extends PriceOutsourceCreateRequest {}
 
+export interface WorkerWorkHistoryItem {
+  period_from: string | null;
+  period_to: string | null;
+  company_name: string | null;
+  employment_type: string | null;
+  industry: string | null;
+  job_description: string | null;
+  resignation_reason: string | null;
+}
+
+export type WorkerWeekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export interface WorkerProfileInput {
+  birth_date: string | null;
+  marital_status: "yes" | "no" | null;
+  address: string | null;
+  hometown: string | null;
+  nearest_station: string | null;
+  station_walk_minutes: number | null;
+  final_education: string | null;
+  licenses_qualifications: string | null;
+  car_drive_ok: boolean | null;
+  hiace_drive_ok: boolean | null;
+  truck_drive: "2t" | "3t" | "none" | null;
+  work_history: WorkerWorkHistoryItem[];
+  ploomx_sales_experience: string | null;
+  smoking_ok: boolean | null;
+  lucky_self: string | null;
+  hobbies: string | null;
+  personality_strengths: string | null;
+  personality_weaknesses: string | null;
+  club_activity: string | null;
+  motivation: string | null;
+  self_pr: string | null;
+  life_goal: string | null;
+  desired_income: string | null;
+  available_days_per_week: number | null;
+  available_weekdays: WorkerWeekday[];
+  available_time_from: string | null;
+  available_time_to: string | null;
+  available_start_date: string | null;
+  payment_terms_ok: boolean | null;
+}
+
+export interface WorkerProfile extends WorkerProfileInput {
+  age: number | null;
+}
+
 export interface WorkerListItem {
   id: string;
   name: string;
@@ -635,6 +683,7 @@ export interface WorkerListItem {
   p_shirt_count: number | null;
   license_type: string | null;
   tags: string[];
+  profile?: WorkerProfile | null;
 }
 
 export interface WorkerCreateRequest {
@@ -659,6 +708,7 @@ export interface WorkerCreateRequest {
   p_shirt_count: number | null;
   license_type: string | null;
   tags: string[];
+  profile?: WorkerProfileInput | null;
 }
 
 export interface WorkerTagOption {
