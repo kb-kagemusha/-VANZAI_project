@@ -1,0 +1,118 @@
+/* APEX tokens: ink #1d2731, muted #667085, line #e6e8ee, green #16a34a, danger #dc2626, canvas #f4f6f8 */
+
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(29, 39, 49, 0.48);
+}
+
+.app-dialog-card {
+  width: min(92vw, 440px);
+  padding: 20px;
+  border: 1px solid #e6e8ee;
+  border-radius: 12px;
+  background: #fff;
+  color: #1d2731;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+  font-family: "Aptos", "BIZ UDPGothic", "Yu Gothic UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app-dialog-title {
+  margin: 0 0 8px;
+  color: #1d2731;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-dialog-message {
+  margin: 0;
+  max-height: min(50vh, 320px);
+  overflow: auto;
+  color: #1d2731;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.app-dialog-input {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin-top: 12px;
+  padding: 0 10px;
+  border: 1px solid #e6e8ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d2731;
+  font: inherit;
+}
+
+.app-dialog-input:focus {
+  outline: 2px solid #16a34a;
+  outline-offset: 1px;
+  border-color: #16a34a;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.app-dialog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-dialog-button:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
+}
+
+.app-dialog-button-primary {
+  border: 1px solid transparent;
+  background: #16a34a;
+  color: #fff;
+}
+
+.app-dialog-button-primary:hover {
+  background: #15803d;
+}
+
+.app-dialog-button-danger {
+  border: 1px solid transparent;
+  background: #dc2626;
+  color: #fff;
+}
+
+.app-dialog-button-danger:hover {
+  background: #b91c1c;
+}
+
+.app-dialog-button-ghost {
+  border: 1px solid #e6e8ee;
+  background: transparent;
+  color: #1d2731;
+}
+
+.app-dialog-button-ghost:hover {
+  background: #f4f6f8;
+}

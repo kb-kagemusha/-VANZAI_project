@@ -9,7 +9,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { getActuals, getAssignments, getExpenses, getImportBatches, getInvoices, getPayouts, getPriceOutsource, getPriceRules, getPriceSales, getProjects, getShiftSlots, searchAuditLogs, ApiError } from "../lib/api/client";
-import { AUDIT_ACTION_OPTION_GROUPS, AUDIT_TARGET_TYPE_OPTION_GROUPS, currentMonthInput, formatAuditAction, formatAuditDetailValue, formatAuditSummary, formatAuditTargetType, formatCurrency, formatDateTime, formatPeriodKey, toPeriodKey } from "../lib/formatters";
+import { AUDIT_ACTION_OPTION_GROUPS, AUDIT_TARGET_TYPE_OPTION_GROUPS, currentMonthInput, formatAuditAction, formatAuditDetailValue, formatAuditSummary, formatAuditTargetType, formatCurrency, formatDateTime, formatPeriodKey, periodKeyToDateRange, toPeriodKey } from "../lib/formatters";
 
 const PAGE_SIZE = 20;
 const QUICK_FILTER_CONFIG = {
@@ -81,6 +81,7 @@ export function AuditLogsPage() {
   const [dateTo, setDateTo] = useState(() => searchParams.get("date_to") || "");
   const [page, setPage] = useState(() => parsePageParam(searchParams.get("page")));
   const periodKey = toPeriodKey(monthValue);
+  const { from: periodDateFrom, to: periodDateTo } = periodKeyToDateRange(periodKey);
   const activeQuickFilterKey = resolveQuickFilterKey(actionGroup, targetType) || "all";
   const activeQuickFilterLabel = QUICK_FILTER_CONFIG[activeQuickFilterKey].label;
   const quickFilterTargetType = QUICK_FILTER_CONFIG[activeQuickFilterKey].targetType;
@@ -214,8 +215,8 @@ export function AuditLogsPage() {
         ]),
       ),
   });
-  const shiftSlotsWorkDateFrom = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-01`;
-  const shiftSlotsWorkDateTo = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-31`;
+  const shiftSlotsWorkDateFrom = periodDateFrom;
+  const shiftSlotsWorkDateTo = periodDateTo;
   const shiftSlotTargetsQuery = useQuery({
     queryKey: ["audit-shift-slot-targets", periodKey],
     queryFn: () =>
@@ -233,8 +234,8 @@ export function AuditLogsPage() {
         ]),
       ),
   });
-  const expensesDateFrom = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-01`;
-  const expensesDateTo = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-31`;
+  const expensesDateFrom = periodDateFrom;
+  const expensesDateTo = periodDateTo;
   const expenseTargetsQuery = useQuery({
     queryKey: ["audit-expense-targets", periodKey],
     queryFn: () =>
@@ -293,8 +294,8 @@ export function AuditLogsPage() {
         ]),
       ),
   });
-  const assignmentsWorkDateFrom = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-01`;
-  const assignmentsWorkDateTo = `${periodKey.slice(0, 4)}-${periodKey.slice(4, 6)}-31`;
+  const assignmentsWorkDateFrom = periodDateFrom;
+  const assignmentsWorkDateTo = periodDateTo;
   const assignmentTargetsQuery = useQuery({
     queryKey: ["audit-assignment-targets", periodKey],
     queryFn: () =>
@@ -474,6 +475,16 @@ export function AuditLogsPage() {
 
     if (row.action === "assignment_canceled" && row.reason) {
       return `取消理由: ${row.reason}`;
+    }
+
+    if (row.action === "payout_delivery_sent" || row.action === "payout_delivery_failed") {
+      return [
+        typeof details.recipient_email === "string" ? `送信先: ${details.recipient_email}` : null,
+        typeof details.delivery_note === "string" && details.delivery_note ? `送信理由: ${details.delivery_note}` : null,
+        typeof details.internal_note === "string" && details.internal_note ? `内部メモ: ${details.internal_note}` : null,
+        typeof details.provider === "string" ? `プロバイダ: ${details.provider}` : null,
+        typeof details.error_message === "string" && details.error_message ? `エラー: ${details.error_message}` : null,
+      ].filter((value): value is string => Boolean(value)).join(" / ") || formatAuditSummary(row.details_summary || row.reason);
     }
 
     return formatAuditSummary(row.details_summary || row.reason);

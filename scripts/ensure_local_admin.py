@@ -21,6 +21,8 @@ def main() -> None:
     try:
         user = session.query(User).filter(User.username == USERNAME).first()
         if user is None:
+            user = session.query(User).filter(User.email == EMAIL).first()
+        if user is None:
             user = User(
                 username=USERNAME,
                 email=EMAIL,
@@ -30,6 +32,7 @@ def main() -> None:
             )
             session.add(user)
         else:
+            user.username = USERNAME
             user.email = EMAIL
             user.hashed_password = get_password_hash(PASSWORD)
             user.role = UserRole.ADMIN.value

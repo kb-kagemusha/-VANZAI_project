@@ -37,6 +37,14 @@ def generate_invoice(
     period_key: str,
     billing_date: date,
     user_id: str,
+    *,
+    document_type: str = "invoice",
+    subject: str | None = None,
+    addressee_company_name: str | None = None,
+    addressee_name: str | None = None,
+    addressee_email: str | None = None,
+    addressee_address: str | None = None,
+    fixed_office_fee_amount: Decimal | None = None,
 ) -> Invoice:
     """請求書を生成する
     
@@ -63,6 +71,13 @@ def generate_invoice(
         project_id=project_id,
         period_key=period_key,
         billing_date=billing_date,
+        document_type=document_type,
+        invoice_subject=subject,
+        addressee_company_name=addressee_company_name,
+        addressee_name=addressee_name,
+        addressee_email=addressee_email,
+        addressee_address=addressee_address,
+        fixed_office_fee_amount=fixed_office_fee_amount,
         status=InvoiceStatus.PREPARING,
         version=1,
         subtotal=Decimal("0"),
@@ -115,6 +130,25 @@ def generate_invoice(
         )
         session.add(line)
         subtotal += line_amount
+        line_number += 1
+
+    fixed_office_fee = Decimal(str(fixed_office_fee_amount or 0))
+    if fixed_office_fee > 0:
+        session.add(
+            InvoiceLine(
+                invoice_id=invoice.id,
+                line_number=line_number,
+                description="固定事務局費",
+                line_type="office_fee",
+                unit_price_snapshot=fixed_office_fee,
+                quantity_snapshot=Decimal("1"),
+                unit_type="lumpsum",
+                line_amount=fixed_office_fee,
+                tax_amount=Decimal("0"),
+                is_correction=False,
+            )
+        )
+        subtotal += fixed_office_fee
         line_number += 1
     
     # 4.5. 経費・インセンティブ行を追加（承認済みのみ）
@@ -212,6 +246,9 @@ def generate_invoice(
             "client_id": client_id,
             "project_id": project_id,
             "period_key": period_key,
+            "document_type": document_type,
+            "subject": subject,
+            "fixed_office_fee_amount": float(fixed_office_fee),
             "line_count": line_number - 1,
             "subtotal": float(subtotal),
             "total": float(total_amount),

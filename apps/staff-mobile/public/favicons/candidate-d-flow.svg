@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="VANZAI">
+  <defs>
+    <linearGradient id="flow" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4a7c59"/>
+      <stop offset="50%" stop-color="#d98f2b"/>
+      <stop offset="100%" stop-color="#c8553d"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="#f6f2e8"/>
+  <path fill="none" stroke="url(#flow)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+    d="M8 22 V14 L16 8 l8 6 v8"/>
+  <circle cx="8" cy="22" r="2.5" fill="#4a7c59"/>
+  <circle cx="16" cy="8" r="2.5" fill="#d98f2b"/>
+  <circle cx="24" cy="22" r="2.5" fill="#c8553d"/>
+</svg>

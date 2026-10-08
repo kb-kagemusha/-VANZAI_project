@@ -46,7 +46,7 @@ export function ActualsPage() {
   return (
     <div className="page-stack">
       <PageHeader title="実績一覧" description="実績の参照、要レビュー状態、適用単価を一覧で確認します。" />
-      <FilterBar>
+      <FilterBar className="actuals-filter-bar">
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(event) => { setMonthValue(event.target.value); setPage(0); }} />

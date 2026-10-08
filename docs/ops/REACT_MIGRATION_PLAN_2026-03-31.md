@@ -1,6 +1,6 @@
 # React前提 Kintone全面移行計画書
 
-更新日: 2026-03-31
+更新日: 2026-04-01
 
 ## 1. 目的
 Kintone ベースで運用している現行業務を、既存 FastAPI + PostgreSQL 資産を活かしながら、React ベースの Web システムへ段階移行する。
@@ -25,7 +25,7 @@ Kintone ベースで運用している現行業務を、既存 FastAPI + Postgre
 1. React + FastAPI + PostgreSQL の 3 層構成に固定する
 2. React 管理画面を apps/admin-web、スタッフ向けモバイルを apps/staff-mobile として分離する
 3. FastAPI は API 専用サーバーとして運用し、React ビルド成果物は Nginx で配信する
-4. ファイルは Cloudflare R2 に保存し、DB には参照キーのみ保持する
+4. ファイルは最終的に Cloudflare R2 に保存し、DB には参照キーのみ保持する
 5. 別系統バックアップとしてさくらインターネットに日次複製する
 6. Phase 1 では編集系ではなく参照系を優先して Kintone 依存を減らす
 7. 参照系が安定した後に月次運用 UI、マスタ管理、案件運用、スタッフモバイルへ進む
@@ -41,10 +41,55 @@ Kintone ベースで運用している現行業務を、既存 FastAPI + Postgre
 - DB: PostgreSQL
 - プロセス管理: systemd
 - SSL: HTTPS 前提
-- 本保存: Cloudflare R2
+- 本保存: Cloudflare R2（Phase 5 完了後に切替）
 - 別系統バックアップ: さくらインターネット オブジェクトストレージ
 
 ## 6. フェーズ計画
+
+### 6.0 現在の実装進捗メモ（2026-03-31）
+- Phase 1 の参照系画面は admin-web 側で実装済み
+- 追加で CSV取込、差戻し文面作成、請求生成/発行、支払生成/確定/支払済み更新、PDFダウンロード、支払明細メール送信導線まで実装済み
+- 請求一覧と支払一覧では保存済み PDF の storage key を参照可能で、請求発行時と支払確定時に storage/pdfs 配下へ PDF を保存する
+- 支払一覧では最終送信ステータス、送信日時、送信先を参照可能で、送信結果は payout_deliveries と監査ログに記録する
+- 支払一覧から送信履歴パネルを開き、再送を含む送信試行履歴を確認できる
+- 履歴パネルでは宛先メールアドレスを上書きして送信でき、空欄時は既定宛先へフォールバックする
+- 履歴パネルには payee に紐づく既定送信先メールを表示し、送信前に候補と未設定状態を確認できる
+- 履歴パネルでは既定送信先に加え、過去送信先から再利用候補を出し、ワンクリックで宛先入力へ反映できる
+- 支払一覧には既定送信先未設定のみの絞り込みを追加し、未設定支払を月次運用で先に洗い出せるようにした
+- 支払一覧には未送信のみ / 送信失敗のみの絞り込みも追加し、再送対象を最終送信状態から絞り込める
+- 送信時の理由メモと内部メモは payout_deliveries と監査ログへ残し、再送時の判断文脈を継続参照できる
+- ダッシュボードと支払一覧に未設定送信先件数のサマリーを出し、送信前の整備漏れを月次画面から把握できる
+- 監査ログ一覧の概要には支払明細送信の宛先、送信理由メモ、内部メモを表示し、一覧だけで送信判断の文脈を追えるようにした
+- ローカル検証は `alembic upgrade head` 後に uvicorn と admin-web を起動し、`apps/admin-web/e2e/phase1-smoke.spec.ts` を `npm run smoke:e2e` で流す手順に統一した
+- スモーク実行前に `scripts/ensure_local_admin.py` と `scripts/ensure_browser_smoke_data.py` を自動実行し、ログインユーザーと支払送信確認用データを再現可能に投入する
+- Phase 3 は admin-web のマスタ一覧からクライアント、現場、案件種別、役割の新規登録に着手済み
+- 追加した POST /api/clients、/api/sites、/api/project-types、/api/roles は MASTER_WRITE 権限で保護し、作成時に監査ログを残す
+- Phase 3 はさらに稼働者 / 下請けの新規登録・編集と、売上単価 / 外注単価 / 単価ルールの新規登録・編集まで拡張済み
+- 追加した POST/PUT /api/workers、/api/suppliers、/api/price-rules、/api/price-sales、/api/price-outsource は admin 権限に限定し、作成・更新の監査ログを残す
+- `apps/admin-web/e2e/phase1-smoke.spec.ts` は下請け作成 / 更新に加え、単価ルール、売上単価、外注単価の作成 / 更新も検証するよう拡張済み
+- ローカル既存 DB で server default が不足していても作成系が通るよう、`src/models/base.py` の `TimestampMixin` に Python 側 timestamp default を追加した
+- Phase 4 は案件登録 / 編集、シフト枠作成 / 編集、アサイン作成、アサイン編集、単件/一括のアサイン状態変更まで実装済み
+- canceled 変更時は取消理由が必須で、有効な実績が残るアサインは取消不可
+- 一括状態更新は対象月内でページ・ステータス切替をまたいで選択保持でき、保存済み選択セットの再利用も可能
+- 保存済み選択セットは /api/assignments/selection-sets でサーバー保存され、共有セットは admin / ops が再利用用に公開できる
+- 一括更新は取消不可条件が1件でもあれば全件をロールバックする
+- 状態変更パネルで対象アサインの監査ログを参照でき、対象月の取消履歴専用一覧と canceled 行からの再開導線を追加済み
+- canceled から tentative / confirmed へ戻す際は復帰理由が必須で、監査ログと取消履歴一覧に復帰日時・実行者・理由を表示する
+- active な実績があるアサインは、枠・稼働者・役割の差し替えも不可
+- 案件一覧とシフト枠一覧では主要項目と運用メモを直接編集でき、既存 notes を Kintone を介さず管理できる
+- `apps/admin-web/e2e/phase1-smoke.spec.ts` は案件 / シフト枠の作成・更新も検証するよう拡張済み
+- Phase 5 の初手として `apps/staff-mobile` を追加し、worker ロール向けにログイン、当日アサイン確認、今月の実績確認を既存 API で提供開始した
+- Phase 5 を進め、worker 向けの出勤 / 退勤 API、経費申請 API、領収書アップロード、staff-mobile の打刻 / 経費画面を追加した
+- Phase 5 をさらに進め、worker 向けの予定確認画面、稼働可否入力画面、経費一覧からの領収書参照導線を追加した
+- Phase 5 をさらに進め、assignment に worker 応答状態を持たせて `POST /api/assignments/{id}/worker-response` を追加し、staff-mobile の予定画面から参加可 / 辞退返信と未回答バッジ表示を行えるようにした
+- Phase 5 の reminder 配信として、scheduler の週次催促を pending assignment の worker 向けメール送信へ接続し、対象期間を `SCHEDULER_WEEKLY_LOOKAHEAD_DAYS` で制御できるようにした
+- backend には `worker_availability` と `GET/POST /api/worker-availability`、expense 承認 / 却下 / 領収書ダウンロード API を追加し、admin-web 経費一覧から承認運用へ移行できるようにした
+- 領収書保存は `ObjectStorage` に寄せて object key 契約を明示し、Cloudflare R2 への保存先切替を後段で差し替えやすい形へ整理した
+- 締め・締め解除は専用ページではなく、ダッシュボードの締め状況セクションで運用可能
+- `alembic upgrade head` をローカル DB に適用し、Alembic head は `4b6f2d1c9a0e` に統一した
+- Focused pytest 35件、admin-web build、Playwright smoke、staff-mobile build で、案件 / シフト枠更新と Phase 5 attendance / expense / availability / assignment response 追加を検証済み
+- 次の主課題は Phase 5 のリマインド配信実装と、Cloudflare R2 切替の実装計画具体化である
+- Cloudflare R2 への PDF 本保存切替は計画上 Phase 5 完了後へ後ろ倒しする
 
 ### 6.1 Phase A: 技術基盤確定
 Sprint 1 着手前に、以下を確定する。
@@ -135,20 +180,28 @@ Phase 1 の想定期間は Sprint 1 から Sprint 3 までの 3 スプリント�
 - 備品
 
 ### 6.5 Phase 4: 案件・シフト運用
-- 案件登録
-- シフト枠作成
+- 案件登録 / 編集
+- シフト枠作成 / 編集
 - アサイン
 - 予定 / 確定の状態管理
 - 取消理由管理
 - 運用メモ管理
 
 ### 6.6 Phase 5: スタッフ向けモバイル
-- 出勤 / 退勤
+- worker ロール向けログイン
 - 当日アサイン確認
+- 今月の実績確認
+- 出勤 / 退勤
 - 予定確認
 - 稼働可否入力
 - 経費申請
 - 領収書アップロード
+
+### 6.7 Phase 6: ファイル保存先・配信基盤の本番切替
+- PDF 保存先をローカル storage/pdfs から Cloudflare R2 へ切替
+- 参照キー管理、アップロード、ダウンロード経路を本番保存前提で整備
+- R2 保存データのバックアップと監視を整備
+- 切替前に admin-web / staff-mobile の主要導線で回帰確認を行う
 
 ## 7. バックエンド方針
 

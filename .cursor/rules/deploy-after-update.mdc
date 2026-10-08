@@ -1,0 +1,34 @@
+---
+description: コード更新後はコミット・push・VPSデプロイまで実行（リリースワークフロー ステップ3）
+alwaysApply: true
+---
+
+# 更新後のデプロイ（デフォルト）
+
+**全体手順の正本: `.cursor/rules/release-workflow.mdc`**（1.バージョン → 2.CHANGELOG → 3.コミット・push・デプロイ）
+
+本番反映が必要なコード変更を完了したら、ユーザーが別途指示しない限り **ステップ 1・2（バージョン・CHANGELOG）の後に、コミット → push → VPSデプロイ → 動作確認** まで行う。毎回の明示指示は不要。**完了時に許可を求めない**（`release-workflow.mdc` 参照）。
+
+## デプロイしない例外
+
+- ユーザーが「デプロイしない」「ローカルのみ」「コミットしない」等と明示したとき
+- 質問のみ・レビューのみでコード変更がないとき
+- ドキュメントだけの変更で本番反映が不要と判断できるとき（ユーザーが本番反映を求めている場合は除く）
+
+## 手順（正本: `scripts/deploy/DEPLOY_STEPS.md`）
+
+1. テスト実行（変更範囲に応じた最小セット）
+2. **バージョン・`CHANGELOG.md` 更新済みであること**（ステップ 1・2）
+3. コミット → `git push origin <現在ブランチ>`
+4. VPS で **デプロイスクリプトのみ** 実行（事前の `git pull` / `stash` は不要・禁止）
+   ```bash
+   ssh -i ~/.ssh/vanzai_vps vanzai@220.158.28.35 "bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh"
+   ```
+   - スクリプト内で `git fetch` + `reset --hard` するため、VPS 上で手動 `git pull` しない
+   - VPS 上のファイルを scp で直接編集しない（デプロイと競合する）
+5. デプロイスクリプトが API 再起動まで行う（`restart_uvicorn.sh` はフォールバック込み）
+6. 動作確認: `curl http://localhost:8000/api/health`
+
+## 報告
+
+作業完了時にデプロイ結果（コミット hash、ビルドバージョン、再起動の成否）を簡潔に伝える。

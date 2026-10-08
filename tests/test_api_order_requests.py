@@ -1,0 +1,1104 @@
+"""発注依頼書の保存・確定・履歴。LINE送信は未接続。"""
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
+from src.models.base import generate_ulid
+from src.models.enums import UserRole
+from src.models.master import Worker
+from src.models.order_request import OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion
+from src.services.document_storage import DocumentStorage
+
+
+def _token(username: str) -> str:
+    return create_access_token({"sub": username})
+
+
+def _auth(username: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {_token(username)}"}
+
+
+@pytest.fixture
+def pdf_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("PDF_STORAGE_ROOT", str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture
+def ops_user(db_session):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="order_ops",
+        email="order_ops@example.com",
+        password="pass123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+    return user
+
+
+@pytest.fixture
+def worker_user(db_session):
+    worker = Worker(id=generate_ulid(), name="稼働者A", email="order_worker_a@example.com", is_active=True)
+    db_session.add(worker)
+    db_session.flush()
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="order_worker",
+        email="order_worker@example.com",
+        password="pass123",
+        role=UserRole.WORKER.value,
+    )
+    user.worker_id = worker.id
+    db_session.commit()
+    return user, worker
+
+
+def _worker(db_session, name: str) -> Worker:
+    worker = Worker(id=generate_ulid(), name=name, is_active=True)
+    db_session.add(worker)
+    db_session.commit()
+    return worker
+
+
+def _body(worker_ids: list[str], **overrides) -> dict:
+    payload = {
+        "kind": "formal",
+        "work_date_label": "2026-10-05",
+        "site_name": "渋谷現場",
+        "request_conditions": "9時集合",
+        "body": "通常稼働",
+        "contact_name": "依頼担当",
+        "contact_desk": "03-0000-0000",
+        "worker_ids": worker_ids,
+        "phone_first": False,
+        "follow_up_due_on": "2026-10-20",
+        "follow_up_due_time": "21:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_confirm_creates_one_pdf_and_delivery_rows(api_client, db_session, ops_user, pdf_root, monkeypatch):
+    monkeypatch.delenv("LINE_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_SECRET", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN", raising=False)
+    first = _worker(db_session, "稼働者A")
+    second = _worker(db_session, "稼働者B")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([first.id, second.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    version_id = created.json()["id"]
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    data = confirmed.json()
+    assert data["status"] == "confirmed"
+    assert data["has_pdf"] is True
+    assert data["template_layout_applied"] is False
+    assert data["line_send_available"] is False
+    assert len(data["deliveries"]) == 2
+    assert {row["send_status"] for row in data["deliveries"]} == {"unsent"}
+    assert {row["ack_status"] for row in data["deliveries"]} == {"unacked"}
+    assert "pdf_object_key" not in data
+
+    pdf = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf",
+        headers=_auth(ops_user.username),
+    )
+    assert pdf.status_code == 200
+    assert pdf.content.startswith(b"%PDF")
+    assert "attachment" in pdf.headers["content-disposition"]
+
+
+def test_draft_pdf_preview_keeps_the_draft(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    version_id = created.json()["id"]
+
+    preview = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf-preview",
+        headers=_auth(ops_user.username),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.content.startswith(b"%PDF")
+    assert preview.headers["content-type"].startswith("application/pdf")
+    assert "inline" in preview.headers["content-disposition"]
+
+    stored = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    )
+    assert stored.status_code == 200
+    assert stored.json()["status"] == "draft"
+    assert stored.json()["has_pdf"] is False
+    assert stored.json()["deliveries"] == []
+
+
+def test_confirmed_pdf_preview_is_rejected(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    version_id = created.json()["id"]
+    assert api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    ).status_code == 200
+    preview = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf-preview",
+        headers=_auth(ops_user.username),
+    )
+    assert preview.status_code == 409
+
+
+def test_confirm_without_business_desk(api_client, db_session, ops_user, pdf_root, monkeypatch):
+    monkeypatch.delenv("LINE_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_SECRET", raising=False)
+    monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN", raising=False)
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], contact_desk=""),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{created.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["contact_name"] == "依頼担当"
+    assert confirmed.json()["contact_desk"] == ""
+
+
+def test_pdf_save_failure_rolls_back_confirmation(api_client, db_session, ops_user, pdf_root, monkeypatch):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    version_id = created.json()["id"]
+
+    def fail_save(self, object_key, content):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(DocumentStorage, "save_bytes", fail_save)
+    failed = api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert failed.status_code == 500
+
+    db_session.expire_all()
+    version = db_session.get(OrderRequestVersion, version_id)
+    assert version.status == "draft"
+    assert version.pdf_object_key is None
+    assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_confirmed_snapshot_is_not_rewritten(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "確定前の氏名")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], work_date_label="10月5日"),
+        headers=_auth(ops_user.username),
+    )
+    version_id = created.json()["id"]
+    assert api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    ).status_code == 200
+
+    worker.name = "改名後"
+    db_session.commit()
+    edited = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json={"work_date_label": "変えてはいけない"},
+        headers=_auth(ops_user.username),
+    )
+    assert edited.status_code == 409
+
+    detail = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    ).json()
+    assert detail["work_date_label"] == "10月5日"
+    assert detail["deliveries"][0]["worker_name_snapshot"] == "確定前の氏名"
+
+
+def test_kind_cannot_change_after_confirm_and_revision_keeps_old_version(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], kind="test"),
+        headers=_auth(ops_user.username),
+    )
+    version_id = created.json()["id"]
+    api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    changed = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json={"kind": "formal"},
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 409
+
+    revised = api_client.post(
+        f"/api/order-requests/versions/{version_id}/revise",
+        json={"reason": "条件変更"},
+        headers=_auth(ops_user.username),
+    )
+    assert revised.status_code == 200, revised.text
+    draft = revised.json()
+    assert draft["status"] == "draft"
+    assert draft["kind"] == "test"
+    assert draft["version_no"] == 2
+    assert draft["revision_of_version_id"] == version_id
+    assert draft["deliveries"] == []
+
+    original = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    ).json()
+    assert original["status"] == "confirmed"
+    assert original["work_date_label"] == "2026-10-05"
+
+
+def test_change_creates_a_new_document_from_a_sent_request(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], work_date_label="2026年10月5日～2026年10月6日", site_name="渋谷現場"),
+        headers=_auth(ops_user.username),
+    )
+    source_id = created.json()["id"]
+    source_number = created.json()["document_number"]
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{source_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    delivery = db_session.query(OrderRequestDelivery).one()
+    delivery.send_status = "accepted"
+    db_session.commit()
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label="2026年10月7日～2026年10月8日",
+            site_name="渋谷現場",
+            based_on_version_id=source_id,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    draft = changed.json()
+    assert draft["status"] == "draft"
+    assert draft["document_number"] == f"{source_number[:-1]}B"
+    assert source_number.endswith("A")
+    assert draft["version_no"] == 1
+    assert draft["revision_of_version_id"] == source_id
+    assert draft["revision_reason"] == "変更を作成"
+    assert draft["based_on_document_number"] == source_number
+    assert draft["based_on_version_no"] == 1
+    assert draft["work_date_label"] == "2026年10月7日～2026年10月8日"
+    assert draft["deliveries"] == []
+
+    original = api_client.get(
+        f"/api/order-requests/versions/{source_id}",
+        headers=_auth(ops_user.username),
+    ).json()
+    assert original["status"] == "confirmed"
+    assert original["work_date_label"] == "2026年10月5日～2026年10月6日"
+    assert original["change_documents"][0]["document_number"] == draft["document_number"]
+    assert original["change_documents"][0]["version_id"] == draft["id"]
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username)).json()
+    source_row = next(item for item in listed["items"] if item["version_id"] == source_id)
+    child_row = next(item for item in listed["items"] if item["version_id"] == draft["id"])
+    assert source_row["change_documents"][0]["document_number"] == draft["document_number"]
+    assert child_row["based_on_document_number"] == source_number
+
+    replies = api_client.get("/api/order-requests/replies", headers=_auth(ops_user.username)).json()
+    assert replies["items"][0]["version_id"] == source_id
+    assert replies["items"][0]["change_documents"][0]["version_id"] == draft["id"]
+
+    missing = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id="01NOTAVERSION000000000000"),
+        headers=_auth(ops_user.username),
+    )
+    assert missing.status_code == 404
+
+
+def test_default_list_hides_test_documents(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    api_client.post("/api/order-requests", json=_body([worker.id], kind="test"), headers=_auth(ops_user.username))
+    formal = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            request_conditions='{"format":"additional-request-v1","project_name":"横浜おいも万博"}',
+        ),
+        headers=_auth(ops_user.username),
+    )
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
+    assert listed.status_code == 200
+    numbers = {item["document_number"] for item in listed.json()["items"]}
+    assert formal.json()["document_number"] in numbers
+    listed_formal = next(item for item in listed.json()["items"] if item["document_number"] == formal.json()["document_number"])
+    assert listed_formal["project_name"] == "横浜おいも万博"
+    assert all(item["kind"] == "formal" for item in listed.json()["items"])
+
+    tests = api_client.get("/api/order-requests?kind=test", headers=_auth(ops_user.username))
+    assert tests.json()["total"] == 1
+    assert tests.json()["items"][0]["kind"] == "test"
+
+
+def test_draft_save_keeps_phone_first_note_and_tracker(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            phone_first=True,
+            phone_note="なんか色々",
+            assign_tracker_self=True,
+            tracker_user_id=None,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    created_body = created.json()
+    version_id = created_body["id"]
+    assert created_body["phone_first"] is True
+    assert created_body["phone_note"] == "なんか色々"
+    assert created_body["tracker_user_id"] == ops_user.id
+
+    updated = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json=_body(
+            [worker.id],
+            phone_first=True,
+            phone_note="電話した内容",
+            assign_tracker_self=True,
+            tracker_user_id=None,
+            site_name="更新後の現場",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["phone_first"] is True
+    assert updated.json()["phone_note"] == "電話した内容"
+    assert updated.json()["tracker_user_id"] == ops_user.id
+    assert updated.json()["site_name"] == "更新後の現場"
+
+    fetched = api_client.get(
+        f"/api/order-requests/versions/{version_id}",
+        headers=_auth(ops_user.username),
+    )
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["phone_first"] is True
+    assert fetched.json()["phone_note"] == "電話した内容"
+    assert fetched.json()["tracker_user_id"] == ops_user.id
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
+    item = next(row for row in listed.json()["items"] if row["version_id"] == version_id)
+    assert item["phone_first"] is True
+    assert item["tracker_name"]
+
+    cleared = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json=_body(
+            [worker.id],
+            phone_first=False,
+            phone_note=None,
+            assign_tracker_self=False,
+            tracker_user_id=None,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["phone_first"] is False
+    assert cleared.json()["phone_note"] is None
+    assert cleared.json()["tracker_user_id"] is None
+
+
+def test_phone_first_does_not_mark_sent_and_overdue_stays_unsent(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            phone_first=True,
+            phone_note="先に電話した",
+            follow_up_due_on=(date.today() - timedelta(days=2)).isoformat(),
+            tracker_user_id=ops_user.id,
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["phone_first"] is True
+    assert created.json()["deliveries"] == []
+
+    overdue = api_client.get("/api/order-requests?queue=overdue", headers=_auth(ops_user.username))
+    assert overdue.json()["total"] == 1
+    assert overdue.json()["items"][0]["phone_first"] is True
+    assert overdue.json()["items"][0]["unsent_count"] == 0
+    assert overdue.json()["items"][0]["status"] == "draft"
+
+
+def test_cancel_stops_dispatch_without_clearing_delivery(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post("/api/order-requests", json=_body([worker.id]), headers=_auth(ops_user.username))
+    version_id = created.json()["id"]
+    api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    cancelled = api_client.post(
+        f"/api/order-requests/versions/{version_id}/cancel",
+        json={"reason": "中止"},
+        headers=_auth(ops_user.username),
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    data = cancelled.json()
+    assert data["status"] == "cancelled"
+    assert data["dispatch_stopped"] is True
+    assert data["deliveries"][0]["send_status"] == "unsent"
+    assert data["deliveries"][0]["ack_status"] == "unacked"
+
+    hidden = api_client.get("/api/order-requests?queue=unsent", headers=_auth(ops_user.username))
+    assert all(item["version_id"] != version_id for item in hidden.json()["items"])
+
+
+def test_worker_and_anonymous_cannot_read_pdf(api_client, db_session, ops_user, worker_user, pdf_root):
+    _user, worker = worker_user
+    created = api_client.post("/api/order-requests", json=_body([worker.id]), headers=_auth(ops_user.username))
+    version_id = created.json()["id"]
+    api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+
+    denied = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf",
+        headers=_auth("order_worker"),
+    )
+    assert denied.status_code == 403
+    assert api_client.get(f"/api/order-requests/versions/{version_id}/pdf").status_code == 401
+    assert api_client.get("/storage/pdfs/order-requests/secret.pdf").status_code == 404
+
+
+def test_additional_request_format_replaces_condition_and_body_blob(api_client, db_session, ops_user, pdf_root):
+    import json
+
+    worker = _worker(db_session, "稼働者A")
+    conditions = json.dumps(
+        {
+            "format": "additional-request-v1",
+            "project_name": "春施策_渋谷",
+            "background": "増員",
+            "gather_time": "9:00",
+            "work_time": "10:00-17:00",
+            "dismiss_time": "17:30",
+            "content": "受付",
+            "belongings": "名札",
+            "base_fee": "12000",
+            "incentive": "達成時",
+            "notes": "報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+        },
+        ensure_ascii=False,
+    )
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], request_conditions=conditions, body="無視される本文"),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()["body"]
+    headings = [
+        "【追加案件依頼】",
+        "■案件名",
+        "春施策_渋谷",
+        "■背景",
+        "増員",
+        "■稼働場所",
+        "渋谷現場",
+        "■稼働日",
+        "2026-10-05",
+        "■稼働時間",
+        "集合時間：9:00",
+        "実施時間：10:00-17:00",
+        "解散時間：17:30",
+        "■内容：",
+        "受付",
+        "■持ち物：",
+        "名札",
+        "■単価：",
+        "ベース：¥12000",
+        "■インセンティブ：",
+        "達成時",
+        "■備考：",
+        "・報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+    ]
+    cursor = -1
+    for heading in headings:
+        found = body.find(heading)
+        assert found > cursor, heading
+        cursor = found
+    assert "無視される本文" not in body
+    assert "依頼条件" not in body
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{created.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+
+def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops_user):
+    import json
+
+    worker = _worker(db_session, "稼働者A")
+    hours = "\n".join(
+        [
+            "10/9(金)　※初日30分前集合",
+            "　8:30　集合・準備",
+            "　10:00~18:00　PR実施",
+            "　19:00　片付け・解散",
+            "",
+            "10/10(土)〜10/13(火)",
+            "　9:00　集合・準備",
+        ]
+    )
+    fee = "\n".join(
+        [
+            "10/9(金)　初日30分前集合",
+            "報酬：¥20,500(税抜)",
+            "　(昼食代、交通費込み)",
+            "",
+            "※インセン無し",
+        ]
+    )
+    site = "横浜赤レンガ倉庫 イベント広場\n（神奈川県横浜市中区新港1-1）\n※具体的な集合場所は追って。"
+    work_dates = "10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"
+    conditions = json.dumps(
+        {
+            "format": "additional-request-v1",
+            "project_name": "【横浜おいも万博2026】\nhttps://example.com/event",
+            "background": "-",
+            "hours": hours,
+            "content": "・商品販売促進",
+            "belongings": "・ipad\n・プリンター",
+            "fee": fee,
+            "work_date_detail": "10/8(木)　前日準備\n10/9(金)~10/13(火)　実施日",
+            "notes": "報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+        },
+        ensure_ascii=False,
+    )
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label=work_dates,
+            site_name=site,
+            request_conditions=conditions,
+            body="無視される本文",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()
+    expected_hours = hours.replace("~", "～")
+    assert data["site_name"] == site
+    assert data["work_date_label"] == work_dates
+    stored = json.loads(data["request_conditions"])
+    assert stored["hours"] == expected_hours
+    assert stored["fee"] == fee
+    assert stored["work_date_detail"] == "10/8(木)　前日準備\n10/9(金)～10/13(火)　実施日"
+    body = data["body"]
+    assert "集合時間：" not in body
+    assert "ベース：" not in body
+    assert "~" not in stored["hours"]
+    assert body.index("■稼働日") < body.index(work_dates) < body.index("■稼働日の詳細") < body.index("■稼働時間")
+    for line in (expected_hours, fee, site, work_dates, stored["work_date_detail"], "・商品販売促進", "・ipad"):
+        assert line in body
+
+
+def test_ascii_tilde_becomes_fullwidth_on_save(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body(
+            [worker.id],
+            work_date_label="10/9(金)~10/13(火)",
+            site_name="会場A~会場B",
+            contact_name="担当~次郎",
+        ),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()
+    assert data["work_date_label"] == "10/9(金)～10/13(火)"
+    assert data["site_name"] == "会場A～会場B"
+    assert data["contact_name"] == "担当～次郎"
+    assert "~" not in data["work_date_label"]
+
+
+def test_legacy_free_text_stays_until_rewritten(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["request_conditions"] == "9時集合"
+    assert created.json()["body"] == "通常稼働"
+
+
+def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    duplicated = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id, worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert duplicated.status_code == 400
+
+    ids = [_worker(db_session, f"人{index}").id for index in range(31)]
+    too_many = api_client.post(
+        "/api/order-requests",
+        json=_body(ids),
+        headers=_auth(ops_user.username),
+    )
+    assert too_many.status_code == 400
+    assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_follow_up_due_date_is_required_and_defaults_to_21(api_client, db_session, ops_user):
+    worker = _worker(db_session, "稼働者A")
+    missing = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], follow_up_due_on=None),
+        headers=_auth(ops_user.username),
+    )
+    assert missing.status_code == 400, missing.text
+
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], follow_up_due_on="2026-10-08", follow_up_due_time="21:00"),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["follow_up_due_on"] == "2026-10-08"
+    assert created.json()["follow_up_due_time"] == "21:00"
+
+
+def test_line_push_text_includes_project_name():
+    from src.services.line_order import _push_messages
+
+    messages = _push_messages(
+        document_number="OR-1",
+        version_no=1,
+        project_name="横浜おいも万博",
+        work_date_label="10/9",
+        site_name="赤レンガ倉庫",
+        pdf_url="https://example.invalid/pdf",
+        delivery_id="delivery-1",
+        is_test=True,
+    )
+    text = messages[0]["text"]
+    assert "発注依頼書 OR-1（版1）" in text
+    assert "案件名: 横浜おいも万博" in text
+    assert text.index("発注依頼書") < text.index("案件名:") < text.index("稼働日:")
+
+
+def test_order_pdf_embeds_japanese_font():
+    from src.services.order_request_pdf import PDF_LAYOUT_ID, _headed_fields, render_order_request_pdf
+    from src.services.pdf_generator import DEFAULT_FONT
+
+    body = "\n".join([
+        "【追加案件依頼】",
+        "■案件名",
+        "有楽町交通会館",
+        "■背景",
+        "交通量の多い時間帯の案内",
+        "■稼働場所",
+        "有楽町",
+        "■稼働日",
+        "10/5～10/8",
+        "■稼働時間",
+        "集合時間：9:00\n実施時間：10:00～18:00",
+        "■内容：",
+        "受付と誘導",
+        "■持ち物：",
+        "動きやすい服装",
+        "■単価：",
+        "ベース：¥12000",
+        "■インセンティブ：",
+        "",
+        "■備考：",
+        "・報酬の期限等その他の事項は、業務委託契約書記載のとおり。",
+    ])
+    pdf = render_order_request_pdf(
+        document_number="OR-1",
+        version_no=1,
+        kind="formal",
+        work_date_label="10/5～10/8",
+        site_name="有楽町",
+        site_address=None,
+        request_conditions='{"format":"additional-request-v1","project_name":"有楽町交通会館"}',
+        body=body,
+        contact_name="山田",
+        contact_desk="",
+        counterparty_note=None,
+        worker_names=["山田"],
+    )
+    assert pdf.startswith(b"%PDF")
+    assert len(__import__("re").findall(rb"/Type\s*/Page(?!s)", pdf)) == 1
+    assert DEFAULT_FONT == "IPAexGothic"
+    assert b"IPAexGothic" in pdf
+    assert PDF_LAYOUT_ID.encode("ascii") in pdf
+    assert b"/Subtype /Image" in pdf or b"/Subtype/Image" in pdf
+    assert len(pdf) > 20000
+    fields = _headed_fields(body.split("【追加案件依頼】", 1)[1])
+    assert [caption for caption, _text in fields] == [
+        "案件名",
+        "背景",
+        "稼働場所",
+        "稼働日",
+        "稼働時間",
+        "内容",
+        "持ち物",
+        "単価",
+        "インセンティブ",
+        "備考",
+    ]
+    assert fields[4][1].startswith("集合時間：9:00")
+
+
+def test_order_pdf_omits_recipient_names():
+    from src.services.order_request_pdf import _document_fields
+
+    common = dict(
+        request_conditions="",
+        body="本文",
+        work_date_label="10/5",
+        site_name="現場",
+        site_address=None,
+        contact_name="担当",
+        contact_desk="",
+        counterparty_note=None,
+    )
+    for names in (["山田"], ["山田", "佐藤"]):
+        fields = _document_fields(**common, worker_names=names)
+        captions = [caption for caption, _text in fields]
+        assert "送付先\n（確定時の氏名）" not in captions
+        joined = "\n".join(text for _caption, text in fields)
+        assert "山田" not in joined
+        assert "佐藤" not in joined
+
+
+def test_order_pdf_created_on_uses_japan_date():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from src.services.order_request_pdf import format_created_on
+
+    created = datetime(2026, 10, 6, 15, 30, tzinfo=ZoneInfo("UTC"))
+    assert format_created_on(created) == "2026年10月7日"
+
+
+def test_order_pdf_filename_is_date_plus_project():
+    from src.services.order_request_pdf import (
+        attachment_content_disposition,
+        order_request_document_title,
+        order_request_pdf_filename,
+    )
+
+    name = order_request_pdf_filename(work_date_label="2026年10月8日～2026年10月13日", project_name="有楽町交通会館")
+    assert name == "2026年10月8日～2026年10月13日：有楽町交通会館.pdf"
+    wrapped = order_request_pdf_filename(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="【横浜おいも万博2026】",
+    )
+    assert wrapped == "2026年10月8日～2026年10月13日：横浜おいも万博2026.pdf"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="【横浜おいも万博2026】",
+    ) == "【新規発注依頼】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="横浜おいも万博2026",
+        notice="change",
+    ) == "【発注依頼の変更】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
+    assert order_request_document_title(
+        work_date_label="2026年10月8日～2026年10月13日",
+        project_name="横浜おいも万博2026",
+        notice="cancel",
+    ) == "【発注済み依頼のキャンセル】\n2026年10月8日～2026年10月13日：横浜おいも万博2026"
+    legacy = order_request_pdf_filename(work_date_label="10/5～10/8", project_name="有楽町交通会館")
+    assert legacy == "10／5～10／8：有楽町交通会館.pdf"
+    header = attachment_content_disposition(legacy)
+    assert "filename*=UTF-8''" in header
+    assert "10%EF%BC%8F5" in header
+    blank = order_request_pdf_filename(work_date_label="", project_name="")
+    assert blank == "発注依頼書.pdf"
+
+
+def test_admin_hides_an_order_request_from_the_list(api_client, db_session, ops_user):
+    admin = create_user_with_hashed_password(
+        db=db_session,
+        username="order_admin",
+        email="order_admin@example.com",
+        password="pass123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="隠す現場"),
+        headers=_auth(admin.username),
+    )
+    assert created.status_code == 200, created.text
+    document_id = created.json()["document_id"]
+    document_number = created.json()["document_number"]
+
+    denied = api_client.post(
+        f"/api/order-requests/documents/{document_id}/hide",
+        headers=_auth(ops_user.username),
+    )
+    assert denied.status_code == 403
+
+    hidden = api_client.post(
+        f"/api/order-requests/documents/{document_id}/hide",
+        headers=_auth(admin.username),
+    )
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["document_number"] == document_number
+
+    listed = api_client.get("/api/order-requests", headers=_auth(admin.username))
+    assert all(item["document_id"] != document_id for item in listed.json()["items"])
+
+    ops_deleted = api_client.get("/api/order-requests/deleted", headers=_auth(ops_user.username))
+    assert ops_deleted.status_code == 403
+    deleted = api_client.get("/api/order-requests/deleted", headers=_auth(admin.username))
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["total"] == 1
+    assert deleted.json()["items"][0]["document_number"] == document_number
+    assert deleted.json()["items"][0]["deleted_by_name"]
+
+
+def _today_stamp() -> str:
+    return datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
+
+
+def _seed_document(db_session, user, number: str) -> str:
+    document = OrderRequestDocument(
+        id=generate_ulid(),
+        document_number=number,
+        kind="formal",
+        created_by_user_id=user.id,
+    )
+    version = OrderRequestVersion(
+        id=generate_ulid(),
+        document_id=document.id,
+        version_no=1,
+        status="confirmed",
+        work_date_label="2026-01-01",
+        site_name="既存現場",
+        request_conditions="9時集合",
+        body="通常稼働",
+        contact_name="依頼担当",
+        contact_desk="03-0000-0000",
+        created_by_user_id=user.id,
+        follow_up_due_on=date(2026, 10, 20),
+    )
+    db_session.add(document)
+    db_session.add(version)
+    db_session.commit()
+    return version.id
+
+
+def test_document_numbers_use_daily_sequence_and_revision_letters(api_client, db_session, ops_user, pdf_root):
+    day = _today_stamp()
+    _seed_document(db_session, ops_user, "OR-20260101-007A")
+    past_b = _seed_document(db_session, ops_user, "OR-20260101-007B")
+    worker = _worker(db_session, "稼働者A")
+
+    first = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["document_number"] == f"OR-{day}-001A"
+
+    second = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="二件目"),
+        headers=_auth(ops_user.username),
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["document_number"] == f"OR-{day}-002A"
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=first.json()["id"]),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["document_number"] == f"OR-{day}-001B"
+    assert changed.json()["based_on_document_number"] == f"OR-{day}-001A"
+
+    changed_again = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=first.json()["id"]),
+        headers=_auth(ops_user.username),
+    )
+    assert changed_again.status_code == 200, changed_again.text
+    assert changed_again.json()["document_number"] == f"OR-{day}-001C"
+
+    third = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], site_name="三件目"),
+        headers=_auth(ops_user.username),
+    )
+    assert third.status_code == 200, third.text
+    assert third.json()["document_number"] == f"OR-{day}-003A"
+
+    kept = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=past_b),
+        headers=_auth(ops_user.username),
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["document_number"] == "OR-20260101-007C"
+    assert kept.json()["based_on_document_number"] == "OR-20260101-007B"
+
+    listed = api_client.get("/api/order-requests", headers=_auth(ops_user.username))
+    numbers = {item["document_number"] for item in listed.json()["items"]}
+    assert numbers == {
+        f"OR-{day}-001A",
+        f"OR-{day}-001B",
+        f"OR-{day}-001C",
+        f"OR-{day}-002A",
+        f"OR-{day}-003A",
+        "OR-20260101-007A",
+        "OR-20260101-007B",
+        "OR-20260101-007C",
+    }
+    detail = api_client.get(
+        f"/api/order-requests/versions/{changed_again.json()['id']}",
+        headers=_auth(ops_user.username),
+    )
+    assert detail.json()["document_number"] == f"OR-{day}-001C"
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{first.json()['id']}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["document_number"] == f"OR-{day}-001A"
+
+
+def test_legacy_document_number_stays_and_change_starts_a_new_family(api_client, db_session, ops_user):
+    day = _today_stamp()
+    legacy_number = "OR-20261008-4D0E97"
+    legacy_id = _seed_document(db_session, ops_user, legacy_number)
+    worker = _worker(db_session, "稼働者A")
+
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["document_number"] == f"OR-{day}-001A"
+
+    changed = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=legacy_id),
+        headers=_auth(ops_user.username),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["document_number"] == f"OR-{day}-002A"
+    assert changed.json()["based_on_document_number"] == legacy_number
+
+    stored = (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == legacy_number)
+        .one()
+    )
+    assert stored.document_number == legacy_number
+
+
+def test_document_number_stops_at_z_and_at_999(api_client, db_session, ops_user):
+    day = _today_stamp()
+    zee = _seed_document(db_session, ops_user, "OR-20260101-004Z")
+    full = _seed_document(db_session, ops_user, f"OR-{day}-999A")
+    worker = _worker(db_session, "稼働者A")
+
+    past_z = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=zee),
+        headers=_auth(ops_user.username),
+    )
+    assert past_z.status_code == 409
+    assert "Z" in past_z.json()["detail"]
+    assert (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == "OR-20260101-004Z")
+        .count()
+        == 1
+    )
+    assert db_session.query(OrderRequestDocument).count() == 2
+
+    past_999 = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id]),
+        headers=_auth(ops_user.username),
+    )
+    assert past_999.status_code == 409
+    assert "999" in past_999.json()["detail"]
+    assert db_session.query(OrderRequestDocument).count() == 2
+
+    revised = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], based_on_version_id=full),
+        headers=_auth(ops_user.username),
+    )
+    assert revised.status_code == 200, revised.text
+    assert revised.json()["document_number"] == f"OR-{day}-999B"
+    assert (
+        db_session.query(OrderRequestDocument)
+        .filter(OrderRequestDocument.document_number == f"OR-{day}-999A")
+        .count()
+        == 1
+    )
+
+
+def test_changed_field_captions_marks_only_differences():
+    from src.services.order_request_pdf import changed_field_captions
+
+    current = [("案件名", "横浜おいも万博2026"), ("内容", "新しい内容"), ("備考", "同じ")]
+    previous = [("案件名", "横浜おいも万博2026"), ("内容", "古い内容"), ("備考", "同じ")]
+    assert changed_field_captions(current, previous) == {"内容"}

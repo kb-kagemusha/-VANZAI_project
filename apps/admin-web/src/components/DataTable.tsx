@@ -14,6 +14,7 @@ interface DataTableProps<Row> {
   getRowKey: (row: Row) => string;
   emptyTitle: string;
   emptyDescription: string;
+  striped?: boolean;
 }
 
 export function DataTable<Row>({
@@ -22,6 +23,7 @@ export function DataTable<Row>({
   getRowKey,
   emptyTitle,
   emptyDescription,
+  striped = false,
 }: DataTableProps<Row>) {
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
@@ -29,7 +31,7 @@ export function DataTable<Row>({
 
   return (
     <div className="table-card">
-      <table className="data-table">
+      <table className={striped ? "data-table data-table--striped" : "data-table"}>
         <thead>
           <tr>
             {columns.map((column) => (

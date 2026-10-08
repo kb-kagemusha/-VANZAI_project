@@ -17,6 +17,13 @@ htmlcov/
 # Local databases and generated storage
 *.db
 storage/bank_transfers/
+storage/pdfs/
+storage/ocr/
+
+# Sync / debug artifacts (OneDrive 等)
+.tmp/
+.tmp_*
+Backup/
 
 # Frontend build artifacts
 node_modules/
@@ -24,6 +31,9 @@ apps/admin-web/node_modules/
 apps/admin-web/dist/
 apps/admin-web/.vite/
 apps/admin-web/*.tsbuildinfo
+apps/staff-mobile/dist/
+apps/staff-mobile/.vite/
+apps/staff-mobile/*.tsbuildinfo
 playwright-report/
 test-results/
 

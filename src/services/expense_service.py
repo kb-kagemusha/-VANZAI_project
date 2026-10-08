@@ -14,6 +14,7 @@ from ..models.master import User, Worker
 from ..models.transaction import Expense, Project
 from .audit import AuditService
 from .auth import require_permission
+from src.exceptions import RecordNotFoundException
 
 
 @dataclass
@@ -98,8 +99,8 @@ class ExpenseService:
         # 監査ログ
         audit_service = AuditService(self.session)
         audit_service.log(
-            action=AuditAction.IMPORT_BATCH_CREATED,  # 暫定的にこのActionを使用
-            target_type="Expense",
+            action=AuditAction.EXPENSE_SUBMITTED,
+            target_type="expense",
             target_id=expense.id,
             actor=user.username,
             actor_role=user.role,
@@ -145,17 +146,18 @@ class ExpenseService:
             )
         
         # 承認処理
-        expense.status = ExpenseStatus.APPROVED
-        expense.approved_by = user.id
+        expense.status = ExpenseStatus.APPROVED.value
+        expense.approved_by = user.username
         expense.approved_at = datetime.now(timezone.utc)
+        expense.reject_reason = None
         
         self.session.flush()
         
         # 監査ログ
         audit_service = AuditService(self.session)
         audit_service.log(
-            action=AuditAction.IMPORT_BATCH_COMPLETED,  # 暫定
-            target_type="Expense",
+            action=AuditAction.EXPENSE_APPROVED,
+            target_type="expense",
             target_id=expense.id,
             actor=user.username,
             actor_role=user.role,
@@ -205,18 +207,18 @@ class ExpenseService:
             )
         
         # 却下処理
-        expense.status = ExpenseStatus.REJECTED
-        expense.approved_by = user.id
+        expense.status = ExpenseStatus.REJECTED.value
+        expense.approved_by = user.username
         expense.approved_at = datetime.now(timezone.utc)
-        expense.rejection_reason = rejection_reason
+        expense.reject_reason = rejection_reason
         
         self.session.flush()
         
         # 監査ログ
         audit_service = AuditService(self.session)
         audit_service.log(
-            action=AuditAction.ACTUAL_INVALIDATED,  # 暫定
-            target_type="Expense",
+            action=AuditAction.EXPENSE_REJECTED,
+            target_type="expense",
             target_id=expense.id,
             actor=user.username,
             actor_role=user.role,

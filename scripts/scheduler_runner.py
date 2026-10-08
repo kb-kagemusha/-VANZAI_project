@@ -2,6 +2,7 @@
 
 使用方法:
     python scripts/scheduler_runner.py
+    python scripts/scheduler_runner.py --run-once weekly_reminder
 
 機能:
     - 週次催促（月曜9時）
@@ -11,6 +12,7 @@
 停止方法:
     Ctrl+C
 """
+import argparse
 import sys
 import os
 from pathlib import Path
@@ -31,8 +33,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="VANZAI スケジューラー実行")
+    parser.add_argument(
+        "--run-once",
+        choices=["weekly_reminder", "daily_update", "monthly_invoice"],
+        help="指定したジョブを1回だけ実行して終了します",
+    )
+    return parser.parse_args()
+
+
 def main():
     """スケジューラーを起動してバックグラウンドで実行"""
+    args = parse_args()
     
     logger.info("=" * 60)
     logger.info("VANZAIスケジューラー起動")
@@ -41,6 +54,19 @@ def main():
     try:
         # スケジューラー取得
         scheduler = get_scheduler()
+
+        if args.run_once:
+            logger.info("単発実行モード: %s", args.run_once)
+            logger.info(
+                "EMAIL_DRY_RUN=%s EMAIL_PROVIDER=%s LOOKAHEAD_DAYS=%s",
+                os.getenv("EMAIL_DRY_RUN", "true"),
+                os.getenv("EMAIL_PROVIDER", "gmail"),
+                os.getenv("SCHEDULER_WEEKLY_LOOKAHEAD_DAYS", "14"),
+            )
+            scheduler.run_job_once(args.run_once)
+            scheduler.shutdown()
+            logger.info("✅ 単発実行が完了しました")
+            return
         
         # デフォルトジョブを登録
         logger.info("\nデフォルトジョブを登録中...")

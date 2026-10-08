@@ -7,7 +7,7 @@
 
 ## 📋 概要
 
-実績CSV（kintoneエクスポート）をシステムに取り込む手順と、エラー対応方法を記載します。
+実績CSV（現場・運用担当から受領、または管理画面の実績一覧からエクスポート）をシステムに取り込む手順と、エラー対応方法を記載します。
 
 ---
 
@@ -32,12 +32,13 @@
 
 ## 📥 取り込み手順
 
-### ステップ1: CSVエクスポート（kintone）
-1. kintoneアプリ「実績管理」を開く
-2. 対象期間をフィルタ（例: 2026年1月）
-3. 「ファイルに書き出す」→「CSV」
-4. 文字コード: **Shift-JIS**（Excelで開く場合）
-5. ファイル名: `actuals_YYYYMM.csv`（例: `actuals_202601.csv`）
+### ステップ1: CSVの準備
+1. 現場・運用担当から実績 CSV を受領する（または取込テンプレート形式で作成）
+2. 対象期間を確認（例: 2026年1月分）
+3. 文字コード: **UTF-8** または **Shift-JIS**（取込画面で指定）
+4. ファイル名: `actuals_YYYYMM.csv`（例: `actuals_202601.csv`）
+
+> **注記**: 本番は admin-web の「CSV取込」（`/operations/csv-import`）から実施。Kintone エクスポートは廃止済み。
 
 ### ステップ2: ファイル配置
 ```bash
@@ -113,7 +114,7 @@ AssignmentCanceledException: Cannot import to canceled assignment
 **原因**: キャンセル済みのシフト枠に実績を登録しようとした
 
 **対応**:
-1. kintoneでアサインステータスを確認
+1. 管理画面のアサイン一覧でステータスを確認
 2. 不要な実績行をCSVから削除
 3. または、Assignment.statusを確認して修正
    ```sql
@@ -133,7 +134,7 @@ InvalidCSVFormatException: Missing required column: work_date
    ```csv
    work_date,worker_id,project_id,start_time,end_time,...
    ```
-2. kintoneエクスポート設定を確認
+2. CSV エクスポート元の列定義を確認
 3. 手動編集時の列削除ミスをチェック
 
 ### エラー4: データ型不一致

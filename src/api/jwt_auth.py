@@ -22,7 +22,13 @@ from src.api.deps import get_db
 
 
 # 環境変数から設定取得
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+_raw_secret = os.getenv("JWT_SECRET_KEY", "")
+if not _raw_secret:
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set. "
+        "Set it to a long random string before starting the server."
+    )
+SECRET_KEY = _raw_secret
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -77,6 +83,28 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def get_refresh_token_subject(token: str) -> str:
+    """
+    リフレッシュトークンからユーザー名を取り出す。
+
+    アクセストークンや期限切れトークンは拒否する。
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if username is None or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return username
 
 
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
