@@ -17,6 +17,7 @@ from src.domain.line_registration_entry import registration_entry_ready
 from src.domain.line_registration_input import (
     LineRegistrationInputError,
     NormalizedRegistration,
+    canonicalize_line_registration,
     normalize_line_registration,
 )
 from src.models.base import generate_ulid
@@ -33,6 +34,7 @@ SESSION_TTL = timedelta(minutes=60)
 NOT_SAVED_MESSAGE = "前回の申請を管理者が確認中です。今回入力した内容は申請本文に保存していません"
 SAVED_MESSAGE = "受付済みです。管理者が確認します。"
 CLOSED_MESSAGE = "LINEからの登録は受け付けていません"
+EXISTING_REVIEW_UNAVAILABLE = "LINEからの申請は、専用の審査が使えるまで承認も却下もできません。"
 
 
 class LineRegistrationClosed(Exception):
@@ -152,6 +154,10 @@ class LineRegistrationService:
 
     def _submit_once(self, token: str, idempotency_key: str, payload: dict, sent: set[str]) -> SubmitResult:
         session_row = self._valid_session(token)
+        existing_key = self._find_key(session_row.line_user_id, idempotency_key)
+        if existing_key is not None:
+            return self._replay_saved_key(existing_key, payload, sent)
+        self._lock_active_links(session_row.line_user_id)
         link = self._current_link(session_row)
         if not self._link_matches_session(session_row, link):
             raise LineRegistrationRejected(
@@ -161,9 +167,6 @@ class LineRegistrationService:
             )
         normalized = normalize_line_registration(payload, sent=sent, linked=link is not None)
         digest = content_hash(normalized.canonical())
-        existing_key = self._find_key(session_row.line_user_id, idempotency_key)
-        if existing_key is not None:
-            return self._replay(existing_key, digest)
         context = self._open_context(session_row.line_user_id)
         if context is not None:
             request = self._lock_request(context.request_id)
@@ -238,6 +241,19 @@ class LineRegistrationService:
         self.session.flush()
         return SubmitResult(request.id, "pending", True, SAVED_MESSAGE)
 
+    def _replay_saved_key(self, existing_key: LineRegistrationSubmitKey, payload: dict, sent: set[str]) -> SubmitResult:
+        try:
+            normalized = canonicalize_line_registration(payload, sent=sent)
+            digest = content_hash(normalized.canonical())
+        except LineRegistrationInputError as exc:
+            raise LineRegistrationRejected(
+                409,
+                "同じ送信識別子で、内容の違う申請は受け付けません。",
+                "idempotency_conflict",
+                existing_key.request_id,
+            ) from exc
+        return self._replay(existing_key, digest)
+
     def _replay(self, existing_key: LineRegistrationSubmitKey, digest: str) -> SubmitResult:
         if not hmac.compare_digest(existing_key.content_hash, digest):
             raise LineRegistrationRejected(
@@ -274,7 +290,9 @@ class LineRegistrationService:
             select(LineRegistrationSession).where(LineRegistrationSession.token_hash == _token_hash(token))
         )
         if row is None or _aware(row.expires_at) <= datetime.now(timezone.utc):
-            raise LineRegistrationAuthError("本人確認の期限が切れました。入力は残しています。LINEでもう一度開き直してください。")
+            raise LineRegistrationAuthError(
+                "本人確認の期限が切れました。入力は残しています。本人確認をやり直してから、もう一度送信してください。"
+            )
         return row
 
     def _active_link(self, line_user_id: str) -> LineWorkerLink | None:
@@ -315,6 +333,20 @@ class LineRegistrationService:
             )
         )
 
+    def _lock_active_links(self, line_user_id: str) -> None:
+        if self.session.get_bind().dialect.name != "postgresql":
+            return
+        self.session.execute(
+            text(
+                """
+                SELECT id FROM line_worker_links
+                WHERE line_user_id = :line_user_id AND status = 'active'
+                FOR UPDATE
+                """
+            ),
+            {"line_user_id": line_user_id},
+        )
+
     def _lock_request(self, request_id: str) -> RegistrationRequest | None:
         if self.session.get_bind().dialect.name == "postgresql":
             self.session.execute(
@@ -322,6 +354,15 @@ class LineRegistrationService:
                 {"id": request_id},
             )
         return self.session.get(RegistrationRequest, request_id)
+
+
+def is_line_registration_request(session: Session, request_id: str) -> bool:
+    return (
+        session.scalar(
+            select(LineRegistrationContext.id).where(LineRegistrationContext.request_id == request_id)
+        )
+        is not None
+    )
 
 
 def _request_is_open(request: RegistrationRequest) -> bool:

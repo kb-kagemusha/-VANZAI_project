@@ -137,3 +137,40 @@ def test_expired_session_and_link_change_do_not_save(api_client, db_session, mon
     assert all(item.actor == "line-registration" for item in audits)
     assert all("U-line-1" not in str(item.reason) for item in audits)
     assert all(item.before_value is None and item.after_value is None for item in audits)
+
+
+def test_saved_key_returns_original_result_after_link_changes(api_client, db_session, monkeypatch):
+    _enable(monkeypatch)
+    token = _session(api_client)
+    first = _submit(api_client, token, "key-saved")
+    assert first.status_code == 200, first.text
+    request_id = first.json()["request_id"]
+
+    worker = Worker(id=generate_ulid(), name="サンプル", is_active=True)
+    db_session.add(worker)
+    db_session.flush()
+    db_session.add(
+        LineWorkerLink(
+            id=generate_ulid(),
+            worker_id=worker.id,
+            line_user_id="U-line-1",
+            status="active",
+            linked_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    replay = _submit(api_client, token, "key-saved")
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["request_id"] == request_id
+    assert replay.json()["saved"] is True
+    different = _submit(api_client, token, "key-saved", {**_body(), "phone": "09000009999"})
+    assert different.status_code == 409
+    db_session.expire_all()
+    detail = db_session.query(WorkerRegistrationRequestDetail).filter_by(request_id=request_id).one()
+    assert detail.phone == "09000001111"
+    assert db_session.query(RegistrationRequest).count() == 1
+    fresh = _submit(api_client, token, "key-after-link")
+    assert fresh.status_code == 409
+    assert db_session.query(RegistrationRequest).count() == 1
+

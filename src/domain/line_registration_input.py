@@ -60,7 +60,8 @@ class NormalizedRegistration:
         }
 
 
-def normalize_line_registration(payload: dict, *, sent: set[str], linked: bool) -> NormalizedRegistration:
+def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> NormalizedRegistration:
+    """組の形式だけを確認する。紐付けの有無による必須判定はしない。"""
     last_name, first_name = _pair(payload, sent, "last_name", "first_name", "氏名", 100, 100)
     last_kana, first_kana = _pair(
         payload, sent, "last_name_furigana", "first_name_furigana", "ふりがな", 200, 100
@@ -87,6 +88,17 @@ def normalize_line_registration(payload: dict, *, sent: set[str], linked: bool) 
         address2=address[3],
         address_sent=address[4],
     )
+    return normalized
+
+
+def normalize_line_registration(payload: dict, *, sent: set[str], linked: bool) -> NormalizedRegistration:
+    normalized = canonicalize_line_registration(payload, sent=sent)
+    last_name = normalized.last_name
+    first_name = normalized.first_name
+    last_kana = normalized.last_name_furigana
+    first_kana = normalized.first_name_furigana
+    phone = normalized.phone
+    birth = normalized.birth_date
     if linked:
         if not normalized.has_change():
             raise LineRegistrationInputError("変更する項目を1つ以上入力してください。")

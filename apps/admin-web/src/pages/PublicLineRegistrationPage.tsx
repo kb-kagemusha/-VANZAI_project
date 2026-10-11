@@ -11,8 +11,10 @@ import {
   emptyLineRegistrationInput,
   idempotencyKeyAfterAttempt,
   lineRegistrationPayload,
-  registrationInputAfterSubjectChange,
+  screenAfterReauthentication,
+  screenAfterUnauthorized,
   type LineRegistrationInput,
+  type LineRegistrationScreen,
 } from "../lib/lineRegistrationForm";
 
 type LiffClient = {
@@ -39,6 +41,11 @@ const fields: Array<{ key: keyof LineRegistrationInput; label: string; type?: st
 let memoryToken = "";
 let memorySubject = "";
 let memoryKey = "";
+
+function remember(screen: LineRegistrationScreen) {
+  memoryToken = screen.token;
+  memorySubject = screen.subject;
+}
 
 function liffClient(): LiffClient | null {
   const candidate = (window as Window & { liff?: LiffClient }).liff;
@@ -68,12 +75,22 @@ function loadLiff(liffId: string): Promise<void> {
 
 export function PublicLineRegistrationPage() {
   const [phase, setPhase] = useState<"checking" | "closed" | "form">("checking");
-  const [linked, setLinked] = useState(false);
   const [notice, setNotice] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [input, setInput] = useState<LineRegistrationInput>(emptyLineRegistrationInput);
+  const [screen, setScreen] = useState<LineRegistrationScreen>({
+    input: emptyLineRegistrationInput(),
+    token: "",
+    subject: "",
+    linked: false,
+    needsReauth: false,
+    error: "",
+    message: "",
+  });
   const [sending, setSending] = useState(false);
+
+  function replaceScreen(next: LineRegistrationScreen) {
+    remember(next);
+    setScreen(next);
+  }
 
   useEffect(() => {
     let active = true;
@@ -99,13 +116,20 @@ export function PublicLineRegistrationPage() {
         }
         const session = await createLineRegistrationSession(idToken);
         if (!active) return;
-        memoryToken = session.token;
-        setInput((current) => registrationInputAfterSubjectChange(memorySubject, session.subject_tag, current));
-        memorySubject = session.subject_tag;
-        setLinked(session.linked);
+        const next: LineRegistrationScreen = {
+          input: emptyLineRegistrationInput(),
+          token: session.token,
+          subject: session.subject_tag,
+          linked: session.linked,
+          needsReauth: false,
+          error: "",
+          message: "",
+        };
+        remember(next);
+        setScreen(next);
         const form = await getLineRegistrationForm(session.token);
         if (!active) return;
-        setLinked(form.linked);
+        setScreen((current) => ({ ...current, linked: form.linked }));
         setNotice(form.message);
         setPhase("form");
       })
@@ -115,35 +139,97 @@ export function PublicLineRegistrationPage() {
           setPhase("closed");
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "登録画面を開けませんでした。");
+        setScreen((current) => ({
+          ...current,
+          error: loadError instanceof Error ? loadError.message : "登録画面を開けませんでした。",
+        }));
       });
     return () => {
       active = false;
     };
   }, []);
 
-  async function send() {
-    if (!memoryToken || sending) return;
-    const key = memoryKey || crypto.randomUUID();
-    memoryKey = key;
+  async function reauthenticate() {
     setSending(true);
-    setError("");
-    setMessage("");
     try {
-      const result = await submitLineRegistration(memoryToken, key, lineRegistrationPayload(input, linked));
-      memoryKey = idempotencyKeyAfterAttempt(key, 200);
-      setMessage(result.message);
-      setNotice("");
-    } catch (submitError) {
-      const status = submitError instanceof ApiError ? submitError.status : "network";
-      memoryKey = idempotencyKeyAfterAttempt(key, status);
-      setError(submitError instanceof ApiError ? submitError.message : "送信できませんでした。もう一度送信してください。");
+      const entry = await getLineRegistrationEntry();
+      if (!entry.enabled || !entry.liff_id) {
+        setPhase("closed");
+        return;
+      }
+      await loadLiff(entry.liff_id);
+      const liff = liffClient();
+      if (!liff?.isLoggedIn()) {
+        replaceScreen({
+          ...screen,
+          needsReauth: true,
+          error: "LINEのログインが確認できません。入力は残しています。",
+          message: "",
+        });
+        return;
+      }
+      const idToken = liff.getIDToken();
+      if (!idToken) {
+        replaceScreen({
+          ...screen,
+          needsReauth: true,
+          error: "本人確認ができません。入力は残しています。",
+          message: "",
+        });
+        return;
+      }
+      const session = await createLineRegistrationSession(idToken);
+      const next = screenAfterReauthentication(screen, {
+        token: session.token,
+        subject: session.subject_tag,
+        linked: session.linked,
+      });
+      replaceScreen(next);
+      if (next.subject === screen.subject) {
+        const form = await getLineRegistrationForm(session.token);
+        setNotice(form.message);
+        setScreen((current) => ({ ...current, linked: form.linked }));
+      } else {
+        setNotice("");
+      }
+    } catch (loadError) {
+      replaceScreen({
+        ...screen,
+        needsReauth: true,
+        error: loadError instanceof ApiError ? loadError.message : "本人確認をやり直せませんでした。入力は残しています。",
+        message: "",
+      });
     } finally {
       setSending(false);
     }
   }
 
-  if (phase === "checking" && !error) {
+  async function send() {
+    if (!memoryToken || sending || screen.needsReauth) return;
+    const key = memoryKey || crypto.randomUUID();
+    memoryKey = key;
+    setSending(true);
+    replaceScreen({ ...screen, error: "", message: "" });
+    try {
+      const result = await submitLineRegistration(
+        memoryToken,
+        key,
+        lineRegistrationPayload(screen.input, screen.linked),
+      );
+      memoryKey = idempotencyKeyAfterAttempt(key, 200);
+      setNotice("");
+      replaceScreen({ ...screen, error: "", message: result.message });
+    } catch (submitError) {
+      const status = submitError instanceof ApiError ? submitError.status : "network";
+      memoryKey = idempotencyKeyAfterAttempt(key, status);
+      const error = submitError instanceof ApiError ? submitError.message : "送信できませんでした。もう一度送信してください。";
+      replaceScreen(status === 401 ? screenAfterUnauthorized(screen, error) : { ...screen, error, message: "" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (phase === "checking" && !screen.error) {
     return (
       <div className="public-form-page">
         <section className="panel-card">
@@ -159,7 +245,7 @@ export function PublicLineRegistrationPage() {
       <div className="public-form-page">
         <section className="panel-card">
           <h1>稼働者登録</h1>
-          <p>{error || "LINEからの登録は受け付けていません"}</p>
+          <p>{screen.error || "LINEからの登録は受け付けていません"}</p>
         </section>
       </div>
     );
@@ -170,7 +256,7 @@ export function PublicLineRegistrationPage() {
       <section className="panel-card" style={{ display: "grid", gap: "0.75rem" }}>
         <h1>稼働者登録</h1>
         <p style={{ margin: 0 }}>
-          {linked
+          {screen.linked
             ? "変える項目だけ入力します。空欄は今の登録を消しません。"
             : "氏名、ふりがな、電話、生年月日、住所を入力します。"}
         </p>
@@ -180,16 +266,27 @@ export function PublicLineRegistrationPage() {
             {field.label}
             <input
               type={field.type ?? "text"}
-              value={input[field.key]}
-              onChange={(event) => setInput((current) => ({ ...current, [field.key]: event.target.value }))}
+              value={screen.input[field.key]}
+              onChange={(event) =>
+                setScreen((current) => ({
+                  ...current,
+                  input: { ...current.input, [field.key]: event.target.value },
+                }))
+              }
             />
           </label>
         ))}
-        {message ? <p style={{ margin: 0 }}>{message}</p> : null}
-        {error ? <p style={{ margin: 0 }}>{error}</p> : null}
-        <button type="button" onClick={() => void send()} disabled={sending}>
-          {sending ? "送信中..." : "申請を送る"}
-        </button>
+        {screen.message ? <p style={{ margin: 0 }}>{screen.message}</p> : null}
+        {screen.error ? <p style={{ margin: 0 }}>{screen.error}</p> : null}
+        {screen.needsReauth ? (
+          <button type="button" onClick={() => void reauthenticate()} disabled={sending}>
+            {sending ? "確認中..." : "本人確認をやり直す"}
+          </button>
+        ) : (
+          <button type="button" onClick={() => void send()} disabled={sending}>
+            {sending ? "送信中..." : "申請を送る"}
+          </button>
+        )}
       </section>
     </div>
   );

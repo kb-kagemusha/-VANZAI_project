@@ -40,6 +40,42 @@ export function registrationInputAfterSubjectChange(
   return current;
 }
 
+export type LineRegistrationScreen = {
+  input: LineRegistrationInput;
+  token: string;
+  subject: string;
+  linked: boolean;
+  needsReauth: boolean;
+  error: string;
+  message: string;
+};
+
+export function screenAfterUnauthorized(screen: LineRegistrationScreen, error: string): LineRegistrationScreen {
+  return {
+    ...screen,
+    needsReauth: true,
+    error,
+    message: "",
+  };
+}
+
+export function screenAfterReauthentication(
+  screen: LineRegistrationScreen,
+  next: { token: string; subject: string; linked: boolean },
+): LineRegistrationScreen {
+  const input = registrationInputAfterSubjectChange(screen.subject, next.subject, screen.input);
+  const samePerson = screen.subject === next.subject;
+  return {
+    input,
+    token: next.token,
+    subject: next.subject,
+    linked: next.linked,
+    needsReauth: false,
+    error: samePerson ? "" : "別のLINEアカウントになったため、入力を消しました。",
+    message: samePerson ? "本人確認をやり直しました。もう一度送信してください。" : "",
+  };
+}
+
 export function idempotencyKeyAfterAttempt(current: string, status: number | "network"): string {
   if (status === "network" || status >= 500) {
     return current;

@@ -7294,6 +7294,7 @@ async def reset_registration_link_pin_lock(
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Registration request not found")
+        _refuse_line_request_on_existing_path(db, request_record.id)
         if request_record.source_type != "public_form":
             raise HTTPException(status_code=400, detail="公開登録リンクではありません")
 
@@ -7339,6 +7340,7 @@ async def reissue_registration_link(
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Registration request not found")
+        _refuse_line_request_on_existing_path(db, request_record.id)
         if request_record.source_type != "public_form":
             raise HTTPException(status_code=400, detail="公開登録リンクではありません")
         if request_record.request_type != payload.request_type:
@@ -7644,6 +7646,13 @@ async def get_registration_request(
     return _registration_detail_response(db, request_record)
 
 
+def _refuse_line_request_on_existing_path(db: Session, request_id: str) -> None:
+    from src.services.line_registration import EXISTING_REVIEW_UNAVAILABLE, is_line_registration_request
+
+    if is_line_registration_request(db, request_id):
+        raise HTTPException(status_code=409, detail=EXISTING_REVIEW_UNAVAILABLE)
+
+
 @app.post("/api/registration-requests/{request_id}/approve", response_model=RegistrationRequestDetailResponse, tags=["Registration Requests"])
 async def approve_registration_request(
     request_id: str,
@@ -7658,6 +7667,7 @@ async def approve_registration_request(
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Registration request not found")
+        _refuse_line_request_on_existing_path(db, request_record.id)
         if request_record.superseded_by_request_id:
             raise HTTPException(status_code=409, detail="この申請は後続申請により superseded 済みです")
         if request_record.status == "approved":
@@ -7721,6 +7731,7 @@ async def reject_registration_request(
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Registration request not found")
+        _refuse_line_request_on_existing_path(db, request_record.id)
         if request_record.status == "approved":
             raise HTTPException(status_code=409, detail="承認済み申請は却下できません")
         if request_record.status == "rejected":
