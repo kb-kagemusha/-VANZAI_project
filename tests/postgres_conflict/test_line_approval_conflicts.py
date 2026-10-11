@@ -188,29 +188,21 @@ def _waiting_while_holding(connection, waiting_table: str, held_table: str) -> b
     pid = connection.execute(
         text(
             """
-            SELECT pid FROM pg_stat_activity
-            WHERE wait_event_type = 'Lock'
-              AND query LIKE :pattern
-              AND pid <> pg_backend_pid()
+            SELECT a.pid
+            FROM pg_stat_activity a
+            JOIN pg_locks waiting ON waiting.pid = a.pid AND NOT waiting.granted
+            JOIN pg_class waiting_class ON waiting_class.oid = waiting.relation
+            JOIN pg_locks held ON held.pid = a.pid AND held.granted
+            JOIN pg_class held_class ON held_class.oid = held.relation
+            WHERE a.pid <> pg_backend_pid()
+              AND waiting_class.relname = :waiting
+              AND held_class.relname = :held
             LIMIT 1
             """
         ),
-        {"pattern": f"%{waiting_table}%"},
+        {"waiting": waiting_table, "held": held_table},
     ).scalar()
-    if pid is None:
-        return False
-    held = connection.execute(
-        text(
-            """
-            SELECT c.relname
-            FROM pg_locks l
-            JOIN pg_class c ON c.oid = l.relation
-            WHERE l.pid = :pid AND l.granted AND c.relname = :held
-            """
-        ),
-        {"pid": pid, "held": held_table},
-    ).scalar()
-    return held == held_table
+    return pid is not None
 
 
 def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine):

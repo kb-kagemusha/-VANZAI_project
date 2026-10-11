@@ -87,6 +87,10 @@ class LineRegistrationReviewService:
         if worker is not None:
             self._lock_worker(worker.id)
         self._lock_links(context.line_user_id, worker.id if worker is not None else None)
+        self.session.expire_all()
+        request, context, detail = self._loaded(request_id)
+        if request.status != "pending" or request.deleted_at is not None or not context.is_open:
+            raise LineReviewError(409, "この申請は、すでに審査が終わっています。", "already_closed", request.id)
         mode, worker, link = self._target(context)
         current_worker_id = worker.id if worker is not None else None
         current_link_id = link.id if link is not None else None
