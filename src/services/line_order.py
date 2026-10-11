@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from src.domain.line_registration_entry import is_registration_keyword, registration_button_messages
+from src.domain.line_registration_locks import lock_link_rows, lock_worker_row
 from src.models.base import generate_ulid
 from src.models.enums import AuditAction
 from src.models.line_order import (
@@ -185,6 +186,8 @@ class LineOrderService:
         cleaned = reason.strip()
         if not cleaned:
             raise OrderRequestError(400, "解除理由を入力してください")
+        lock_worker_row(self.session, worker_id)
+        lock_link_rows(self.session, worker_id=worker_id)
         link = self._active_link_for_worker(worker_id)
         if link is None:
             raise OrderRequestError(404, "有効な紐付けがありません")
@@ -397,6 +400,8 @@ class LineOrderService:
         )
         if code is None:
             return "rejected", "このコードは使えません。管理画面で新しいコードを発行してください。"
+        lock_worker_row(self.session, code.worker_id)
+        lock_link_rows(self.session, line_user_id=line_user_id, worker_id=code.worker_id)
         existing_worker = self._active_link_for_worker(code.worker_id)
         existing_line = self._active_link_for_line_user(line_user_id)
         if existing_worker and existing_worker.line_user_id == line_user_id:

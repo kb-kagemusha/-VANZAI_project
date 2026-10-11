@@ -7,12 +7,16 @@ import {
   getLineRegistrationForm,
   submitLineRegistration,
 } from "../lib/api/client";
+import { confirmApp } from "../lib/appDialog";
 import {
   emptyLineRegistrationInput,
-  idempotencyKeyAfterAttempt,
+  lineLoginExpired,
   lineRegistrationPayload,
   screenAfterReauthentication,
   screenAfterUnauthorized,
+  submissionRetentionAfterAttempt,
+  submissionRetentionAfterNewApplication,
+  submissionRetentionAfterReauthentication,
   type LineRegistrationInput,
   type LineRegistrationScreen,
 } from "../lib/lineRegistrationForm";
@@ -41,6 +45,7 @@ const fields: Array<{ key: keyof LineRegistrationInput; label: string; type?: st
 let memoryToken = "";
 let memorySubject = "";
 let memoryKey = "";
+let memoryPayload: Record<string, string> | null = null;
 
 function remember(screen: LineRegistrationScreen) {
   memoryToken = screen.token;
@@ -86,6 +91,7 @@ export function PublicLineRegistrationPage() {
     message: "",
   });
   const [sending, setSending] = useState(false);
+  const [holdingSubmission, setHoldingSubmission] = useState(false);
 
   function replaceScreen(next: LineRegistrationScreen) {
     remember(next);
@@ -184,6 +190,13 @@ export function PublicLineRegistrationPage() {
         subject: session.subject_tag,
         linked: session.linked,
       });
+      const retained = submissionRetentionAfterReauthentication(
+        { key: memoryKey, payload: memoryPayload },
+        next.subject === screen.subject,
+      );
+      memoryKey = retained.key;
+      memoryPayload = retained.payload;
+      setHoldingSubmission(Boolean(retained.payload));
       replaceScreen(next);
       if (next.subject === screen.subject) {
         const form = await getLineRegistrationForm(session.token);
@@ -204,24 +217,47 @@ export function PublicLineRegistrationPage() {
     }
   }
 
+  function discardSubmission() {
+    const cleared = submissionRetentionAfterNewApplication();
+    memoryKey = cleared.key;
+    memoryPayload = cleared.payload;
+    setHoldingSubmission(false);
+  }
+
+  async function reopenLine() {
+    const confirmed = await confirmApp({
+      title: "LINEを開き直す",
+      message: "LINEのログイン期限が切れています。開き直すと、この画面の入力は残しません。",
+      confirmLabel: "開き直す",
+    });
+    if (!confirmed) return;
+    const liff = liffClient();
+    liff?.login();
+  }
+
   async function send() {
     if (!memoryToken || sending || screen.needsReauth) return;
+    const payload = memoryPayload ?? lineRegistrationPayload(screen.input, screen.linked);
     const key = memoryKey || crypto.randomUUID();
     memoryKey = key;
+    memoryPayload = payload;
+    setHoldingSubmission(true);
     setSending(true);
     replaceScreen({ ...screen, error: "", message: "" });
     try {
-      const result = await submitLineRegistration(
-        memoryToken,
-        key,
-        lineRegistrationPayload(screen.input, screen.linked),
-      );
-      memoryKey = idempotencyKeyAfterAttempt(key, 200);
+      const result = await submitLineRegistration(memoryToken, key, payload);
+      const retained = submissionRetentionAfterAttempt(key, payload, 200);
+      memoryKey = retained.key;
+      memoryPayload = retained.payload;
+      setHoldingSubmission(false);
       setNotice("");
       replaceScreen({ ...screen, error: "", message: result.message });
     } catch (submitError) {
       const status = submitError instanceof ApiError ? submitError.status : "network";
-      memoryKey = idempotencyKeyAfterAttempt(key, status);
+      const retained = submissionRetentionAfterAttempt(key, payload, status);
+      memoryKey = retained.key;
+      memoryPayload = retained.payload;
+      setHoldingSubmission(Boolean(retained.payload));
       const error = submitError instanceof ApiError ? submitError.message : "送信できませんでした。もう一度送信してください。";
       replaceScreen(status === 401 ? screenAfterUnauthorized(screen, error) : { ...screen, error, message: "" });
     } finally {
@@ -267,6 +303,7 @@ export function PublicLineRegistrationPage() {
             <input
               type={field.type ?? "text"}
               value={screen.input[field.key]}
+              readOnly={holdingSubmission}
               onChange={(event) =>
                 setScreen((current) => ({
                   ...current,
@@ -278,15 +315,29 @@ export function PublicLineRegistrationPage() {
         ))}
         {screen.message ? <p style={{ margin: 0 }}>{screen.message}</p> : null}
         {screen.error ? <p style={{ margin: 0 }}>{screen.error}</p> : null}
+        {holdingSubmission ? (
+          <p style={{ margin: 0 }}>再送は、直前に送った内容です。内容を変えるときは、別の申請にしてください。</p>
+        ) : null}
         {screen.needsReauth ? (
-          <button type="button" onClick={() => void reauthenticate()} disabled={sending}>
-            {sending ? "確認中..." : "本人確認をやり直す"}
-          </button>
+          lineLoginExpired(screen.error) ? (
+            <button type="button" onClick={() => void reopenLine()} disabled={sending}>
+              LINEを開き直す
+            </button>
+          ) : (
+            <button type="button" onClick={() => void reauthenticate()} disabled={sending}>
+              {sending ? "確認中..." : "本人確認をやり直す"}
+            </button>
+          )
         ) : (
           <button type="button" onClick={() => void send()} disabled={sending}>
             {sending ? "送信中..." : "申請を送る"}
           </button>
         )}
+        {holdingSubmission ? (
+          <button type="button" onClick={discardSubmission}>
+            別の内容で申請する
+          </button>
+        ) : null}
       </section>
     </div>
   );

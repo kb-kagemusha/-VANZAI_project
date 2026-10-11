@@ -957,6 +957,20 @@ export interface RegistrationRequestDetailResponse {
   files: RegistrationRequestFileItem[];
 }
 
+export interface LineRegistrationReviewResponse {
+  request_id: string;
+  status: string;
+  mode: "create_new" | "fixed_update";
+  can_decide: boolean;
+  worker_id: string | null;
+  worker_name: string | null;
+  link_id: string | null;
+  before: Record<string, string>;
+  after: Record<string, string>;
+  components: Record<string, string>;
+  comparison_ticket: string | null;
+}
+
 export interface RegistrationLinkCreateRequest {
   request_type: "worker" | "supplier_individual" | "supplier_corporation" | "introducer_identity";
   expires_in_days: number;

@@ -76,11 +76,42 @@ export function screenAfterReauthentication(
   };
 }
 
+export type RetainedSubmission = {
+  key: string;
+  payload: Record<string, string> | null;
+};
+
 export function idempotencyKeyAfterAttempt(current: string, status: number | "network"): string {
-  if (status === "network" || status >= 500) {
-    return current;
+  return submissionRetentionAfterAttempt(current, { kept: "1" }, status).key;
+}
+
+export function submissionRetentionAfterAttempt(
+  key: string,
+  payload: Record<string, string>,
+  status: number | "network",
+): RetainedSubmission {
+  if (status === "network" || status >= 500 || status === 401) {
+    return { key, payload };
   }
-  return "";
+  return { key: "", payload: null };
+}
+
+export function submissionRetentionAfterReauthentication(
+  retained: RetainedSubmission,
+  samePerson: boolean,
+): RetainedSubmission {
+  if (!samePerson) {
+    return { key: "", payload: null };
+  }
+  return retained;
+}
+
+export function submissionRetentionAfterNewApplication(): RetainedSubmission {
+  return { key: "", payload: null };
+}
+
+export function lineLoginExpired(error: string): boolean {
+  return error.includes("LINEのログイン期限が切れました");
 }
 
 export function lineRegistrationPayload(input: LineRegistrationInput, linked: boolean): Record<string, string> {

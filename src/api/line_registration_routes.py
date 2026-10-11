@@ -5,6 +5,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -24,6 +25,26 @@ from src.services.line_registration import (
 
 router = APIRouter(prefix="/api/line/registration", tags=["LINE registration"])
 VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify"
+LINE_ID_TOKEN_EXPIRED = "LINEのログイン期限が切れました。LINEでもう一度開き直してください。この画面の入力は、開き直すと残りません。"
+
+
+def line_verify_error_message(body: str) -> str:
+    lowered = body.lower()
+    if "expir" in lowered:
+        return LINE_ID_TOKEN_EXPIRED
+    return "本人確認に失敗しました。"
+
+
+def assert_line_id_token_usable(payload: dict, channel_id: str, now: datetime) -> str:
+    if not isinstance(payload, dict) or payload.get("aud") != channel_id:
+        raise LineRegistrationAuthError()
+    subject = payload.get("sub")
+    if not isinstance(subject, str) or not subject.strip():
+        raise LineRegistrationAuthError()
+    exp = payload.get("exp")
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)) or int(exp) <= int(now.timestamp()):
+        raise LineRegistrationAuthError(LINE_ID_TOKEN_EXPIRED)
+    return subject.strip()
 
 
 class LineRegistrationSessionRequest(BaseModel):
@@ -53,14 +74,15 @@ def verify_line_id_token(id_token: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            detail = ""
+        raise LineRegistrationAuthError(line_verify_error_message(detail)) from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeError) as exc:
         raise LineRegistrationAuthError() from exc
-    if not isinstance(payload, dict) or payload.get("aud") != channel_id:
-        raise LineRegistrationAuthError()
-    subject = payload.get("sub")
-    if not isinstance(subject, str) or not subject.strip():
-        raise LineRegistrationAuthError()
-    return subject.strip()
+    return assert_line_id_token_usable(payload, channel_id, datetime.now(timezone.utc))
 
 
 def _bearer(request: Request) -> str:

@@ -9873,6 +9873,7 @@ from src.api.public_ocr_routes import router as public_ocr_router
 from src.api.order_request_routes import router as order_request_router
 from src.api.line_webhook_routes import router as line_webhook_router
 from src.api.line_registration_routes import router as line_registration_router
+from src.api.line_registration_review_routes import router as line_registration_review_router
 
 app.include_router(ocr_router)
 app.include_router(inventory_router)
@@ -9880,6 +9881,7 @@ app.include_router(public_ocr_router)
 app.include_router(order_request_router)
 app.include_router(line_webhook_router)
 app.include_router(line_registration_router)
+app.include_router(line_registration_review_router)
 
 
 if __name__ == "__main__":

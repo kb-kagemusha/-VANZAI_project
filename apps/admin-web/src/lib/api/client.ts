@@ -57,6 +57,7 @@ import type {
   RegistrationLinkCreateRequest,
   RegistrationLinkResponse,
   RegistrationRequestApproveRequest,
+  LineRegistrationReviewResponse,
   RegistrationRequestDetailResponse,
   RegistrationRequestListItem,
   RegistrationRequestRejectRequest,
@@ -1002,6 +1003,30 @@ export function getRegistrationRequests(params?: Record<string, string | number 
 
 export function getRegistrationRequest(requestId: string) {
   return apiFetch<RegistrationRequestDetailResponse>(`/api/registration-requests/${requestId}`);
+}
+
+export function getLineRegistrationReview(requestId: string) {
+  return apiFetch<LineRegistrationReviewResponse>(`/api/line/registration/reviews/${requestId}`);
+}
+
+export function approveLineRegistrationReview(requestId: string, comparisonTicket: string) {
+  return apiFetch<{ request_id: string; status: string; worker_id: string }>(
+    `/api/line/registration/reviews/${requestId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ comparison_ticket: comparisonTicket }),
+    },
+  );
+}
+
+export function rejectLineRegistrationReview(requestId: string, reason: string) {
+  return apiFetch<{ request_id: string; status: string }>(
+    `/api/line/registration/reviews/${requestId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  );
 }
 
 export function approveRegistrationRequest(requestId: string, body: RegistrationRequestApproveRequest) {

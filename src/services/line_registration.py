@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.domain.line_registration_entry import registration_entry_ready
+from src.domain.line_registration_locks import lock_worker_row
 from src.domain.line_registration_input import (
     LineRegistrationInputError,
     NormalizedRegistration,
@@ -34,7 +35,7 @@ SESSION_TTL = timedelta(minutes=60)
 NOT_SAVED_MESSAGE = "前回の申請を管理者が確認中です。今回入力した内容は申請本文に保存していません"
 SAVED_MESSAGE = "受付済みです。管理者が確認します。"
 CLOSED_MESSAGE = "LINEからの登録は受け付けていません"
-EXISTING_REVIEW_UNAVAILABLE = "LINEからの申請は、専用の審査が使えるまで承認も却下もできません。"
+EXISTING_REVIEW_UNAVAILABLE = "LINEからの申請は、専用の審査から承認または却下してください。"
 
 
 class LineRegistrationClosed(Exception):
@@ -47,6 +48,10 @@ class LineRegistrationAuthError(Exception):
     def __init__(self, message: str = "本人確認ができません。LINEでもう一度開き直してください。") -> None:
         super().__init__(message)
         self.message = message
+
+
+class _SubmitRetry(Exception):
+    pass
 
 
 class LineRegistrationRejected(Exception):
@@ -135,6 +140,8 @@ class LineRegistrationService:
         for _attempt in range(3):
             try:
                 return self._submit_once(token, key, payload, sent)
+            except _SubmitRetry:
+                self.session.rollback()
             except IntegrityError as exc:
                 self.session.rollback()
                 if not _expected_unique(exc) or _attempt == 2:
@@ -157,6 +164,11 @@ class LineRegistrationService:
         existing_key = self._find_key(session_row.line_user_id, idempotency_key)
         if existing_key is not None:
             return self._replay_saved_key(existing_key, payload, sent)
+        peeked = self._open_context(session_row.line_user_id)
+        if peeked is not None:
+            self._lock_request(peeked.request_id)
+        if session_row.worker_id:
+            lock_worker_row(self.session, session_row.worker_id)
         self._lock_active_links(session_row.line_user_id)
         link = self._current_link(session_row)
         if not self._link_matches_session(session_row, link):
@@ -168,6 +180,8 @@ class LineRegistrationService:
         normalized = normalize_line_registration(payload, sent=sent, linked=link is not None)
         digest = content_hash(normalized.canonical())
         context = self._open_context(session_row.line_user_id)
+        if context is not None and (peeked is None or peeked.request_id != context.request_id):
+            raise _SubmitRetry()
         if context is not None:
             request = self._lock_request(context.request_id)
             context = self._open_context(session_row.line_user_id)

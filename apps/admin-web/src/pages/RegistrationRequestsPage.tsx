@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DataTable } from "../components/DataTable";
+import { LineRegistrationReviewPanel } from "../components/LineRegistrationReviewPanel";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
@@ -14,6 +15,7 @@ import {
   approveRegistrationRequest,
   createRegistrationLink,
   downloadRegistrationRequestFile,
+  getLineRegistrationReview,
   getRegistrationRequest,
   getRegistrationRequests,
   reissueRegistrationLink,
@@ -111,6 +113,13 @@ export function RegistrationRequestsPage() {
     queryKey: ["registration-request", selectedRequestId],
     queryFn: () => getRegistrationRequest(selectedRequestId || ""),
     enabled: Boolean(selectedRequestId),
+  });
+
+  const lineReviewQuery = useQuery({
+    queryKey: ["line-registration-review", selectedRequestId],
+    queryFn: () => getLineRegistrationReview(selectedRequestId || ""),
+    enabled: Boolean(selectedRequestId),
+    retry: false,
   });
 
   useEffect(() => {
@@ -228,6 +237,10 @@ export function RegistrationRequestsPage() {
   }
 
   const selectedDetail = detailQuery.data;
+  const lineReviewMissing = lineReviewQuery.isError
+    && lineReviewQuery.error instanceof ApiError
+    && lineReviewQuery.error.status === 404;
+  const showPublicReview = Boolean(selectedDetail) && lineReviewMissing;
   const approvalDisabled = !selectedDetail
     || selectedDetail.status !== "pending"
     || approveMutation.isPending
@@ -406,6 +419,23 @@ export function RegistrationRequestsPage() {
             <div>approved_target: {selectedDetail.approved_target_type && selectedDetail.approved_target_id ? `${selectedDetail.approved_target_type}:${selectedDetail.approved_target_id}` : "-"}</div>
           </div>
 
+          {lineReviewQuery.data ? (
+            <LineRegistrationReviewPanel
+              review={lineReviewQuery.data}
+              onReload={() => {
+                void lineReviewQuery.refetch();
+              }}
+            />
+          ) : null}
+          {lineReviewQuery.isLoading ? <p style={{ margin: 0 }}>審査内容を確認しています。</p> : null}
+          {lineReviewQuery.isError && !lineReviewMissing ? (
+            <p style={{ margin: 0 }}>
+              {lineReviewQuery.error instanceof ApiError ? lineReviewQuery.error.message : "審査内容を読み込めませんでした。"}
+            </p>
+          ) : null}
+
+          {showPublicReview ? (
+          <>
           <div>
             <h4 style={{ margin: "0 0 0.5rem" }}>申請データ</h4>
             <div style={{ display: "grid", gap: "0.35rem", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
@@ -537,6 +567,8 @@ export function RegistrationRequestsPage() {
                 </button>
               </div>
             </div>
+          ) : null}
+          </>
           ) : null}
 
           {selectedDetail.notes ? (
