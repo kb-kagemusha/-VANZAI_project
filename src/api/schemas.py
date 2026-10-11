@@ -1182,8 +1182,14 @@ class WorkerCreateRequest(BaseModel):
 
 
 class WorkerUpdateRequest(WorkerCreateRequest):
-    """稼働者更新リクエスト"""
-    pass
+    """稼働者更新リクエスト。比較票がない更新はAPI側で409にする。"""
+    edit_guard: Optional[str] = None
+
+
+class WorkerEditGuardResponse(BaseModel):
+    """編集開始時の最新値と、同じ読み取りから作った比較票。"""
+    worker: WorkerListItem
+    edit_guard: str
 
 
 class WorkerQualsUpdateRequest(BaseModel):

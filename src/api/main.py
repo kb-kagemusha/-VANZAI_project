@@ -49,7 +49,7 @@ from src.api.schemas import (
     PriceRuleListQuery, PriceRuleListItem, PriceRuleListResponse, PriceRuleCreateRequest, PriceRuleUpdateRequest,
     PriceSalesListQuery, PriceSalesListItem, PriceSalesListResponse, PriceSalesCreateRequest, PriceSalesUpdateRequest,
     PriceOutsourceListQuery, PriceOutsourceListItem, PriceOutsourceListResponse, PriceOutsourceCreateRequest, PriceOutsourceUpdateRequest,
-    WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerQualsUpdateRequest,
+    WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerEditGuardResponse, WorkerQualsUpdateRequest,
     WorkerTagCatalogResponse, WorkerTagOption,
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
     ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
@@ -6330,6 +6330,74 @@ async def create_worker_master(
         raise HTTPException(status_code=500, detail="稼働者作成に失敗しました")
 
 
+def _worker_list_item(worker, supplier_name: str | None) -> WorkerListItem:
+    from src.domain.worker_profile import read_worker_profile
+    from src.domain.worker_tags import stored_worker_tags
+
+    return WorkerListItem(
+        id=worker.id,
+        name=worker.name,
+        furigana=worker.furigana,
+        email=worker.email,
+        phone=worker.phone,
+        sole_proprietor_name=worker.sole_proprietor_name,
+        emergency_contact_name_kana=worker.emergency_contact_name_kana,
+        emergency_contact_phone=worker.emergency_contact_phone,
+        gender=worker.gender,
+        invoice_registration_status=worker.invoice_registration_status,
+        invoice_number=worker.invoice_number,
+        is_active=worker.is_active,
+        introducer_supplier_id=worker.introducer_supplier_id,
+        introducer_supplier_name=supplier_name,
+        notes=worker.notes,
+        smoking_area_ok=worker.smoking_area_ok,
+        has_p_shirt=worker.has_p_shirt,
+        has_best=worker.has_best,
+        stores_training_done=worker.stores_training_done,
+        pioneer_training_done=worker.pioneer_training_done,
+        p_shirt_count=worker.p_shirt_count,
+        license_type=worker.license_type,
+        tags=stored_worker_tags(worker.tags),
+        profile=read_worker_profile(worker),
+    )
+
+
+def _supplier_name_for_worker(db: Session, worker) -> str | None:
+    from src.models.master import Supplier
+
+    if not worker.introducer_supplier_id:
+        return None
+    supplier = db.get(Supplier, worker.introducer_supplier_id)
+    if not supplier or supplier.deleted_at is not None:
+        return None
+    return supplier.name
+
+
+@app.get("/api/workers/{worker_id}/edit-guard", response_model=WorkerEditGuardResponse, tags=["Master"])
+async def get_worker_edit_guard(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """編集開始用の最新値と比較票。一覧の古い行には票を付けない。"""
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+        from src.domain.worker_edit_guard import issue_worker_edit_guard
+        from src.models.master import Worker
+
+        worker = db.get(Worker, worker_id)
+        if not worker or worker.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        return WorkerEditGuardResponse(
+            worker=_worker_list_item(worker, _supplier_name_for_worker(db, worker)),
+            edit_guard=issue_worker_edit_guard(worker, current_user.id),
+        )
+    except HTTPException:
+        raise
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
 @app.put("/api/workers/{worker_id}", response_model=WorkerListItem, tags=["Master"])
 async def update_worker_master(
     worker_id: str,
@@ -6341,13 +6409,18 @@ async def update_worker_master(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
 
+        from src.domain.worker_edit_guard import WorkerEditGuardError, lock_worker_for_edit, verify_worker_edit_guard
         from src.domain.worker_profile import read_worker_profile, write_worker_profile
         from src.domain.worker_tags import newcomer_until_for_assignment, stored_worker_tags, tokyo_today
-        from src.models.master import Supplier, Worker
+        from src.models.master import Supplier
 
-        worker = db.get(Worker, worker_id)
+        worker = lock_worker_for_edit(db, worker_id)
         if not worker or worker.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Worker not found")
+        try:
+            verify_worker_edit_guard(request.edit_guard, worker, current_user.id)
+        except WorkerEditGuardError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message) from exc
 
         supplier_name = None
         if request.introducer_supplier_id:

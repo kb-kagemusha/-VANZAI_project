@@ -73,6 +73,7 @@ import type {
   SupplierUpdateRequest,
   TokenResponse,
   WorkerAvailabilityPreference,
+  WorkerEditGuardResponse,
   WorkerListItem,
   WorkerTagOption,
   WorkerCreateRequest,
@@ -911,6 +912,10 @@ export function createWorker(body: WorkerCreateRequest) {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function getWorkerEditGuard(workerId: string) {
+  return apiFetch<WorkerEditGuardResponse>(`/api/workers/${workerId}/edit-guard`);
 }
 
 export function updateWorker(workerId: string, body: WorkerUpdateRequest) {

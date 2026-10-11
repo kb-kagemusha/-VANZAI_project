@@ -31,6 +31,7 @@ import {
   getSuppliers,
   getVanzaiStaff,
   getWorkerTags,
+  getWorkerEditGuard,
   getWorkers,
   updateClientStaff,
   updateSupplierBankAccount,
@@ -39,6 +40,7 @@ import {
   updateWorker,
 } from "../lib/api/client";
 import { formatDate, formatMaskedAccountNumber } from "../lib/formatters";
+import { workerEditFieldsFromGuard } from "../lib/workerEditForm";
 import type {
   ClientCreateRequest,
   ClientListItem,
@@ -58,6 +60,7 @@ import type {
   VanzaiStaffCreateRequest,
   VanzaiStaffUpdateRequest,
   WorkerCreateRequest,
+  WorkerEditGuardResponse,
   WorkerListItem,
   WorkerUpdateRequest,
 } from "../types/api";
@@ -171,6 +174,8 @@ export function MasterDataPage() {
   const [formMessage, setFormMessage] = useState("");
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
+  const [editGuard, setEditGuard] = useState("");
+  const [editNeedsReload, setEditNeedsReload] = useState(false);
   const [supplierBankBankName, setSupplierBankBankName] = useState("");
   const [supplierBankBranchName, setSupplierBankBranchName] = useState("");
   const [supplierBankBranchCode, setSupplierBankBranchCode] = useState("");
@@ -223,6 +228,8 @@ export function MasterDataPage() {
 
   function clearEditor() {
     setSelectedWorker(null);
+    setEditGuard("");
+    setEditNeedsReload(false);
     setSelectedSupplier(null);
     setSelectedVanzaiStaff(null);
     setSelectedClient(null);
@@ -282,19 +289,31 @@ export function MasterDataPage() {
     clearEditor();
   }
 
-  function openWorkerEditor(worker: WorkerListItem) {
-    setSelectedSupplier(null);
-    setSelectedVanzaiStaff(null);
-    setSelectedWorker(worker);
-    setEditName(worker.name);
-    setEditEmail(worker.email ?? "");
-    setEditPhone(worker.phone ?? "");
-    setEditSupplierId(worker.introducer_supplier_id ?? "");
-    setEditNotes(worker.notes ?? "");
-    setEditIsActive(worker.is_active);
-    setEditTags(worker.tags ?? []);
+  function applyWorkerEdit(fresh: WorkerEditGuardResponse) {
+    const fields = workerEditFieldsFromGuard(fresh);
+    setEditGuard(fresh.edit_guard);
+    setEditNeedsReload(false);
+    setSelectedWorker(fresh.worker);
+    setEditName(fields.name);
+    setEditEmail(fields.email);
+    setEditPhone(fields.phone);
+    setEditSupplierId(fields.supplierId);
+    setEditNotes(fields.notes);
+    setEditIsActive(fields.isActive);
+    setEditTags(fields.tags);
+  }
+
+  async function openWorkerEditor(worker: WorkerListItem) {
     setEditError("");
     setEditMessage("");
+    try {
+      const fresh = await getWorkerEditGuard(worker.id);
+      setSelectedSupplier(null);
+      setSelectedVanzaiStaff(null);
+      applyWorkerEdit(fresh);
+    } catch (error) {
+      setEditError(error instanceof ApiError ? error.message : "最新の稼働者を読み込めませんでした");
+    }
   }
 
   function openSupplierEditor(supplier: SupplierListItem) {
@@ -578,6 +597,7 @@ export function MasterDataPage() {
     },
     onSuccess: async (_, variables) => {
       setEditError("");
+      setEditNeedsReload(false);
       setEditMessage(`${VIEW_LABELS[variables.view]}を更新しました`);
       const qKey = variables.view === "vanzai_staff" ? "vanzai-staff-page" : `${variables.view}-page`;
       await queryClient.invalidateQueries({ queryKey: [qKey] });
@@ -586,10 +606,13 @@ export function MasterDataPage() {
       }
       if (variables.view === "workers") {
         await queryClient.invalidateQueries({ queryKey: ["workers-master-options"] });
+        const fresh = await getWorkerEditGuard(variables.id);
+        applyWorkerEdit(fresh);
       }
     },
     onError: (error: unknown) => {
       setEditMessage("");
+      setEditNeedsReload(error instanceof ApiError && error.status === 409);
       setEditError(error instanceof ApiError ? error.message : "更新に失敗しました");
     },
   });
@@ -685,10 +708,16 @@ export function MasterDataPage() {
     setEditMessage("");
 
     if (selectedWorker) {
+      if (!editGuard) {
+        setEditError("比較票がないため保存しませんでした。最新の内容を読み込んでから、もう一度保存してください。");
+        setEditNeedsReload(true);
+        return;
+      }
       updateMutation.mutate({
         view: "workers",
         id: selectedWorker.id,
         body: {
+          edit_guard: editGuard,
           name: editName,
           furigana: selectedWorker.furigana ?? null,
           email: editEmail || null,
@@ -1066,6 +1095,11 @@ export function MasterDataPage() {
             有効
           </label>
           {editError ? <p className="form-error">{editError}</p> : null}
+          {editNeedsReload && selectedWorker ? (
+            <button type="button" className="ghost-button" onClick={() => { void openWorkerEditor(selectedWorker); }}>
+              最新の内容を読み込む
+            </button>
+          ) : null}
           {editMessage ? <p>{editMessage}</p> : null}
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <button type="button" className="primary-button" onClick={handleUpdate} disabled={!editName.trim() || updateMutation.isPending}>

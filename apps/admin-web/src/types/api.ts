@@ -728,7 +728,14 @@ export interface WorkerTagOption {
   description?: string;
 }
 
-export interface WorkerUpdateRequest extends WorkerCreateRequest {}
+export interface WorkerUpdateRequest extends WorkerCreateRequest {
+  edit_guard?: string | null;
+}
+
+export interface WorkerEditGuardResponse {
+  worker: WorkerListItem;
+  edit_guard: string;
+}
 
 export interface WorkerQualsUpdateRequest {
   smoking_area_ok: boolean | null;

@@ -416,6 +416,7 @@ class WorkerRegistrationRequestDetail(Base, TimestampMixin):
     prefecture: Mapped[str | None] = mapped_column(String(50), nullable=True)
     city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

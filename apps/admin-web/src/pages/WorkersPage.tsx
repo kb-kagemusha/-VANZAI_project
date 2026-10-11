@@ -26,6 +26,7 @@ import {
   getWorkerBankAccounts,
   getSuppliers,
   getWorkerTags,
+  getWorkerEditGuard,
   getWorkers,
   issueLineLinkCode,
   listLineLinks,
@@ -183,6 +184,8 @@ export function WorkersPage() {
   const [selectedWorker, setSelectedWorker] = useState<WorkerListItem | null>(null);
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
+  const [editGuard, setEditGuard] = useState("");
+  const [editNeedsReload, setEditNeedsReload] = useState(false);
 
   // 口座フォーム
   const [bankBankName, setBankBankName] = useState("");
@@ -324,19 +327,24 @@ export function WorkersPage() {
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!selectedWorker) throw new Error("対象稼働者を選択してください");
-      return updateWorker(selectedWorker.id, intakeToRequest(intakeForm, selectedWorker));
+      if (!editGuard) throw new Error("比較票がないため保存しませんでした。最新の内容を読み込んでから、もう一度保存してください。");
+      return updateWorker(selectedWorker.id, { ...intakeToRequest(intakeForm, selectedWorker), edit_guard: editGuard });
     },
     onSuccess: async (updated) => {
-      const next = intakeFromWorker(updated);
-      setSelectedWorker(updated);
+      const fresh = await getWorkerEditGuard(updated.id);
+      const next = intakeFromWorker(fresh.worker);
+      setEditGuard(fresh.edit_guard);
+      setSelectedWorker(fresh.worker);
       setIntakeForm(next);
       setIntakeBaseline(JSON.stringify(next));
+      setEditNeedsReload(false);
       setEditError("");
       setEditMessage("更新しました");
       await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
     },
     onError: (error: unknown) => {
       setEditMessage("");
+      setEditNeedsReload(error instanceof ApiError && error.status === 409);
       setEditError(messageOf(error));
     },
   });
@@ -373,27 +381,39 @@ export function WorkersPage() {
     rememberIntake(emptyIntakeForm());
     setEditorMode("create");
     setSelectedWorker(null);
+    setEditGuard("");
+    setEditNeedsReload(false);
     setFormError("");
     setPageNotice("");
     setEditError("");
     setEditMessage("");
   }
 
-  function openEditor(worker: WorkerListItem) {
-    rememberIntake(intakeFromWorker(worker));
-    setSelectedWorker(worker);
-    setEditorMode("edit");
+  async function openEditor(worker: WorkerListItem) {
     setEditError("");
     setEditMessage("");
     setPageNotice("");
-    setSelectedBankAccount(null);
-    setBankEditError("");
-    setBankEditMessage("");
+    try {
+      const fresh = await getWorkerEditGuard(worker.id);
+      setEditGuard(fresh.edit_guard);
+      rememberIntake(intakeFromWorker(fresh.worker));
+      setSelectedWorker(fresh.worker);
+      setEditorMode("edit");
+      setEditNeedsReload(false);
+      setSelectedBankAccount(null);
+      setBankEditError("");
+      setBankEditMessage("");
+    } catch (error) {
+      setPageNotice("");
+      setEditError(messageOf(error));
+    }
   }
 
   function closeEditor() {
     setEditorMode(null);
     setSelectedWorker(null);
+    setEditGuard("");
+    setEditNeedsReload(false);
     setFormError("");
     setEditError("");
     setEditMessage("");
@@ -491,6 +511,7 @@ export function WorkersPage() {
       </FilterBar>
 
       {pageNotice ? <p style={{ margin: 0, color: "#16a34a" }}>{pageNotice}</p> : null}
+      {editError && !editorMode ? <p className="form-error">{editError}</p> : null}
 
       {user?.role === "admin" && editorMode ? (
         <WorkerProfileModal
@@ -512,6 +533,11 @@ export function WorkersPage() {
         >
           {editorMode === "edit" && selectedWorker ? (
             <>
+          {editNeedsReload ? (
+            <button type="button" className="ghost-button" onClick={() => { void openEditor(selectedWorker); }}>
+              最新の内容を読み込む
+            </button>
+          ) : null}
           {/* 口座情報セクション */}
           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
             <strong style={{ fontSize: "0.9rem" }}>振込先口座</strong>

@@ -13,6 +13,12 @@ def _auth_header(username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _with_edit_guard(api_client, worker_id: str, headers: dict[str, str], body: dict) -> dict:
+    guard = api_client.get(f"/api/workers/{worker_id}/edit-guard", headers=headers)
+    assert guard.status_code == 200, guard.text
+    return {**body, "edit_guard": guard.json()["edit_guard"]}
+
+
 # ===========================
 # /api/workers
 # ===========================
@@ -239,7 +245,12 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
 
     kept = api_client.put(
         f"/api/workers/{created.json()['id']}",
-        json={"name": "Profile Worker Renamed", "is_active": True},
+        json=_with_edit_guard(
+            api_client,
+            created.json()["id"],
+            headers,
+            {"name": "Profile Worker Renamed", "is_active": True},
+        ),
         headers=headers,
     )
     assert kept.status_code == 200
@@ -267,10 +278,16 @@ def test_update_worker_succeeds_for_admin(api_client, db_session, worker):
     )
     db_session.commit()
 
+    headers = _auth_header(user.username)
     response = api_client.put(
         f"/api/workers/{worker.id}",
-        json={"name": "Updated Worker", "email": "updated-worker@example.com", "phone": "08000000000", "introducer_supplier_id": None, "notes": "updated", "is_active": False},
-        headers=_auth_header(user.username),
+        json=_with_edit_guard(
+            api_client,
+            worker.id,
+            headers,
+            {"name": "Updated Worker", "email": "updated-worker@example.com", "phone": "08000000000", "introducer_supplier_id": None, "notes": "updated", "is_active": False},
+        ),
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -320,7 +337,12 @@ def test_worker_tags_are_predefined_only(api_client, db_session):
 
     kept = api_client.put(
         f"/api/workers/{created.json()['id']}",
-        json={"name": "Tagged Worker", "is_active": True, "tags": ["newcomer", "food_d"]},
+        json=_with_edit_guard(
+            api_client,
+            created.json()["id"],
+            headers,
+            {"name": "Tagged Worker", "is_active": True, "tags": ["newcomer", "food_d"]},
+        ),
         headers=headers,
     )
     assert kept.status_code == 200

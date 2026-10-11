@@ -7,6 +7,8 @@ import os
 # テスト用ダミー値をデフォルトにする（空文字も未設定と同扱いにする）。
 if not os.environ.get("JWT_SECRET_KEY"):
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-only"
+if not os.environ.get("WORKER_EDIT_GUARD_KEY"):
+    os.environ["WORKER_EDIT_GUARD_KEY"] = "test-worker-edit-guard-key"
 
 import pytest
 from datetime import date, time
@@ -24,6 +26,7 @@ import src.models.ocr  # noqa: F401 — register OCR tables for metadata.create_
 import src.models.inventory_reconciliation  # noqa: F401 — register inventory tables
 import src.models.order_request  # noqa: F401 — register order request tables
 import src.models.line_order  # noqa: F401 — register LINE link tables
+import src.models.line_registration  # noqa: F401 — register LINE registration tables
 from src.models.enums import AssignmentStatus
 from src.api.main import app
 from src.api.deps import get_db
