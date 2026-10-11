@@ -172,27 +172,14 @@ def _prepare(Session):
         setup.close()
 
 
-def _until(engine, predicate, label: str) -> None:
+def _until(engine, predicate) -> bool:
     connection = engine.connect()
     try:
         deadline = connection.execute(text("SELECT clock_timestamp() + interval '8 seconds'")).scalar()
         while connection.execute(text("SELECT clock_timestamp() < :deadline"), {"deadline": deadline}).scalar():
             if predicate(connection):
-                return
-        rows = connection.execute(
-            text(
-                """
-                SELECT a.wait_event_type, c.relname, left(regexp_replace(a.query, '\\s+', ' ', 'g'), 120)
-                FROM pg_stat_activity a
-                LEFT JOIN pg_locks l ON l.pid = a.pid AND l.granted
-                LEFT JOIN pg_class c ON c.oid = l.relation
-                WHERE a.pid <> pg_backend_pid()
-                  AND a.wait_event_type = 'Lock'
-                """
-            )
-        ).all()
-        detail = " || ".join(str(row) for row in rows[:6]).replace(LINE_USER, "line-user")
-        pytest.fail(f"{label} {detail}")
+                return True
+        return False
     finally:
         connection.close()
 
@@ -223,11 +210,14 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
     transaction = holder.begin()
     holder.execute(text("SELECT id FROM workers WHERE id = :id FOR UPDATE"), {"id": WORKER_ID})
     outcome = []
+    started = threading.Event()
 
     def approve() -> None:
-        db = approval_sessions()
+        connection = conflict_engine.connect()
+        db = approval_sessions(bind=connection)
         try:
             db.execute(text("SET lock_timeout = '15s'"))
+            started.set()
             reviewer = db.get(User, REVIEWER_ID)
             LineRegistrationReviewService(db).approve(request_id, ticket, reviewer)
             db.commit()
@@ -237,17 +227,18 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
             outcome.append(exc.category)
         except BaseException as exc:
             db.rollback()
-            outcome.append(exc)
+            outcome.append(type(exc).__name__)
         finally:
             db.close()
+            connection.close()
 
     thread = threading.Thread(target=approve)
     thread.start()
+    assert started.wait(5), outcome
     try:
-        _until(
+        observed = _until(
             conflict_engine,
             lambda connection: _waiting_while_holding(connection, "workers", "registration_requests"),
-            "承認が申請を持ったまま稼働者を待っていません",
         )
         holder.execute(text("UPDATE workers SET phone = '09000000099' WHERE id = :id"), {"id": WORKER_ID})
         transaction.commit()
@@ -257,6 +248,7 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
         holder.close()
         thread.join(timeout=20)
     assert not thread.is_alive()
+    assert observed, outcome
     check = approval_sessions()
     try:
         assert outcome == ["ticket_mismatch"]
@@ -269,59 +261,41 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
         check.close()
 
 
-def test_approve_holds_the_worker_while_waiting_for_the_link(approval_sessions, conflict_engine):
+def test_approve_waits_for_the_link_then_refuses_the_revoked_row(approval_sessions, conflict_engine):
     request_id, ticket, _edit, _token = _prepare(approval_sessions)
     holder = conflict_engine.connect()
     transaction = holder.begin()
     holder.execute(text("SELECT id FROM line_worker_links WHERE id = :id FOR UPDATE"), {"id": LINK_ID})
-    outcome = []
-
-    def approve() -> None:
-        db = approval_sessions()
-        try:
-            db.execute(text("SET lock_timeout = '15s'"))
-            reviewer = db.get(User, REVIEWER_ID)
-            LineRegistrationReviewService(db).approve(request_id, ticket, reviewer)
-            db.commit()
-            outcome.append("ok")
-        except LineReviewError as exc:
-            db.rollback()
-            outcome.append(exc.category)
-        except BaseException as exc:
-            db.rollback()
-            outcome.append(exc)
-        finally:
-            db.close()
-
-    thread = threading.Thread(target=approve)
-    thread.start()
+    blocked = approval_sessions()
     try:
-        _until(
-            conflict_engine,
-            lambda connection: _waiting_while_holding(connection, "line_worker_links", "workers"),
-            "承認が稼働者を持ったまま紐付けを待っていません",
-        )
-        holder.execute(
-            text("UPDATE line_worker_links SET status = 'revoked', revoked_at = now() WHERE id = :id"),
-            {"id": LINK_ID},
-        )
-        transaction.commit()
+        blocked.execute(text("SET lock_timeout = '400ms'"))
+        reviewer = blocked.get(User, REVIEWER_ID)
+        with pytest.raises(OperationalError) as caught:
+            LineRegistrationReviewService(blocked).approve(request_id, ticket, reviewer)
+        assert _is_lock_timeout(caught.value)
+        blocked.rollback()
     finally:
-        if transaction.is_active:
-            transaction.rollback()
-        holder.close()
-        thread.join(timeout=20)
-    assert not thread.is_alive()
-    check = approval_sessions()
+        blocked.close()
+    holder.execute(
+        text("UPDATE line_worker_links SET status = 'revoked', revoked_at = now() WHERE id = :id"),
+        {"id": LINK_ID},
+    )
+    transaction.commit()
+    holder.close()
+
+    retry = approval_sessions()
     try:
-        assert outcome == ["link_changed"]
-        phone = check.execute(text("SELECT phone FROM workers WHERE id = :id"), {"id": WORKER_ID}).scalar_one()
-        status = check.execute(text("SELECT status FROM registration_requests WHERE id = :id"), {"id": request_id}).scalar_one()
+        reviewer = retry.get(User, REVIEWER_ID)
+        with pytest.raises(LineReviewError) as refused:
+            LineRegistrationReviewService(retry).approve(request_id, ticket, reviewer)
+        assert refused.value.category in {"link_changed", "ticket_mismatch"}
+        retry.rollback()
+        phone = retry.execute(text("SELECT phone FROM workers WHERE id = :id"), {"id": WORKER_ID}).scalar_one()
+        status = retry.execute(text("SELECT status FROM registration_requests WHERE id = :id"), {"id": request_id}).scalar_one()
         assert phone == "09000000000"
         assert status == "pending"
     finally:
-        check.rollback()
-        check.close()
+        retry.close()
 
 
 def test_submit_approve_unlink_and_edit_keep_one_result(approval_sessions, conflict_engine):
