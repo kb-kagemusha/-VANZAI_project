@@ -179,7 +179,20 @@ def _until(engine, predicate, label: str) -> None:
         while connection.execute(text("SELECT clock_timestamp() < :deadline"), {"deadline": deadline}).scalar():
             if predicate(connection):
                 return
-        pytest.fail(label)
+        rows = connection.execute(
+            text(
+                """
+                SELECT a.wait_event_type, c.relname, left(regexp_replace(a.query, '\\s+', ' ', 'g'), 120)
+                FROM pg_stat_activity a
+                LEFT JOIN pg_locks l ON l.pid = a.pid AND l.granted
+                LEFT JOIN pg_class c ON c.oid = l.relation
+                WHERE a.pid <> pg_backend_pid()
+                  AND a.wait_event_type = 'Lock'
+                """
+            )
+        ).all()
+        detail = " || ".join(str(row) for row in rows[:6]).replace(LINE_USER, "line-user")
+        pytest.fail(f"{label} {detail}")
     finally:
         connection.close()
 
@@ -190,17 +203,16 @@ def _waiting_while_holding(connection, waiting_table: str, held_table: str) -> b
             """
             SELECT a.pid
             FROM pg_stat_activity a
-            JOIN pg_locks waiting ON waiting.pid = a.pid AND NOT waiting.granted
-            JOIN pg_class waiting_class ON waiting_class.oid = waiting.relation
             JOIN pg_locks held ON held.pid = a.pid AND held.granted
             JOIN pg_class held_class ON held_class.oid = held.relation
             WHERE a.pid <> pg_backend_pid()
-              AND waiting_class.relname = :waiting
+              AND a.wait_event_type = 'Lock'
+              AND a.query LIKE :waiting
               AND held_class.relname = :held
             LIMIT 1
             """
         ),
-        {"waiting": waiting_table, "held": held_table},
+        {"waiting": f"%{waiting_table}%", "held": held_table},
     ).scalar()
     return pid is not None
 
