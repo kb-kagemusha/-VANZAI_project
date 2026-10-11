@@ -258,7 +258,7 @@ def test_same_key_conflict_keeps_the_first_body(submit_sessions):
         check.close()
 
 
-def test_new_submit_waits_for_link_revocation_and_does_not_save(submit_sessions):
+def test_new_submit_waits_for_link_revocation_and_does_not_save(submit_sessions, conflict_engine):
     Session = submit_sessions
     setup = Session()
     try:
