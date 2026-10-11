@@ -157,7 +157,9 @@ def _prepare(Session):
         )
         setup.add(reviewer)
         setup.add(worker)
+        setup.flush()
         setup.add(link)
+        setup.flush()
         setup.commit()
         token, _expires, linked, _tag = LineRegistrationService(setup).issue_session(LINE_USER)
         assert linked is True
