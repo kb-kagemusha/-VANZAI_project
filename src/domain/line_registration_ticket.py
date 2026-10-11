@@ -78,6 +78,21 @@ def issue_line_review_ticket(
     return f"{encoded}.{_b64(signature)}"
 
 
+def read_line_review_claims(
+    token: str | None,
+    *,
+    request_id: str,
+    reviewer_id: str,
+    now: datetime | None = None,
+) -> dict:
+    try:
+        return _authenticated_body(token, request_id=request_id, reviewer_id=reviewer_id, now=now or datetime.now(timezone.utc))
+    except LineReviewTicketError:
+        raise
+    except Exception as exc:
+        raise LineReviewTicketError() from exc
+
+
 def verify_line_review_ticket(
     token: str | None,
     *,
@@ -106,17 +121,7 @@ def verify_line_review_ticket(
         raise LineReviewTicketError() from exc
 
 
-def _verify(
-    token: str | None,
-    *,
-    request_id: str,
-    reviewer_id: str,
-    mode: str,
-    worker_id: str,
-    link_id: str,
-    before: dict[str, str],
-    now: datetime,
-) -> None:
+def _authenticated_body(token: str | None, *, request_id: str, reviewer_id: str, now: datetime) -> dict:
     if not token or "." not in token:
         raise LineReviewTicketError()
     encoded, signature = token.split(".", 1)
@@ -128,15 +133,26 @@ def _verify(
         raise LineReviewTicketError()
     if body.get("fields") != list(GUARDED_FIELDS):
         raise LineReviewTicketError()
-    if (
-        body.get("request_id") != request_id
-        or body.get("reviewer_id") != reviewer_id
-        or body.get("mode") != mode
-        or body.get("worker_id") != worker_id
-        or body.get("link_id") != link_id
-    ):
+    if body.get("request_id") != request_id or body.get("reviewer_id") != reviewer_id:
         raise LineReviewTicketError()
     if int(body.get("exp") or 0) <= int(now.timestamp()):
+        raise LineReviewTicketError()
+    return body
+
+
+def _verify(
+    token: str | None,
+    *,
+    request_id: str,
+    reviewer_id: str,
+    mode: str,
+    worker_id: str,
+    link_id: str,
+    before: dict[str, str],
+    now: datetime,
+) -> None:
+    body = _authenticated_body(token, request_id=request_id, reviewer_id=reviewer_id, now=now)
+    if body.get("mode") != mode or body.get("worker_id") != worker_id or body.get("link_id") != link_id:
         raise LineReviewTicketError()
     if not hmac.compare_digest(str(body.get("digest") or ""), _digest(before)):
         raise LineReviewTicketError()

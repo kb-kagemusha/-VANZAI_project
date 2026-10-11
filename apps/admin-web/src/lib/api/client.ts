@@ -57,6 +57,7 @@ import type {
   RegistrationLinkCreateRequest,
   RegistrationLinkResponse,
   RegistrationRequestApproveRequest,
+  LineRegistrationReviewCandidate,
   LineRegistrationReviewResponse,
   RegistrationRequestDetailResponse,
   RegistrationRequestListItem,
@@ -1007,6 +1008,23 @@ export function getRegistrationRequest(requestId: string) {
 
 export function getLineRegistrationReview(requestId: string) {
   return apiFetch<LineRegistrationReviewResponse>(`/api/line/registration/reviews/${requestId}`);
+}
+
+export function getLineRegistrationReviewCandidates(requestId: string, query: string) {
+  const suffix = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+  return apiFetch<{ candidates: LineRegistrationReviewCandidate[] }>(
+    `/api/line/registration/reviews/${requestId}/candidates${suffix}`,
+  );
+}
+
+export function chooseLineRegistrationReview(
+  requestId: string,
+  body: { decision: "create_new" | "existing"; worker_id?: string },
+) {
+  return apiFetch<LineRegistrationReviewResponse>(`/api/line/registration/reviews/${requestId}/choice`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function approveLineRegistrationReview(requestId: string, comparisonTicket: string) {

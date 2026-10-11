@@ -288,7 +288,7 @@ def test_approve_waits_for_the_link_then_refuses_the_revoked_row(approval_sessio
         reviewer = retry.get(User, REVIEWER_ID)
         with pytest.raises(LineReviewError) as refused:
             LineRegistrationReviewService(retry).approve(request_id, ticket, reviewer)
-        assert refused.value.category in {"link_changed", "ticket_mismatch"}
+        assert refused.value.category in {"fixed_target", "link_changed", "ticket_mismatch"}
         retry.rollback()
         phone = retry.execute(text("SELECT phone FROM workers WHERE id = :id"), {"id": WORKER_ID}).scalar_one()
         status = retry.execute(text("SELECT status FROM registration_requests WHERE id = :id"), {"id": request_id}).scalar_one()
@@ -395,7 +395,7 @@ def test_submit_approve_unlink_and_edit_keep_one_result(approval_sessions, confl
             assert phone == "09000001111"
         else:
             assert status == "pending"
-            assert approve_detail in {"ticket_mismatch", "link_changed"}
+            assert approve_detail in {"ticket_mismatch", "link_changed", "fixed_target"}
             assert phone in {"09000000000", "09000000077"}
         if unlink_detail == "ok":
             assert link_status == "revoked"

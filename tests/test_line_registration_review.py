@@ -6,10 +6,11 @@ from src.api.line_registration_routes import LINE_ID_TOKEN_EXPIRED, assert_line_
 from src.domain.worker_edit_guard import issue_worker_edit_guard
 from src.models.base import generate_ulid
 from src.models.enums import UserRole
-from src.models.line_order import LINK_ACTIVE, LineWorkerLink
+from src.models.line_order import LINK_ACTIVE, LINK_REVOKED, LineWorkerLink
 from src.models.line_registration import LineRegistrationContext
-from src.models.master import RegistrationRequest, Worker
+from src.models.master import RegistrationRequest, Worker, WorkerRegistrationRequestDetail
 from src.models.transaction import AuditLog
+from src.services.audit import AuditService
 from src.services.line_registration import LineRegistrationAuthError
 
 
@@ -51,6 +52,20 @@ def _submit(api_client, body: dict, key: str) -> tuple[str, str]:
     return submitted.json()["request_id"], token
 
 
+def _choose_new(api_client, request_id: str, headers: dict[str, str]) -> dict:
+    chosen = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/choice",
+        json={"decision": "create_new"},
+        headers=headers,
+    )
+    assert chosen.status_code == 200, chosen.text
+    body = chosen.json()
+    assert body["mode"] == "create_new"
+    assert body["can_decide"] is True
+    assert body["comparison_ticket"]
+    return body
+
+
 def _full_body() -> dict:
     return {
         "last_name": "山田",
@@ -77,13 +92,16 @@ def test_create_new_links_in_the_same_decision_and_replay_keeps_the_request(api_
 
     review = api_client.get(f"/api/line/registration/reviews/{request_id}", headers=headers)
     assert review.status_code == 200, review.text
-    body = review.json()
-    assert body["mode"] == "create_new"
+    opened = review.json()
+    assert opened["mode"] == "choose"
+    assert opened["can_decide"] is False
+    assert opened["comparison_ticket"] is None
+    assert any(item["worker_id"] == untouched.id for item in opened["candidates"])
+    body = _choose_new(api_client, request_id, headers)
     assert body["worker_id"] is None
     assert body["before"]["name"] == ""
     assert body["after"]["name"] == "山田 太郎"
     assert body["after"]["address"] == "東京都千代田区1-1\n建物"
-    assert body["comparison_ticket"]
 
     approved = api_client.post(
         f"/api/line/registration/reviews/{request_id}/approve",
@@ -261,9 +279,11 @@ def test_review_works_while_entry_is_off_and_public_requests_stay_on_the_old_pat
     headers = _auth(admin.username)
     review = api_client.get(f"/api/line/registration/reviews/{request_id}", headers=headers)
     assert review.status_code == 200, review.text
+    assert review.json()["comparison_ticket"] is None
+    chosen = _choose_new(api_client, request_id, headers)
     approved = api_client.post(
         f"/api/line/registration/reviews/{request_id}/approve",
-        json={"comparison_ticket": review.json()["comparison_ticket"]},
+        json={"comparison_ticket": chosen["comparison_ticket"]},
         headers=headers,
     )
     assert approved.status_code == 200, approved.text
@@ -285,6 +305,212 @@ def test_review_works_while_entry_is_off_and_public_requests_stay_on_the_old_pat
         headers=headers,
     )
     assert rejected.status_code == 200, rejected.text
+
+
+def test_relink_cannot_move_the_fixed_target(api_client, db_session, monkeypatch):
+    _enable(monkeypatch)
+    admin = _admin(db_session)
+    worker_a = Worker(id=generate_ulid(), name="稼働者A", phone="09011110001", is_active=True, tags=[])
+    db_session.add(worker_a)
+    db_session.flush()
+    link_a = LineWorkerLink(
+        id=generate_ulid(),
+        worker_id=worker_a.id,
+        line_user_id="U-line-review",
+        status=LINK_ACTIVE,
+        linked_at=datetime.now(timezone.utc),
+    )
+    db_session.add(link_a)
+    db_session.commit()
+    request_id, _token = _submit(api_client, {"phone": "09000003333"}, "review-fixed-relink")
+    link_a.status = LINK_REVOKED
+    db_session.commit()
+    worker_b = Worker(id=generate_ulid(), name="稼働者B", phone="09022220002", is_active=True, tags=[])
+    db_session.add(worker_b)
+    db_session.flush()
+    db_session.add(
+        LineWorkerLink(
+            id=generate_ulid(),
+            worker_id=worker_b.id,
+            line_user_id="U-line-review",
+            status=LINK_ACTIVE,
+            linked_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+    headers = _auth(admin.username)
+
+    def opened():
+        review = api_client.get(f"/api/line/registration/reviews/{request_id}", headers=headers)
+        assert review.status_code == 200, review.text
+        return review.json()
+
+    body = opened()
+    assert body["mode"] == "fixed_update"
+    assert body["worker_id"] == worker_a.id
+    assert body["link_id"] == link_a.id
+    assert body["can_decide"] is False
+    assert body["comparison_ticket"]
+    assert "解除または差し替え" in body["blocked_reason"]
+    approved = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": body["comparison_ticket"]},
+        headers=headers,
+    )
+    assert approved.status_code == 409
+    assert "解除または差し替え" in approved.text
+    db_session.expire_all()
+    assert db_session.get(Worker, worker_a.id).phone == "09011110001"
+    assert db_session.get(Worker, worker_b.id).phone == "09022220002"
+    assert db_session.get(RegistrationRequest, request_id).status == "pending"
+    again = opened()
+    assert again["worker_id"] == worker_a.id
+    assert again["link_id"] == link_a.id
+    assert again["can_decide"] is False
+    retried = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": again["comparison_ticket"]},
+        headers=headers,
+    )
+    assert retried.status_code == 409
+    db_session.expire_all()
+    assert db_session.get(Worker, worker_b.id).phone == "09022220002"
+
+
+def test_unlinked_existing_worker_is_not_created_without_an_explicit_choice(api_client, db_session, monkeypatch):
+    _enable(monkeypatch)
+    admin = _admin(db_session)
+    existing = Worker(
+        id=generate_ulid(),
+        name="山田 太郎",
+        furigana="やまだ たろう",
+        phone="09000001111",
+        email="keep@example.com",
+        is_active=True,
+        tags=[],
+    )
+    db_session.add(existing)
+    db_session.commit()
+    body = _full_body()
+    body["phone"] = "09000002222"
+    body["email"] = "next@example.com"
+    request_id, _token = _submit(api_client, body, "review-existing")
+    headers = _auth(admin.username)
+    review = api_client.get(f"/api/line/registration/reviews/{request_id}", headers=headers)
+    assert review.status_code == 200, review.text
+    opened = review.json()
+    assert opened["mode"] == "choose"
+    assert opened["can_decide"] is False
+    assert opened["comparison_ticket"] is None
+    assert any(item["worker_id"] == existing.id and "氏名" in item["match_reasons"] for item in opened["candidates"])
+    missing = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": "not-a-ticket"},
+        headers=headers,
+    )
+    assert missing.status_code == 409
+    waiting = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/choice",
+        json={"decision": "existing", "worker_id": existing.id},
+        headers=headers,
+    )
+    assert waiting.status_code == 200, waiting.text
+    held = waiting.json()
+    assert held["mode"] == "existing"
+    assert held["worker_id"] == existing.id
+    assert held["can_decide"] is False
+    assert held["comparison_ticket"] is None
+    assert "一次性コード" in held["blocked_reason"]
+    db_session.expire_all()
+    assert db_session.query(Worker).count() == 1
+    assert db_session.query(LineWorkerLink).count() == 0
+    assert db_session.get(Worker, existing.id).email == "keep@example.com"
+
+    db_session.add(
+        LineWorkerLink(
+            id=generate_ulid(),
+            worker_id=existing.id,
+            line_user_id="U-line-review",
+            status=LINK_ACTIVE,
+            linked_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+    ready = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/choice",
+        json={"decision": "existing", "worker_id": existing.id},
+        headers=headers,
+    )
+    assert ready.status_code == 200, ready.text
+    selected = ready.json()
+    assert selected["can_decide"] is True
+    assert selected["mode"] == "existing"
+    assert selected["comparison_ticket"]
+    approved = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": selected["comparison_ticket"]},
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    db_session.expire_all()
+    assert db_session.query(Worker).count() == 1
+    assert db_session.query(LineWorkerLink).filter_by(status=LINK_ACTIVE).count() == 1
+    stored = db_session.get(Worker, existing.id)
+    assert stored.phone == "09000002222"
+    assert stored.email == "next@example.com"
+
+
+def test_create_new_rechecks_required_fields_and_a_failure_leaves_no_worker(api_client, db_session, monkeypatch):
+    _enable(monkeypatch)
+    admin = _admin(db_session)
+    headers = _auth(admin.username)
+    request_id, _token = _submit(api_client, _full_body(), "review-required")
+    chosen = _choose_new(api_client, request_id, headers)
+    detail = db_session.query(WorkerRegistrationRequestDetail).filter_by(request_id=request_id).one()
+    detail.phone = None
+    db_session.commit()
+    blocked = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/choice",
+        json={"decision": "create_new"},
+        headers=headers,
+    )
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["can_decide"] is False
+    assert blocked.json()["comparison_ticket"] is None
+    approved = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": chosen["comparison_ticket"]},
+        headers=headers,
+    )
+    assert approved.status_code == 409
+    assert "必要な項目" in approved.text
+    db_session.expire_all()
+    assert db_session.query(Worker).count() == 0
+    assert db_session.query(LineWorkerLink).count() == 0
+    assert db_session.get(RegistrationRequest, request_id).status == "pending"
+
+    detail.phone = "09000001111"
+    db_session.commit()
+    fresh = _choose_new(api_client, request_id, headers)
+    original = AuditService.log
+
+    def stop_after_insert(self, action, *args, **kwargs):
+        if action == "line_registration_approved":
+            raise RuntimeError("forced")
+        return original(self, action, *args, **kwargs)
+
+    monkeypatch.setattr(AuditService, "log", stop_after_insert)
+    failed = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": fresh["comparison_ticket"]},
+        headers=headers,
+    )
+    assert failed.status_code == 500
+    db_session.expire_all()
+    assert db_session.query(Worker).count() == 0
+    assert db_session.query(LineWorkerLink).count() == 0
+    assert db_session.get(RegistrationRequest, request_id).status == "pending"
+    assert db_session.query(LineRegistrationContext).filter_by(request_id=request_id).one().is_open is True
 
 
 def test_line_id_token_expiry_is_distinct_from_the_registration_bearer():

@@ -957,11 +957,19 @@ export interface RegistrationRequestDetailResponse {
   files: RegistrationRequestFileItem[];
 }
 
+export interface LineRegistrationReviewCandidate {
+  worker_id: string;
+  name: string;
+  phone: string;
+  match_reasons: string[];
+}
+
 export interface LineRegistrationReviewResponse {
   request_id: string;
   status: string;
-  mode: "create_new" | "fixed_update";
+  mode: "create_new" | "fixed_update" | "choose" | "existing";
   can_decide: boolean;
+  blocked_reason: string | null;
   worker_id: string | null;
   worker_name: string | null;
   link_id: string | null;
@@ -969,6 +977,7 @@ export interface LineRegistrationReviewResponse {
   after: Record<string, string>;
   components: Record<string, string>;
   comparison_ticket: string | null;
+  candidates: LineRegistrationReviewCandidate[];
 }
 
 export interface RegistrationLinkCreateRequest {

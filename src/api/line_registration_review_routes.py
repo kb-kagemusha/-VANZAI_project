@@ -1,7 +1,9 @@
 """LINE申請の審査API。管理画面のログインが必要で、登録用Bearerでは呼ばない。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
@@ -23,6 +25,11 @@ class LineRegistrationReviewDecision(BaseModel):
 
 class LineRegistrationReviewReject(BaseModel):
     reason: str
+
+
+class LineRegistrationReviewChoice(BaseModel):
+    decision: Literal["create_new", "existing"]
+    worker_id: str | None = None
 
 
 def _failure(db: Session, *, request_id: str | None, actor: str, category: str) -> None:
@@ -57,6 +64,38 @@ def get_line_registration_review(
     try:
         check_permission(current_user, Permission.MASTER_WRITE)
         return LineRegistrationReviewService(db).view(request_id, current_user)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=403, detail="この操作の権限がありません。") from exc
+    except LineReviewError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.get("/{request_id}/candidates")
+def search_line_registration_candidates(
+    request_id: str,
+    q: str | None = Query(default=None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+        return {"candidates": LineRegistrationReviewService(db).candidates(request_id, q)}
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=403, detail="この操作の権限がありません。") from exc
+    except LineReviewError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.post("/{request_id}/choice")
+def choose_line_registration_target(
+    request_id: str,
+    body: LineRegistrationReviewChoice,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        check_permission(current_user, Permission.MASTER_WRITE)
+        return LineRegistrationReviewService(db).choose(request_id, current_user, body.decision, body.worker_id)
     except AuthorizationError as exc:
         raise HTTPException(status_code=403, detail="この操作の権限がありません。") from exc
     except LineReviewError as exc:
