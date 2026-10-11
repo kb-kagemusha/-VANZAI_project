@@ -234,6 +234,7 @@ class LineRegistrationService:
             content_hash=digest,
         )
         self.session.add(request)
+        self.session.flush()
         self.session.add(detail)
         self.session.add(context)
         self.session.add(submit_key)
