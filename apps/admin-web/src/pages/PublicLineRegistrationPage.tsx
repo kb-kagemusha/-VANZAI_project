@@ -67,9 +67,8 @@ function loadLiff(liffId: string): Promise<void> {
 }
 
 export function PublicLineRegistrationPage() {
-  const [closed, setClosed] = useState(false);
+  const [phase, setPhase] = useState<"checking" | "closed" | "form">("checking");
   const [linked, setLinked] = useState(false);
-  const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -82,7 +81,7 @@ export function PublicLineRegistrationPage() {
       .then(async (entry) => {
         if (!active) return;
         if (!entry.enabled || !entry.liff_id) {
-          setClosed(true);
+          setPhase("closed");
           return;
         }
         await loadLiff(entry.liff_id);
@@ -108,12 +107,12 @@ export function PublicLineRegistrationPage() {
         if (!active) return;
         setLinked(form.linked);
         setNotice(form.message);
-        setReady(true);
+        setPhase("form");
       })
       .catch((loadError) => {
         if (!active) return;
         if (loadError instanceof ApiError && loadError.status === 403) {
-          setClosed(true);
+          setPhase("closed");
           return;
         }
         setError(loadError instanceof Error ? loadError.message : "登録画面を開けませんでした。");
@@ -144,12 +143,23 @@ export function PublicLineRegistrationPage() {
     }
   }
 
-  if (closed) {
+  if (phase === "checking" && !error) {
     return (
       <div className="public-form-page">
         <section className="panel-card">
           <h1>稼働者登録</h1>
-          <p>LINEからの登録は受け付けていません</p>
+          <p>確認しています。</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (phase !== "form") {
+    return (
+      <div className="public-form-page">
+        <section className="panel-card">
+          <h1>稼働者登録</h1>
+          <p>{error || "LINEからの登録は受け付けていません"}</p>
         </section>
       </div>
     );
@@ -177,7 +187,7 @@ export function PublicLineRegistrationPage() {
         ))}
         {message ? <p style={{ margin: 0 }}>{message}</p> : null}
         {error ? <p style={{ margin: 0 }}>{error}</p> : null}
-        <button type="button" onClick={() => void send()} disabled={!ready || sending}>
+        <button type="button" onClick={() => void send()} disabled={sending}>
           {sending ? "送信中..." : "申請を送る"}
         </button>
       </section>
