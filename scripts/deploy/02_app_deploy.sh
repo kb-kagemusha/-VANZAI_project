@@ -262,17 +262,34 @@ echo "  フロントエンドビルド完了"
 # ----------------------------------------
 # 6. systemd サービス再起動
 # ----------------------------------------
+wait_for_api() {
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if curl -sf http://127.0.0.1:8000/api/health >/dev/null; then
+            echo "  API の /api/health が応答しました"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "  API が /api/health に応答しませんでした"
+    return 1
+}
+
+ocr_worker_running() {
+    ps -u vanzai -o cmd= | grep -q '[r]un_job_worker.py'
+}
+
 echo "[6/7] API サービス再起動..."
 if sudo -n true 2>/dev/null; then
     sudo systemctl daemon-reload
     sudo systemctl enable vanzai-api
     sudo systemctl restart vanzai-api
-    sleep 2
     sudo systemctl status vanzai-api --no-pager
 else
     echo "  sudo にパスワードが必要なため、restart_uvicorn.sh で再起動します"
     bash "${APP_DIR}/restart_uvicorn.sh"
 fi
+wait_for_api
 
 # ----------------------------------------
 # 7. OCR ジョブワーカー
@@ -292,17 +309,23 @@ else
     echo "  sudo 不可 — crontab でワーカー常駐を設定します"
     CRON_MARKER="# vanzai-ocr-worker"
     CRON_BOOT="${CRON_MARKER} @reboot sleep 30 && cd ${APP_DIR} && ${VENV_DIR}/bin/python ${APP_DIR}/scripts/ocr/run_job_worker.py >> ${APP_DIR}/logs/ocr-worker.log 2>> ${APP_DIR}/logs/ocr-worker-error.log"
-    CRON_WATCH="${CRON_MARKER} */5 * * * * pgrep -f run_job_worker >/dev/null || (cd ${APP_DIR} && nohup ${VENV_DIR}/bin/python ${APP_DIR}/scripts/ocr/run_job_worker.py >> ${APP_DIR}/logs/ocr-worker.log 2>> ${APP_DIR}/logs/ocr-worker-error.log &)"
+    CRON_WATCH="${CRON_MARKER} */5 * * * * ps -u vanzai -o cmd= | grep -q '[r]un_job_worker.py' || (cd ${APP_DIR} && nohup ${VENV_DIR}/bin/python ${APP_DIR}/scripts/ocr/run_job_worker.py >> ${APP_DIR}/logs/ocr-worker.log 2>> ${APP_DIR}/logs/ocr-worker-error.log &)"
     (crontab -l 2>/dev/null | grep -v "${CRON_MARKER}" || true
      echo "${CRON_BOOT}"
      echo "${CRON_WATCH}") | crontab -
-    if ! pgrep -f run_job_worker >/dev/null; then
+    if ! ocr_worker_running; then
         nohup "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/ocr/run_job_worker.py" \
             >> "${APP_DIR}/logs/ocr-worker.log" 2>> "${APP_DIR}/logs/ocr-worker-error.log" &
         sleep 1
     fi
-    pgrep -af run_job_worker || echo "  !! OCR ワーカー起動に失敗しました"
-    OCR_WORKER_STARTED=1
+    if ocr_worker_running; then
+        echo "  OCR ワーカーは起動しています"
+        ps -u vanzai -o pid=,cmd= | grep '[r]un_job_worker.py'
+        OCR_WORKER_STARTED=1
+    else
+        echo "  !! OCR ワーカーが起動していません"
+        exit 1
+    fi
 fi
 
 echo "  受領期限の案内..."

@@ -1,0 +1,355 @@
+"""LINE登録のセッションと申請送信。入口が無効のときは受け付けない。承認はここではしない。"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import secrets
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from src.domain.line_registration_entry import registration_entry_ready
+from src.domain.line_registration_input import (
+    LineRegistrationInputError,
+    NormalizedRegistration,
+    normalize_line_registration,
+)
+from src.models.base import generate_ulid
+from src.models.line_order import LINK_ACTIVE, LineWorkerLink
+from src.models.line_registration import (
+    LineRegistrationContext,
+    LineRegistrationSession,
+    LineRegistrationSubmitKey,
+)
+from src.models.master import RegistrationRequest, Worker, WorkerRegistrationRequestDetail
+from src.services.audit import AuditService
+
+SESSION_TTL = timedelta(minutes=60)
+NOT_SAVED_MESSAGE = "前回の申請を管理者が確認中です。今回入力した内容は申請本文に保存していません"
+SAVED_MESSAGE = "受付済みです。管理者が確認します。"
+CLOSED_MESSAGE = "LINEからの登録は受け付けていません"
+
+
+class LineRegistrationClosed(Exception):
+    def __init__(self) -> None:
+        super().__init__(CLOSED_MESSAGE)
+        self.message = CLOSED_MESSAGE
+
+
+class LineRegistrationAuthError(Exception):
+    def __init__(self, message: str = "本人確認ができません。LINEでもう一度開き直してください。") -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class LineRegistrationRejected(Exception):
+    def __init__(self, status_code: int, message: str, category: str, request_id: str | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+        self.category = category
+        self.request_id = request_id
+
+
+@dataclass(frozen=True)
+class SubmitResult:
+    request_id: str
+    status: str
+    saved: bool
+    message: str
+
+
+def content_hash(canonical: dict) -> str:
+    key = (
+        os.getenv("LINE_REGISTRATION_HASH_KEY")
+        or os.getenv("WORKER_EDIT_GUARD_KEY")
+        or os.getenv("JWT_SECRET_KEY")
+        or ""
+    )
+    if not key:
+        raise LineRegistrationAuthError("登録を確認できません。時間をおいてもう一度開いてください。")
+    body = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+
+def subject_tag(line_user_id: str) -> str:
+    return hashlib.sha256(line_user_id.encode("utf-8")).hexdigest()
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+class LineRegistrationService:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def issue_session(self, line_user_id: str) -> tuple[str, datetime, bool, str]:
+        self._require_open()
+        if not line_user_id.strip():
+            raise LineRegistrationAuthError()
+        link = self._active_link(line_user_id)
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + SESSION_TTL
+        row = LineRegistrationSession(
+            id=generate_ulid(),
+            token_hash=_token_hash(token),
+            line_user_id=line_user_id,
+            line_worker_link_id=link.id if link else None,
+            worker_id=link.worker_id if link else None,
+            expires_at=expires_at,
+        )
+        self.session.add(row)
+        self.session.flush()
+        return token, expires_at, link is not None, subject_tag(line_user_id)
+
+    def form_state(self, token: str) -> dict:
+        self._require_open()
+        session_row = self._valid_session(token)
+        link = self._current_link(session_row)
+        pending = self._open_context(session_row.line_user_id)
+        return {
+            "linked": link is not None,
+            "pending": pending is not None,
+            "message": "管理者が確認中の申請があります。送信しても、確認中の申請本文は変わりません。" if pending else "",
+        }
+
+    def submit(self, token: str, idempotency_key: str, payload: dict, sent: set[str]) -> SubmitResult:
+        self._require_open()
+        key = idempotency_key.strip()
+        if not key or len(key) > 128:
+            raise LineRegistrationRejected(422, "送信の識別子がありません。", "idempotency_key")
+        for _attempt in range(3):
+            try:
+                return self._submit_once(token, key, payload, sent)
+            except IntegrityError as exc:
+                self.session.rollback()
+                if not _expected_unique(exc) or _attempt == 2:
+                    raise
+        raise LineRegistrationRejected(503, "申請を確定できませんでした。時間をおいてもう一度送信してください。", "retry_exhausted")
+
+    def delete_expired_sessions(self, *, now: datetime | None = None) -> int:
+        moment = now or datetime.now(timezone.utc)
+        rows = self.session.scalars(
+            select(LineRegistrationSession).where(LineRegistrationSession.expires_at < moment)
+        ).all()
+        for row in rows:
+            self.session.delete(row)
+        if rows:
+            self.session.flush()
+        return len(rows)
+
+    def _submit_once(self, token: str, idempotency_key: str, payload: dict, sent: set[str]) -> SubmitResult:
+        session_row = self._valid_session(token)
+        link = self._current_link(session_row)
+        if not self._link_matches_session(session_row, link):
+            raise LineRegistrationRejected(
+                409,
+                "紐付けの状態が変わったため、保存しませんでした。登録画面を開き直してください。",
+                "link_changed",
+            )
+        normalized = normalize_line_registration(payload, sent=sent, linked=link is not None)
+        digest = content_hash(normalized.canonical())
+        existing_key = self._find_key(session_row.line_user_id, idempotency_key)
+        if existing_key is not None:
+            return self._replay(existing_key, digest)
+        context = self._open_context(session_row.line_user_id)
+        if context is not None:
+            request = self._lock_request(context.request_id)
+            context = self._open_context(session_row.line_user_id)
+            if request is None or context is None or not _request_is_open(request):
+                return self._create(session_row, link, idempotency_key, normalized, digest)
+            self.session.add(
+                LineRegistrationSubmitKey(
+                    id=generate_ulid(),
+                    line_user_id=session_row.line_user_id,
+                    idempotency_key=idempotency_key,
+                    request_id=request.id,
+                    content_hash=digest,
+                )
+            )
+            self._audit_success(request.id, saved=False)
+            self.session.flush()
+            return SubmitResult(request.id, request.status, False, NOT_SAVED_MESSAGE)
+        return self._create(session_row, link, idempotency_key, normalized, digest)
+
+    def _create(
+        self,
+        session_row: LineRegistrationSession,
+        link: LineWorkerLink | None,
+        idempotency_key: str,
+        normalized: NormalizedRegistration,
+        digest: str,
+    ) -> SubmitResult:
+        request = RegistrationRequest(
+            id=generate_ulid(),
+            request_type="worker",
+            status="pending",
+            source_type="public_form",
+            failed_attempts=0,
+            submitted_at=datetime.now(timezone.utc),
+        )
+        detail = WorkerRegistrationRequestDetail(
+            id=generate_ulid(),
+            request_id=request.id,
+            last_name=normalized.last_name,
+            first_name=normalized.first_name,
+            last_name_furigana=normalized.last_name_furigana,
+            first_name_furigana=normalized.first_name_furigana,
+            email=normalized.email,
+            phone=normalized.phone,
+            zipcode=normalized.postal_code,
+            prefecture=normalized.prefecture,
+            city_address=normalized.address1,
+            building_address=normalized.address2 if normalized.address_sent else None,
+            birth_date=normalized.birth_date,
+        )
+        context = LineRegistrationContext(
+            id=generate_ulid(),
+            request_id=request.id,
+            line_user_id=session_row.line_user_id,
+            line_worker_link_id=link.id if link else None,
+            worker_id=link.worker_id if link else None,
+            is_open=True,
+        )
+        submit_key = LineRegistrationSubmitKey(
+            id=generate_ulid(),
+            line_user_id=session_row.line_user_id,
+            idempotency_key=idempotency_key,
+            request_id=request.id,
+            content_hash=digest,
+        )
+        self.session.add(request)
+        self.session.add(detail)
+        self.session.add(context)
+        self.session.add(submit_key)
+        self._audit_success(request.id, saved=True)
+        self.session.flush()
+        return SubmitResult(request.id, "pending", True, SAVED_MESSAGE)
+
+    def _replay(self, existing_key: LineRegistrationSubmitKey, digest: str) -> SubmitResult:
+        if not hmac.compare_digest(existing_key.content_hash, digest):
+            raise LineRegistrationRejected(
+                409,
+                "同じ送信識別子で、内容の違う申請は受け付けません。",
+                "idempotency_conflict",
+                existing_key.request_id,
+            )
+        request = self.session.get(RegistrationRequest, existing_key.request_id)
+        if request is None:
+            raise LineRegistrationRejected(409, "以前の申請を確認できません。", "missing_request", existing_key.request_id)
+        detail = self.session.scalar(
+            select(WorkerRegistrationRequestDetail).where(WorkerRegistrationRequestDetail.request_id == request.id)
+        )
+        saved = detail is not None and content_hash(_detail_canonical(detail)) == digest
+        message = SAVED_MESSAGE if saved else NOT_SAVED_MESSAGE
+        return SubmitResult(request.id, request.status, saved, message)
+
+    def _audit_success(self, request_id: str, *, saved: bool) -> None:
+        AuditService(self.session).log(
+            "line_registration_submitted",
+            target_type="registration_request",
+            target_id=request_id,
+            actor="line-registration",
+            after_value={"saved": saved, "status": "pending"},
+        )
+
+    def _require_open(self) -> None:
+        if not registration_entry_ready():
+            raise LineRegistrationClosed()
+
+    def _valid_session(self, token: str) -> LineRegistrationSession:
+        row = self.session.scalar(
+            select(LineRegistrationSession).where(LineRegistrationSession.token_hash == _token_hash(token))
+        )
+        if row is None or _aware(row.expires_at) <= datetime.now(timezone.utc):
+            raise LineRegistrationAuthError("本人確認の期限が切れました。入力は残しています。LINEでもう一度開き直してください。")
+        return row
+
+    def _active_link(self, line_user_id: str) -> LineWorkerLink | None:
+        return self.session.scalar(
+            select(LineWorkerLink).where(
+                LineWorkerLink.line_user_id == line_user_id,
+                LineWorkerLink.status == LINK_ACTIVE,
+            )
+        )
+
+    def _current_link(self, session_row: LineRegistrationSession) -> LineWorkerLink | None:
+        link = self._active_link(session_row.line_user_id)
+        if link is None:
+            return None
+        worker = self.session.get(Worker, link.worker_id)
+        if worker is None or worker.deleted_at is not None or not worker.is_active:
+            return None
+        return link
+
+    def _link_matches_session(self, session_row: LineRegistrationSession, link: LineWorkerLink | None) -> bool:
+        current_link_id = link.id if link else None
+        current_worker_id = link.worker_id if link else None
+        return session_row.line_worker_link_id == current_link_id and session_row.worker_id == current_worker_id
+
+    def _open_context(self, line_user_id: str) -> LineRegistrationContext | None:
+        return self.session.scalar(
+            select(LineRegistrationContext).where(
+                LineRegistrationContext.line_user_id == line_user_id,
+                LineRegistrationContext.is_open.is_(True),
+            )
+        )
+
+    def _find_key(self, line_user_id: str, idempotency_key: str) -> LineRegistrationSubmitKey | None:
+        return self.session.scalar(
+            select(LineRegistrationSubmitKey).where(
+                LineRegistrationSubmitKey.line_user_id == line_user_id,
+                LineRegistrationSubmitKey.idempotency_key == idempotency_key,
+            )
+        )
+
+    def _lock_request(self, request_id: str) -> RegistrationRequest | None:
+        if self.session.get_bind().dialect.name == "postgresql":
+            self.session.execute(
+                text("SELECT id FROM registration_requests WHERE id = :id FOR UPDATE"),
+                {"id": request_id},
+            )
+        return self.session.get(RegistrationRequest, request_id)
+
+
+def _request_is_open(request: RegistrationRequest) -> bool:
+    return request.status == "pending" and request.deleted_at is None
+
+
+def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str | None]:
+    address_sent = detail.zipcode is not None or detail.prefecture is not None or detail.city_address is not None
+    return {
+        "last_name": detail.last_name,
+        "first_name": detail.first_name,
+        "last_name_furigana": detail.last_name_furigana,
+        "first_name_furigana": detail.first_name_furigana,
+        "phone": detail.phone,
+        "email": detail.email,
+        "birth_date": detail.birth_date.isoformat() if detail.birth_date else None,
+        "postal_code": detail.zipcode,
+        "prefecture": detail.prefecture,
+        "address1": detail.city_address,
+        "address2": detail.building_address if address_sent else None,
+    }
+
+
+def _expected_unique(exc: IntegrityError) -> bool:
+    message = str(getattr(exc, "orig", exc))
+    return (
+        "uq_line_registration_submit_keys" in message
+        or "uq_line_registration_contexts_open" in message
+        or "line_registration_submit_keys.line_user_id" in message
+        or "line_registration_contexts.line_user_id" in message
+    )

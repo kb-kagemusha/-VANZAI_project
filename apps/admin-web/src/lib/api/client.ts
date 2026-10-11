@@ -1094,6 +1094,63 @@ export function submitPublicIntroducerIdentityRegistration(body: PublicIntroduce
   });
 }
 
+export type LineRegistrationEntry = {
+  enabled: boolean;
+  liff_id: string | null;
+};
+
+export type LineRegistrationSessionResponse = {
+  token: string;
+  expires_at: string;
+  linked: boolean;
+  subject_tag: string;
+};
+
+export type LineRegistrationFormState = {
+  linked: boolean;
+  pending: boolean;
+  message: string;
+};
+
+export type LineRegistrationSubmitResponse = {
+  request_id: string;
+  status: string;
+  saved: boolean;
+  message: string;
+};
+
+export function getLineRegistrationEntry() {
+  return publicApiFetch<LineRegistrationEntry>("/api/line/registration/entry");
+}
+
+export function createLineRegistrationSession(idToken: string) {
+  return publicApiFetch<LineRegistrationSessionResponse>("/api/line/registration/sessions", {
+    method: "POST",
+    body: JSON.stringify({ id_token: idToken }),
+  });
+}
+
+export function getLineRegistrationForm(token: string) {
+  return publicApiFetch<LineRegistrationFormState>("/api/line/registration/form", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function submitLineRegistration(
+  token: string,
+  idempotencyKey: string,
+  body: Record<string, string>,
+) {
+  return publicApiFetch<LineRegistrationSubmitResponse>("/api/line/registration/submissions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 export function createProjectType(body: ProjectTypeCreateRequest) {
   return apiFetch<ProjectTypeListItem>("/api/project-types", {
     method: "POST",

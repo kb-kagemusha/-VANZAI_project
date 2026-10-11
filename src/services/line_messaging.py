@@ -66,7 +66,12 @@ class LineMessagingClient:
     def reply_text(self, reply_token: str, text: str) -> None:
         if not reply_token:
             return
-        self._post(REPLY_URL, {"replyToken": reply_token, "messages": [{"type": "text", "text": text}]})
+        self.reply_messages(reply_token, [{"type": "text", "text": text}])
+
+    def reply_messages(self, reply_token: str, messages: list[dict]) -> None:
+        if not reply_token or not messages:
+            return
+        self._post(REPLY_URL, {"replyToken": reply_token, "messages": messages})
 
     def profile_name(self, user_id: str) -> str | None:
         settings = line_settings()

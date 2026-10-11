@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from src.domain.line_registration_entry import is_registration_keyword, registration_button_messages
 from src.models.base import generate_ulid
 from src.models.enums import AuditAction
 from src.models.line_order import (
@@ -354,8 +355,13 @@ class LineOrderService:
         line_user_id = source.get("userId") if isinstance(source.get("userId"), str) else ""
 
         if event_type == "message":
-            outcome, reply = self._handle_message(event, line_user_id)
-            self._reply(reply_token, reply)
+            message = event.get("message") if isinstance(event.get("message"), dict) else {}
+            text = message.get("text") if message.get("type") == "text" and isinstance(message.get("text"), str) else ""
+            if text and is_registration_keyword(text):
+                outcome = self._handle_registration_keyword(event, reply_token)
+            else:
+                outcome, reply = self._handle_message(event, line_user_id)
+                self._reply(reply_token, reply)
         elif event_type == "postback":
             outcome, reply = self._handle_postback(event, line_user_id)
             self._reply(reply_token, reply)
@@ -568,6 +574,25 @@ class LineOrderService:
             sent += 1
         self.session.flush()
         return sent
+
+    def _handle_registration_keyword(self, event: dict, reply_token: str) -> str:
+        """「登録」は辞退理由にしない。入口が有効な1対1のときだけ共通ボタンを返す。"""
+        source = event.get("source") if isinstance(event.get("source"), dict) else {}
+        if source.get("type") != "user":
+            return "registration_ignored"
+        messages = registration_button_messages()
+        if not messages:
+            return "registration_closed"
+        self._reply_messages(reply_token, messages)
+        return "registration_button"
+
+    def _reply_messages(self, reply_token: str, messages: list[dict]) -> None:
+        if not reply_token or not messages:
+            return
+        try:
+            self.client.reply_messages(reply_token, messages)
+        except Exception:
+            return
 
     def _reply(self, reply_token: str, text: str | None) -> None:
         if not text:

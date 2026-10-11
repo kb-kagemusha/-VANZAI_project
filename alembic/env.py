@@ -2,10 +2,12 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, engine_from_config, pool, text
+from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, engine_from_config, pool
 
 from alembic import context
 from alembic.ddl.impl import DefaultImpl
+
+from src.alembic_support import widen_existing_version_num
 
 # Import models for autogenerate
 from src.models.base import Base
@@ -44,24 +46,6 @@ def _wide_version_table(self, *, version_table, version_table_schema, version_ta
 DefaultImpl.version_table_impl = _wide_version_table
 
 
-def _widen_existing_version_num(connection) -> None:
-    width = connection.execute(
-        text(
-            """
-            SELECT character_maximum_length
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'alembic_version'
-              AND column_name = 'version_num'
-            """
-        )
-    ).scalar()
-    if width is not None and width < 128:
-        connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
-    if connection.in_transaction():
-        connection.commit()
-
-
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
@@ -85,7 +69,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        _widen_existing_version_num(connection)
+        widen_existing_version_num(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata

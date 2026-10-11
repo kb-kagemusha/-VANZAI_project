@@ -36,6 +36,7 @@ class FakeLine:
     def __init__(self):
         self.pushes: list[tuple[str, list[dict]]] = []
         self.replies: list[tuple[str, str]] = []
+        self.messages: list[tuple[str, list[dict]]] = []
         self.push_status = 200
 
     def push_messages(self, to: str, messages: list[dict]) -> LineCallResult:
@@ -48,6 +49,9 @@ class FakeLine:
 
     def reply_text(self, reply_token: str, text: str) -> None:
         self.replies.append((reply_token, text))
+
+    def reply_messages(self, reply_token: str, messages: list[dict]) -> None:
+        self.messages.append((reply_token, messages))
 
     def profile_name(self, user_id: str) -> str | None:
         return "テストLINE"
@@ -482,3 +486,90 @@ def test_reminder_is_sent_once_after_the_due_date(
     db_session.expire_all()
     assert service.send_due_reminders(now=datetime(2026, 10, 8, 21, 0, tzinfo=timezone(timedelta(hours=9)))) == 0
     assert db_session.get(OrderRequestDelivery, delivery_id).ack_reminded_at is not None
+
+
+def test_registration_keyword_is_not_a_decline_reason(api_client, db_session, ops_user, pdf_root, line_env, fake_line, monkeypatch):
+    monkeypatch.delenv("LINE_WORKER_REGISTRATION_ENABLED", raising=False)
+    worker = _worker(db_session, "稼働者A")
+    confirmed = _confirm(api_client, ops_user, worker.id)
+    delivery_id = confirmed["deliveries"][0]["id"]
+    _link(api_client, ops_user, worker.id, "U123")
+    sent = api_client.post(
+        f"/api/order-requests/deliveries/{delivery_id}/line-send",
+        headers=_auth(ops_user.username),
+    )
+    assert sent.status_code == 200, sent.text
+    declined = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "postback",
+                    "replyToken": "reply-decline",
+                    "source": {"type": "user", "userId": "U123"},
+                    "postback": {"data": f"or_decline:{delivery_id}"},
+                }
+            ]
+        },
+        event_id="reg-decline",
+    )
+    assert declined.status_code == 200
+    keyword = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "reply-register",
+                    "source": {"type": "user", "userId": "U123"},
+                    "message": {"type": "text", "text": " 登録 "},
+                }
+            ]
+        },
+        event_id="reg-keyword",
+    )
+    assert keyword.status_code == 200
+    db_session.expire_all()
+    stored = db_session.get(OrderRequestDelivery, delivery_id)
+    assert stored.ack_status == "decline_pending"
+    assert stored.decline_reason is None
+    assert fake_line.messages == []
+
+    monkeypatch.setenv("LINE_WORKER_REGISTRATION_ENABLED", "1")
+    monkeypatch.setenv("LINE_LIFF_ID", "liff-test")
+    monkeypatch.setenv("LINE_LOGIN_CHANNEL_ID", "login-channel")
+    direct = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "reply-button",
+                    "source": {"type": "user", "userId": "U123"},
+                    "message": {"type": "text", "text": "登録"},
+                }
+            ]
+        },
+        event_id="reg-button",
+    )
+    assert direct.status_code == 200
+    assert fake_line.messages[-1][1][0]["template"]["actions"][0]["uri"] == "https://liff.line.me/liff-test"
+    assert "U123" not in json.dumps(fake_line.messages[-1][1])
+
+    group = _webhook(
+        api_client,
+        {
+            "events": [
+                {
+                    "type": "message",
+                    "replyToken": "reply-group",
+                    "source": {"type": "group", "groupId": "G1"},
+                    "message": {"type": "text", "text": "登録"},
+                }
+            ]
+        },
+        event_id="reg-group",
+    )
+    assert group.status_code == 200
+    assert len(fake_line.messages) == 1
+
