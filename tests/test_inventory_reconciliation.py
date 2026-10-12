@@ -34,7 +34,7 @@ PAYGATE POS ¥1,960
 def _make_confirmed_settlement_row(db_session, *, transaction_count: int = 9) -> OcrExtractedRow:
     service = OcrService(db_session)
     with patch("src.services.ocr_service.preprocess_for_ocr", return_value=object()):
-        with patch("src.services.ocr_service.run_ocr", return_value=run_ocr_from_text(SETTLEMENT_TEXT)):
+        with patch("src.services.ocr_service.run_settlement_ocr", return_value=run_ocr_from_text(SETTLEMENT_TEXT)):
             image, _ = service.upload_image(
                 file_bytes=SETTLEMENT_TEXT.encode("utf-8") + b"receipt.png",
                 file_name="receipt.png",

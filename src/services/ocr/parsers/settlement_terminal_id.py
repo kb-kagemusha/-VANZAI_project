@@ -85,13 +85,26 @@ def normalize_settlement_terminal_id(value: str | None) -> str | None:
     """Return canonical terminal_id or None if the value does not match the rules."""
     if not value:
         return None
-    cleaned = _fold_ocr_accents(value.strip().lower()).translate(_OCR_SHORT_ID_FIXES).replace(" ", "")
+    cleaned = unicodedata.normalize("NFKC", value.strip()).lower().replace(" ", "")
     if _SETTLEMENT_TERMINAL_ID_RE.fullmatch(cleaned):
         return cleaned
-    hex_only = re.sub(r"[^0-9a-f]", "", cleaned)
-    if len(hex_only) == 32 and _HEX32_RE.fullmatch(hex_only):
-        return format_terminal_id_from_hex32(hex_only)
+    if _HEX32_RE.fullmatch(cleaned):
+        return format_terminal_id_from_hex32(cleaned)
     return None
+
+
+def normalize_ocr_settlement_terminal_id(value: str | None) -> str | None:
+    """Bounded OCR repair; manual/API input uses strict normalization above."""
+    if not value:
+        return None
+    strict = normalize_settlement_terminal_id(value)
+    if strict:
+        return strict
+    raw = _fold_ocr_accents(value.strip().lower()).replace(" ", "")
+    repaired = raw.translate(_OCR_SHORT_ID_FIXES)
+    if sum(a != b for a, b in zip(raw, repaired)) > 2:
+        return None
+    return normalize_settlement_terminal_id(repaired)
 
 
 def _repair_98f0_short_id_candidate(value: str) -> str | None:

@@ -29,7 +29,7 @@ PAYGATE POS ¥1,960
 
 def _upload_and_parse(db_session, service: OcrService, text: str, filename: str = "receipt.png"):
     with patch("src.services.ocr_service.preprocess_for_ocr", return_value=object()):
-        with patch("src.services.ocr_service.run_ocr", return_value=run_ocr_from_text(text)):
+        with patch("src.services.ocr_service.run_settlement_ocr", return_value=run_ocr_from_text(text)):
             image, _ = service.upload_image(
                 file_bytes=text.encode("utf-8") + filename.encode(),
                 file_name=filename,
@@ -157,7 +157,7 @@ def test_settlement_reparse_targets_only_requested_row(db_session):
     db_session.flush()
 
     with patch("src.services.ocr_service.preprocess_for_ocr", return_value=object()):
-        with patch("src.services.ocr_service.run_ocr", return_value=run_ocr_from_text(SETTLEMENT_TEXT)):
+        with patch("src.services.ocr_service.run_settlement_ocr", return_value=run_ocr_from_text(SETTLEMENT_TEXT)):
             job = service.reparse_settlement_row(row_id=original.id, executed_by="tester")
     db_session.flush()
     assert job.row_count == 1

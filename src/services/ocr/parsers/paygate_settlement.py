@@ -26,7 +26,7 @@ from src.services.ocr.parsers.settlement_terminal_id import (
     recover_terminal_id_from_partial_segments,
     format_terminal_id_from_hex32,
     is_valid_settlement_terminal_short_id,
-    normalize_settlement_terminal_id,
+    normalize_ocr_settlement_terminal_id as normalize_settlement_terminal_id,
     normalize_settlement_terminal_short_id,
 )
 from src.services.ocr.parsers.settlement_layout import (
@@ -1028,29 +1028,25 @@ def _extract_terminal_id(text: str, short_id_hint: str | None = None) -> str | N
     if split_32:
         candidate = normalize_settlement_terminal_id(f"{split_32.group(1)}{split_32.group(2)}")
         if candidate:
-            return candidate
+            return _repair_terminal_id_split_suffix(text, candidate)
 
     split_match = _TERMINAL_SPLIT_RE.search(text)
     if split_match:
         candidate = normalize_settlement_terminal_id(f"{split_match.group(1)}{split_match.group(2)}")
         if candidate:
-            return candidate
+            return _repair_terminal_id_split_suffix(text, candidate)
 
     terminal_match = _TERMINAL_RE.search(text)
     if terminal_match:
         candidate = normalize_settlement_terminal_id(terminal_match.group(1))
         if candidate:
-            return candidate
+            return _repair_terminal_id_split_suffix(text, candidate)
 
     fallback = _TERMINAL_FALLBACK_RE.search(text)
     if fallback:
         candidate = normalize_settlement_terminal_id(fallback.group(1))
         if candidate:
-            return candidate
-
-    compact_candidate = _extract_terminal_id_from_compact_hex(text, short_id_hint)
-    if compact_candidate and _score_terminal_id_candidate(compact_candidate, short_id_hint, text=text) >= 0:
-        return compact_candidate
+            return _repair_terminal_id_split_suffix(text, candidate)
 
     explicit_candidate = _extract_terminal_id_from_explicit_pattern(text, short_id_hint)
     if explicit_candidate:
