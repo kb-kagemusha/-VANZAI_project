@@ -78,6 +78,12 @@ def _full_body() -> dict:
         "prefecture": "東京都",
         "address1": "千代田区1-1",
         "address2": "建物",
+        "email": "worker@example.com",
+        "nearest_station": "新宿駅",
+        "station_walk_minutes": "0",
+        "emergency_contact_phone": "09000002222",
+        "emergency_contact_name": "山田 花子",
+        "emergency_contact_relationship": "実母",
     }
 
 

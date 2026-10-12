@@ -679,6 +679,8 @@ export interface WorkerListItem {
   sole_proprietor_name: string | null;
   emergency_contact_name_kana: string | null;
   emergency_contact_phone: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
   gender: string | null;
   invoice_registration_status: string | null;
   invoice_number: string | null;
@@ -705,6 +707,8 @@ export interface WorkerCreateRequest {
   sole_proprietor_name: string | null;
   emergency_contact_name_kana: string | null;
   emergency_contact_phone: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
   gender: string | null;
   invoice_registration_status: string | null;
   invoice_number: string | null;

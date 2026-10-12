@@ -6208,6 +6208,8 @@ async def list_workers(
             sole_proprietor_name=w.sole_proprietor_name,
             emergency_contact_name_kana=w.emergency_contact_name_kana,
             emergency_contact_phone=w.emergency_contact_phone,
+            emergency_contact_name=w.emergency_contact_name,
+            emergency_contact_relationship=w.emergency_contact_relationship,
             gender=w.gender,
             invoice_registration_status=w.invoice_registration_status,
             invoice_number=w.invoice_number,
@@ -6251,6 +6253,12 @@ async def create_worker_master(
                 raise HTTPException(status_code=404, detail="Supplier not found")
             supplier_name = supplier.name
 
+        if request.profile is not None and not all((
+            (request.emergency_contact_phone or "").strip(),
+            (request.emergency_contact_name or "").strip(),
+            (request.emergency_contact_relationship or "").strip(),
+        )):
+            raise HTTPException(status_code=422, detail="緊急連絡先の電話番号・お名前・関係を入力してください。")
         worker = Worker(
             name=request.name.strip(),
             furigana=request.furigana.strip() if request.furigana else None,
@@ -6259,6 +6267,8 @@ async def create_worker_master(
             sole_proprietor_name=request.sole_proprietor_name.strip() if request.sole_proprietor_name else None,
             emergency_contact_name_kana=request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None,
             emergency_contact_phone=request.emergency_contact_phone.strip() if request.emergency_contact_phone else None,
+            emergency_contact_name=request.emergency_contact_name.strip() if request.emergency_contact_name else None,
+            emergency_contact_relationship=request.emergency_contact_relationship.strip() if request.emergency_contact_relationship else None,
             gender=request.gender.strip() if request.gender else None,
             invoice_registration_status=request.invoice_registration_status.strip() if request.invoice_registration_status else None,
             invoice_number=request.invoice_number.strip() if request.invoice_number else None,
@@ -6307,6 +6317,8 @@ async def create_worker_master(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,
@@ -6346,6 +6358,8 @@ def _worker_list_item(worker, supplier_name: str | None) -> WorkerListItem:
         sole_proprietor_name=worker.sole_proprietor_name,
         emergency_contact_name_kana=worker.emergency_contact_name_kana,
         emergency_contact_phone=worker.emergency_contact_phone,
+        emergency_contact_name=worker.emergency_contact_name,
+        emergency_contact_relationship=worker.emergency_contact_relationship,
         gender=worker.gender,
         invoice_registration_status=worker.invoice_registration_status,
         invoice_number=worker.invoice_number,
@@ -6440,6 +6454,8 @@ async def update_worker_master(
             "sole_proprietor_name": worker.sole_proprietor_name,
             "emergency_contact_name_kana": worker.emergency_contact_name_kana,
             "emergency_contact_phone": worker.emergency_contact_phone,
+            "emergency_contact_name": worker.emergency_contact_name,
+            "emergency_contact_relationship": worker.emergency_contact_relationship,
             "gender": worker.gender,
             "invoice_registration_status": worker.invoice_registration_status,
             "invoice_number": worker.invoice_number,
@@ -6455,7 +6471,10 @@ async def update_worker_master(
         worker.phone = request.phone.strip() if request.phone else None
         worker.sole_proprietor_name = request.sole_proprietor_name.strip() if request.sole_proprietor_name else None
         worker.emergency_contact_name_kana = request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None
-        worker.emergency_contact_phone = request.emergency_contact_phone.strip() if request.emergency_contact_phone else None
+        for field in ("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"):
+            if field in request.model_fields_set:
+                value = getattr(request, field)
+                setattr(worker, field, value.strip() if value else None)
         worker.gender = request.gender.strip() if request.gender else None
         worker.invoice_registration_status = request.invoice_registration_status.strip() if request.invoice_registration_status else None
         worker.invoice_number = request.invoice_number.strip() if request.invoice_number else None
@@ -6494,6 +6513,8 @@ async def update_worker_master(
                 "sole_proprietor_name": worker.sole_proprietor_name,
                 "emergency_contact_name_kana": worker.emergency_contact_name_kana,
                 "emergency_contact_phone": worker.emergency_contact_phone,
+                "emergency_contact_name": worker.emergency_contact_name,
+                "emergency_contact_relationship": worker.emergency_contact_relationship,
                 "gender": worker.gender,
                 "invoice_registration_status": worker.invoice_registration_status,
                 "invoice_number": worker.invoice_number,
@@ -6516,6 +6537,8 @@ async def update_worker_master(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,
@@ -6600,6 +6623,8 @@ async def patch_worker_quals(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,

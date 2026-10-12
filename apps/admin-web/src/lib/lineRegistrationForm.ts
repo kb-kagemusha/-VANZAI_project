@@ -15,6 +15,9 @@ export type LineRegistrationInput = {
   address2: string;
   nearest_station: string;
   station_walk_minutes: string;
+  emergency_contact_phone: string;
+  emergency_contact_name: string;
+  emergency_contact_relationship: string;
 };
 
 export const emptyLineRegistrationInput = (): LineRegistrationInput => ({
@@ -31,6 +34,9 @@ export const emptyLineRegistrationInput = (): LineRegistrationInput => ({
   address2: "",
   nearest_station: "",
   station_walk_minutes: "",
+  emergency_contact_phone: "",
+  emergency_contact_name: "",
+  emergency_contact_relationship: "",
 });
 
 export function registrationInputAfterSubjectChange(
@@ -133,6 +139,12 @@ export function lineRegistrationPayload(input: LineRegistrationInput, linked: bo
       }
     });
   const addressTouched = Boolean(trimmed.postal_code || trimmed.prefecture || trimmed.address1 || trimmed.address2);
+  const contactTouched = Boolean(trimmed.emergency_contact_phone || trimmed.emergency_contact_name || trimmed.emergency_contact_relationship);
+  if (contactTouched) {
+    payload.emergency_contact_phone = trimmed.emergency_contact_phone;
+    payload.emergency_contact_name = trimmed.emergency_contact_name;
+    payload.emergency_contact_relationship = trimmed.emergency_contact_relationship;
+  }
   if (addressTouched) {
     payload.postal_code = trimmed.postal_code;
     payload.prefecture = trimmed.prefecture;

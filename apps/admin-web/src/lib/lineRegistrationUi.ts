@@ -1,7 +1,7 @@
 import type { LineRegistrationInput } from "./lineRegistrationForm";
 
 export const REGISTRATION_PRIVACY_NOTICE =
-  "ご入力いただいた個人情報は、当社の稼働者情報の登録・更新、お仕事のご案内および業務連絡のために利用し、これらの目的以外には利用しません。";
+  "ご入力いただいた個人情報は、当社の稼働者情報の登録・更新、お仕事のご案内、業務連絡および緊急時の連絡のために利用し、これらの目的以外には利用しません。";
 
 export const PREFECTURES = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -40,6 +40,7 @@ export function validateRegistrationInput(input: LineRegistrationInput, linked: 
   if (!linked && !v.phone) errors.phone = "電話番号を入力してください";
   else if (v.phone && !/^[0-9+\-]{1,20}$/.test(v.phone)) errors.phone = "半角数字で入力してください（ハイフンも使えます）";
   if (v.email && (!v.email.includes("@") || v.email.length > 255)) errors.email = "メールアドレスを確認してください";
+  if (!linked && !v.email) errors.email = "メールアドレスを入力してください";
   if (!linked && !v.birth_date) errors.birth_date = "生年月日を入力してください";
   if (v.birth_date) {
     const date = new Date(`${v.birth_date}T00:00:00Z`);
@@ -53,8 +54,17 @@ export function validateRegistrationInput(input: LineRegistrationInput, linked: 
     if (!v.address1) errors.address1 = "市区町村・番地を入力してください";
   }
   if (v.nearest_station.length > 100) errors.nearest_station = "100文字以内で入力してください";
+  if (!linked && !v.nearest_station) errors.nearest_station = "最寄り駅を入力してください";
+  if (!linked && !v.station_walk_minutes) errors.station_walk_minutes = "最寄り駅までの徒歩時間を入力してください";
   if (v.station_walk_minutes && (!/^[0-9]{1,3}$/.test(v.station_walk_minutes) || Number(v.station_walk_minutes) > 300)) {
     errors.station_walk_minutes = "0〜300分の整数で入力してください";
+  }
+  const contact = ["emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"] as const;
+  if (!linked || contact.some((key) => Boolean(v[key]))) {
+    if (!v.emergency_contact_phone) errors.emergency_contact_phone = "緊急連絡先の電話番号を入力してください";
+    else if (!/^[0-9+\-]{1,20}$/.test(v.emergency_contact_phone)) errors.emergency_contact_phone = "電話番号を半角数字で入力してください";
+    if (!v.emergency_contact_name || v.emergency_contact_name.length > 200) errors.emergency_contact_name = "お名前を200文字以内で入力してください";
+    if (!v.emergency_contact_relationship || v.emergency_contact_relationship.length > 50) errors.emergency_contact_relationship = "関係を50文字以内で入力してください";
   }
   return errors;
 }

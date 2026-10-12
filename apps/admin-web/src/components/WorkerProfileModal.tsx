@@ -45,6 +45,9 @@ export interface WorkerIntakeForm {
   name: string;
   email: string;
   phone: string;
+  emergencyContactPhone: string;
+  emergencyContactName: string;
+  emergencyContactRelationship: string;
   supplierId: string;
   notes: string;
   isActive: boolean;
@@ -96,6 +99,9 @@ export function emptyIntakeForm(): WorkerIntakeForm {
     name: "",
     email: "",
     phone: "",
+    emergencyContactPhone: "",
+    emergencyContactName: "",
+    emergencyContactRelationship: "",
     supplierId: "",
     notes: "",
     isActive: true,
@@ -257,6 +263,9 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
     name: worker.name,
     email: worker.email ?? "",
     phone: worker.phone ?? "",
+    emergencyContactPhone: worker.emergency_contact_phone ?? "",
+    emergencyContactName: worker.emergency_contact_name ?? "",
+    emergencyContactRelationship: worker.emergency_contact_relationship ?? "",
     supplierId: worker.introducer_supplier_id ?? "",
     notes: worker.notes ?? "",
     isActive: worker.is_active,
@@ -293,6 +302,12 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
 }
 
 export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | null) {
+  if (!base && (!form.emergencyContactPhone.trim() || !form.emergencyContactName.trim() || !form.emergencyContactRelationship.trim())) {
+    throw new Error("緊急連絡先の電話番号・お名前・関係を入力してください");
+  }
+  if (form.emergencyContactPhone.trim() && !/^[0-9+\-]{1,20}$/.test(form.emergencyContactPhone.trim())) {
+    throw new Error("緊急連絡先の電話番号は半角数字で入力してください");
+  }
   const profile: WorkerProfileInput = {
     birth_date: form.birthDate || null,
     marital_status: form.maritalStatus || null,
@@ -357,7 +372,9 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
     phone: optionalText(form.phone),
     sole_proprietor_name: base?.sole_proprietor_name ?? null,
     emergency_contact_name_kana: base?.emergency_contact_name_kana ?? null,
-    emergency_contact_phone: base?.emergency_contact_phone ?? null,
+    emergency_contact_phone: optionalText(form.emergencyContactPhone),
+    emergency_contact_name: optionalText(form.emergencyContactName),
+    emergency_contact_relationship: optionalText(form.emergencyContactRelationship),
     gender: base?.gender ?? null,
     invoice_registration_status: base?.invoice_registration_status ?? null,
     invoice_number: base?.invoice_number ?? null,
@@ -634,6 +651,18 @@ export function WorkerProfileModal({
                     <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                   ))}
                 </select>
+              </label>
+              <label className="order-field order-span-4">
+                <span className="order-field-label">緊急連絡先の電話番号{mode === "create" ? <span style={{ color: "#dc2626" }}> *</span> : null}</span>
+                <input type="tel" inputMode="tel" maxLength={20} value={form.emergencyContactPhone} onChange={(event) => patch({ emergencyContactPhone: event.target.value })} placeholder="09012345678" />
+              </label>
+              <label className="order-field order-span-4">
+                <span className="order-field-label">緊急連絡先のお名前{mode === "create" ? <span style={{ color: "#dc2626" }}> *</span> : null}</span>
+                <input maxLength={200} value={form.emergencyContactName} onChange={(event) => patch({ emergencyContactName: event.target.value })} placeholder="山田 花子" />
+              </label>
+              <label className="order-field order-span-4">
+                <span className="order-field-label">ご本人との関係{mode === "create" ? <span style={{ color: "#dc2626" }}> *</span> : null}</span>
+                <input maxLength={50} value={form.emergencyContactRelationship} onChange={(event) => patch({ emergencyContactRelationship: event.target.value })} placeholder="実父・実兄・配偶者など" />
               </label>
               <label className="order-field order-span-4">
                 <span className="order-field-label">備考</span>

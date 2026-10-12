@@ -210,7 +210,7 @@ def _waiting_while_holding(connection, waiting_table: str, held_table: str) -> b
     return pid is not None
 
 
-@pytest.mark.parametrize("changed_field", ["phone", "nearest_station", "station_walk_minutes"])
+@pytest.mark.parametrize("changed_field", ["phone", "nearest_station", "station_walk_minutes", "emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"])
 def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine, changed_field):
     request_id, ticket, _edit, _token = _prepare(approval_sessions)
     holder = conflict_engine.connect()
@@ -247,7 +247,7 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
             conflict_engine,
             lambda connection: _waiting_while_holding(connection, "workers", "registration_requests"),
         )
-        values = {"phone": "09000000099", "nearest_station": "別の管理者の駅", "station_walk_minutes": 99}
+        values = {"phone": "09000000099", "nearest_station": "別の管理者の駅", "station_walk_minutes": 99, "emergency_contact_phone": "09000008888", "emergency_contact_name": "変更された連絡先", "emergency_contact_relationship": "実兄"}
         holder.execute(text(f"UPDATE workers SET {changed_field} = :value WHERE id = :id"), {"id": WORKER_ID, "value": values[changed_field]})
         transaction.commit()
     finally:
@@ -266,6 +266,9 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
         station = check.execute(text("SELECT nearest_station, station_walk_minutes FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
         assert station.nearest_station == ("別の管理者の駅" if changed_field == "nearest_station" else "旧駅")
         assert station.station_walk_minutes == (99 if changed_field == "station_walk_minutes" else 10)
+        emergency = check.execute(text("SELECT emergency_contact_phone, emergency_contact_name, emergency_contact_relationship FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+        for index, field in enumerate(("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship")):
+            assert emergency[index] == (values[field] if changed_field == field else None)
         assert status == "pending"
     finally:
         check.rollback()

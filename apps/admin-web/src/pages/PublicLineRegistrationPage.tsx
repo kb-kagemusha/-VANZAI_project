@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, MapPin, Phone, ShieldCheck, UserRound } from "lucide-react";
 import registrationLogo from "../assets/registration-logo.png";
 import "../styles/lineRegistration.css";
 import { PREFECTURES, REGISTRATION_PRIVACY_NOTICE, todayInJapan, validateRegistrationInput, type RegistrationFieldErrors } from "../lib/lineRegistrationUi";
+import { lookupPostalAddress, normalizePostalCode, type PostalAddress } from "../lib/postalAddress";
 
 import {
   ApiError,
@@ -46,6 +47,9 @@ const fields: Array<{ key: keyof LineRegistrationInput; label: string; type?: st
   { key: "address2", label: "建物名" },
   { key: "nearest_station", label: "最寄り駅" },
   { key: "station_walk_minutes", label: "最寄り駅までの徒歩時間" },
+  { key: "emergency_contact_phone", label: "緊急連絡先の電話番号" },
+  { key: "emergency_contact_name", label: "緊急連絡先のお名前" },
+  { key: "emergency_contact_relationship", label: "ご本人との関係" },
 ];
 
 let memoryToken = "";
@@ -101,6 +105,47 @@ export function PublicLineRegistrationPage() {
   const [view, setView] = useState<"input" | "confirm" | "receipt">("input");
   const [fieldErrors, setFieldErrors] = useState<RegistrationFieldErrors>({});
   const [receiptSaved, setReceiptSaved] = useState(false);
+  const [postalMessage, setPostalMessage] = useState("");
+  const [postalLoading, setPostalLoading] = useState(false);
+  const [postalChoices, setPostalChoices] = useState<{ postal: string; addresses: PostalAddress[] }>({ postal: "", addresses: [] });
+  const addressEditVersion = useRef(0);
+
+  useEffect(() => {
+    const postal = screen.input.postal_code;
+    setPostalChoices({ postal: "", addresses: [] });
+    setPostalMessage("");
+    setPostalLoading(false);
+    if (phase !== "form" || view !== "input" || holdingSubmission || !/^[0-9]{7}$/.test(postal)) return;
+    setPostalLoading(true);
+    const controller = new AbortController();
+    let active = true;
+    const beforeEdit = addressEditVersion.current;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      setPostalMessage("住所を検索しています…");
+      deadline = setTimeout(() => {
+        controller.abort();
+        if (active) setPostalLoading(false);
+        if (active) setPostalMessage("住所を取得できませんでした。手入力で続けられます。");
+      }, 10000);
+      lookupPostalAddress(postal, controller.signal).then((addresses) => {
+        if (!active) return;
+        if (addresses.length === 0) {
+          setPostalMessage("該当する住所が見つかりません。郵便番号を確認するか、手入力してください。");
+        } else if (addresses.length === 1 && beforeEdit === addressEditVersion.current) {
+          setScreen((current) => current.input.postal_code === postal ? { ...current, input: { ...current.input, prefecture: addresses[0].prefecture, address1: addresses[0].address } } : current);
+          setFieldErrors((current) => ({ ...current, prefecture: undefined, address1: undefined }));
+          setPostalMessage("住所を入力しました。続けて番地を入力してください。");
+        } else {
+          setPostalChoices({ postal, addresses });
+          setPostalMessage(addresses.length > 1 ? "候補が複数あります。住所を選択してください。" : "手入力した住所を残しました。必要なら検索結果を選択してください。");
+        }
+      }).catch(() => {
+        if (active && !controller.signal.aborted) setPostalMessage("住所を取得できませんでした。手入力で続けられます。");
+      }).finally(() => { clearTimeout(deadline); if (active) setPostalLoading(false); });
+    }, 300);
+    return () => { active = false; clearTimeout(timer); clearTimeout(deadline); controller.abort(); };
+  }, [screen.input.postal_code, phase, view, holdingSubmission]);
 
   useEffect(() => {
     const previous = document.title;
@@ -289,6 +334,7 @@ export function PublicLineRegistrationPage() {
 
   const jumpToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   function confirmInput() {
+    if (postalLoading) return;
     const errors = validateRegistrationInput(screen.input, screen.linked);
     if (screen.linked && !Object.values(screen.input).some((value) => value.trim())) {
       setScreen((current) => ({ ...current, error: "変更する項目を1つ以上入力してください。" }));
@@ -309,6 +355,7 @@ export function PublicLineRegistrationPage() {
     last_name: "山田", first_name: "太郎", last_name_furigana: "やまだ", first_name_furigana: "たろう",
     phone: "09012345678", email: "example@mail.com", postal_code: "1234567",
     address1: "〇〇市〇〇町1-2-3", address2: "〇〇マンション101号室", nearest_station: "新宿駅", station_walk_minutes: "10",
+    emergency_contact_phone: "09012345678", emergency_contact_name: "山田 花子", emergency_contact_relationship: "実父・実兄・配偶者など",
   };
   const autocomplete: Partial<Record<keyof LineRegistrationInput, string>> = {
     last_name: "family-name", first_name: "given-name", phone: "tel", email: "email",
@@ -316,15 +363,18 @@ export function PublicLineRegistrationPage() {
   };
   function renderField(key: keyof LineRegistrationInput) {
     const field = fields.find((item) => item.key === key)!;
-    const required = !screen.linked && !["email", "address2", "nearest_station", "station_walk_minutes"].includes(key);
+    const required = !screen.linked && key !== "address2";
     const error = fieldErrors[key];
     const change = (value: string) => {
+      if (key === "prefecture" || key === "address1") addressEditVersion.current += 1;
+      if (key === "postal_code") value = normalizePostalCode(value);
       setScreen((current) => ({ ...current, input: { ...current.input, [key]: value }, error: "" }));
       setFieldErrors((current) => ({ ...current, [key]: undefined }));
     };
     const properties = {
       id: `lr-${key}`, name: key, value: screen.input[key], autoComplete: autocomplete[key] ?? "off",
       "aria-invalid": Boolean(error), "aria-describedby": error ? `lr-error-${key}` : undefined,
+      "aria-required": required, required,
     };
     return <div className="lr-field" key={key}>
       <label htmlFor={`lr-${key}`}><span>{field.label}</span><span className={`lr-badge ${required ? "lr-badge-required" : ""}`}>{required ? "必須" : "任意"}</span></label>
@@ -333,14 +383,23 @@ export function PublicLineRegistrationPage() {
       </select> : <div className={key === "station_walk_minutes" ? "lr-walk-input" : "lr-input-wrap"}>
         {key === "station_walk_minutes" ? <span aria-hidden="true">徒歩</span> : null}
         <input {...properties} readOnly={holdingSubmission}
-          type={key === "phone" ? "tel" : key === "email" ? "email" : field.type ?? "text"}
-          inputMode={["phone", "postal_code", "station_walk_minutes"].includes(key) ? "numeric" : key === "email" ? "email" : "text"}
+          type={["phone", "emergency_contact_phone"].includes(key) ? "tel" : key === "email" ? "email" : field.type ?? "text"}
+          inputMode={["phone", "postal_code", "station_walk_minutes", "emergency_contact_phone"].includes(key) ? "numeric" : key === "email" ? "email" : "text"}
           max={key === "birth_date" ? todayInJapan() : undefined}
-          maxLength={key === "postal_code" ? 7 : key === "station_walk_minutes" ? 3 : key === "nearest_station" ? 100 : undefined}
+          maxLength={key === "postal_code" ? 8 : key === "station_walk_minutes" ? 3 : key === "nearest_station" ? 100 : key === "emergency_contact_name" ? 200 : key === "emergency_contact_relationship" ? 50 : key === "emergency_contact_phone" ? 20 : undefined}
           placeholder={placeholders[key]} onChange={(event) => change(event.target.value)} />
         {key === "station_walk_minutes" ? <span aria-hidden="true">分</span> : null}
       </div>}
       {key === "postal_code" ? <span className="lr-hint">ハイフンなし・半角数字7桁</span> : null}
+      {key === "postal_code" && postalMessage ? <span className="lr-hint" role="status">{postalMessage}</span> : null}
+      {key === "postal_code" && postalChoices.addresses.length ? <select aria-label="郵便番号の住所候補" defaultValue="" disabled={holdingSubmission} onChange={(event) => {
+        const address = postalChoices.addresses[Number(event.target.value)];
+        if (!event.target.value || !address) return;
+        addressEditVersion.current += 1;
+        setScreen((current) => current.input.postal_code === postalChoices.postal ? { ...current, input: { ...current.input, prefecture: address.prefecture, address1: address.address } } : current);
+        setPostalMessage("住所を入力しました。続けて番地を入力してください。");
+        setPostalChoices({ postal: "", addresses: [] });
+      }}><option value="">検索結果から住所を選択</option>{postalChoices.addresses.map((item, index) => <option key={index} value={index}>{item.prefecture}{item.address}</option>)}</select> : null}
       {error ? <span id={`lr-error-${key}`} className="lr-field-error" role="alert">{error}</span> : null}
     </div>;
   }
@@ -366,10 +425,11 @@ export function PublicLineRegistrationPage() {
             <section className="lr-card"><div className="lr-section-heading"><span><UserRound size={19} /></span><div><h2>お名前・生年月日</h2><p>ご本人の情報を入力してください</p></div></div><div className="lr-fields"><div className="lr-pair">{renderField("last_name")}{renderField("first_name")}</div><div className="lr-pair">{renderField("last_name_furigana")}{renderField("first_name_furigana")}</div>{renderField("birth_date")}</div></section>
             <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>連絡先</h2><p>お仕事のご案内や業務連絡に使用します</p></div></div><div className="lr-fields">{renderField("phone")}{renderField("email")}</div></section>
             <section className="lr-card"><div className="lr-section-heading"><span><MapPin size={19} /></span><div><h2>住所・アクセス</h2><p>住所を変更する場合は、郵便番号から番地まで入力してください</p></div></div><div className="lr-fields">{renderField("postal_code")}{renderField("prefecture")}{renderField("address1")}{renderField("address2")}<div className="lr-divider" />{renderField("nearest_station")}{renderField("station_walk_minutes")}</div></section>
+            <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>緊急連絡先</h2><p>緊急時に連絡できる方をご入力ください</p></div></div><div className="lr-fields">{renderField("emergency_contact_phone")}{renderField("emergency_contact_name")}{renderField("emergency_contact_relationship")}{screen.linked ? <p className="lr-hint">変更する場合は、電話番号・お名前・関係をまとめて入力してください。</p> : null}</div></section>
             {screen.error ? <div className="lr-error" role="alert">{screen.error}</div> : null}
             {screen.message ? <div className="lr-notice" role="status">{screen.message}</div> : null}
             {holdingSubmission ? <p className="lr-hint">直前の送信内容を保持しています。内容を変える場合は「別の内容で申請する」を選んでください。</p> : null}
-            <div className="lr-action-bar"><button className="lr-button lr-primary" type="submit" disabled={sending}>入力内容を確認する<ArrowRight size={18} /></button><p>確認画面で内容を確認してから送信できます</p></div>
+            <div className="lr-action-bar"><button className="lr-button lr-primary" type="submit" disabled={sending || postalLoading}>{postalLoading ? "住所を検索しています…" : "入力内容を確認する"}<ArrowRight size={18} /></button><p>確認画面で内容を確認してから送信できます</p></div>
           </form> : <>
             <section className="lr-card lr-confirm-card"><h2>申請する内容</h2><dl>{fields.filter((field) => screen.input[field.key].trim()).map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === "station_walk_minutes" ? `徒歩${screen.input[field.key]}分` : screen.input[field.key]}</dd></div>)}</dl>{screen.linked ? <p className="lr-hint">表示のない項目は、現在の登録内容を変更しません。</p> : null}</section>
             {screen.error ? <div className="lr-error" role="alert">{screen.error}</div> : null}

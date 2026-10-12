@@ -495,6 +495,12 @@ class LineRegistrationReviewService:
 
     def _new_worker_problem(self, detail) -> str | None:
         parts = submitted_components(detail)
+        if (detail.line_registration_form_version or 0) >= 2:
+            from src.domain.line_registration_input import normalize_line_registration, LineRegistrationInputError
+            try:
+                normalize_line_registration(parts, sent=set(parts), linked=False, full_required=True)
+            except LineRegistrationInputError as exc:
+                return f"{INCOMPLETE} {exc.message}"
         missing = (
             not parts["last_name"]
             or not parts["first_name"]

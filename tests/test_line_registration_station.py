@@ -19,7 +19,9 @@ def _enable(monkeypatch):
 
 def _body():
     return {"last_name": "山田", "first_name": "太郎", "last_name_furigana": "やまだ", "first_name_furigana": "たろう",
-            "phone": "09000001111", "birth_date": "1990-01-02", "postal_code": "1000001", "prefecture": "東京都", "address1": "千代田区1-1", "address2": ""}
+            "phone": "09000001111", "birth_date": "1990-01-02", "postal_code": "1000001", "prefecture": "東京都", "address1": "千代田区1-1", "address2": "",
+            "email": "worker@example.com", "nearest_station": "新宿駅", "station_walk_minutes": "0",
+            "emergency_contact_phone": "09000002222", "emergency_contact_name": "山田 花子", "emergency_contact_relationship": "実母"}
 
 
 def _submit(api_client, body, key="station-key"):
@@ -46,7 +48,7 @@ def test_zero_minutes_is_a_change_and_blank_keys_keep_old_hash():
     changed = normalize_line_registration({"station_walk_minutes": "0"}, sent={"station_walk_minutes"}, linked=True)
     assert changed.station_walk_minutes == 0
     assert changed.canonical()["station_walk_minutes"] == 0
-    body = _body()
+    body = {key: value for key, value in _body().items() if key not in ("nearest_station", "station_walk_minutes")}
     old = normalize_line_registration(body, sent=set(body), linked=False).canonical()
     with_blanks = {**body, "nearest_station": "", "station_walk_minutes": ""}
     new = normalize_line_registration(with_blanks, sent=set(with_blanks), linked=False).canonical()
@@ -112,7 +114,7 @@ def test_legacy_submission_can_replay_with_new_blank_fields(api_client, db_sessi
     _enable(monkeypatch)
     token, first = _submit(api_client, _body())
     assert first.status_code == 200
-    replay = api_client.post("/api/line/registration/submissions", json={**_body(), "nearest_station": "", "station_walk_minutes": ""}, headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "station-key"})
+    replay = api_client.post("/api/line/registration/submissions", json=_body(), headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "station-key"})
     assert replay.status_code == 200, replay.text
     assert replay.json()["request_id"] == first.json()["request_id"]
     assert db_session.query(RegistrationRequest).count() == 1

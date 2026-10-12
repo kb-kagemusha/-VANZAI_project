@@ -13,7 +13,8 @@ test("任意の駅情報だけでも更新でき、徒歩0分は空欄扱いに�
 test("新規の必須項目と、部分更新の氏名・住所の組を案内する", () => {
   const errors = validateRegistrationInput(emptyLineRegistrationInput(), false);
   assert.ok(errors.last_name && errors.phone && errors.birth_date && errors.postal_code);
-  assert.equal(errors.nearest_station, undefined);
+  assert.ok(errors.email && errors.nearest_station && errors.station_walk_minutes && errors.emergency_contact_phone);
+  assert.equal(errors.address2, undefined);
   const partial = validateRegistrationInput({ ...emptyLineRegistrationInput(), last_name: "山田", address2: "建物" }, true);
   assert.ok(partial.first_name && partial.postal_code && partial.address1);
 });

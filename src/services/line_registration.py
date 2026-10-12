@@ -177,7 +177,7 @@ class LineRegistrationService:
                 "紐付けの状態が変わったため、保存しませんでした。登録画面を開き直してください。",
                 "link_changed",
             )
-        normalized = normalize_line_registration(payload, sent=sent, linked=link is not None)
+        normalized = normalize_line_registration(payload, sent=sent, linked=link is not None, full_required=True)
         digest = content_hash(normalized.canonical())
         context = self._open_context(session_row.line_user_id)
         if context is not None and (peeked is None or peeked.request_id != context.request_id):
@@ -233,6 +233,10 @@ class LineRegistrationService:
             birth_date=normalized.birth_date,
             nearest_station=normalized.nearest_station,
             station_walk_minutes=normalized.station_walk_minutes,
+            emergency_contact_phone=normalized.emergency_contact_phone,
+            emergency_contact_name=normalized.emergency_contact_name,
+            emergency_contact_relationship=normalized.emergency_contact_relationship,
+            line_registration_form_version=2,
         )
         context = LineRegistrationContext(
             id=generate_ulid(),
@@ -405,6 +409,9 @@ def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str 
         values["nearest_station"] = detail.nearest_station
     if detail.station_walk_minutes is not None:
         values["station_walk_minutes"] = detail.station_walk_minutes
+    for field in ("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"):
+        if getattr(detail, field) is not None:
+            values[field] = getattr(detail, field)
     return values
 
 

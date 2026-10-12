@@ -20,6 +20,9 @@ const FIELD_LABELS: Record<string, string> = {
   address: "住所",
   nearest_station: "最寄り駅",
   station_walk_minutes: "最寄り駅まで徒歩（分）",
+  emergency_contact_phone: "緊急連絡先の電話番号",
+  emergency_contact_name: "緊急連絡先のお名前",
+  emergency_contact_relationship: "ご本人との関係",
 };
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -36,6 +39,9 @@ const COMPONENT_LABELS: Record<string, string> = {
   address2: "建物名",
   nearest_station: "最寄り駅",
   station_walk_minutes: "最寄り駅まで徒歩（分）",
+  emergency_contact_phone: "緊急連絡先の電話番号",
+  emergency_contact_name: "緊急連絡先のお名前",
+  emergency_contact_relationship: "ご本人との関係",
 };
 
 function show(value: string) {

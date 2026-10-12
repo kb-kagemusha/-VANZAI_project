@@ -1108,6 +1108,8 @@ class WorkerListItem(BaseModel):
     sole_proprietor_name: Optional[str] = None
     emergency_contact_name_kana: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
     gender: Optional[str] = None
     invoice_registration_status: Optional[str] = None
     invoice_number: Optional[str] = None
@@ -1153,6 +1155,8 @@ class WorkerCreateRequest(BaseModel):
     sole_proprietor_name: Optional[str] = Field(None, max_length=200)
     emergency_contact_name_kana: Optional[str] = Field(None, max_length=200)
     emergency_contact_phone: Optional[str] = Field(None, max_length=20)
+    emergency_contact_name: Optional[str] = Field(None, max_length=200)
+    emergency_contact_relationship: Optional[str] = Field(None, max_length=50)
     gender: Optional[str] = Field(None, max_length=20)
     invoice_registration_status: Optional[str] = Field(None, max_length=30)
     invoice_number: Optional[str] = Field(None, max_length=20)
@@ -1169,6 +1173,15 @@ class WorkerCreateRequest(BaseModel):
     license_type: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     profile: Optional[WorkerProfileInput] = None
+
+    @field_validator("emergency_contact_phone")
+    @classmethod
+    def validate_emergency_phone(cls, value: str | None) -> str | None:
+        import re
+        cleaned = (value or "").strip()
+        if cleaned and not re.fullmatch(r"[0-9+\-]{1,20}", cleaned):
+            raise ValueError("緊急連絡先の電話番号は半角数字・ハイフン・+で入力してください")
+        return cleaned or None
 
     @field_validator("tags")
     @classmethod

@@ -49,6 +49,10 @@ def _body(phone: str = "09000001111") -> dict:
         "address2": "",
         "nearest_station": "試験用駅",
         "station_walk_minutes": "0",
+        "email": "worker@example.com",
+        "emergency_contact_phone": "09000002222",
+        "emergency_contact_name": "山田 花子",
+        "emergency_contact_relationship": "実母",
     }
 
 

@@ -1,6 +1,6 @@
 """通常の稼働者編集で、氏名・連絡先・生年月日・住所の上書きを防ぐ。
 
-比較票はサーバが読んだ9項目から作り、値そのものは票に載せない。
+比較票はサーバが読んだ12項目から作り、値そのものは票に載せない。
 LINE承認の比較票とは用途を分け、入れ替えて使えない。
 """
 from __future__ import annotations
@@ -27,6 +27,9 @@ GUARDED_FIELDS = (
     "address",
     "nearest_station",
     "station_walk_minutes",
+    "emergency_contact_phone",
+    "emergency_contact_name",
+    "emergency_contact_relationship",
 )
 
 
@@ -61,6 +64,9 @@ def guarded_values(worker) -> dict[str, str]:
         "address": _blank(worker.address),
         "nearest_station": _blank(worker.nearest_station),
         "station_walk_minutes": _blank(worker.station_walk_minutes),
+        "emergency_contact_phone": _blank(worker.emergency_contact_phone),
+        "emergency_contact_name": _blank(worker.emergency_contact_name),
+        "emergency_contact_relationship": _blank(worker.emergency_contact_relationship),
     }
 
 

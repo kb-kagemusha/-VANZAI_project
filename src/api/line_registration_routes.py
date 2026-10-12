@@ -65,6 +65,9 @@ class LineRegistrationSubmitRequest(BaseModel):
     address2: str | None = None
     nearest_station: str | None = None
     station_walk_minutes: str | None = None
+    emergency_contact_phone: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relationship: str | None = None
 
 
 def verify_line_id_token(id_token: str) -> str:
