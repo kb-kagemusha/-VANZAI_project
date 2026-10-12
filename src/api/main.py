@@ -131,6 +131,9 @@ async def lifespan(_: FastAPI):
 
 
 # FastAPIアプリケーション初期化
+from src.api.closing_approval_routes import router as closing_approval_router, approval_item
+from src.services.closing_approval import request_operation
+
 app = FastAPI(
     title="VANZAI API",
     description="案件・シフト・実績・請求・支払 一元管理システム",
@@ -154,6 +157,8 @@ _cors_origins = (
     if _cors_origins_env
     else _default_origins
 )
+app.include_router(closing_approval_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -9019,17 +9024,10 @@ async def close_hard(
     """
     try:
         check_permission(current_user, Permission.HARD_CLOSE)
-        result = closing.hard_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            notes=request.reason
-        )
+        result = request_operation(db, request.project_id, request.period_key, "hard_close", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -9056,17 +9054,10 @@ async def release_close_soft(
     """
     try:
         check_permission(current_user, Permission.SOFT_CLOSE_RELEASE)
-        result = closing.release_soft_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            reason=request.reason,
-        )
+        result = request_operation(db, request.project_id, request.period_key, "soft_release", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -9093,17 +9084,10 @@ async def release_close_hard(
     """
     try:
         check_permission(current_user, Permission.HARD_CLOSE_RELEASE)
-        result = closing.release_hard_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            reason=request.reason,
-        )
+        result = request_operation(db, request.project_id, request.period_key, "hard_release", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:

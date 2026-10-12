@@ -1,3 +1,4 @@
+from src.models.closing_approval import ClosingApprovalRequest
 # Models package
 from src.models.base import Base
 from src.models.master import Worker, Client, Site, ProjectType, Role, RegistrationRequest

@@ -877,21 +877,21 @@ export function softCloseProject(projectId: string, periodKey: string, reason?: 
 }
 
 export function hardCloseProject(projectId: string, periodKey: string, approver: string, reason?: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/hard", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/hard", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
 }
 
 export function releaseSoftCloseProject(projectId: string, periodKey: string, approver: string, reason: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/soft/release", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/soft/release", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
 }
 
 export function releaseHardCloseProject(projectId: string, periodKey: string, approver: string, reason: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/hard/release", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/hard/release", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
@@ -1152,6 +1152,7 @@ export type LineRegistrationSessionResponse = {
 export type LineRegistrationFormState = {
   registered?: Record<string, string> | null;
   form_ticket?: string | null;
+  target_tag?: string | null;
   linked: boolean;
   pending: boolean;
   message: string;
@@ -1728,3 +1729,7 @@ export function sendOrderRequestLine(deliveryId: string) {
     method: "POST",
   });
 }
+export type ClosingApprovalItem = { id: string; project_id: string; project_name: string; period_key: string; action: string; status: string; requested_by: string; reason: string; expires_at: string; can_approve: boolean };
+export function getClosingApprovals(periodKey: string) { return apiFetch<{ items: ClosingApprovalItem[] }>("/api/closing/approvals", undefined, { period_key: periodKey }); }
+export function approveClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/approve", { method: "POST" }); }
+export function rejectClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/reject", { method: "POST" }); }

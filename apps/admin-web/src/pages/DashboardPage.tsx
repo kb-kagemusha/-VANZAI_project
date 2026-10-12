@@ -11,6 +11,9 @@ import { StatusBadge } from "../components/StatusBadge";
 import { SummaryCard } from "../components/SummaryCard";
 import {
   ApiError,
+  getClosingApprovals,
+  approveClosingRequest,
+  rejectClosingRequest,
   generateMonthlyBilling,
   getDashboard,
   getProjects,
@@ -84,6 +87,10 @@ export function DashboardPage() {
     queryKey: ["dashboard", periodKey],
     queryFn: () => getDashboard(periodKey),
   });
+  const approvalsQuery = useQuery({ queryKey: ["closing-approvals", periodKey], queryFn: () => getClosingApprovals(periodKey), refetchInterval: 30000 });
+  const approveMutation = useMutation({ mutationFn: approveClosingRequest, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); } });
+  const rejectApprovalMutation = useMutation({ mutationFn: rejectClosingRequest, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); } });
   const projectsQuery = useQuery({
     queryKey: ["projects-all"],
     queryFn: () => getProjects({ limit: 200 }),
@@ -93,6 +100,7 @@ export function DashboardPage() {
     mutationFn: () => generateMonthlyBilling(periodKey),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["invoices"] });
       void queryClient.invalidateQueries({ queryKey: ["payouts"] });
     },
@@ -103,6 +111,7 @@ export function DashboardPage() {
       softCloseProject(targetProjectId, periodKey, reason || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
     },
   });
@@ -112,6 +121,7 @@ export function DashboardPage() {
       hardCloseProject(targetProjectId, periodKey, approver, reason || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -122,6 +132,7 @@ export function DashboardPage() {
       releaseSoftCloseProject(targetProjectId, periodKey, approver, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -132,6 +143,7 @@ export function DashboardPage() {
       releaseHardCloseProject(targetProjectId, periodKey, approver, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -243,20 +255,6 @@ export function DashboardPage() {
     setSelectedClosingRows(nextSelectedRows);
   };
 
-  const selectApproverRequiredRowsWithoutApprover = () => {
-    const closingRows = dashboardQuery.data?.closing_status ?? [];
-    const nextSelectedRows: Record<string, boolean> = {};
-
-    for (const row of closingRows) {
-      const approver = getRowDraft(row.project_id).approver.trim();
-      if (row.status !== "open" && approver.length === 0) {
-        nextSelectedRows[row.project_id] = true;
-      }
-    }
-
-    setSelectedClosingRows(nextSelectedRows);
-  };
-
   const selectReasonRequiredRowsWithoutReason = () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const nextSelectedRows: Record<string, boolean> = {};
@@ -274,9 +272,8 @@ export function DashboardPage() {
   const getRowsAffectedByCopy = (rows: typeof closingRows) =>
     rows.filter((row) => {
       const draft = getRowDraft(row.project_id);
-      const nextApprover = selectedApprover || draft.approver;
       const nextReason = selectedReason || draft.reason;
-      return nextApprover !== draft.approver || nextReason !== draft.reason;
+      return nextReason !== draft.reason;
     });
 
   const buildCopyConfirmationMessage = (rows: typeof closingRows, scopeLabel: string) => {
@@ -373,7 +370,6 @@ export function DashboardPage() {
   const selectedCopyAffectedRows = getRowsAffectedByCopy(closingRows.filter((row) => isClosingRowSelected(row.project_id)));
   const selectedClosingRowCount = closingRows.filter((row) => isClosingRowSelected(row.project_id)).length;
   const allClosingRowsSelected = closingRows.length > 0 && closingRows.every((row) => isClosingRowSelected(row.project_id));
-  const selectedRowsMissingApproverCount = closingRows.filter((row) => isClosingRowSelected(row.project_id) && getRowDraft(row.project_id).approver.trim().length === 0).length;
   const selectedReleaseRowsMissingReasonCount = closingRows.filter(
     (row) => isClosingRowSelected(row.project_id) && (row.status === "soft_closed" || row.status === "hard_closed") && getRowDraft(row.project_id).reason.trim().length === 0,
   ).length;
@@ -447,10 +443,15 @@ export function DashboardPage() {
         </Link>
       </div>
 
+      <section className="upload-card"><h3 className="section-title">締めの承認待ち</h3><p>申請者とは別の権限者が、対象・理由を確認して承認してください。申請の有効期限は24時間です。</p>
+        {approvalsQuery.data?.items.map((item) => <div key={item.id} style={{ padding: "0.75rem", borderBottom: "1px solid var(--color-border)" }}><strong>{item.project_name} / {item.period_key} / {{ hard_close: "本締め", soft_release: "仮締め解除", hard_release: "本締め解除" }[item.action] ?? item.action}</strong><p>申請者：{item.requested_by}　理由：{item.reason}　期限：{formatDateTime(item.expires_at)}</p><button className="btn btn-primary btn-sm" disabled={!item.can_approve || approveMutation.isPending} onClick={async () => { if (await confirmApp({ title: "締めの申請を承認", message: item.project_name + "：" + item.reason, confirmLabel: "承認する" })) approveMutation.mutate(item.id); }}>承認する</button> <button className="btn btn-ghost btn-sm" disabled={rejectApprovalMutation.isPending} onClick={async () => { if (await confirmApp({ title: "申請の取消・却下", message: "この申請を終了します。", confirmLabel: "終了する" })) rejectApprovalMutation.mutate(item.id); }}>取消・却下</button>{!item.can_approve ? <span> 別の権限者による承認が必要です。</span> : null}</div>)}
+        {approveMutation.error ? <p className="form-error">{approveMutation.error instanceof Error ? approveMutation.error.message : "承認できませんでした"}</p> : null}
+        {rejectApprovalMutation.error ? <p className="form-error">{rejectApprovalMutation.error instanceof Error ? rejectApprovalMutation.error.message : "申請を終了できませんでした"}</p> : null}
+      </section>
       <section className="upload-card">
         <div>
           <h3 className="section-title">締め処理</h3>
-          <p style={{ marginTop: 0, color: "var(--color-muted)" }}>案件を選んで仮締め・本締めを実行します。</p>
+          <p style={{ marginTop: 0, color: "var(--color-muted)" }}>仮締めは実行、本締め・解除は申請して別の権限者が承認します。</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
           <label>
@@ -463,14 +464,11 @@ export function DashboardPage() {
             </select>
           </label>
           <label>
-            締め理由
-            <input value={selectedReason} onChange={(event) => setSelectedReason(event.target.value)} placeholder="任意" />
+            締め・申請理由
+            <input value={selectedReason} onChange={(event) => setSelectedReason(event.target.value)} placeholder="本締め・解除の申請は理由を入力" />
           </label>
-          <label>
-            承認者
-            <input value={selectedApprover} onChange={(event) => setSelectedApprover(event.target.value)} placeholder="本締めで必須" />
-          </label>
-        </div>
+          <p>本締め・解除は申請後、別の権限者がログインして承認します。</p>
+       </div>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_all" })}` }}>
             締め関連ログ
@@ -486,8 +484,8 @@ export function DashboardPage() {
           <button className="btn btn-primary dashboard-action-button" onClick={() => softCloseMutation.mutate({ projectId, reason: selectedReason })} disabled={!projectId || softCloseMutation.isPending}>
             {softCloseMutation.isPending ? "仮締め中..." : "仮締め"}
           </button>
-          <button className="btn btn-primary dashboard-action-button" onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedApprover || hardCloseMutation.isPending}>
-            {hardCloseMutation.isPending ? "本締め中..." : "本締め"}
+          <button className="btn btn-primary dashboard-action-button" onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedReason.trim() || hardCloseMutation.isPending}>
+            {hardCloseMutation.isPending ? "申請中..." : "本締めを申請"}
           </button>
           <button className="btn btn-ghost dashboard-action-button" onClick={copySelectedInputsToRows} disabled={allCopyAffectedRows.length === 0}>
             一覧へ入力コピー
@@ -512,9 +510,6 @@ export function DashboardPage() {
           <button className="btn btn-ghost dashboard-selection-button" onClick={selectReleaseTargetRows} disabled={closingRows.length === 0}>
             解除候補を選択
           </button>
-          <button className="btn btn-ghost dashboard-selection-button" onClick={selectApproverRequiredRowsWithoutApprover} disabled={closingRows.length === 0}>
-            承認者未入力の必須行を選択
-          </button>
           <button className="btn btn-ghost dashboard-selection-button" onClick={selectReasonRequiredRowsWithoutReason} disabled={closingRows.length === 0}>
             理由未入力の解除候補を選択
           </button>
@@ -531,15 +526,14 @@ export function DashboardPage() {
         <div style={{ display: "grid", gap: "0.35rem", padding: "0.75rem", border: "1px solid var(--color-border, #d0d5dd)", borderRadius: "0.75rem" }}>
           <strong>選択状態</strong>
           <span>選択行: {selectedClosingRowCount} 件</span>
-          <span>承認者未入力: {selectedRowsMissingApproverCount} 件</span>
           <span>解除理由未入力: {selectedReleaseRowsMissingReasonCount} 件</span>
         </div>
-        <p style={{ margin: 0, color: "var(--color-muted)" }}>選択中の承認者・理由は月ごとに保持されます。全行コピーに加えて、チェックした {selectedClosingRowCount} 件だけへ反映できます。</p>
+        <p style={{ margin: 0, color: "var(--color-muted)" }}>選択中の申請理由は月ごとに保持されます。全行コピーに加えて、チェックした {selectedClosingRowCount} 件だけへ反映できます。</p>
         {closingMutationError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{closingMutationError}</p> : null}
         {softCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締めを実行しました。</p> : null}
-        {hardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締めを実行しました。</p> : null}
-        {releaseSoftCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締め解除を実行しました。</p> : null}
-        {releaseHardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締め解除を実行しました。</p> : null}
+        {hardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締めを申請しました。別の権限者の承認待ちです。</p> : null}
+        {releaseSoftCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締め解除を申請しました。別の権限者の承認待ちです。</p> : null}
+        {releaseHardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締め解除を申請しました。別の権限者の承認待ちです。</p> : null}
       </section>
 
       <section className="summary-grid">
@@ -672,17 +666,6 @@ export function DashboardPage() {
               { key: "releasedBy", header: "最終解除者", render: (row) => row.last_released_by || "-" },
               { key: "deadline", header: "再締め期限", render: (row) => formatDateTime(row.reclose_deadline) },
               {
-                key: "rowApprover",
-                header: "承認者入力",
-                render: (row) => (
-                  <input
-                    value={getRowDraft(row.project_id).approver}
-                    onChange={(event) => updateRowDraft(row.project_id, "approver", event.target.value)}
-                    placeholder="username"
-                  />
-                ),
-              },
-              {
                 key: "rowReason",
                 header: "理由入力",
                 render: (row) => (
@@ -733,9 +716,9 @@ export function DashboardPage() {
                               reason: getRowDraft(row.project_id).reason,
                             });
                           }}
-                          disabled={!getRowDraft(row.project_id).approver || hardCloseMutation.isPending}
+                          disabled={!getRowDraft(row.project_id).reason.trim() || hardCloseMutation.isPending}
                         >
-                          本締め
+                          本締めを申請
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
@@ -744,9 +727,9 @@ export function DashboardPage() {
                             approver: getRowDraft(row.project_id).approver,
                             reason: getRowDraft(row.project_id).reason,
                           })}
-                          disabled={!getRowDraft(row.project_id).approver || !getRowDraft(row.project_id).reason || releaseSoftCloseMutation.isPending}
+                          disabled={!getRowDraft(row.project_id).reason || releaseSoftCloseMutation.isPending}
                         >
-                          仮締め解除
+                          仮締め解除を申請
                         </button>
                       </>
                     ) : null}
@@ -758,9 +741,9 @@ export function DashboardPage() {
                           approver: getRowDraft(row.project_id).approver,
                           reason: getRowDraft(row.project_id).reason,
                         })}
-                        disabled={!getRowDraft(row.project_id).approver || !getRowDraft(row.project_id).reason || releaseHardCloseMutation.isPending}
+                        disabled={!getRowDraft(row.project_id).reason || releaseHardCloseMutation.isPending}
                       >
-                        本締め解除
+                        本締め解除を申請
                       </button>
                     ) : null}
                   </div>

@@ -1615,6 +1615,8 @@ class RoleListItem(BaseModel):
     """役割一覧の1行"""
     id: str
     name: str
+    code: Optional[str] = None
+    description: Optional[str] = None
 
 
 # ===========================
@@ -1953,7 +1955,7 @@ class HardCloseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: Optional[str] = Field(None, description="締め理由")
 
 
@@ -1962,7 +1964,7 @@ class SoftCloseReleaseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: str = Field(..., min_length=1, description="解除理由")
 
 
@@ -1971,7 +1973,7 @@ class HardCloseReleaseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: str = Field(..., min_length=1, description="解除理由")
 
 

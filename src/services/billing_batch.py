@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.models.enums import ActualStatus, InvoiceStatus, PayoutStatus
 from src.models.transaction import Actual, Assignment, ShiftSlot, Project, Invoice, Payout
+from src.services.financial_guards import lock_all_projects
 from src.services import invoice_service, payout_service
 
 
@@ -43,6 +44,7 @@ def _existing_payout(session: Session, worker_id: str, period_key: str) -> bool:
 
 
 def generate_monthly_billing(session: Session, period_key: str, user_id: str) -> BatchResult:
+    lock_all_projects(session)
     stmt_clients = (
         select(distinct(Project.client_id))
         .join(ShiftSlot, ShiftSlot.project_id == Project.id)
