@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
 from src.api.line_registration_routes import LINE_ID_TOKEN_EXPIRED, assert_line_id_token_usable, line_verify_error_message
 from src.domain.worker_edit_guard import issue_worker_edit_guard
+from tests.registration_test_helpers import complete_registered_worker, submission_headers
 from src.models.base import generate_ulid
 from src.models.enums import UserRole
 from src.models.line_order import LINK_ACTIVE, LINK_REVOKED, LineWorkerLink
@@ -46,7 +47,7 @@ def _submit(api_client, body: dict, key: str) -> tuple[str, str]:
     submitted = api_client.post(
         "/api/line/registration/submissions",
         json=body,
-        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": key},
+        headers=submission_headers(api_client, token, key),
     )
     assert submitted.status_code == 200, submitted.text
     return submitted.json()["request_id"], token
@@ -145,7 +146,7 @@ def test_create_new_links_in_the_same_decision_and_replay_keeps_the_request(api_
     another = api_client.post(
         "/api/line/registration/submissions",
         json=_full_body(),
-        headers={"Authorization": f"Bearer {fresh.json()['token']}", "Idempotency-Key": "review-create-next"},
+        headers=submission_headers(api_client, fresh.json()["token"], "review-create-next"),
     )
     assert another.status_code == 200, another.text
     assert another.json()["request_id"] != request_id
@@ -156,16 +157,16 @@ def test_linked_update_keeps_blank_fields_and_does_not_add_a_link(api_client, db
     admin = _admin(db_session)
     worker = Worker(
         id=generate_ulid(),
-        name="元の名前",
-        furigana="もとのなまえ",
+        name="元の 名前",
+        furigana="もとの なまえ",
         phone="09011112222",
         email="keep@example.com",
         postal_code="1500001",
-        address="旧住所",
+        address="東京都旧住所",
         is_active=True,
         tags=[],
     )
-    db_session.add(worker)
+    db_session.add(complete_registered_worker(worker))
     db_session.flush()
     db_session.add(
         LineWorkerLink(
@@ -187,7 +188,7 @@ def test_linked_update_keeps_blank_fields_and_does_not_add_a_link(api_client, db
     assert body["before"]["email"] == "keep@example.com"
     assert body["after"]["phone"] == "09000003333"
     assert body["after"]["email"] == "keep@example.com"
-    assert body["after"]["address"] == "旧住所"
+    assert body["after"]["address"] == "東京都旧住所"
 
     approved = api_client.post(
         f"/api/line/registration/reviews/{request_id}/approve",
@@ -199,8 +200,8 @@ def test_linked_update_keeps_blank_fields_and_does_not_add_a_link(api_client, db
     stored = db_session.get(Worker, worker.id)
     assert stored.phone == "09000003333"
     assert stored.email == "keep@example.com"
-    assert stored.address == "旧住所"
-    assert stored.name == "元の名前"
+    assert stored.address == "東京都旧住所"
+    assert stored.name == "元の 名前"
     assert db_session.query(LineWorkerLink).filter_by(status=LINK_ACTIVE).count() == 1
     assert db_session.query(LineRegistrationContext).filter_by(request_id=request_id).one().is_open is False
 
@@ -226,7 +227,7 @@ def test_stale_ticket_does_not_approve_and_failure_audit_has_no_values(api_clien
     _enable(monkeypatch)
     admin = _admin(db_session)
     worker = Worker(id=generate_ulid(), name="元", phone="09011110000", is_active=True, tags=[])
-    db_session.add(worker)
+    db_session.add(complete_registered_worker(worker))
     db_session.flush()
     db_session.add(
         LineWorkerLink(
@@ -317,7 +318,7 @@ def test_relink_cannot_move_the_fixed_target(api_client, db_session, monkeypatch
     _enable(monkeypatch)
     admin = _admin(db_session)
     worker_a = Worker(id=generate_ulid(), name="稼働者A", phone="09011110001", is_active=True, tags=[])
-    db_session.add(worker_a)
+    db_session.add(complete_registered_worker(worker_a))
     db_session.flush()
     link_a = LineWorkerLink(
         id=generate_ulid(),
@@ -332,7 +333,7 @@ def test_relink_cannot_move_the_fixed_target(api_client, db_session, monkeypatch
     link_a.status = LINK_REVOKED
     db_session.commit()
     worker_b = Worker(id=generate_ulid(), name="稼働者B", phone="09022220002", is_active=True, tags=[])
-    db_session.add(worker_b)
+    db_session.add(complete_registered_worker(worker_b))
     db_session.flush()
     db_session.add(
         LineWorkerLink(

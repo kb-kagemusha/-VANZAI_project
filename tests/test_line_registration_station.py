@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from src.api.jwt_auth import create_access_token, create_user_with_hashed_password
 from src.domain.line_registration_input import LineRegistrationInputError, normalize_line_registration
 from src.domain.worker_edit_guard import WorkerEditGuardError, issue_worker_edit_guard, verify_worker_edit_guard
+from tests.registration_test_helpers import complete_registered_worker, submission_headers
 from src.models.base import generate_ulid
 from src.models.line_order import LineWorkerLink
 from src.models.master import RegistrationRequest, Worker, WorkerRegistrationRequestDetail
@@ -28,7 +29,7 @@ def _submit(api_client, body, key="station-key"):
     session = api_client.post("/api/line/registration/sessions", json={"id_token": "test-only"})
     assert session.status_code == 200
     token = session.json()["token"]
-    result = api_client.post("/api/line/registration/submissions", json=body, headers={"Authorization": f"Bearer {token}", "Idempotency-Key": key})
+    result = api_client.post("/api/line/registration/submissions", json=body, headers=submission_headers(api_client, token, key))
     return token, result
 
 
@@ -81,6 +82,7 @@ def test_new_worker_station_saved_only_after_approval(api_client, db_session, mo
 
 def test_station_replay_and_competing_edit_are_guarded(api_client, db_session, monkeypatch, worker):
     _enable(monkeypatch)
+    complete_registered_worker(worker)
     worker.nearest_station = "旧駅"
     worker.station_walk_minutes = 12
     db_session.add(LineWorkerLink(id=generate_ulid(), worker_id=worker.id, line_user_id="U-station-test", status="active", linked_at=datetime.now(timezone.utc)))

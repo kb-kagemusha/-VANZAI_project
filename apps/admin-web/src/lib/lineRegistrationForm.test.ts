@@ -85,3 +85,22 @@ test("紐付け済みの空欄は送らず、住所は空の建物名も送る",
     address2: "",
   });
 });
+
+
+test("別の本人の取得値は旧入力を持ち越さず、新しい比較票とともに表示する", async () => {
+  const { screenAfterRegisteredForm, emptyLineRegistrationInput } = await import("./lineRegistrationForm.ts");
+  const old = { input: { ...emptyLineRegistrationInput(), phone: "09000001111" }, baseline: { ...emptyLineRegistrationInput(), phone: "09000002222" }, targetTag: "old", formTicket: "old-ticket", token: "token", subject: "new-person", linked: true, needsReauth: false, error: "", message: "" };
+  const next = screenAfterRegisteredForm(old, { linked: true, registered: { phone: "09000003333" }, target_tag: "new", form_ticket: "new-ticket" });
+  assert.equal(next.input.phone, "09000003333");
+  assert.equal(next.formTicket, "new-ticket");
+});
+
+test("同じ本人・反映先の再取得は編集値を保ち、未編集欄は最新値にする", async () => {
+  const { screenAfterRegisteredForm, emptyLineRegistrationInput } = await import("./lineRegistrationForm.ts");
+  const baseline = { ...emptyLineRegistrationInput(), phone: "09000001111", email: "old@example.com" };
+  const old = { input: { ...baseline, phone: "09000002222" }, baseline, targetTag: "same", token: "token", subject: "same-person", linked: true, needsReauth: false, error: "", message: "" };
+  const next = screenAfterRegisteredForm(old, { linked: true, registered: { ...baseline, email: "fresh@example.com" }, target_tag: "same", form_ticket: "fresh-ticket" }, true);
+  assert.equal(next.input.phone, "09000002222");
+  assert.equal(next.input.email, "fresh@example.com");
+  assert.equal(next.baseline?.phone, "09000001111");
+});

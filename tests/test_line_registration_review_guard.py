@@ -39,6 +39,12 @@ def _line_request(api_client) -> str:
             "prefecture": "東京都",
             "address1": "千代田区1-1",
             "address2": "",
+            "email": "worker@example.com",
+            "nearest_station": "新宿駅",
+            "station_walk_minutes": "0",
+            "emergency_contact_phone": "09000002222",
+            "emergency_contact_name": "架空の連絡先",
+            "emergency_contact_relationship": "実父",
         },
         headers={
             "Authorization": f"Bearer {created.json()['token']}",

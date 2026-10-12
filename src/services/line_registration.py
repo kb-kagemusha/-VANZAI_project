@@ -136,6 +136,7 @@ class LineRegistrationService:
             "pending": pending is not None,
             "message": "管理者が確認中の申請があります。送信しても、確認中の申請本文は変わりません。" if pending else "",
             "registered": worker_form_values(worker) if worker else None,
+            "target_tag": subject_tag(link.id + ":" + worker.id) if worker else None,
             "form_ticket": self._form_ticket(session_row, link, worker) if worker else None,
         }
 

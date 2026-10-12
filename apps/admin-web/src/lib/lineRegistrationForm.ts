@@ -57,6 +57,7 @@ export type LineRegistrationScreen = {
   linked: boolean;
   baseline?: LineRegistrationInput;
   formTicket?: string;
+  targetTag?: string;
   needsReauth: boolean;
   error: string;
   message: string;
@@ -82,6 +83,7 @@ export function screenAfterReauthentication(
     token: next.token,
     subject: next.subject,
     linked: next.linked,
+    targetTag: samePerson ? screen.targetTag : undefined,
     baseline: samePerson ? screen.baseline : undefined,
     formTicket: samePerson ? screen.formTicket : undefined,
     needsReauth: false,
@@ -174,4 +176,25 @@ export function lineRegistrationPayload(input: LineRegistrationInput, linked: bo
     payload.address2 = trimmed.address2;
   }
   return payload;
+}
+
+export function screenAfterRegisteredForm(
+  screen: LineRegistrationScreen,
+  form: { linked: boolean; registered?: Record<string, string> | null; form_ticket?: string | null; target_tag?: string | null },
+  preserveEdits = false,
+): LineRegistrationScreen {
+  const fresh = { ...emptyLineRegistrationInput(), ...form.registered };
+  const sameTarget = Boolean(screen.targetTag && screen.targetTag === form.target_tag);
+  const input = { ...fresh };
+  if (preserveEdits && sameTarget && screen.baseline) {
+    for (const key of Object.keys(fresh) as Array<keyof LineRegistrationInput>) {
+      if (screen.input[key] !== screen.baseline[key]) input[key] = screen.input[key];
+    }
+  } else if (preserveEdits && !form.registered && !screen.baseline) {
+    Object.assign(input, screen.input);
+  }
+  return { ...screen, input, linked: form.linked,
+    baseline: form.registered ? fresh : undefined,
+    formTicket: form.form_ticket ?? undefined, targetTag: form.target_tag ?? undefined,
+    message: preserveEdits && screen.targetTag && !sameTarget ? "紐付け先が変わったため、最新の登録情報を表示しました。内容を確認してください。" : screen.message };
 }

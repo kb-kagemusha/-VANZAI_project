@@ -18,6 +18,7 @@ import {
   lineLoginExpired,
   lineRegistrationPayload,
   screenAfterReauthentication,
+  screenAfterRegisteredForm,
   screenAfterUnauthorized,
   submissionRetentionAfterAttempt,
   submissionRetentionAfterNewApplication,
@@ -195,11 +196,7 @@ export function PublicLineRegistrationPage() {
         setScreen(next);
         const form = await getLineRegistrationForm(session.token);
         if (!active) return;
-        replaceScreen({ ...next, linked: form.linked,
-          input: { ...emptyLineRegistrationInput(), ...form.registered },
-          baseline: form.registered ? { ...emptyLineRegistrationInput(), ...form.registered } : undefined,
-          formTicket: form.form_ticket ?? undefined,
-        });
+        replaceScreen(screenAfterRegisteredForm(next, form));
         setNotice(form.message);
         setPhase("form");
       })
@@ -262,12 +259,11 @@ export function PublicLineRegistrationPage() {
       memoryPayload = retained.payload;
       setHoldingSubmission(Boolean(retained.payload));
       replaceScreen(next);
-      if (next.subject === screen.subject) {
-        const form = await getLineRegistrationForm(session.token);
-        setNotice(form.message);
-        replaceScreen({ ...next, linked: form.linked });
-      } else {
-        setNotice("");
+      const form = await getLineRegistrationForm(session.token);
+      setNotice(form.message);
+      const samePerson = next.subject === screen.subject;
+      replaceScreen(samePerson && retained.payload ? { ...next, linked: form.linked } : screenAfterRegisteredForm(next, form, samePerson));
+      if (!samePerson) {
         setView("input");
         setFieldErrors({});
       }
