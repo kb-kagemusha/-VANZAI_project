@@ -123,6 +123,9 @@ REGISTRATION_ALLOWED_DOCUMENT_PARTS = {"front", "back", "single"}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from src.domain.line_registration_config import load_line_registration_config
+
+    load_line_registration_config()
     initialize_default_jobs()
     yield
 
