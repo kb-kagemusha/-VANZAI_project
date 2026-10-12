@@ -1150,6 +1150,8 @@ export type LineRegistrationSessionResponse = {
 };
 
 export type LineRegistrationFormState = {
+  registered?: Record<string, string> | null;
+  form_ticket?: string | null;
   linked: boolean;
   pending: boolean;
   message: string;
@@ -1183,12 +1185,14 @@ export function submitLineRegistration(
   token: string,
   idempotencyKey: string,
   body: Record<string, string>,
+  formTicket?: string,
 ) {
   return publicApiFetch<LineRegistrationSubmitResponse>("/api/line/registration/submissions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Idempotency-Key": idempotencyKey,
+      ...(formTicket ? { "X-Registration-Form-Ticket": formTicket } : {}),
     },
     body: JSON.stringify(body),
   });

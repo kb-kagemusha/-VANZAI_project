@@ -55,6 +55,8 @@ export type LineRegistrationScreen = {
   token: string;
   subject: string;
   linked: boolean;
+  baseline?: LineRegistrationInput;
+  formTicket?: string;
   needsReauth: boolean;
   error: string;
   message: string;
@@ -80,6 +82,8 @@ export function screenAfterReauthentication(
     token: next.token,
     subject: next.subject,
     linked: next.linked,
+    baseline: samePerson ? screen.baseline : undefined,
+    formTicket: samePerson ? screen.formTicket : undefined,
     needsReauth: false,
     error: samePerson ? "" : "別のLINEアカウントになったため、入力を消しました。",
     message: samePerson ? "本人確認をやり直しました。もう一度送信してください。" : "",
@@ -124,12 +128,30 @@ export function lineLoginExpired(error: string): boolean {
   return error.includes("LINEのログイン期限が切れました");
 }
 
-export function lineRegistrationPayload(input: LineRegistrationInput, linked: boolean): Record<string, string> {
+export function lineRegistrationPayload(input: LineRegistrationInput, linked: boolean, baseline?: LineRegistrationInput): Record<string, string> {
   const trimmed = Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, value.trim()]),
   ) as LineRegistrationInput;
   if (!linked) {
     return trimmed;
+  }
+  if (baseline) {
+    const payload: Record<string, string> = {};
+    const groups = [
+      ["last_name", "first_name"], ["last_name_furigana", "first_name_furigana"],
+      ["postal_code", "prefecture", "address1", "address2"],
+      ["emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"],
+    ] as const;
+    const grouped = new Set<string>(groups.flat());
+    for (const keys of groups) {
+      if (keys.some((key) => trimmed[key] !== baseline[key].trim())) {
+        for (const key of keys) payload[key] = trimmed[key];
+      }
+    }
+    for (const key of Object.keys(trimmed) as Array<keyof LineRegistrationInput>) {
+      if (!grouped.has(key) && trimmed[key] && trimmed[key] !== baseline[key].trim()) payload[key] = trimmed[key];
+    }
+    return payload;
   }
   const payload: Record<string, string> = {};
   (["last_name", "first_name", "last_name_furigana", "first_name_furigana", "phone", "email", "birth_date", "nearest_station", "station_walk_minutes"] as const)

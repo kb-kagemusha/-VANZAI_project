@@ -13,6 +13,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.domain.line_registration_prefill import worker_form_values
+from src.domain.worker_edit_guard import guarded_values
 from src.domain.line_registration_entry import registration_entry_ready
 from src.domain.line_registration_locks import lock_worker_row
 from src.domain.line_registration_input import (
@@ -125,21 +127,30 @@ class LineRegistrationService:
         self._require_open()
         session_row = self._valid_session(token)
         link = self._current_link(session_row)
+        if not self._link_matches_session(session_row, link):
+            raise LineRegistrationRejected(409, "紐付けが変わったため、画面を開き直してください。", "link_changed")
         pending = self._open_context(session_row.line_user_id)
+        worker = self.session.get(Worker, link.worker_id) if link else None
         return {
             "linked": link is not None,
             "pending": pending is not None,
             "message": "管理者が確認中の申請があります。送信しても、確認中の申請本文は変わりません。" if pending else "",
+            "registered": worker_form_values(worker) if worker else None,
+            "form_ticket": self._form_ticket(session_row, link, worker) if worker else None,
         }
 
-    def submit(self, token: str, idempotency_key: str, payload: dict, sent: set[str]) -> SubmitResult:
+    def _form_ticket(self, session_row, link, worker):
+        return content_hash({"purpose": "line_registration_prefill", "subject": session_row.line_user_id,
+                             "link": link.id, "worker": worker.id, "values": guarded_values(worker)})
+
+    def submit(self, token: str, idempotency_key: str, payload: dict, sent: set[str], form_ticket: str | None = None) -> SubmitResult:
         self._require_open()
         key = idempotency_key.strip()
         if not key or len(key) > 128:
             raise LineRegistrationRejected(422, "送信の識別子がありません。", "idempotency_key")
         for _attempt in range(3):
             try:
-                return self._submit_once(token, key, payload, sent)
+                return self._submit_once(token, key, payload, sent, form_ticket)
             except _SubmitRetry:
                 self.session.rollback()
             except IntegrityError as exc:
@@ -159,7 +170,7 @@ class LineRegistrationService:
             self.session.flush()
         return len(rows)
 
-    def _submit_once(self, token: str, idempotency_key: str, payload: dict, sent: set[str]) -> SubmitResult:
+    def _submit_once(self, token: str, idempotency_key: str, payload: dict, sent: set[str], form_ticket: str | None = None) -> SubmitResult:
         session_row = self._valid_session(token)
         existing_key = self._find_key(session_row.line_user_id, idempotency_key)
         if existing_key is not None:
@@ -177,6 +188,17 @@ class LineRegistrationService:
                 "紐付けの状態が変わったため、保存しませんでした。登録画面を開き直してください。",
                 "link_changed",
             )
+        if link is not None and form_ticket is not None:
+            # The public API always supplies a ticket (empty if omitted). Internal
+            # legacy callers remain compatible; saved replays returned above.
+            worker = self.session.get(Worker, link.worker_id, populate_existing=True)
+            if not worker or not form_ticket or not hmac.compare_digest(form_ticket, self._form_ticket(session_row, link, worker)):
+                raise LineRegistrationRejected(409, "登録情報が変わったか、表示の確認ができません。画面を閉じて登録ボタンから開き直してください。入力は残しています。", "form_changed")
+            merged = worker_form_values(worker)
+            for field in sent:
+                if field in merged:
+                    merged[field] = str(payload.get(field) or "").strip()
+            normalize_line_registration(merged, sent=set(merged), linked=False, full_required=True)
         normalized = normalize_line_registration(payload, sent=sent, linked=link is not None, full_required=True)
         digest = content_hash(normalized.canonical())
         context = self._open_context(session_row.line_user_id)

@@ -115,7 +115,7 @@ export function PublicLineRegistrationPage() {
     setPostalChoices({ postal: "", addresses: [] });
     setPostalMessage("");
     setPostalLoading(false);
-    if (phase !== "form" || view !== "input" || holdingSubmission || !/^[0-9]{7}$/.test(postal)) return;
+    if (phase !== "form" || view !== "input" || holdingSubmission || (screen.baseline && postal === screen.baseline.postal_code && screen.baseline.prefecture && screen.baseline.address1) || !/^[0-9]{7}$/.test(postal)) return;
     setPostalLoading(true);
     const controller = new AbortController();
     let active = true;
@@ -195,7 +195,11 @@ export function PublicLineRegistrationPage() {
         setScreen(next);
         const form = await getLineRegistrationForm(session.token);
         if (!active) return;
-        setScreen((current) => ({ ...current, linked: form.linked }));
+        replaceScreen({ ...next, linked: form.linked,
+          input: { ...emptyLineRegistrationInput(), ...form.registered },
+          baseline: form.registered ? { ...emptyLineRegistrationInput(), ...form.registered } : undefined,
+          formTicket: form.form_ticket ?? undefined,
+        });
         setNotice(form.message);
         setPhase("form");
       })
@@ -261,7 +265,7 @@ export function PublicLineRegistrationPage() {
       if (next.subject === screen.subject) {
         const form = await getLineRegistrationForm(session.token);
         setNotice(form.message);
-        setScreen((current) => ({ ...current, linked: form.linked }));
+        replaceScreen({ ...next, linked: form.linked });
       } else {
         setNotice("");
         setView("input");
@@ -302,7 +306,7 @@ export function PublicLineRegistrationPage() {
 
   async function send() {
     if (!memoryToken || sending || screen.needsReauth) return;
-    const payload = memoryPayload ?? lineRegistrationPayload(screen.input, screen.linked);
+    const payload = memoryPayload ?? lineRegistrationPayload(screen.input, screen.linked, screen.baseline);
     const key = memoryKey || crypto.randomUUID();
     memoryKey = key;
     memoryPayload = payload;
@@ -310,7 +314,7 @@ export function PublicLineRegistrationPage() {
     setSending(true);
     replaceScreen({ ...screen, error: "", message: "" });
     try {
-      const result = await submitLineRegistration(memoryToken, key, payload);
+      const result = await submitLineRegistration(memoryToken, key, payload, screen.formTicket);
       const retained = submissionRetentionAfterAttempt(key, payload, 200);
       memoryKey = retained.key;
       memoryPayload = retained.payload;
@@ -335,8 +339,8 @@ export function PublicLineRegistrationPage() {
   const jumpToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   function confirmInput() {
     if (postalLoading) return;
-    const errors = validateRegistrationInput(screen.input, screen.linked);
-    if (screen.linked && !Object.values(screen.input).some((value) => value.trim())) {
+    const errors = validateRegistrationInput(screen.input, screen.baseline ? false : screen.linked);
+    if (!Object.keys(errors).length && screen.linked && !Object.keys(lineRegistrationPayload(screen.input, true, screen.baseline)).length) {
       setScreen((current) => ({ ...current, error: "変更する項目を1つ以上入力してください。" }));
       return;
     }
@@ -363,7 +367,7 @@ export function PublicLineRegistrationPage() {
   };
   function renderField(key: keyof LineRegistrationInput) {
     const field = fields.find((item) => item.key === key)!;
-    const required = !screen.linked && key !== "address2";
+    const required = key !== "address2" && (!screen.linked || (screen.baseline !== undefined && !screen.baseline[key].trim()));
     const error = fieldErrors[key];
     const change = (value: string) => {
       if (key === "prefecture" || key === "address1") addressEditVersion.current += 1;
@@ -377,7 +381,7 @@ export function PublicLineRegistrationPage() {
       "aria-required": required, required,
     };
     return <div className="lr-field" key={key}>
-      <label htmlFor={`lr-${key}`}><span>{field.label}</span><span className={`lr-badge ${required ? "lr-badge-required" : ""}`}>{required ? "必須" : "任意"}</span></label>
+      <label htmlFor={`lr-${key}`}><span>{field.label}</span><span className={`lr-badge ${required ? "lr-badge-required" : ""}`}>{required ? "必須" : screen.baseline?.[key].trim() ? "登録済み" : "任意"}</span></label>
       {key === "prefecture" ? <select {...properties} disabled={holdingSubmission} onChange={(event) => change(event.target.value)}>
         <option value="">選択してください</option>{PREFECTURES.map((prefecture) => <option key={prefecture}>{prefecture}</option>)}
       </select> : <div className={key === "station_walk_minutes" ? "lr-walk-input" : "lr-input-wrap"}>
@@ -418,11 +422,12 @@ export function PublicLineRegistrationPage() {
           <p>{screen.message}</p>
           {receiptSaved ? <p className="lr-hint">登録情報は、管理者の確認・承認後に反映されます。<br />この画面を閉じてお待ちください。</p> : <p className="lr-hint">今回入力した内容は保存していません。<br />この画面を閉じてお待ちください。</p>}
         </section> : <>
-          <div className="lr-intro"><span className="lr-eyebrow">{view === "confirm" ? "送信前の最終確認" : "LINEから登録・更新"}</span><h1>{view === "confirm" ? "入力内容をご確認ください" : screen.linked ? "登録情報を更新" : "稼働者情報の登録"}</h1><p>{view === "confirm" ? "内容を確認して、申請を送信してください。" : screen.linked ? "変更したい項目だけ入力してください。空欄の項目は現在の登録内容を変更しません。" : "お名前・連絡先・住所をご入力ください。管理者が確認してから登録します。"}</p></div>
+          <div className="lr-intro"><span className="lr-eyebrow">{view === "confirm" ? "送信前の最終確認" : "LINEから登録・更新"}</span><h1>{view === "confirm" ? "入力内容をご確認ください" : screen.linked ? "登録情報を更新" : "稼働者情報の登録"}</h1><p>{view === "confirm" ? "内容を確認して、申請を送信してください。" : screen.linked ? "登録済みの情報を表示しています。変更する項目と、未登録の必須項目を入力してください。" : "お名前・連絡先・住所をご入力ください。管理者が確認してから登録します。"}</p></div>
           <aside className="lr-privacy"><ShieldCheck size={18} aria-hidden="true" /><div><strong>個人情報の取り扱い</strong><p>{REGISTRATION_PRIVACY_NOTICE}</p></div></aside>
           {notice ? <div className="lr-notice" role="status"><Clock3 size={18} /><p>{notice}</p></div> : null}
           {view === "input" ? <form noValidate onSubmit={(event) => { event.preventDefault(); confirmInput(); }}>
             <section className="lr-card"><div className="lr-section-heading"><span><UserRound size={19} /></span><div><h2>お名前・生年月日</h2><p>ご本人の情報を入力してください</p></div></div><div className="lr-fields"><div className="lr-pair">{renderField("last_name")}{renderField("first_name")}</div><div className="lr-pair">{renderField("last_name_furigana")}{renderField("first_name_furigana")}</div>{renderField("birth_date")}</div></section>
+            {screen.baseline && (!screen.baseline.first_name || !screen.baseline.first_name_furigana) ? <p className="lr-notice">保存されている氏名に区切りがない場合は姓の欄に表示しています。姓・名とふりがなを分けて入力してください。</p> : null}
             <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>連絡先</h2><p>お仕事のご案内や業務連絡に使用します</p></div></div><div className="lr-fields">{renderField("phone")}{renderField("email")}</div></section>
             <section className="lr-card"><div className="lr-section-heading"><span><MapPin size={19} /></span><div><h2>住所・アクセス</h2><p>住所を変更する場合は、郵便番号から番地まで入力してください</p></div></div><div className="lr-fields">{renderField("postal_code")}{renderField("prefecture")}{renderField("address1")}{renderField("address2")}<div className="lr-divider" />{renderField("nearest_station")}{renderField("station_walk_minutes")}</div></section>
             <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>緊急連絡先</h2><p>緊急時に連絡できる方をご入力ください</p></div></div><div className="lr-fields">{renderField("emergency_contact_phone")}{renderField("emergency_contact_name")}{renderField("emergency_contact_relationship")}{screen.linked ? <p className="lr-hint">変更する場合は、電話番号・お名前・関係をまとめて入力してください。</p> : null}</div></section>
@@ -431,7 +436,7 @@ export function PublicLineRegistrationPage() {
             {holdingSubmission ? <p className="lr-hint">直前の送信内容を保持しています。内容を変える場合は「別の内容で申請する」を選んでください。</p> : null}
             <div className="lr-action-bar"><button className="lr-button lr-primary" type="submit" disabled={sending || postalLoading}>{postalLoading ? "住所を検索しています…" : "入力内容を確認する"}<ArrowRight size={18} /></button><p>確認画面で内容を確認してから送信できます</p></div>
           </form> : <>
-            <section className="lr-card lr-confirm-card"><h2>申請する内容</h2><dl>{fields.filter((field) => screen.input[field.key].trim()).map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === "station_walk_minutes" ? `徒歩${screen.input[field.key]}分` : screen.input[field.key]}</dd></div>)}</dl>{screen.linked ? <p className="lr-hint">表示のない項目は、現在の登録内容を変更しません。</p> : null}</section>
+            <section className="lr-card lr-confirm-card"><h2>申請する内容</h2><dl>{fields.filter((field) => (screen.baseline ? Object.prototype.hasOwnProperty.call(lineRegistrationPayload(screen.input, screen.linked, screen.baseline), field.key) : screen.input[field.key].trim())).map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === "station_walk_minutes" ? `徒歩${screen.input[field.key]}分` : screen.input[field.key]}</dd></div>)}</dl>{screen.linked ? <p className="lr-hint">表示のない項目は、現在の登録内容を変更しません。</p> : null}</section>
             {screen.error ? <div className="lr-error" role="alert">{screen.error}</div> : null}
             {screen.message ? <div className="lr-notice" role="status">{screen.message}</div> : null}
             {holdingSubmission ? <p className="lr-hint">再送は直前に送った内容で行います。入力は保持しています。</p> : null}

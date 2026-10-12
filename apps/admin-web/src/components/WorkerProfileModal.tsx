@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { splitStoredName, splitStoredAddress, joinStoredAddress } from "../lib/workerIdentity";
+import { PREFECTURES } from "../lib/lineRegistrationUi";
+import { lookupPostalAddress, normalizePostalCode, type PostalAddress } from "../lib/postalAddress";
+
 import { WorkerTagPicker } from "./WorkerTags";
 import type { WorkerDayAvailability, WorkerDayHours, WorkerListItem, WorkerProfileInput, WorkerTagOption, WorkerWeekday, WorkerWorkHistoryItem } from "../types/api";
 
@@ -43,6 +47,14 @@ export interface DayHoursDraft {
 
 export interface WorkerIntakeForm {
   name: string;
+  furigana: string;
+  lastName: string;
+  firstName: string;
+  lastNameFurigana: string;
+  firstNameFurigana: string;
+  prefecture: string;
+  address1: string;
+  address2: string;
   email: string;
   phone: string;
   emergencyContactPhone: string;
@@ -96,7 +108,9 @@ function emptyHistory(): WorkHistoryDraft {
 
 export function emptyIntakeForm(): WorkerIntakeForm {
   return {
-    name: "",
+    name: "", furigana: "",
+    lastName: "", firstName: "", lastNameFurigana: "", firstNameFurigana: "",
+    prefecture: "", address1: "", address2: "",
     email: "",
     phone: "",
     emergencyContactPhone: "",
@@ -260,7 +274,10 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
   const profile = worker.profile;
   const history = profile?.work_history?.length ? profile.work_history.map(historyFromItem) : [emptyHistory()];
   return {
-    name: worker.name,
+    name: worker.name, furigana: worker.furigana ?? "",
+    lastName: splitStoredName(worker.name)[0], firstName: splitStoredName(worker.name)[1],
+    lastNameFurigana: splitStoredName(worker.furigana)[0], firstNameFurigana: splitStoredName(worker.furigana)[1],
+    ...splitStoredAddress(worker.profile?.address),
     email: worker.email ?? "",
     phone: worker.phone ?? "",
     emergencyContactPhone: worker.emergency_contact_phone ?? "",
@@ -302,6 +319,9 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
 }
 
 export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | null) {
+  if (!base && (!form.lastName.trim() || !form.firstName.trim() || !form.lastNameFurigana.trim() || !form.firstNameFurigana.trim())) {
+    throw new Error("姓・名と、それぞれのふりがなを入力してください");
+  }
   if (!base && (!form.emergencyContactPhone.trim() || !form.emergencyContactName.trim() || !form.emergencyContactRelationship.trim())) {
     throw new Error("緊急連絡先の電話番号・お名前・関係を入力してください");
   }
@@ -312,7 +332,7 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
     birth_date: form.birthDate || null,
     marital_status: form.maritalStatus || null,
     postal_code: postalDigits(form.postalCode),
-    address: optionalText(form.address),
+    address: optionalText(joinStoredAddress(form.prefecture, form.address1, form.address2)),
     hometown: optionalText(form.hometown),
     nearest_station: optionalText(form.nearestStation),
     station_walk_minutes: optionalBoundedInt(form.stationWalkMinutes, "最寄駅から徒歩", 0, 300),
@@ -366,8 +386,8 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
   };
 
   return {
-    name: form.name.trim(),
-    furigana: base?.furigana ?? null,
+    name: [form.lastName.trim(), form.firstName.trim()].filter(Boolean).join(" "),
+    furigana: optionalText([form.lastNameFurigana.trim(), form.firstNameFurigana.trim()].filter(Boolean).join(" ")),
     email: optionalText(form.email),
     phone: optionalText(form.phone),
     sole_proprietor_name: base?.sole_proprietor_name ?? null,
@@ -510,7 +530,8 @@ export function WorkerProfileModal({
   const [dayMessage, setDayMessage] = useState("");
   const [postalMessage, setPostalMessage] = useState("");
   const formRef = useRef(form);
-  const lastAutoAddress = useRef("");
+  const addressEditVersion = useRef(0);
+  const [postalChoices, setPostalChoices] = useState<PostalAddress[]>([]);
   const lastLookedUpZip = useRef("");
   const postalTouched = useRef(false);
   formRef.current = form;
@@ -527,50 +548,45 @@ export function WorkerProfileModal({
   }, [onClose]);
 
   useEffect(() => {
-    const digits = form.postalCode.replace(/\D/g, "");
-    if (!postalTouched.current) return;
-    if (digits.length !== 7) {
-      setPostalMessage("");
-      return;
-    }
+    const digits = normalizePostalCode(form.postalCode);
+    setPostalChoices([]);
+    if (!postalTouched.current || !/^[0-9]{7}$/.test(digits)) return;
     if (digits === lastLookedUpZip.current) return;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${digits}`, { signal: controller.signal })
-        .then(async (response) => {
-          if (!response.ok) throw new Error("network");
-          return response.json() as Promise<{ status?: number; results?: { address1?: string; address2?: string; address3?: string }[] | null }>;
-        })
-        .then((data) => {
-          const result = data.results?.[0];
-          const lookedUp = `${result?.address1 ?? ""}${result?.address2 ?? ""}${result?.address3 ?? ""}`;
-          if (data.status !== 200 || !lookedUp) {
-            setPostalMessage("この郵便番号の住所は見つかりませんでした");
-            return;
-          }
-          const current = formRef.current;
-          const previousAuto = lastAutoAddress.current;
-          lastLookedUpZip.current = digits;
-          lastAutoAddress.current = lookedUp;
-          setPostalMessage("");
-          onChange({
-            ...current,
-            address: mergeLookedUpAddress(current.address, lookedUp, previousAuto),
-          });
-        })
-        .catch((caught: unknown) => {
-          if (caught instanceof DOMException && caught.name === "AbortError") return;
-          setPostalMessage("郵便番号から住所を取得できませんでした");
-        });
-    }, 400);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
+    let active = true;
+    const beforeEdit = addressEditVersion.current;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      setPostalMessage("住所を検索しています…");
+      timeout = setTimeout(() => { controller.abort(); if (active) setPostalMessage("住所を取得できませんでした。手入力で続けられます。"); }, 10000);
+      lookupPostalAddress(digits, controller.signal).then((addresses) => {
+        if (!active) return;
+        lastLookedUpZip.current = digits;
+        const current = formRef.current;
+        if (addresses.length === 1 && beforeEdit === addressEditVersion.current) {
+          const found = addresses[0];
+          onChange({ ...current, prefecture: found.prefecture, address1: found.address,
+            address: joinStoredAddress(found.prefecture, found.address, current.address2) });
+          setPostalMessage("住所を補完しました。番地は追記してください。");
+        } else {
+          setPostalChoices(addresses);
+          setPostalMessage(addresses.length ? "手入力した住所を残しました。必要なら候補を選択してください。" : "住所が見つかりません。手入力してください。");
+        }
+      }).catch(() => { if (active && !controller.signal.aborted) setPostalMessage("住所を取得できませんでした。手入力で続けられます。"); })
+        .finally(() => clearTimeout(timeout));
+    }, 300);
+    return () => { active = false; controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
   }, [form.postalCode, onChange]);
 
   function patch(partial: Partial<WorkerIntakeForm>) {
-    onChange({ ...form, ...partial });
+    const next = { ...form, ...partial };
+    if (["lastName", "firstName"].some((key) => key in partial)) next.name = [next.lastName.trim(), next.firstName.trim()].filter(Boolean).join(" ");
+    if (["lastNameFurigana", "firstNameFurigana"].some((key) => key in partial)) next.furigana = [next.lastNameFurigana.trim(), next.firstNameFurigana.trim()].filter(Boolean).join(" ");
+    if (["prefecture", "address1", "address2"].some((key) => key in partial)) {
+      addressEditVersion.current += 1;
+      next.address = joinStoredAddress(next.prefecture, next.address1, next.address2);
+    }
+    onChange(next);
   }
 
   function patchHistory(index: number, partial: Partial<WorkHistoryDraft>) {
@@ -631,10 +647,12 @@ export function WorkerProfileModal({
           <section className="order-draft-section">
             <h4>基本</h4>
             <div className="order-draft-grid">
-              <label className="order-field order-span-4">
-                <span className="order-field-label">名前<span style={{ color: "#dc2626" }}> *</span></span>
-                <input value={form.name} onChange={(event) => patch({ name: event.target.value })} placeholder="氏名" autoFocus />
-              </label>
+              {([ ["lastName", "姓", "山田"], ["firstName", "名", "太郎"], ["lastNameFurigana", "姓ふりがな", "やまだ"], ["firstNameFurigana", "名ふりがな", "たろう"] ] as const).map(([key, label, example]) => (
+                <label key={key} className="order-field order-span-6">
+                  <span className="order-field-label">{label}{mode === "create" ? <span style={{ color: "#dc2626" }}> *</span> : null}</span>
+                  <input maxLength={100} value={form[key]} onChange={(event) => patch({ [key]: event.target.value })} placeholder={example} autoFocus={key === "lastName"} />
+                </label>
+              ))}
               <label className="order-field order-span-4">
                 <span className="order-field-label">メール</span>
                 <input type="email" value={form.email} onChange={(event) => patch({ email: event.target.value })} placeholder="任意" />
@@ -713,18 +731,15 @@ export function WorkerProfileModal({
                   maxLength={8}
                   onChange={(event) => {
                     postalTouched.current = true;
-                    patch({ postalCode: event.target.value });
+                    patch({ postalCode: normalizePostalCode(event.target.value) });
                   }}
                 />
               </label>
               {postalMessage ? <p className="form-error order-span-12">{postalMessage}</p> : null}
-              <label className="order-field order-span-12">
-                <span className="order-field-label">
-                  住所
-                  <span className="order-field-hint">建物名・部屋番号は改行して続けてください</span>
-                </span>
-                <textarea className="is-short" value={form.address} onChange={(event) => patch({ address: event.target.value })} />
-              </label>
+              {postalChoices.length ? <label className="order-field order-span-12"><span className="order-field-label">住所の候補</span><select defaultValue="" onChange={(event) => { const choice = postalChoices[Number(event.target.value)]; if (event.target.value && choice) patch({ prefecture: choice.prefecture, address1: choice.address }); }}><option value="">住所を選択してください</option>{postalChoices.map((choice, index) => <option key={index} value={index}>{choice.prefecture}{choice.address}</option>)}</select></label> : null}
+              <label className="order-field order-span-4"><span className="order-field-label">都道府県</span><select value={form.prefecture} onChange={(event) => patch({ prefecture: event.target.value })}><option value="">選択してください</option>{PREFECTURES.map((prefecture) => <option key={prefecture} value={prefecture}>{prefecture}</option>)}</select></label>
+              <label className="order-field order-span-8"><span className="order-field-label">市区町村・番地</span><input value={form.address1} onChange={(event) => patch({ address1: event.target.value })} placeholder="千代田区1-2-3" /></label>
+              <label className="order-field order-span-12"><span className="order-field-label">建物名（任意）</span><input value={form.address2} onChange={(event) => patch({ address2: event.target.value })} placeholder="〇〇マンション101号室" /></label>
               <label className="order-field order-span-6">
                 <span className="order-field-label">出身</span>
                 <input value={form.hometown} onChange={(event) => patch({ hometown: event.target.value })} />

@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -144,13 +144,16 @@ def create_registration_session(body: LineRegistrationSessionRequest, db: Sessio
 
 
 @router.get("/form")
-def registration_form(request: Request, db: Session = Depends(get_db)):
+def registration_form(request: Request, response: Response, db: Session = Depends(get_db)):
     try:
+        response.headers["Cache-Control"] = "no-store"
         state = LineRegistrationService(db).form_state(_bearer(request))
     except LineRegistrationClosed as exc:
         raise HTTPException(status_code=403, detail=exc.message) from exc
     except LineRegistrationAuthError as exc:
         raise HTTPException(status_code=401, detail=exc.message) from exc
+    except LineRegistrationRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return state
 
 
@@ -163,6 +166,7 @@ def submit_registration(body: LineRegistrationSubmitRequest, request: Request, d
             request.headers.get("idempotency-key", ""),
             body.model_dump(),
             sent,
+            form_ticket=request.headers.get("x-registration-form-ticket", ""),
         )
         db.commit()
     except LineRegistrationClosed as exc:
