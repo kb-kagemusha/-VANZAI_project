@@ -4,6 +4,7 @@
 受付の同時送信試験ではない。この試験が作った行だけを消す。
 """
 import threading
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -178,8 +179,12 @@ def _until(engine, predicate) -> bool:
     try:
         deadline = connection.execute(text("SELECT clock_timestamp() + interval '8 seconds'")).scalar()
         while connection.execute(text("SELECT clock_timestamp() < :deadline"), {"deadline": deadline}).scalar():
+            # PostgreSQL caches activity snapshots within a transaction. Refresh
+            # before polling so a waiter that starts later can be observed.
+            connection.execute(text("SELECT pg_stat_clear_snapshot()"))
             if predicate(connection):
                 return True
+            time.sleep(0.02)
         return False
     finally:
         connection.close()
