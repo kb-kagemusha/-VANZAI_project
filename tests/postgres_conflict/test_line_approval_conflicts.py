@@ -147,7 +147,7 @@ def _prepare(Session):
             role="admin",
             is_active=True,
         )
-        worker = Worker(id=WORKER_ID, name="承認前", phone="09000000000", email="keep@example.com", is_active=True, tags=[])
+        worker = Worker(id=WORKER_ID, name="承認前", phone="09000000000", email="keep@example.com", nearest_station="旧駅", station_walk_minutes=10, is_active=True, tags=[])
         link = LineWorkerLink(
             id=LINK_ID,
             worker_id=WORKER_ID,
@@ -163,7 +163,8 @@ def _prepare(Session):
         setup.commit()
         token, _expires, linked, _tag = LineRegistrationService(setup).issue_session(LINE_USER)
         assert linked is True
-        result = LineRegistrationService(setup).submit(token, "approve-key", {"phone": "09000001111"}, {"phone"})
+        body = {"phone": "09000001111", "nearest_station": "新宿駅", "station_walk_minutes": "0"}
+        result = LineRegistrationService(setup).submit(token, "approve-key", body, set(body))
         setup.commit()
         review = LineRegistrationReviewService(setup).view(result.request_id, reviewer)
         edit_ticket = issue_worker_edit_guard(worker, reviewer.id)
@@ -204,7 +205,8 @@ def _waiting_while_holding(connection, waiting_table: str, held_table: str) -> b
     return pid is not None
 
 
-def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine):
+@pytest.mark.parametrize("changed_field", ["phone", "nearest_station", "station_walk_minutes"])
+def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine, changed_field):
     request_id, ticket, _edit, _token = _prepare(approval_sessions)
     holder = conflict_engine.connect()
     transaction = holder.begin()
@@ -240,7 +242,8 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
             conflict_engine,
             lambda connection: _waiting_while_holding(connection, "workers", "registration_requests"),
         )
-        holder.execute(text("UPDATE workers SET phone = '09000000099' WHERE id = :id"), {"id": WORKER_ID})
+        values = {"phone": "09000000099", "nearest_station": "別の管理者の駅", "station_walk_minutes": 99}
+        holder.execute(text(f"UPDATE workers SET {changed_field} = :value WHERE id = :id"), {"id": WORKER_ID, "value": values[changed_field]})
         transaction.commit()
     finally:
         if transaction.is_active:
@@ -254,7 +257,10 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
         assert outcome == ["ticket_mismatch"]
         phone = check.execute(text("SELECT phone FROM workers WHERE id = :id"), {"id": WORKER_ID}).scalar_one()
         status = check.execute(text("SELECT status FROM registration_requests WHERE id = :id"), {"id": request_id}).scalar_one()
-        assert phone == "09000000099"
+        assert phone == ("09000000099" if changed_field == "phone" else "09000000000")
+        station = check.execute(text("SELECT nearest_station, station_walk_minutes FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+        assert station.nearest_station == ("別の管理者の駅" if changed_field == "nearest_station" else "旧駅")
+        assert station.station_walk_minutes == (99 if changed_field == "station_walk_minutes" else 10)
         assert status == "pending"
     finally:
         check.rollback()
@@ -393,6 +399,8 @@ def test_submit_approve_unlink_and_edit_keep_one_result(approval_sessions, confl
         if approve_detail == "ok":
             assert status == "approved"
             assert phone == "09000001111"
+            station = check.execute(text("SELECT nearest_station, station_walk_minutes FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+            assert tuple(station) == ("新宿駅", 0)
         else:
             assert status == "pending"
             assert approve_detail in {"ticket_mismatch", "link_changed", "fixed_target"}

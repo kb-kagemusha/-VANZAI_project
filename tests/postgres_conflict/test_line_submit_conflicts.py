@@ -47,6 +47,8 @@ def _body(phone: str = "09000001111") -> dict:
         "prefecture": "東京都",
         "address1": "千代田区1-1",
         "address2": "",
+        "nearest_station": "試験用駅",
+        "station_walk_minutes": "0",
     }
 
 

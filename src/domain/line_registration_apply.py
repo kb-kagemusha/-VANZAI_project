@@ -1,4 +1,4 @@
-"""LINE申請を稼働者の7項目へ反映する。空欄は消さない。住所は届いた組で置き換える。"""
+"""LINE申請を稼働者の9項目へ反映する。空欄は消さない。住所は届いた組で置き換える。"""
 from __future__ import annotations
 
 from datetime import date
@@ -28,6 +28,11 @@ def project_worker_values(before: dict[str, str], detail) -> dict[str, str]:
         after["email"] = email
     if detail.birth_date is not None:
         after["birth_date"] = detail.birth_date.isoformat()
+    station = _text(detail.nearest_station)
+    if station:
+        after["nearest_station"] = station
+    if detail.station_walk_minutes is not None:
+        after["station_walk_minutes"] = str(detail.station_walk_minutes)
     if _address_sent(detail):
         building = _text(detail.building_address)
         address = f"{_text(detail.prefecture)}{_text(detail.city_address)}"
@@ -50,6 +55,8 @@ def assign_worker_values(worker, values: dict[str, str]) -> None:
     worker.birth_date = date.fromisoformat(values["birth_date"]) if values["birth_date"] else None
     worker.postal_code = values["postal_code"] or None
     worker.address = values["address"] or None
+    worker.nearest_station = values["nearest_station"] or None
+    worker.station_walk_minutes = int(values["station_walk_minutes"]) if values["station_walk_minutes"] else None
 
 
 def changed_fields(before: dict[str, str], after: dict[str, str]) -> dict[str, dict[str, str]]:
@@ -74,6 +81,8 @@ def submitted_components(detail) -> dict[str, str]:
         "prefecture": _text(detail.prefecture),
         "address1": _text(detail.city_address),
         "address2": _text(detail.building_address),
+        "nearest_station": _text(detail.nearest_station),
+        "station_walk_minutes": _text(detail.station_walk_minutes),
     }
 
 

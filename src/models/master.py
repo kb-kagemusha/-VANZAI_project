@@ -395,6 +395,9 @@ class RegistrationRequest(Base, TimestampMixin, SoftDeleteMixin):
 class WorkerRegistrationRequestDetail(Base, TimestampMixin):
     """稼働者登録申請の生データ"""
     __tablename__ = "worker_registration_request_details"
+    __table_args__ = (
+        CheckConstraint("station_walk_minutes IS NULL OR (station_walk_minutes >= 0 AND station_walk_minutes <= 300)", name="ck_worker_registration_station_walk"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=generate_ulid
@@ -417,6 +420,8 @@ class WorkerRegistrationRequestDetail(Base, TimestampMixin):
     city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nearest_station: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    station_walk_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

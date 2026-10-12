@@ -13,6 +13,8 @@ export type LineRegistrationInput = {
   prefecture: string;
   address1: string;
   address2: string;
+  nearest_station: string;
+  station_walk_minutes: string;
 };
 
 export const emptyLineRegistrationInput = (): LineRegistrationInput => ({
@@ -27,6 +29,8 @@ export const emptyLineRegistrationInput = (): LineRegistrationInput => ({
   prefecture: "",
   address1: "",
   address2: "",
+  nearest_station: "",
+  station_walk_minutes: "",
 });
 
 export function registrationInputAfterSubjectChange(
@@ -122,7 +126,7 @@ export function lineRegistrationPayload(input: LineRegistrationInput, linked: bo
     return trimmed;
   }
   const payload: Record<string, string> = {};
-  (["last_name", "first_name", "last_name_furigana", "first_name_furigana", "phone", "email", "birth_date"] as const)
+  (["last_name", "first_name", "last_name_furigana", "first_name_furigana", "phone", "email", "birth_date", "nearest_station", "station_walk_minutes"] as const)
     .forEach((key) => {
       if (trimmed[key]) {
         payload[key] = trimmed[key];

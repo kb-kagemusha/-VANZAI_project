@@ -31,6 +31,8 @@ class NormalizedRegistration:
     address1: str | None
     address2: str | None
     address_sent: bool
+    nearest_station: str | None = None
+    station_walk_minutes: int | None = None
 
     def has_change(self) -> bool:
         return any(
@@ -41,11 +43,13 @@ class NormalizedRegistration:
                 self.email,
                 self.birth_date,
                 self.address_sent,
+                self.nearest_station,
+                self.station_walk_minutes is not None,
             )
         )
 
-    def canonical(self) -> dict[str, str | None]:
-        return {
+    def canonical(self) -> dict[str, str | int | None]:
+        values = {
             "last_name": self.last_name,
             "first_name": self.first_name,
             "last_name_furigana": self.last_name_furigana,
@@ -58,6 +62,12 @@ class NormalizedRegistration:
             "address1": self.address1,
             "address2": self.address2 if self.address_sent else None,
         }
+        # Keep hashes of existing requests stable when the new fields are blank.
+        if self.nearest_station is not None:
+            values["nearest_station"] = self.nearest_station
+        if self.station_walk_minutes is not None:
+            values["station_walk_minutes"] = self.station_walk_minutes
+        return values
 
 
 def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> NormalizedRegistration:
@@ -74,6 +84,12 @@ def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> Normaliz
         raise LineRegistrationInputError("メールアドレスの形式を確認してください。")
     birth = _birth_date(payload, sent)
     address = _address(payload, sent)
+    station = _optional_text(payload, sent, "nearest_station")
+    if station is not None and len(station) > 100:
+        raise LineRegistrationInputError("最寄り駅は100文字以内で入力してください。")
+    walk = _optional_text(payload, sent, "station_walk_minutes")
+    if walk is not None and (not re.fullmatch(r"[0-9]{1,3}", walk) or not 0 <= int(walk) <= 300):
+        raise LineRegistrationInputError("最寄り駅までの徒歩時間は0〜300分の整数で入力してください。")
     normalized = NormalizedRegistration(
         last_name=last_name,
         first_name=first_name,
@@ -87,6 +103,8 @@ def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> Normaliz
         address1=address[2],
         address2=address[3],
         address_sent=address[4],
+        nearest_station=station,
+        station_walk_minutes=int(walk) if walk is not None else None,
     )
     return normalized
 

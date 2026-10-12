@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { AppShell } from "../components/AppShell";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -36,9 +36,10 @@ import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
 function StandaloneFrame() {
+  const location = useLocation();
   return (
     <>
-      <ThemeToggle placement="fixed" />
+      {location.pathname !== "/public/line-registration" ? <ThemeToggle placement="fixed" /> : null}
       <Outlet />
     </>
   );

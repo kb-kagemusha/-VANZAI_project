@@ -37,6 +37,8 @@ apps/staff-mobile/.vite/
 apps/staff-mobile/*.tsbuildinfo
 playwright-report/
 test-results/
+artifacts/
+.test-temp*/
 
 # Editor / OS
 .DS_Store

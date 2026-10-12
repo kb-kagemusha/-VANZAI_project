@@ -231,6 +231,8 @@ class LineRegistrationService:
             city_address=normalized.address1,
             building_address=normalized.address2 if normalized.address_sent else None,
             birth_date=normalized.birth_date,
+            nearest_station=normalized.nearest_station,
+            station_walk_minutes=normalized.station_walk_minutes,
         )
         context = LineRegistrationContext(
             id=generate_ulid(),
@@ -384,9 +386,9 @@ def _request_is_open(request: RegistrationRequest) -> bool:
     return request.status == "pending" and request.deleted_at is None
 
 
-def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str | None]:
+def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str | int | None]:
     address_sent = detail.zipcode is not None or detail.prefecture is not None or detail.city_address is not None
-    return {
+    values = {
         "last_name": detail.last_name,
         "first_name": detail.first_name,
         "last_name_furigana": detail.last_name_furigana,
@@ -399,6 +401,11 @@ def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str 
         "address1": detail.city_address,
         "address2": detail.building_address if address_sent else None,
     }
+    if detail.nearest_station is not None:
+        values["nearest_station"] = detail.nearest_station
+    if detail.station_walk_minutes is not None:
+        values["station_walk_minutes"] = detail.station_walk_minutes
+    return values
 
 
 def _expected_unique(exc: IntegrityError) -> bool:

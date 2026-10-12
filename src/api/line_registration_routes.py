@@ -63,6 +63,8 @@ class LineRegistrationSubmitRequest(BaseModel):
     prefecture: str | None = None
     address1: str | None = None
     address2: str | None = None
+    nearest_station: str | None = None
+    station_walk_minutes: str | None = None
 
 
 def verify_line_id_token(id_token: str) -> str:
