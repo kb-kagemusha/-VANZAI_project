@@ -1,6 +1,6 @@
 """追加案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
-from src.domain.order_schedule import normalize_schedule, schedule_text
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.domain.maps_url import validate_maps_url
 
 FORMAT_ID = "additional-request-v1"
@@ -52,6 +52,8 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     if "schedule" in data:
         sections["schedule"] = normalize_schedule(data["schedule"])
         _, sections["hours"], sections["fee"] = schedule_text(sections["schedule"])
+    if "work_period" in data:
+        sections["work_period"] = normalize_work_period(data["work_period"], sections.get("schedule"))
     if not sections["hours"]:
         sections["hours"] = _legacy_hours(sections)
     if not sections["fee"]:
@@ -60,6 +62,8 @@ def parse_sections(request_conditions: str | None) -> dict | None:
 
 
 def compose_document(sections: dict, *, work_date_label: str, site_name: str, site_address: str | None = None) -> str:
+    if "work_period" in sections:
+        work_date_label = work_period_label(sections["work_period"])
     notes = _text(sections.get("notes"))
     if notes and not notes.startswith("・"):
         notes = f"・{notes}"
@@ -111,7 +115,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
-    for key in ("schedule", "previous_hours", "previous_fee", "place_id", "maps_url"):
+    for key in ("schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url"):
         if key in sections:
             payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)

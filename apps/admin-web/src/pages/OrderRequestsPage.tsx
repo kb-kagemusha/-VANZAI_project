@@ -12,6 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { emptySchedule, newWorkGroup, scheduleDateLabel, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
   addOrderRequestNote,
@@ -210,7 +211,7 @@ export function OrderRequestsPage() {
   const visibleWorkers = useMemo(() => {
     const query = workerSearch.trim().toLocaleLowerCase();
     return workers.filter((worker) => {
-      if (workerRoleFilters.length && !workerRoleFilters.some((role) => (worker.tags ?? []).includes(role))) return false;
+      if (!matchesWorkerRoles(worker.tags ?? [], workerRoleFilters)) return false;
       if (!query) return true;
       const roles = (worker.tags ?? []).map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join(" ");
       return [worker.name, worker.furigana ?? "", roles].some((text) => text.toLocaleLowerCase().includes(query));
@@ -254,7 +255,8 @@ export function OrderRequestsPage() {
       contact_desk: "",
       counterparty_note: current.counterparty_note || null,
       phone_first: Boolean(current.phone_first),
-      assign_tracker_self: Boolean(current.assign_tracker_self),
+      assign_tracker_self: undefined,
+      tracker_user_id: undefined,
       phone_note: phoneNote,
       site_address: current.site_address || null,
       follow_up_due_on: current.follow_up_due_on || null,
@@ -349,19 +351,20 @@ export function OrderRequestsPage() {
       ? "change"
       : "new";
   const parsedWorkDates = parseWorkDateRange(form.work_date_label);
-  const workDateFrom = parsedWorkDates?.from ?? "";
-  const workDateTo = parsedWorkDates?.to ?? "";
-  const legacyWorkDate = parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
+  const storedWorkDates = sections.schedule?.work_groups.flatMap((group) => [group.from, group.to]).filter(Boolean).sort() ?? [];
+  const workDateFrom = sections.workPeriod?.from ?? parsedWorkDates?.from ?? storedWorkDates[0] ?? "";
+  const workDateTo = sections.workPeriod?.to ?? parsedWorkDates?.to ?? storedWorkDates[storedWorkDates.length - 1] ?? "";
+  const legacyWorkDate = sections.workPeriod || parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
 
   function setWorkDateBound(bound: "from" | "to", value: string) {
     const from = bound === "from" ? value : workDateFrom;
     const to = bound === "to" ? value : workDateTo;
+    setSections({ ...sections, workPeriod: { from, to } });
     setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
   }
   function changeSchedule(schedule: OrderSchedule) {
     const next = syncSchedule(schedule);
     setSections({ ...sections, schedule: next });
-    setForm({ ...form, work_date_label: scheduleDateLabel(next) });
   }
   async function enableSchedule() {
     const accepted = await confirmApp({ title: "日付・期間ごとの入力", message: "勤務時間・単価を日付別の入力に切り替えます。既存の文面は参考として残し、依頼書は新しい日付別の入力から作成します。", confirmLabel: "切り替える" });
@@ -401,7 +404,7 @@ export function OrderRequestsPage() {
   function startNewDraft() {
     loadedForRef.current = null;
     formRef.current = EMPTY_FORM;
-    const initialSections = { ...EMPTY_ORDER_SECTIONS, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
+    const initialSections = { ...EMPTY_ORDER_SECTIONS, workPeriod: { from: "", to: "" }, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
     sectionsRef.current = initialSections;
     setCreating(true);
     setBasedOn(null);
@@ -871,7 +874,6 @@ export function OrderRequestsPage() {
               <th>現場</th>
               <th>日付</th>
               <th>作成者</th>
-              <th>追跡</th>
               <th>送付先</th>
               <th>期限</th>
               <th>変更</th>
@@ -901,7 +903,6 @@ export function OrderRequestsPage() {
                 <td className="order-cell-multiline">{siteLabelForList(item.site_name)}</td>
                 <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
-                <td>{item.tracker_name ?? "—"}</td>
                 <td>{item.recipient_count}</td>
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
@@ -1096,7 +1097,8 @@ export function OrderRequestsPage() {
                       onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
                     />
                   </label>
-                  {!sections.schedule && <div className="order-field order-span-4">
+                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
+                  <div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <input
@@ -1110,6 +1112,7 @@ export function OrderRequestsPage() {
                       <input
                         type="date"
                         aria-label="稼働日の終了"
+                        min={workDateFrom || undefined}
                         value={workDateTo}
                         disabled={!editable}
                         onChange={(event) => setWorkDateBound("to", event.target.value)}
@@ -1125,10 +1128,9 @@ export function OrderRequestsPage() {
                         {legacyWorkDate}
                       </span>
                     ) : null}
-                  </div>}
-                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
+                  </div>
                   <label className="order-field order-span-6">
-                    <span className="order-field-label">{sections.schedule ? "稼働日の補足（全体）" : "稼働日の詳細"}</span>
+                    <span className="order-field-label">稼働日の補足（全体）</span>
                     <textarea
                       className="is-short"
                       value={sections.workDateDetail}
@@ -1287,26 +1289,8 @@ export function OrderRequestsPage() {
                     <span className="order-choice-hint">電話しただけでは、送付済み・受領済みにはしません。</span>
                   </span>
                 </label>
-                <label className={`order-choice${form.assign_tracker_self ? " is-on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.assign_tracker_self}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      const assignTrackerSelf = event.target.checked;
-                      setForm((current) => {
-                        const next = { ...current, assign_tracker_self: assignTrackerSelf };
-                        formRef.current = next;
-                        return next;
-                      });
-                    }}
-                  />
-                  <span>
-                    <span className="order-choice-title">追跡担当は自分</span>
-                    <span className="order-choice-hint">保存すると、追跡担当が自分になります。</span>
-                  </span>
-                </label>
               </div>
+              <p className="order-field-hint">依頼書の作成者と管理ロールを持つ担当者が、送付・回答状況を確認します。</p>
             </section>
 
             <section className="order-draft-section">
@@ -1333,6 +1317,7 @@ export function OrderRequestsPage() {
                 <fieldset className="order-role-filters" disabled={!editable || workerRolesQuery.isLoading}>
                   <legend>付与ロールで絞り込み</legend>
                   <p className="order-field-hint">複数選択できます。選んだいずれかのロールを持つ人を表示します。未選択なら全員を表示します。</p>
+                  <p className="order-field-hint">イベントDは対応できる最大規模です。小型を選ぶと小型・中型・大型、中型を選ぶと中型・大型、大型を選ぶと大型のロールを持つ人を表示します。</p>
                   <div className="order-role-options">
                     {workerRoles.map((role) => <label key={role.code} className={`order-role-option${workerRoleFilters.includes(role.code) ? " is-on" : ""}`}>
                       <input type="checkbox" checked={workerRoleFilters.includes(role.code)} onChange={(event) => setWorkerRoleFilters((current) => event.target.checked ? [...current, role.code] : current.filter((code) => code !== role.code))} />

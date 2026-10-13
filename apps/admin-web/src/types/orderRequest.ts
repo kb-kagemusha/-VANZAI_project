@@ -190,9 +190,9 @@ export interface OrderRequestWrite {
   worker_ids: string[];
   phone_first: boolean;
   phone_note: string | null;
-  tracker_user_id: string | null;
+  tracker_user_id?: string | null;
   follow_up_due_on: string | null;
   follow_up_due_time: string;
-  assign_tracker_self: boolean;
+  assign_tracker_self?: boolean;
   based_on_version_id?: string | null;
 }

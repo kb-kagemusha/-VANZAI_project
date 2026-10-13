@@ -6,6 +6,7 @@ export const ORDER_FORMAT_ID = "additional-request-v1";
 export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。";
 
 export interface OrderDocumentSections {
+  workPeriod?: { from: string; to: string };
   schedule?: OrderSchedule;
   previousHours?: string;
   previousFee?: string;
@@ -62,6 +63,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     incentive: wavy(sections.incentive.trim()),
     notes: wavy(sections.notes.trim()),
     ...(sections.schedule ? { schedule: syncSchedule(sections.schedule) } : {}),
+    ...(sections.workPeriod ? { work_period: sections.workPeriod } : {}),
     ...(sections.previousHours ? { previous_hours: sections.previousHours } : {}),
     ...(sections.previousFee ? { previous_fee: sections.previousFee } : {}),
     ...(sections.placeId ? { place_id: sections.placeId } : {}),
@@ -123,6 +125,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
     const data = JSON.parse(text) as Record<string, unknown>;
     if (data.format !== ORDER_FORMAT_ID) return null;
     return {
+      workPeriod: data.work_period && typeof data.work_period === "object" ? { from: textOf((data.work_period as Record<string, unknown>).from), to: textOf((data.work_period as Record<string, unknown>).to) } : undefined,
       schedule: scheduleFromStored(data.schedule),
       previousHours: textOf(data.previous_hours),
       previousFee: textOf(data.previous_fee),

@@ -20,7 +20,7 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
       const offset = Number(params.get("offset") ?? 0), limit = Number(params.get("limit") ?? 200);
       return respond({ items: workers.slice(offset, offset + limit), total: workers.length, offset, limit });
     }
-    if (path === "/api/worker-tags") return respond({ items: [{ code: "commercial_d", label: "商業D" }, { code: "food_d", label: "飲食D" }] });
+    if (path === "/api/worker-tags") return respond({ items: [{ code: "commercial_d", label: "商業D" }, { code: "food_d", label: "飲食D" }, { code: "event_small_d", label: "小型イベD" }, { code: "event_medium_d", label: "中型イベD" }, { code: "event_large_d", label: "大型イベD" }] });
     if (path === "/api/workers/test-worker/edit-guard") {
       if (updatedWorker && options.profileRefreshFailure) return respond({ detail: "読み込み失敗" }, 500);
       return respond({ worker, edit_guard: updatedWorker ? "fresh-guard" : "initial-guard" });
@@ -91,6 +91,9 @@ test("successful save with failed refresh still reports saved and disables stale
 test("daily and ranged work preserve matching prices and expense notes in saved document", async ({ page }) => {
   const writes = await setup(page); await page.goto("/operations/order-requests");
   await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
+  await page.getByLabel("稼働日の開始", { exact: true }).fill("2027-03-01");
+  await page.getByLabel("稼働日の終了", { exact: true }).fill("2027-03-12");
+  await page.getByRole("textbox", { name: "稼働日の補足（全体）", exact: true }).fill("3/11・3/12は予備日");
   await page.getByLabel("稼働日の詳細1の開始日").fill("2027-03-01");
   const first = page.getByRole("group", { name: "稼働日の詳細 1", exact: true });
   await first.getByLabel("開始時間").fill("08:00"); await first.getByLabel("終了時間").fill("17:00");
@@ -114,6 +117,11 @@ test("daily and ranged work preserve matching prices and expense notes in saved 
   await expect(page.getByText("下書きを保存しました。確定するまで送付は始まりません。")).toBeVisible();
   const payload = writes.find((w) => w.path === "/api/order-requests")!.body;
   const schedule = JSON.parse(payload.request_conditions).schedule;
+  expect(payload.work_date_label).toBe("2027年3月1日～2027年3月12日");
+  expect(JSON.parse(payload.request_conditions).work_period).toEqual({ from: "2027-03-01", to: "2027-03-12" });
+  expect(payload.body).toContain("3/11・3/12は予備日");
+  expect(payload).not.toHaveProperty("assign_tracker_self"); expect(payload).not.toHaveProperty("tracker_user_id");
+  await expect(page.getByLabel("稼働日の終了", { exact: true })).toHaveValue("2027-03-12");
   expect(schedule.rate_groups.every((rate: any) => rate.unit === "day")).toBe(true);
   expect(schedule.work_groups).toHaveLength(2); expect(schedule.rate_groups).toHaveLength(2);
   expect(schedule.rate_groups[1].from).toBe("2027-03-02"); expect(schedule.rate_groups[1].to).toBe("2027-03-10");
@@ -131,6 +139,11 @@ test("venue and general date notes match project half width and rates only offer
     expect(Math.abs(box!.width - project!.width)).toBeLessThan(2);
   }
   const rate = page.locator("fieldset.order-rate-row");
+  await expect(page.getByRole("heading", { name: "稼働時間の詳細", exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /追跡担当/ })).toHaveCount(0);
+  const dates = await page.getByLabel("稼働日の開始", { exact: true }).evaluate((el) => el.closest(".order-field")!.getBoundingClientRect().y);
+  const notes = await page.getByRole("textbox", { name: "稼働日の補足（全体）", exact: true }).evaluate((el) => el.closest(".order-field")!.getBoundingClientRect().y);
+  expect(Math.abs(dates - notes)).toBeLessThan(2);
   await expect(rate.getByText("単位：日給", { exact: true })).toBeVisible();
   await expect(rate.getByRole("button", { name: "時給", exact: true })).toHaveCount(0);
   await expect(rate.getByRole("combobox")).toHaveCount(0);
@@ -248,7 +261,7 @@ test("multiple recipient roles use union and name filtering preserves selected r
   await page.goto("/operations/order-requests"); await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
   const choices = page.locator(".order-recipient-list");
   const roles = page.getByRole("group", { name: "付与ロールで絞り込み", exact: true });
-  await expect(roles.getByRole("checkbox")).toHaveCount(2);
+  await expect(roles.getByRole("checkbox")).toHaveCount(5);
   await roles.getByRole("checkbox", { name: "商業D", exact: true }).check();
   await expect(choices.getByRole("checkbox")).toHaveCount(2);
   await choices.getByRole("checkbox", { name: /商業担当/ }).check();
@@ -286,4 +299,31 @@ test("role filtering also finds recipients after the first API page", async ({ p
   await page.getByRole("group", { name: "付与ロールで絞り込み", exact: true }).getByRole("checkbox", { name: "商業D", exact: true }).check();
   await expect(page.locator(".order-recipient-list").getByRole("checkbox")).toHaveCount(1);
   await expect(page.locator(".order-recipient-list").getByRole("checkbox", { name: /後方確認200/ })).toBeVisible();
+});
+
+test("event director filters include larger qualifications and combine with unrelated roles", async ({ page }) => {
+  await setup(page, { workers: [
+    { id: "small", name: "小型担当", tags: ["event_small_d"] }, { id: "medium", name: "中型担当", tags: ["event_medium_d"] },
+    { id: "large", name: "大型担当", tags: ["event_large_d"] }, { id: "food", name: "飲食担当", tags: ["food_d"] },
+  ] });
+  await page.goto("/operations/order-requests"); await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
+  const roles = page.getByRole("group", { name: "付与ロールで絞り込み", exact: true });
+  const choices = page.locator(".order-recipient-list");
+  await expect(roles.getByText(/小型を選ぶと小型・中型・大型/)).toBeVisible();
+  await roles.getByRole("checkbox", { name: "小型イベD", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(3);
+  await choices.getByRole("checkbox", { name: /小型担当/ }).check();
+  await roles.getByRole("checkbox", { name: "小型イベD", exact: true }).uncheck();
+  await roles.getByRole("checkbox", { name: "中型イベD", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(2);
+  await expect(choices.getByRole("checkbox", { name: /小型担当/ })).toHaveCount(0);
+  await roles.getByRole("checkbox", { name: "中型イベD", exact: true }).uncheck();
+  await roles.getByRole("checkbox", { name: "大型イベD", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(1);
+  await expect(choices.getByRole("checkbox", { name: /大型担当/ })).toBeVisible();
+  await roles.getByRole("checkbox", { name: "飲食D", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(2);
+  await expect(page.locator(".order-recipient-picks").getByText("小型担当")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

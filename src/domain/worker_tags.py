@@ -13,8 +13,8 @@ WORKER_TAGS: tuple[tuple[str, str, str], ...] = (
     ("commercial_d", "商業D", "商業施設の現場ができる"),
     ("shibuya_smoke_d", "渋喫D", "渋谷の喫煙所ができる"),
     ("event_small_d", "小型イベD", "小型イベントなど、4〜5名の現場ができる"),
-    ("event_medium_d", "中型イベD", "中型イベントなど、6〜10名の現場ができる"),
-    ("event_large_d", "大型イベD", "大型イベントなど、11名以上の現場ができる"),
+    ("event_medium_d", "中型イベD", "中型イベントなど、6〜10名までの現場ができる（小型を含む）"),
+    ("event_large_d", "大型イベD", "大型イベントなど、11名以上の現場ができる（中型・小型を含む）"),
 )
 
 WORKER_TAG_LABELS: dict[str, str] = {code: label for code, label, _description in WORKER_TAGS}

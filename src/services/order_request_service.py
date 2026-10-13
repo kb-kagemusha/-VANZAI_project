@@ -37,7 +37,7 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
-from src.domain.order_schedule import normalize_schedule, schedule_text
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -314,6 +314,8 @@ class OrderRequestService:
             sections = parse_sections(version.request_conditions)
             if sections and "schedule" in sections:
                 normalize_schedule(sections["schedule"], complete=True)
+            if sections and "work_period" in sections:
+                normalize_work_period(sections["work_period"], sections.get("schedule"), complete=True)
         except ValueError as exc:
             raise OrderRequestError(400, str(exc)) from None
         required = (
@@ -792,7 +794,9 @@ class OrderRequestService:
         version.site_address = fields["site_address"]
         try:
             sections = parse_sections(fields["request_conditions"] or "")
-            if sections and "schedule" in sections:
+            if sections and "work_period" in sections:
+                version.work_date_label = work_period_label(sections["work_period"])
+            elif sections and "schedule" in sections:
                 version.work_date_label, _, _ = schedule_text(sections["schedule"])
             request_conditions, body = apply_template_fields(
                 fields["request_conditions"] or "", fields["body"] or "",

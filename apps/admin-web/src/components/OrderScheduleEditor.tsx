@@ -45,8 +45,8 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
   }
 
   return <div className="order-schedule order-span-12">
-    <h5>稼働日・稼働時間</h5>
-    <p className="order-field-hint">同じ時間・条件の日は期間でまとめられます。日付が重複しないように設定してください。</p>
+    <h5>稼働時間の詳細</h5>
+    <p className="order-field-hint">上で設定した全体の稼働期間内で、日ごと・期間ごとの開始時間と終了時間を入力してください。同じ時間・条件の日は期間でまとめられます。</p>
     {value.work_groups.map((group, index) => {
       const update = (patch: Partial<typeof group>) => change({ ...value, work_groups: value.work_groups.map((g) => g.id === group.id ? { ...g, ...patch } : g) });
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);

@@ -2,7 +2,7 @@
 import copy
 import json
 import pytest
-from src.domain.order_schedule import normalize_schedule, schedule_text
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text
 from src.services.order_request_format import apply_template_fields, parse_sections
 
 
@@ -87,3 +87,27 @@ def test_duplicate_ids_or_missing_linked_price_rejected():
         if invalid == "duplicate": value["work_groups"][1]["id"] = "day1"
         else: value["rate_groups"].pop()
         with pytest.raises(ValueError): normalize_schedule(value)
+
+
+def test_overall_period_survives_roundtrip_and_is_separate_from_daily_details():
+    period = {"from": "2027-02-28", "to": "2027-03-12"}
+    raw = {"format": "additional-request-v1", "schedule": schedule(), "work_period": period, "work_date_detail": "予備日を含む"}
+    conditions, body = apply_template_fields(json.dumps(raw), "", work_date_label="誤った日付", site_name="会場")
+    assert parse_sections(conditions)["work_period"] == period
+    assert "2027年2月28日～2027年3月12日" in body
+    assert "2027年3月2日～2027年3月10日" in body and "予備日を含む" in body
+
+
+@pytest.mark.parametrize("period", [
+    {"from": "2027-03-02", "to": "2027-03-12"}, {"from": "2027-02-28", "to": "2027-03-09"},
+    {"from": "2027-03-12", "to": "2027-02-28"}, {"from": "2027-02-30", "to": "2027-03-12"},
+])
+def test_invalid_or_outside_overall_period_rejected(period):
+    with pytest.raises(ValueError): normalize_work_period(period, schedule())
+
+
+def test_incomplete_overall_period_allowed_in_draft_but_not_confirmation():
+    period = {"from": "2027-03-01", "to": ""}
+    normalize_work_period(period, schedule())
+    with pytest.raises(ValueError, match="開始日・終了日"):
+        normalize_work_period(period, schedule(), complete=True)

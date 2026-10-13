@@ -81,6 +81,40 @@ class Schedule(BaseModel):
     rate_groups: list[RateGroup] = Field(max_length=120)
 
 
+class WorkPeriod(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    from_: str = Field(alias="from", max_length=10)
+    to: str = Field(max_length=10)
+
+    @field_validator("from_", "to")
+    @classmethod
+    def dates(cls, value):
+        if value and date.fromisoformat(value).isoformat() != value:
+            raise ValueError("稼働日の形式が正しくありません")
+        return value
+
+
+def normalize_work_period(value, schedule=None, *, complete=False):
+    try:
+        period = WorkPeriod.model_validate(value)
+    except (ValidationError, ValueError):
+        raise ValueError("稼働日の開始日・終了日を正しい日付で入力してください") from None
+    if period.from_ and period.to and period.from_ > period.to:
+        raise ValueError("稼働日の終了日は開始日以降にしてください")
+    if complete and (not period.from_ or not period.to):
+        raise ValueError("全体の稼働日の開始日・終了日を入力してください")
+    if schedule:
+        for group in schedule["work_groups"]:
+            for day in (group["from"], group["to"]):
+                if day and ((period.from_ and day < period.from_) or (period.to and day > period.to)):
+                    raise ValueError("稼働時間の詳細の日付は、全体の稼働期間内にしてください")
+    return period.model_dump(by_alias=True)
+
+
+def work_period_label(period):
+    return date_label({**period, "date_mode": "range"})
+
+
 def _ordered(groups):
     if len({g.id for g in groups}) != len(groups):
         raise ValueError("日付・期間の識別子が重複しています")
