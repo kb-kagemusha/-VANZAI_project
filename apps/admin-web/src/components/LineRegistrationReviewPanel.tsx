@@ -126,6 +126,9 @@ export function LineRegistrationReviewPanel({
       await queryClient.invalidateQueries({ queryKey: ["registration-requests"] });
       await queryClient.invalidateQueries({ queryKey: ["registration-request", shown.request_id] });
       await queryClient.invalidateQueries({ queryKey: ["line-registration-review", shown.request_id] });
+      await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+      await queryClient.invalidateQueries({ queryKey: ["line-link-workers"] });
     },
     onError: (caught) => {
       setMessage("");

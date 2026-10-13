@@ -7644,6 +7644,14 @@ async def list_registration_requests(
         stmt = stmt.filter(RegistrationRequest.status == query.status)
     if query.source_type:
         stmt = stmt.filter(RegistrationRequest.source_type == query.source_type)
+    if query.line_only:
+        from src.models.line_registration import LineRegistrationContext
+
+        stmt = stmt.filter(
+            select(LineRegistrationContext.id)
+            .where(LineRegistrationContext.request_id == RegistrationRequest.id)
+            .exists()
+        )
     if query.search:
         pattern = f"%{query.search}%"
         stmt = stmt.filter(

@@ -88,6 +88,43 @@ def _full_body() -> dict:
     }
 
 
+def test_worker_inbox_filters_line_pending_and_approval_moves_to_workers(api_client, db_session, monkeypatch):
+    _enable(monkeypatch)
+    admin = _admin(db_session)
+    headers = _auth(admin.username)
+    public = RegistrationRequest(
+        id=generate_ulid(), request_type="worker", status="pending", source_type="public_form",
+    )
+    db_session.add(public)
+    db_session.commit()
+    request_id, _ = _submit(api_client, _full_body(), "worker-inbox")
+    params = {"request_type": "worker", "status": "pending", "line_only": True, "limit": 1}
+
+    # public_formだけではLINEと従来フォームを区別できない。
+    all_pending = api_client.get("/api/registration-requests", params={"status": "pending"}, headers=headers)
+    assert all_pending.json()["total"] == 2
+    inbox = api_client.get("/api/registration-requests", params=params, headers=headers)
+    assert inbox.status_code == 200, inbox.text
+    assert inbox.json()["total"] == 1
+    assert [item["id"] for item in inbox.json()["items"]] == [request_id]
+    assert inbox.json()["items"][0]["summary_name"] == "山田 太郎"
+    assert db_session.query(Worker).count() == 0
+    assert api_client.get("/api/registration-requests", params={**params, "offset": 1}, headers=headers).json()["items"] == []
+    assert api_client.get("/api/registration-requests", params=params).status_code == 401
+
+    compared = _choose_new(api_client, request_id, headers)
+    approved = api_client.post(
+        f"/api/line/registration/reviews/{request_id}/approve",
+        json={"comparison_ticket": compared["comparison_ticket"]}, headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    assert api_client.get("/api/registration-requests", params=params, headers=headers).json()["total"] == 0
+    workers = api_client.get("/api/workers", headers=headers)
+    assert workers.status_code == 200, workers.text
+    assert [worker["name"] for worker in workers.json()["items"]] == ["山田 太郎"]
+    assert db_session.get(RegistrationRequest, public.id).status == "pending"
+
+
 def test_create_new_links_in_the_same_decision_and_replay_keeps_the_request(api_client, db_session, monkeypatch):
     _enable(monkeypatch)
     admin = _admin(db_session)

@@ -1,11 +1,12 @@
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
+import { LineRegistrationReviewPanel } from "../components/LineRegistrationReviewPanel";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { WorkerTagList } from "../components/WorkerTags";
@@ -28,13 +29,15 @@ import {
   getWorkerTags,
   getWorkerEditGuard,
   getWorkers,
+  getRegistrationRequests,
+  getLineRegistrationReview,
   issueLineLinkCode,
   listLineLinks,
   revokeLineLink,
   updateWorkerBankAccount,
   updateWorker,
 } from "../lib/api/client";
-import { formatDate, formatMaskedAccountNumber } from "../lib/formatters";
+import { formatDate, formatDateTime, formatMaskedAccountNumber } from "../lib/formatters";
 import type { WorkerBankAccountItem, WorkerListItem } from "../types/api";
 import type { LineLinkCode } from "../types/orderRequest";
 
@@ -50,6 +53,78 @@ function messageOf(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "処理に失敗しました";
+}
+
+function LineRegistrationInbox({ canReview }: { canReview: boolean }) {
+  const [page, setPage] = useState(0);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const requestsQuery = useQuery({
+    queryKey: ["registration-requests", "worker-line-pending", page],
+    queryFn: () => getRegistrationRequests({
+      request_type: "worker",
+      status: "pending",
+      line_only: true,
+      sort_by: "submitted_at",
+      sort_order: "desc",
+      offset: page * PAGE_SIZE,
+      limit: PAGE_SIZE,
+    }),
+    refetchInterval: 30_000,
+  });
+  const reviewQuery = useQuery({
+    queryKey: ["line-registration-review", requestId],
+    queryFn: () => getLineRegistrationReview(requestId!),
+    enabled: Boolean(requestId),
+    retry: false,
+    // 審査中の反映先選択をバックグラウンド取得で戻さない。
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (requestsQuery.data && page > 0 && requestsQuery.data.total <= page * PAGE_SIZE) {
+      setPage(Math.max(0, Math.ceil(requestsQuery.data.total / PAGE_SIZE) - 1));
+    }
+  }, [requestsQuery.data, page]);
+
+  return (
+    <section className="card" style={{ padding: "0.9rem 1rem", display: "grid", gap: "0.75rem" }}>
+      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0 }}>LINE登録・確認待ち{requestsQuery.data ? `（${requestsQuery.data.total}件）` : ""}</h2>
+        <button type="button" className="btn btn-ghost" disabled={requestsQuery.isFetching} onClick={() => { setPage(0); void requestsQuery.refetch(); }}>
+          申請を更新
+        </button>
+      </div>
+      <p style={{ margin: 0 }}>公式LINEから届いた登録申請です。内容と反映先を確認し、承認すると下の稼働者一覧へ反映されます。</p>
+      {requestsQuery.isLoading ? <p>登録申請を読み込み中...</p> : null}
+      {requestsQuery.isError ? <p className="form-error">LINE登録申請を取得できませんでした。申請を更新してください。</p> : null}
+      {requestsQuery.data ? (
+        <>
+          <DataTable
+            rows={requestsQuery.data.items}
+            getRowKey={(row) => row.id}
+            columns={[
+              { key: "name", header: "申請者", render: (row) => row.summary_name || "氏名の変更なし" },
+              { key: "submitted", header: "申請日時", render: (row) => formatDateTime(row.submitted_at) },
+              { key: "status", header: "状態", render: () => "管理者確認待ち" },
+              { key: "review", header: "操作", render: (row) => (
+                canReview ? <button type="button" className="btn btn-primary" onClick={() => setRequestId(row.id)}>内容を確認・反映</button> : "管理者が承認します"
+              ) },
+            ]}
+            emptyTitle="LINEの確認待ち申請はありません"
+            emptyDescription="送信済みの申請はここに表示されます。承認済みの方は下の稼働者一覧で確認してください。"
+          />
+          <PaginationBar page={page} limit={PAGE_SIZE} total={requestsQuery.data.total} onPrevious={() => setPage((current) => Math.max(0, current - 1))} onNext={() => setPage((current) => current + 1)} />
+        </>
+      ) : null}
+      {requestId ? (
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div><button type="button" className="btn btn-ghost" onClick={() => setRequestId(null)}>審査を閉じる</button></div>
+          {reviewQuery.isLoading ? <p>申請内容を読み込み中...</p> : null}
+          {reviewQuery.isError ? <p className="form-error">{messageOf(reviewQuery.error)}</p> : null}
+          {reviewQuery.data ? <LineRegistrationReviewPanel key={requestId} review={reviewQuery.data} onReload={() => { void reviewQuery.refetch(); }} /> : null}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function LineWorkerLinkSection() {
@@ -475,11 +550,11 @@ export function WorkersPage() {
     <div className="page-stack">
       <PageHeader
         title="稼働者登録・一覧"
-        description="登録された稼働者（スタッフ）の一覧です。新規登録と編集はポップアップで入力します。管理者と運用担当は、公式LINEの本人紐付けもここで行います。"
+        description="公式LINEからの登録申請を確認・承認し、稼働者一覧へ反映できます。新規登録と編集はポップアップで入力します。"
         eyebrow="マスタ"
       />
 
-      {user?.role === "admin" || user?.role === "ops" ? <LineWorkerLinkSection /> : null}
+      {user?.role === "admin" || user?.role === "ops" ? <><LineRegistrationInbox canReview={user?.role === "admin"} /><LineWorkerLinkSection /></> : null}
 
       <FilterBar>
         <label>

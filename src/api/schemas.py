@@ -1367,6 +1367,7 @@ class RegistrationRequestListQuery(PaginationQuery, SortQuery):
     request_type: Optional[str] = None
     status: Optional[str] = None
     source_type: Optional[str] = None
+    line_only: bool = False
     search: Optional[str] = Field(None, max_length=100)
 
 
