@@ -4462,9 +4462,17 @@ html[data-theme="dark"] .order-location > a { background: #244735; color: #c5efc
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: .8rem;
 }
-.order-recipients-search select { width: 100%; min-height: 44px; padding: .72rem .85rem; border: 1px solid #c6d1de; border-radius: 12px; background: #fff; color: var(--ink); font: inherit; }
+.order-role-filters { min-width: 0; margin: 0 0 1rem; padding: .8rem 1rem; border: 1px solid #a8bace; border-radius: 12px; }
+.order-role-filters legend { padding: 0 .35rem; font-weight: 600; }
+.order-role-options { display: flex; flex-wrap: wrap; gap: .5rem; margin: .65rem 0; }
+.order-role-option { display: flex; align-items: center; gap: .5rem; min-height: 44px; padding: .5rem .8rem; border: 1px solid #8095ab; border-radius: 8px; background: #fff; color: #23364a; cursor: pointer; }
+.order-role-option.is-on { background: #e4f3eb; border-color: #176341; color: #145335; }
+.order-role-option input { width: 18px; height: 18px; margin: 0; accent-color: #176341; }
+.order-role-option:has(input:focus-visible) { outline: 3px solid #326fc2; outline-offset: 2px; }
 .order-recipient-roles { display: block; margin-top: .2rem; color: var(--muted); font-size: .75rem; }
-html[data-theme="dark"] .order-recipients-search select { background: #303746; color: #f4f6f8; border-color: #67778d; }
+html[data-theme="dark"] .order-role-filters { border-color: #67778d; }
+html[data-theme="dark"] .order-role-option { background: #303746; color: #f4f6f8; border-color: #8fa1b6; }
+html[data-theme="dark"] .order-role-option.is-on { background: #244b36; border-color: #72c297; }
 
 .order-recipient-picks {
   display: flex;

@@ -39,6 +39,11 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
     change({ ...value, rates_follow_work: checked, rate_groups: checked ? value.rate_groups : value.rate_groups.map((g) => ({ ...g, work_group_id: null })) });
   }
 
+  async function useDailyRate(id: string) {
+    const accepted = await confirmApp({ title: "日給へ変更", message: "保存済みの旧時給を日給に変更します。金額は自動換算しません。変更後に日給額を入力してください。", confirmLabel: "日給を入力する" });
+    if (accepted) change({ ...value, rate_groups: value.rate_groups.map((g) => g.id === id ? { ...g, unit: "day", amount: "" } : g) });
+  }
+
   return <div className="order-schedule order-span-12">
     <h5>稼働日・稼働時間</h5>
     <p className="order-field-hint">同じ時間・条件の日は期間でまとめられます。日付が重複しないように設定してください。</p>
@@ -71,10 +76,10 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
         <legend>単価 {index + 1}：{dateGroupLabel(group) || "日付未設定"}</legend>
         {!value.rates_follow_work && <DateInputs group={group} prefix={`単価${index + 1}の`} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
-          <label>単価（円・税抜）<input type="number" min="0" step="0.01" value={group.amount} onChange={(e) => update({ amount: e.target.value })} /></label>
-          <div className="order-date-mode"><span>単位</span><div className="order-option-buttons" role="group" aria-label={`単価${index + 1}の単位`}>
-            {([ ["day", "日給"], ["hour", "時給"] ] as const).map(([unit, label]) => <button key={unit} type="button" aria-pressed={group.unit === unit} onClick={() => update({ unit })}>{label}</button>)}
-          </div></div>
+          <label>単価（円・税抜）<input type="number" min="0" step="0.01" readOnly={group.unit === "hour"} value={group.amount} onChange={(e) => update({ amount: e.target.value })} /></label>
+          <div className="order-date-mode"><span>単位：{group.unit === "hour" ? "保存済みの旧時給" : "日給"}</span>
+            {group.unit === "hour" && <><p className="order-field-hint">旧条件を保持しています。日給額を入力する場合は変更してください。</p>{!disabled && <button type="button" className="btn btn-ghost" onClick={() => void useDailyRate(group.id)}>日給へ変更</button>}</>}
+          </div>
         </div>
         <div className="order-expense-grid">
           <div className="order-expense-cell">

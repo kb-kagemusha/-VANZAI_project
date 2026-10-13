@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-async function setup(page: Page, options: { workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[] } = {}) {
+async function setup(page: Page, options: { workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean } = {}) {
   const writes: { path: string; body: any }[] = [];
   let staff: any[] = [];
   let updatedWorker = false;
@@ -41,7 +41,16 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
     if (path === "/api/order-requests" && method === "POST") {
       const body = route.request().postDataJSON(); writes.push({ path, body });
       savedVersion = { ...body, document_id: "doc", document_number: "OR-TEST-001A", id: "version1", version_no: 1, status: "draft", draft_worker_ids: body.worker_ids, deliveries: [], notes: [], change_documents: [], has_pdf: false, line_send_available: false, created_at: "2026-10-13T01:00:00Z" };
+      if (options.legacyHourly) {
+        const stored = JSON.parse(savedVersion.request_conditions);
+        stored.schedule.rate_groups[0].unit = "hour"; stored.schedule.rate_groups[0].amount = "1200";
+        savedVersion.request_conditions = JSON.stringify(stored);
+      }
       return respond(savedVersion);
+    }
+    if (path === "/api/order-requests/versions/version1" && method === "PATCH") {
+      const body = route.request().postDataJSON(); writes.push({ path, body });
+      savedVersion = { ...savedVersion, ...body, draft_worker_ids: body.worker_ids }; return respond(savedVersion);
     }
     if (path === "/api/order-requests/versions/version1") return respond(savedVersion);
     return respond({ items: [], total: 0, offset: 0, limit: 30, line_send_available: false });
@@ -105,11 +114,50 @@ test("daily and ranged work preserve matching prices and expense notes in saved 
   await expect(page.getByText("下書きを保存しました。確定するまで送付は始まりません。")).toBeVisible();
   const payload = writes.find((w) => w.path === "/api/order-requests")!.body;
   const schedule = JSON.parse(payload.request_conditions).schedule;
+  expect(schedule.rate_groups.every((rate: any) => rate.unit === "day")).toBe(true);
   expect(schedule.work_groups).toHaveLength(2); expect(schedule.rate_groups).toHaveLength(2);
   expect(schedule.rate_groups[1].from).toBe("2027-03-02"); expect(schedule.rate_groups[1].to).toBe("2027-03-10");
   expect(payload.body).toContain("¥20,500"); expect(payload.body).toContain("交通費：別途（実費上限1,000円）"); expect(payload.body).toContain("主催者確認住所");
   expect(JSON.parse(payload.request_conditions).maps_url).toBe("https://maps.app.goo.gl/TEST-location");
   expect(payload.body).toContain("https://maps.app.goo.gl/TEST-location");
+});
+
+test("venue and general date notes match project half width and rates only offer daily pay", async ({ page }) => {
+  await setup(page); await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
+  const project = await page.getByRole("textbox", { name: "案件名", exact: true }).boundingBox();
+  for (const name of ["稼働場所", "稼働日の補足（全体）"]) {
+    const box = await page.getByRole("textbox", { name, exact: true }).boundingBox();
+    expect(Math.abs(box!.width - project!.width)).toBeLessThan(2);
+  }
+  const rate = page.locator("fieldset.order-rate-row");
+  await expect(rate.getByText("単位：日給", { exact: true })).toBeVisible();
+  await expect(rate.getByRole("button", { name: "時給", exact: true })).toHaveCount(0);
+  await expect(rate.getByRole("combobox")).toHaveCount(0);
+});
+
+test("legacy hourly price stays unchanged until explicit daily conversion and new amount entry", async ({ page }) => {
+  const writes = await setup(page, { legacyHourly: true }); await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
+  await page.getByLabel(/^期限の案内/).fill("2027-02-20");
+  await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  const rate = page.locator("fieldset.order-rate-row");
+  await expect(rate.getByText("単位：保存済みの旧時給", { exact: true })).toBeVisible();
+  await expect(rate.getByLabel("単価（円・税抜）")).toHaveValue("1200");
+  await expect(rate.getByLabel("単価（円・税抜）")).toHaveAttribute("readonly", "");
+  await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(JSON.parse(writes[1].body.request_conditions).schedule.rate_groups[0]).toMatchObject({ unit: "hour", amount: "1200" });
+  await rate.getByRole("button", { name: "日給へ変更", exact: true }).click();
+  await page.getByRole("dialog", { name: "日給へ変更" }).getByRole("button", { name: "キャンセル" }).click();
+  await expect(rate.getByLabel("単価（円・税抜）")).toHaveValue("1200");
+  await rate.getByRole("button", { name: "日給へ変更", exact: true }).click();
+  await page.getByRole("dialog", { name: "日給へ変更" }).getByRole("button", { name: "日給を入力する" }).click();
+  await expect(rate.getByLabel("単価（円・税抜）")).toHaveValue("");
+  await rate.getByLabel("単価（円・税抜）").fill("18000");
+  await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(3);
+  expect(JSON.parse(writes[2].body.request_conditions).schedule.rate_groups[0]).toMatchObject({ unit: "day", amount: "18000" });
 });
 
 test("date conditions and operator editor fit a mobile screen", async ({ page }) => {
@@ -195,19 +243,26 @@ test("lunch and transport notes share one row on desktop and mobile", async ({ p
   await rate.screenshot({ path: "../../artifacts/order-expense-columns.png" });
 });
 
-test("recipient roles and name filters preserve selected recipients", async ({ page }) => {
-  await setup(page, { workers: [{ id: "one", name: "商業担当", tags: ["commercial_d"] }, { id: "two", name: "飲食担当", tags: ["food_d"] }] });
+test("multiple recipient roles use union and name filtering preserves selected recipients", async ({ page }) => {
+  await setup(page, { workers: [{ id: "one", name: "商業担当", tags: ["commercial_d"] }, { id: "two", name: "飲食担当", tags: ["food_d"] }, { id: "both", name: "両方担当", tags: ["commercial_d", "food_d"] }, { id: "none", name: "未付与", tags: [] }] });
   await page.goto("/operations/order-requests"); await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
   const choices = page.locator(".order-recipient-list");
-  await page.getByLabel("付与ロールで絞り込み").selectOption("commercial_d");
-  await expect(choices.getByRole("checkbox")).toHaveCount(1);
+  const roles = page.getByRole("group", { name: "付与ロールで絞り込み", exact: true });
+  await expect(roles.getByRole("checkbox")).toHaveCount(2);
+  await roles.getByRole("checkbox", { name: "商業D", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(2);
   await choices.getByRole("checkbox", { name: /商業担当/ }).check();
-  await page.getByLabel("付与ロールで絞り込み").selectOption("food_d");
+  await roles.getByRole("checkbox", { name: "飲食D", exact: true }).check();
+  await expect(choices.getByRole("checkbox")).toHaveCount(3);
   await expect(choices.getByRole("checkbox", { name: /飲食担当/ })).toBeVisible();
   await expect(page.locator(".order-recipient-picks").getByText("商業担当")).toBeVisible();
-  await page.getByLabel("付与ロールで絞り込み").selectOption("");
-  await page.getByLabel("氏名・付与ロールで検索").fill("商業D");
+  await page.getByLabel("氏名・付与ロールで検索").fill("飲食担当");
   await expect(choices.getByRole("checkbox")).toHaveCount(1);
+  await page.getByLabel("氏名・付与ロールで検索").fill("");
+  await roles.getByRole("checkbox", { name: "飲食D", exact: true }).uncheck();
+  await expect(choices.getByRole("checkbox")).toHaveCount(2);
+  await roles.getByRole("button", { name: "ロールの絞り込みを解除" }).click();
+  await expect(choices.getByRole("checkbox")).toHaveCount(4);
   await expect(choices.getByRole("checkbox", { name: /商業担当/ })).toBeChecked();
 });
 
@@ -228,7 +283,7 @@ test("role filtering also finds recipients after the first API page", async ({ p
   const workers = Array.from({ length: 201 }, (_, i) => ({ id: `worker-${i}`, name: `後方確認${String(i).padStart(3, "0")}`, tags: i === 200 ? ["commercial_d"] : ["food_d"] }));
   await setup(page, { workers }); await page.goto("/operations/order-requests");
   await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
-  await page.getByLabel("付与ロールで絞り込み").selectOption("commercial_d");
+  await page.getByRole("group", { name: "付与ロールで絞り込み", exact: true }).getByRole("checkbox", { name: "商業D", exact: true }).check();
   await expect(page.locator(".order-recipient-list").getByRole("checkbox")).toHaveCount(1);
   await expect(page.locator(".order-recipient-list").getByRole("checkbox", { name: /後方確認200/ })).toBeVisible();
 });

@@ -162,7 +162,7 @@ export function OrderRequestsPage() {
   const [form, setForm] = useState<OrderRequestWrite>(EMPTY_FORM);
   const [sections, setSections] = useState<OrderDocumentSections>(EMPTY_ORDER_SECTIONS);
   const [workerSearch, setWorkerSearch] = useState("");
-  const [workerRoleFilter, setWorkerRoleFilter] = useState("");
+  const [workerRoleFilters, setWorkerRoleFilters] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
@@ -210,12 +210,12 @@ export function OrderRequestsPage() {
   const visibleWorkers = useMemo(() => {
     const query = workerSearch.trim().toLocaleLowerCase();
     return workers.filter((worker) => {
-      if (workerRoleFilter && !(worker.tags ?? []).includes(workerRoleFilter)) return false;
+      if (workerRoleFilters.length && !workerRoleFilters.some((role) => (worker.tags ?? []).includes(role))) return false;
       if (!query) return true;
       const roles = (worker.tags ?? []).map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join(" ");
       return [worker.name, worker.furigana ?? "", roles].some((text) => text.toLocaleLowerCase().includes(query));
     });
-  }, [workerSearch, workerRoleFilter, workerRoles, workers]);
+  }, [workerSearch, workerRoleFilters, workerRoles, workers]);
   const selectedWorkers = workers.filter((worker) => form.worker_ids.includes(worker.id));
 
   const detail = creating ? null : detailQuery.data;
@@ -409,7 +409,7 @@ export function OrderRequestsPage() {
     setForm(EMPTY_FORM);
     setSections(initialSections);
     setWorkerSearch("");
-    setWorkerRoleFilter("");
+    setWorkerRoleFilters([]);
     setActionError("");
     setActionMessage("");
     setReason("");
@@ -1086,7 +1086,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, background: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  <label className="order-field order-span-6">
                     <span className="order-field-label">稼働場所</span>
                     <textarea
                       className="is-short is-site"
@@ -1127,7 +1127,7 @@ export function OrderRequestsPage() {
                     ) : null}
                   </div>}
                   <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
-                  <label className="order-field order-span-4">
+                  <label className="order-field order-span-6">
                     <span className="order-field-label">{sections.schedule ? "稼働日の補足（全体）" : "稼働日の詳細"}</span>
                     <textarea
                       className="is-short"
@@ -1329,13 +1329,18 @@ export function OrderRequestsPage() {
                     onChange={(event) => setWorkerSearch(event.target.value)}
                   />
                   </label>
-                  <label className="order-field">付与ロールで絞り込み
-                    <select value={workerRoleFilter} disabled={!editable || workerRolesQuery.isLoading} onChange={(event) => setWorkerRoleFilter(event.target.value)}>
-                      <option value="">すべてのロール</option>
-                      {workerRoles.map((role) => <option key={role.code} value={role.code}>{role.label}</option>)}
-                    </select>
-                  </label>
                 </div>
+                <fieldset className="order-role-filters" disabled={!editable || workerRolesQuery.isLoading}>
+                  <legend>付与ロールで絞り込み</legend>
+                  <p className="order-field-hint">複数選択できます。選んだいずれかのロールを持つ人を表示します。未選択なら全員を表示します。</p>
+                  <div className="order-role-options">
+                    {workerRoles.map((role) => <label key={role.code} className={`order-role-option${workerRoleFilters.includes(role.code) ? " is-on" : ""}`}>
+                      <input type="checkbox" checked={workerRoleFilters.includes(role.code)} onChange={(event) => setWorkerRoleFilters((current) => event.target.checked ? [...current, role.code] : current.filter((code) => code !== role.code))} />
+                      {role.label}
+                    </label>)}
+                  </div>
+                  {workerRoleFilters.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => setWorkerRoleFilters([])}>ロールの絞り込みを解除</button>}
+                </fieldset>
                 {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
                 {selectedWorkers.length > 0 ? (
                   <div className="order-recipient-picks">
