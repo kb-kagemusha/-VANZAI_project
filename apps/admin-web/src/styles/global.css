@@ -4163,6 +4163,13 @@ a.primary-button {
 .master-view-switch button:focus-visible { outline: 3px solid #326fc2; outline-offset: 3px; }
 .master-list-actions { display: flex; justify-content: flex-end; }
 .master-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; }
+.master-form label { display: grid; gap: .35rem; min-width: 0; }
+.master-form input:not([type="checkbox"]), .master-form select, .master-form textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: .6rem .75rem; border: 1px solid #a8bace; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; }
+.master-form button { min-height: 44px; }
+.master-form input:focus-visible, .master-form select:focus-visible, .master-form textarea:focus-visible { outline: 2px solid #326fc2; outline-offset: 2px; }
+.master-client-contacts > button { justify-self: start; width: auto; padding: .6rem .9rem; background: #e4f3eb; border: 1px solid #176341; color: #145335; font-weight: 600; }
+html[data-theme="dark"] .master-form input:not([type="checkbox"]), html[data-theme="dark"] .master-form select, html[data-theme="dark"] .master-form textarea { background: #303746; color: #f4f6f8; border-color: #8fa1b6; }
+html[data-theme="dark"] .master-client-contacts > button { background: #244b36; color: #f4f6f8; border-color: #72c297; }
 .master-client-contacts { display: grid; gap: .75rem; }
 .master-client-contacts fieldset { min-width: 0; padding: .75rem; border: 1px solid #a8bace; border-radius: 9px; }
 .order-internal-source { border: 2px solid #9275b4; background: #f7f3fb; padding: 1rem; border-radius: 12px; }

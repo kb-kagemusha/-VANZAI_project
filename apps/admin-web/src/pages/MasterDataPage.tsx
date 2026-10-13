@@ -844,7 +844,7 @@ export function MasterDataPage() {
       {formMessage && <p role="status">{formMessage}</p>}
       {user?.role === "admin" && createOpen ? (
         <ProfileDialog title={`${VIEW_LABELS[view]}の新規追加`} onClose={() => { if (!createMutation.isPending) setCreateOpen(false); }}>
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+        <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{VIEW_LABELS[view]}を追加</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -1048,7 +1048,7 @@ export function MasterDataPage() {
 
       {canEditMaster ? (
         <ProfileDialog title={selectedWorker ? "稼働者を編集" : selectedSupplier ? "下請けを編集" : "VANZAI担当者を編集"} onClose={() => { if (!updateMutation.isPending) clearEditor(); }}>
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+        <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
       <strong>{selectedWorker ? "稼働者を編集" : selectedSupplier ? "下請けを編集" : "VANZAI担当者を編集"}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -1419,7 +1419,7 @@ export function MasterDataPage() {
           />
           {selectedClient ? (
             <ProfileDialog title={`${selectedClient.name}の会社電話・担当者管理`} onClose={() => { if (!companyPhoneMutation.isPending && !createClientStaffMutation.isPending && !updateClientStaffMutation.isPending) { setSelectedClient(null); setSelectedClientStaff(null); } }}>
-            <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+            <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
               <label>会社電話番号<input type="tel" maxLength={20} value={companyPhone} disabled={user?.role !== "admin"} onChange={(event) => setCompanyPhone(event.target.value)} /></label>
               {user?.role === "admin" && <button type="button" disabled={companyPhoneMutation.isPending} onClick={() => companyPhoneMutation.mutate()}>会社電話番号を更新</button>}
               {companyPhoneMessage && <p role="status">{companyPhoneMessage}</p>}

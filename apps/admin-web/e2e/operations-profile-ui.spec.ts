@@ -97,6 +97,8 @@ test("master tabs initially show only lists and open additions in a popup with d
     await page.getByRole("button", { name: "新規追加", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: `${label}の新規追加`, exact: true });
     await expect(dialog.getByLabel("名称", { exact: true })).toBeVisible();
+    const field = await dialog.getByLabel("名称", { exact: true }).evaluate((el) => ({ height: el.getBoundingClientRect().height, right: el.getBoundingClientRect().right, labelRight: el.closest("label")!.getBoundingClientRect().right }));
+    expect(field.height).toBeGreaterThanOrEqual(44); expect(field.right).toBeLessThanOrEqual(field.labelRight + 1);
     await dialog.getByRole("button", { name: "閉じる", exact: true }).click();
   }
   const colors = await tabs.getByRole("button").evaluateAll((elements) => elements.map((el) => getComputedStyle(el).borderTopColor));
