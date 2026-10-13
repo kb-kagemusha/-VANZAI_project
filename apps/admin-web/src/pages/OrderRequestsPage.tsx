@@ -22,6 +22,7 @@ import {
   fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
   getWorkers,
+  getWorkerTags,
   hideOrderRequest,
   listLineLinks,
   listOrderRequestReplies,
@@ -69,6 +70,21 @@ const SEND_LABEL: Record<string, string> = {
   failed: "失敗",
   unknown: "結果不明",
 };
+
+const MAX_ORDER_RECIPIENTS = 40;
+
+async function loadOrderRecipients() {
+  const first = await getWorkers({ limit: 200, offset: 0, is_active: true, sort_by: "name", sort_order: "asc" });
+  const items = [...first.items];
+  let offset = first.items.length;
+  while (offset < first.total) {
+    const page = await getWorkers({ limit: 200, offset, is_active: true, sort_by: "name", sort_order: "asc" });
+    if (!page.items.length) break;
+    items.push(...page.items);
+    offset += page.items.length;
+  }
+  return { ...first, items: [...new Map(items.map((item) => [item.id, item])).values()] };
+}
 
 const REPLY_LABEL: Record<string, string> = {
   unacked: "未回答",
@@ -146,6 +162,7 @@ export function OrderRequestsPage() {
   const [form, setForm] = useState<OrderRequestWrite>(EMPTY_FORM);
   const [sections, setSections] = useState<OrderDocumentSections>(EMPTY_ORDER_SECTIONS);
   const [workerSearch, setWorkerSearch] = useState("");
+  const [workerRoleFilter, setWorkerRoleFilter] = useState("");
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
@@ -179,8 +196,10 @@ export function OrderRequestsPage() {
   });
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
-    queryFn: () => getWorkers({ limit: 200, is_active: true, sort_by: "name", sort_order: "asc" }),
+    queryFn: loadOrderRecipients,
   });
+  const workerRolesQuery = useQuery({ queryKey: ["worker-tags"], queryFn: getWorkerTags });
+  const workerRoles = workerRolesQuery.data?.items ?? [];
   const detailQuery = useQuery({
     queryKey: ["order-request", selectedId],
     queryFn: () => getOrderRequestVersion(selectedId as string),
@@ -189,10 +208,14 @@ export function OrderRequestsPage() {
 
   const workers = workersQuery.data?.items ?? [];
   const visibleWorkers = useMemo(() => {
-    const query = workerSearch.trim();
-    if (!query) return workers;
-    return workers.filter((worker) => worker.name.includes(query) || (worker.furigana ?? "").includes(query));
-  }, [workerSearch, workers]);
+    const query = workerSearch.trim().toLocaleLowerCase();
+    return workers.filter((worker) => {
+      if (workerRoleFilter && !(worker.tags ?? []).includes(workerRoleFilter)) return false;
+      if (!query) return true;
+      const roles = (worker.tags ?? []).map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join(" ");
+      return [worker.name, worker.furigana ?? "", roles].some((text) => text.toLocaleLowerCase().includes(query));
+    });
+  }, [workerSearch, workerRoleFilter, workerRoles, workers]);
   const selectedWorkers = workers.filter((worker) => form.worker_ids.includes(worker.id));
 
   const detail = creating ? null : detailQuery.data;
@@ -386,6 +409,7 @@ export function OrderRequestsPage() {
     setForm(EMPTY_FORM);
     setSections(initialSections);
     setWorkerSearch("");
+    setWorkerRoleFilter("");
     setActionError("");
     setActionMessage("");
     setReason("");
@@ -605,7 +629,7 @@ export function OrderRequestsPage() {
     if (!form.contact_name.trim()) missing.push("担当者");
     if (!form.follow_up_due_on) missing.push("期限の案内");
     if (form.worker_ids.length === 0) missing.push("送付先");
-    if (form.worker_ids.length > 30) missing.push("送付先は30人まで");
+    if (form.worker_ids.length > MAX_ORDER_RECIPIENTS) missing.push(`送付先は${MAX_ORDER_RECIPIENTS}人まで`);
     return missing;
   }
 
@@ -1104,7 +1128,7 @@ export function OrderRequestsPage() {
                   </div>}
                   <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
                   <label className="order-field order-span-4">
-                    <span className="order-field-label">稼働日の詳細</span>
+                    <span className="order-field-label">{sections.schedule ? "稼働日の補足（全体）" : "稼働日の詳細"}</span>
                     <textarea
                       className="is-short"
                       value={sections.workDateDetail}
@@ -1290,20 +1314,29 @@ export function OrderRequestsPage() {
                 <div className="order-recipients-head">
                   <div>
                     <h4>送付先</h4>
-                    <p>最大30人まで選べます。</p>
+                    <p>最大{MAX_ORDER_RECIPIENTS}人まで選べます。</p>
                   </div>
-                  <span className={`order-count${form.worker_ids.length > 30 ? " is-over" : ""}`}>
-                    {form.worker_ids.length} / 30
+                  <span className={`order-count${form.worker_ids.length > MAX_ORDER_RECIPIENTS ? " is-over" : ""}`}>
+                    {form.worker_ids.length} / {MAX_ORDER_RECIPIENTS}
                   </span>
                 </div>
                 <div className="order-recipients-search">
+                  <label className="order-field">氏名・付与ロールで検索
                   <input
-                    placeholder="氏名で絞り込み"
+                    placeholder="氏名・商業Dなどで絞り込み"
                     value={workerSearch}
                     disabled={!editable}
                     onChange={(event) => setWorkerSearch(event.target.value)}
                   />
+                  </label>
+                  <label className="order-field">付与ロールで絞り込み
+                    <select value={workerRoleFilter} disabled={!editable || workerRolesQuery.isLoading} onChange={(event) => setWorkerRoleFilter(event.target.value)}>
+                      <option value="">すべてのロール</option>
+                      {workerRoles.map((role) => <option key={role.code} value={role.code}>{role.label}</option>)}
+                    </select>
+                  </label>
                 </div>
+                {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
                 {selectedWorkers.length > 0 ? (
                   <div className="order-recipient-picks">
                     {selectedWorkers.map((worker) => (
@@ -1322,7 +1355,7 @@ export function OrderRequestsPage() {
                       <input
                         type="checkbox"
                         checked={form.worker_ids.includes(worker.id)}
-                        disabled={!editable}
+                        disabled={!editable || (!form.worker_ids.includes(worker.id) && form.worker_ids.length >= MAX_ORDER_RECIPIENTS)}
                         onChange={(event) => {
                           const next = event.target.checked
                             ? [...form.worker_ids, worker.id]
@@ -1330,7 +1363,7 @@ export function OrderRequestsPage() {
                           setForm({ ...form, worker_ids: next });
                         }}
                       />
-                      <span>{worker.name}</span>
+                      <span>{worker.name}{(worker.tags ?? []).length > 0 && <small className="order-recipient-roles">{worker.tags!.map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join("・")}</small>}</span>
                     </label>
                   ))}
                   {visibleWorkers.length === 0 ? (

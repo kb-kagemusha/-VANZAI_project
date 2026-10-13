@@ -44,7 +44,7 @@ ACK_DECLINE_PENDING = "decline_pending"
 ACK_DECLINED = "declined"
 ACK_STATUSES = (ACK_UNACKED, ACK_ACKED, ACK_DECLINE_PENDING, ACK_DECLINED)
 
-MAX_RECIPIENTS = 30
+MAX_RECIPIENTS = 40
 
 
 class OrderRequestDocument(Base, TimestampMixin):

@@ -682,14 +682,30 @@ def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_us
     )
     assert duplicated.status_code == 400
 
-    ids = [_worker(db_session, f"人{index}").id for index in range(31)]
+    ids = [_worker(db_session, f"人{index}").id for index in range(41)]
     too_many = api_client.post(
         "/api/order-requests",
         json=_body(ids),
         headers=_auth(ops_user.username),
     )
     assert too_many.status_code == 400
+    assert "40人" in too_many.json()["detail"]
     assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_40_recipients_can_be_saved_and_confirmed_but_update_to_41_rejected(api_client, db_session, ops_user, pdf_root):
+    workers = [Worker(id=generate_ulid(), name=f"上限確認{index}", is_active=True) for index in range(41)]
+    db_session.add_all(workers); db_session.commit()
+    ids = [worker.id for worker in workers]
+    saved = api_client.post("/api/order-requests", json=_body(ids[:40]), headers=_auth(ops_user.username))
+    assert saved.status_code == 200, saved.text
+    version_id = saved.json()["id"]
+    rejected = api_client.patch(f"/api/order-requests/versions/{version_id}", json={"worker_ids": ids}, headers=_auth(ops_user.username))
+    assert rejected.status_code == 400 and "40人" in rejected.json()["detail"]
+    assert len(db_session.get(OrderRequestVersion, version_id).draft_worker_ids) == 40
+    confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
+    assert len(confirmed.json()["deliveries"]) == 40
 
 
 def test_follow_up_due_date_is_required_and_defaults_to_21(api_client, db_session, ops_user):
