@@ -8060,7 +8060,7 @@ async def update_vanzai_staff(
 ):
     """VANZAI担当者更新"""
     check_permission(current_user, Permission.MASTER_WRITE)
-    staff = db.query(VanzaiStaff).filter(VanzaiStaff.id == staff_id, VanzaiStaff.deleted_at.is_(None)).first()
+    staff = db.query(VanzaiStaff).filter(VanzaiStaff.id == staff_id, VanzaiStaff.deleted_at.is_(None)).with_for_update().first()
     if not staff:
         raise HTTPException(status_code=404, detail="VANZAI担当者が見つかりません")
     linked_worker = None
@@ -8069,6 +8069,7 @@ async def update_vanzai_staff(
         if not linked_worker or linked_worker.deleted_at is not None:
             raise HTTPException(status_code=400, detail="対応する稼働者が見つかりません")
     staff.name = body.name
+    staff.profile_revision += 1
     staff.role = body.role
     staff.linked_worker_id = body.linked_worker_id
     staff.playing_manager_fee_type = body.playing_manager_fee_type
@@ -9905,6 +9906,10 @@ app.include_router(ocr_router)
 app.include_router(inventory_router)
 app.include_router(public_ocr_router)
 app.include_router(order_request_router)
+from src.api.operator_staff_routes import router as operator_staff_router
+app.include_router(operator_staff_router)
+from src.api.place_routes import router as place_router
+app.include_router(place_router)
 app.include_router(line_webhook_router)
 app.include_router(line_registration_router)
 app.include_router(line_registration_review_router)

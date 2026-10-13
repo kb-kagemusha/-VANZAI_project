@@ -397,6 +397,10 @@ class LineOrderService:
         elif event_type == "postback":
             outcome, reply = self._handle_postback(event, line_user_id)
             self._reply(reply_token, reply)
+        elif event_type == "unfollow":
+            from src.services.operator_staff import OperatorStaffService
+            OperatorStaffService(self.session).unfollow(line_user_id)
+            outcome = "staff_unfollow"
 
         self.session.add(
             LineWebhookEvent(
@@ -414,6 +418,12 @@ class LineOrderService:
         if message.get("type") != "text" or not isinstance(message.get("text"), str):
             return "ignored", None
         normalized = normalize_link_code(message["text"])
+        if normalized.startswith("OPS-"):
+            source = event.get("source") if isinstance(event.get("source"), dict) else {}
+            if source.get("type") != "user":
+                return "staff_rejected", "運営スタッフ用コードは公式LINEとの個別トークから送ってください。"
+            from src.services.operator_staff import OperatorStaffService
+            return OperatorStaffService(self.session).consume_code(normalized, line_user_id, self.client)
         if len(normalized) != CODE_LENGTH or any(char not in CODE_ALPHABET for char in normalized):
             return self._take_decline_reason(line_user_id, message["text"])
         if not line_user_id:

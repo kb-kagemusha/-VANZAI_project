@@ -22,6 +22,7 @@ import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
+import { OperatorStaffPage } from "../pages/OperatorStaffPage";
 import { AccountProfilePage } from "../pages/AccountProfilePage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
@@ -208,6 +209,7 @@ export function App() {
               </PermissionRoute>
             }
           />
+          <Route path="/masters/operator-staff" element={<PermissionRoute allowedRoles={["admin"]}><OperatorStaffPage /></PermissionRoute>} />
           <Route
             path="/audit-logs"
             element={

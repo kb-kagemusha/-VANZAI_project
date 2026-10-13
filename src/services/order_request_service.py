@@ -37,6 +37,7 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
+from src.domain.order_schedule import normalize_schedule, schedule_text
 from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -203,6 +204,7 @@ class OrderRequestService:
         site_name: str | None = None,
         site_id: str | None = None,
         site_address: str | None = None,
+        site_address_set: bool = False,
         clear_site_id: bool = False,
         request_conditions: str | None = None,
         body: str | None = None,
@@ -235,7 +237,7 @@ class OrderRequestService:
             worker_ids,
             site_address,
         ]
-        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None
+        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set
         if content_change and version.status != STATUS_DRAFT:
             raise OrderRequestError(409, "確定済みの本文と送付先は変更できません。改訂で新しい版を作ってください")
 
@@ -275,7 +277,7 @@ class OrderRequestService:
             work_date_label=version.work_date_label if work_date_label is None else work_date_label,
             site_name=version.site_name if site_name is None else site_name,
             site_id=next_site_id,
-            site_address=version.site_address if site_address is None else site_address,
+            site_address=version.site_address if site_address is None and not site_address_set else site_address,
             request_conditions=version.request_conditions if request_conditions is None else request_conditions,
             body=version.body if body is None else body,
             contact_name=version.contact_name if contact_name is None else contact_name,
@@ -308,7 +310,12 @@ class OrderRequestService:
         if len(worker_ids) > MAX_RECIPIENTS:
             raise OrderRequestError(400, f"1回の送付先は{MAX_RECIPIENTS}人までです")
 
-        sections = parse_sections(version.request_conditions)
+        try:
+            sections = parse_sections(version.request_conditions)
+            if sections and "schedule" in sections:
+                normalize_schedule(sections["schedule"], complete=True)
+        except ValueError as exc:
+            raise OrderRequestError(400, str(exc)) from None
         required = (
             (
                 ("案件名", sections.get("project_name") if sections else ""),
@@ -783,12 +790,16 @@ class OrderRequestService:
         version.site_name = _case_text(fields["site_name"])
         version.site_id = fields["site_id"]
         version.site_address = fields["site_address"]
-        request_conditions, body = apply_template_fields(
-            fields["request_conditions"] or "",
-            fields["body"] or "",
-            work_date_label=version.work_date_label,
-            site_name=version.site_name,
-        )
+        try:
+            sections = parse_sections(fields["request_conditions"] or "")
+            if sections and "schedule" in sections:
+                version.work_date_label, _, _ = schedule_text(sections["schedule"])
+            request_conditions, body = apply_template_fields(
+                fields["request_conditions"] or "", fields["body"] or "",
+                work_date_label=version.work_date_label, site_name=version.site_name, site_address=version.site_address,
+            )
+        except ValueError as exc:
+            raise OrderRequestError(400, str(exc)) from None
         version.request_conditions = request_conditions
         version.body = body
         version.contact_name = _case_text(fields["contact_name"])

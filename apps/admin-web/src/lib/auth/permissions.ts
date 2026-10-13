@@ -119,6 +119,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/operator-staff",
+    label: "運営スタッフ登録・一覧",
+    description: "運営スタッフの登録、連絡先、付与ロール、公式LINEの本人紐付け",
+    allowedRoles: ["admin"],
+  },
+  {
     to: "/masters/data",
     label: "マスタ一覧",
     description: "稼働者・下請け・クライアント等のマスタデータを参照",

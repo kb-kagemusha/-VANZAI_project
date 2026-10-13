@@ -1,10 +1,15 @@
 /** 追加案件依頼。保存時は見出し付き本文と、欄を戻すためのJSONにする。 */
+import { scheduleFees, scheduleFromStored, scheduleHours, syncSchedule, type OrderSchedule } from "./orderSchedule";
 
 export const ORDER_DOCUMENT_TITLE = "【追加案件依頼】";
 export const ORDER_FORMAT_ID = "additional-request-v1";
 export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。";
 
 export interface OrderDocumentSections {
+  schedule?: OrderSchedule;
+  previousHours?: string;
+  previousFee?: string;
+  placeId?: string;
   projectName: string;
   background: string;
   workDateDetail: string;
@@ -49,12 +54,16 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     project_name: wavy(sections.projectName.trim()),
     background: wavy(sections.background.trim()),
     work_date_detail: wavy(sections.workDateDetail.trim()),
-    hours: wavy(sections.hours.trim()),
+    hours: wavy(sections.schedule ? scheduleHours(sections.schedule) : sections.hours.trim()),
     content: wavy(sections.content.trim()),
     belongings: wavy(sections.belongings.trim()),
-    fee: wavy(sections.fee.trim()),
+    fee: wavy(sections.schedule ? scheduleFees(sections.schedule) : sections.fee.trim()),
     incentive: wavy(sections.incentive.trim()),
     notes: wavy(sections.notes.trim()),
+    ...(sections.schedule ? { schedule: syncSchedule(sections.schedule) } : {}),
+    ...(sections.previousHours ? { previous_hours: sections.previousHours } : {}),
+    ...(sections.previousFee ? { previous_fee: sections.previousFee } : {}),
+    ...(sections.placeId ? { place_id: sections.placeId } : {}),
   });
 }
 
@@ -62,6 +71,7 @@ export function composeOrderDocument(
   sections: OrderDocumentSections,
   workDateLabel: string,
   siteName: string,
+  siteAddress = "",
 ): string {
   const notes = withBullet(wavy(sections.notes.trim()));
   return [
@@ -75,6 +85,7 @@ export function composeOrderDocument(
     "",
     "■稼働場所",
     wavy(siteName.trim()),
+    ...(siteAddress.trim() ? [wavy(siteAddress.trim())] : []),
     "",
     "■稼働日",
     wavy(workDateLabel.trim()),
@@ -83,7 +94,7 @@ export function composeOrderDocument(
     wavy(sections.workDateDetail.trim()),
     "",
     "■稼働時間",
-    wavy(sections.hours.trim()),
+    wavy(sections.schedule ? scheduleHours(sections.schedule) : sections.hours.trim()),
     "",
     "■内容：",
     wavy(sections.content.trim()),
@@ -92,7 +103,7 @@ export function composeOrderDocument(
     wavy(sections.belongings.trim()),
     "",
     "■単価：",
-    wavy(sections.fee.trim()),
+    wavy(sections.schedule ? scheduleFees(sections.schedule) : sections.fee.trim()),
     "",
     "■インセンティブ：",
     wavy(sections.incentive.trim()),
@@ -109,6 +120,10 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
     const data = JSON.parse(text) as Record<string, unknown>;
     if (data.format !== ORDER_FORMAT_ID) return null;
     return {
+      schedule: scheduleFromStored(data.schedule),
+      previousHours: textOf(data.previous_hours),
+      previousFee: textOf(data.previous_fee),
+      placeId: textOf(data.place_id),
       projectName: textOf(data.project_name),
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),

@@ -9,6 +9,9 @@ import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
+import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
+import { OrderLocationEditor } from "../components/OrderLocationEditor";
+import { emptySchedule, newWorkGroup, scheduleDateLabel, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import {
   ApiError,
   addOrderRequestNote,
@@ -224,7 +227,7 @@ export function OrderRequestsPage() {
     return {
       ...current,
       request_conditions: serializeOrderSections(currentSections),
-      body: composeOrderDocument(currentSections, current.work_date_label, current.site_name),
+      body: composeOrderDocument(currentSections, current.work_date_label, current.site_name, current.site_address ?? ""),
       contact_desk: "",
       counterparty_note: current.counterparty_note || null,
       phone_first: Boolean(current.phone_first),
@@ -316,7 +319,7 @@ export function OrderRequestsPage() {
   const previewProjectCut = `案件名: ${withFullwidthTilde(sections.projectName)}`.length > 80;
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
   const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
-  const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
+  const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name, form.site_address ?? "");
   const pdfNotice = !creating && detail?.status === "cancelled"
     ? "cancel"
     : (basedOn || detail?.based_on_document_number)
@@ -331,6 +334,23 @@ export function OrderRequestsPage() {
     const from = bound === "from" ? value : workDateFrom;
     const to = bound === "to" ? value : workDateTo;
     setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
+  }
+  function changeSchedule(schedule: OrderSchedule) {
+    const next = syncSchedule(schedule);
+    setSections({ ...sections, schedule: next });
+    setForm({ ...form, work_date_label: scheduleDateLabel(next) });
+  }
+  async function enableSchedule() {
+    const accepted = await confirmApp({ title: "日付・期間ごとの入力", message: "勤務時間・単価を日付別の入力に切り替えます。既存の文面は参考として残し、依頼書は新しい日付別の入力から作成します。", confirmLabel: "切り替える" });
+    if (!accepted) return;
+    const first = newWorkGroup();
+    if (parsedWorkDates?.from) {
+      first.from = parsedWorkDates.from;
+      first.to = parsedWorkDates.to || first.from;
+      first.date_mode = parsedWorkDates.to ? "range" : "single";
+    }
+    setSections({ ...sections, previousHours: sections.hours, previousFee: sections.fee, schedule: syncSchedule({ ...emptySchedule(), work_groups: [first] }) });
+    setForm({ ...form, work_date_label: scheduleDateLabel({ ...emptySchedule(), work_groups: [first] }) });
   }
   const previewPdfBody = previewDocument.startsWith(ORDER_DOCUMENT_TITLE)
     ? previewDocument.slice(ORDER_DOCUMENT_TITLE.length).replace(/^\n+/, "")
@@ -358,12 +378,13 @@ export function OrderRequestsPage() {
   function startNewDraft() {
     loadedForRef.current = null;
     formRef.current = EMPTY_FORM;
-    sectionsRef.current = EMPTY_ORDER_SECTIONS;
+    const initialSections = { ...EMPTY_ORDER_SECTIONS, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
+    sectionsRef.current = initialSections;
     setCreating(true);
     setBasedOn(null);
     setSelectedId(null);
     setForm(EMPTY_FORM);
-    setSections(EMPTY_ORDER_SECTIONS);
+    setSections(initialSections);
     setWorkerSearch("");
     setActionError("");
     setActionMessage("");
@@ -1048,10 +1069,10 @@ export function OrderRequestsPage() {
                       value={form.site_name}
                       disabled={!editable}
                       placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
-                      onChange={(event) => setForm({ ...form, site_name: withFullwidthTilde(event.target.value) })}
+                      onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "" }); }}
                     />
                   </label>
-                  <div className="order-field order-span-4">
+                  {!sections.schedule && <div className="order-field order-span-4">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <input
@@ -1080,7 +1101,8 @@ export function OrderRequestsPage() {
                         {legacyWorkDate}
                       </span>
                     ) : null}
-                  </div>
+                  </div>}
+                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId }); if (placeId) setForm({ ...form, site_id: null }); }} />
                   <label className="order-field order-span-4">
                     <span className="order-field-label">稼働日の詳細</span>
                     <textarea
@@ -1091,7 +1113,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, workDateDetail: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  {!sections.schedule && <label className="order-field order-span-4">
                     <span className="order-field-label">稼働時間</span>
                     <textarea
                       className="is-tall"
@@ -1100,7 +1122,9 @@ export function OrderRequestsPage() {
                       placeholder={"10/9(金)　※初日30分前集合\n　8:30　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散\n\n10/10(土)～10/13(火)\n　9:00　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散"}
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
-                  </label>
+                  </label>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button></div>}
+                  {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
                     <textarea
@@ -1117,7 +1141,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, belongings: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  {!sections.schedule && <label className="order-field order-span-4">
                     <span className="order-field-label">単価</span>
                     <textarea
                       className="is-tall"
@@ -1126,7 +1150,7 @@ export function OrderRequestsPage() {
                       placeholder={"10/9(金)\n報酬：¥20,500(税抜)\n　(昼食代、交通費込み)\n\n10/10(土)～10/13(火)\n報酬：¥19,500(税抜)\n　(昼食代、交通費込み)"}
                       onChange={(event) => setSections({ ...sections, fee: withFullwidthTilde(event.target.value) })}
                     />
-                  </label>
+                  </label>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">インセンティブ</span>
                     <textarea

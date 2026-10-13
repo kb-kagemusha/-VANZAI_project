@@ -130,6 +130,23 @@ import type {
   OrderRequestVersion,
   OrderRequestWrite,
 } from "../../types/orderRequest";
+import type { OperatorStaffItem, OperatorStaffWrite } from "../../types/operatorStaff";
+
+export function getOperatorStaff(params: { search?: string; offset?: number; limit?: number }) {
+  return apiFetch<{ items: OperatorStaffItem[]; total: number; offset: number; limit: number }>("/api/operator-staff", undefined, params);
+}
+export function saveOperatorStaff(body: OperatorStaffWrite, id?: string) {
+  return apiFetch<OperatorStaffItem>(id ? `/api/operator-staff/${id}` : "/api/operator-staff", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+}
+export function issueOperatorLineCode(id: string) {
+  return apiFetch<{ code: string; expires_at: string; instruction: string }>(`/api/operator-staff/${id}/line-code`, { method: "POST" });
+}
+export function revokeOperatorLine(id: string, reason: string) {
+  return apiFetch<void>(`/api/operator-staff/${id}/line-revoke`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+export interface PlaceSearchItem { place_id: string; name: string; address: string; attributions: { provider?: string; providerUri?: string }[] }
+export function getPlaceStatus() { return apiFetch<{ configured: boolean }>("/api/places/status"); }
+export function searchPlaces(query: string) { return apiFetch<{ items: PlaceSearchItem[] }>("/api/places/search", undefined, { query }); }
 
 function resolveApiBaseUrl(): string {
   if (import.meta.env.VITE_API_BASE_URL) {

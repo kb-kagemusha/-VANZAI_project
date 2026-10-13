@@ -505,6 +505,7 @@ export function WorkerProfileModal({
   message,
   pending,
   deletePending,
+  submitDisabled = false,
   onChange,
   onClose,
   onSubmit,
@@ -519,6 +520,7 @@ export function WorkerProfileModal({
   message: string;
   pending: boolean;
   deletePending: boolean;
+  submitDisabled?: boolean;
   onChange: (next: WorkerIntakeForm) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -1033,7 +1035,7 @@ export function WorkerProfileModal({
             ) : null}
           </div>
           <div className="order-draft-foot-end">
-            <button type="button" className="btn btn-primary" disabled={!form.name.trim() || pending || deletePending} onClick={onSubmit}>
+            <button type="button" className="btn btn-primary" disabled={!form.name.trim() || pending || deletePending || submitDisabled} onClick={onSubmit}>
               {pending ? (mode === "create" ? "登録中..." : "更新中...") : (mode === "create" ? "登録する" : "更新する")}
             </button>
           </div>

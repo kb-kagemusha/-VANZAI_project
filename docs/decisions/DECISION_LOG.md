@@ -1085,3 +1085,15 @@
 - Minimal model/DDL: 既存line_worker_links.line_display_nameのみを利用。DB/model/DDL追加なし。既存情報補完と表示修正なので0.44.1から0.44.2へZを上げる（DEC-040）。
 - Audit/Tests: line_profile_refreshedに紐付けID、実行者、Worker ID、取得・変更フラグを保存する。LINE ID・認証情報・表示名全文は監査へ複製しない。新規保存、既存補完、失敗時の保持、解除/差し替え拒否、権限、プロフィール応答主体照合、画面の未取得/取得成功/失敗を試験する。
 - Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/040。プロフィール取得の公式仕様: https://developers.line.biz/ja/docs/basics/user-profile/
+
+### DEC-042: 日付別発注条件・運営スタッフ連絡先と所在地基盤（2026-10-13）
+- Status: Partial Confirmed / Pending（勤務日別・期間別の時間・単価、費用込みの初期値、更新成功通知、運営スタッフ登録・LINE紐付けはユーザー指定。起床自動化の今回範囲、5ロールの権限、Google API設定と取得住所の保存方法は回答・確認待ち）
+- Decision: 発注条件は既存request_conditionsのadditional-request-v1 JSONにschedule(version=1)を追加し、勤務/単価グループの不変ID、単日/期間、開始/終了・翌日、任意集合時間、備考、単価・単位、昼食/交通費込みと備考を保存する。連動時は勤務グループIDに単価を対応付ける。日付・時刻・金額の検証をサーバー側で行い、確定時に未入力と単価カバーを拒否する。既存自由文から条件を推測しない。旧文面は切替確認後も参考データとして保存する。給与/請求単価の正本へ転記しない。
+- Minimal model/DDL: 依頼書は既存版Text/JSONを利用しDDL不要。VanzaiStaffにcan_drive、smoking_area_ok、緊急連絡先3項目、management_roles、profile_revisionを追加する。別のLineStaffLink/Codeを追加し、運営1人とLINE1主体の有効紐付けを部分ユニーク索引で担保する。migration 20261013c001。既存の報酬用role・linked_worker・金額設定を上書きしない。稼働者/ログインユーザーの自動生成なし。
+- LINE Guard: OPS-付き一次コードを個別トークの署名付きWebhookで照合する。期限30分、平文不保存、再発行で旧コード失効、行ロック・LINE主体のadvisory lock・ユニーク制約、使用済み/無効/削除済みを拒否する。解除履歴を残し、友だち解除を反映する。運営の紐付けと稼働者の紐付けは本人確認を別々に行う。
+- Pending roles: 5名称は暫定的に担当業務ラベルとして複数記録する。実際のログイン/操作権限の変更は実施しない。特に収益管理・基礎管理の操作範囲と複数権限の方針を質問済み。管理画面/APIは既存admin限定とする。回答後に権限設計を別途確定する。
+- Location: 主催者が提供した住所をsite_addressと本文/PDFへ保存する。Google PlacesのPOI取得住所を永続保存せず、検索結果は参照表示、place_idだけ保存する。会場名変更で地点紐付けを解除する。公式APIのGOOGLE_MAPS_API_KEYはサーバー環境で利用する準備のみで、既存.envの閲覧・変更なし。API利用・課金設定、公開の利用規約等と取得住所の保存方式は確認待ち。起床ボタン・経路計算・期限判定・実リマインド/エスカレーションの自動ジョブは未追加。集合基準・準備余裕・取得失敗・取消停止・通知対象を次段階で確定する。
+- Audit: operator_staff_created/updated、operator_line_code_issued/linked/revoked。ID・担当ロール・状態/版と解除理由を残し、連絡先・LINE ID・平文コードを複製しない。依頼書の既存確定/改訂監査・PDFスナップショットを継続する。
+- Verification: 日付重複/逆転、夜跨ぎ、単価連動とカバー、別途費用備考、確定版保護、既存自由文、運営CRUD/競合/権限、署名・期限/再使用・友だち解除、Google未設定/失敗時の秘密不表示、成功/競合/再読込失敗時のポップアップとスマートフォン表示を試験する。
+- Version: 運営スタッフ専用ページと日付別勤務条件は利用者向けの機能追加のためYを上げ、0.44.2から0.45.0とする。今回の更新成功通知単体はZ相当。前回の修正をYにした誤りの訂正（DEC-040）とは判定が異なる。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・7・16、AGENTS.md §9、DEC-040、ORDER_CONDITIONS_OPERATOR_STAFF_RUNBOOK.md。Google公式資料: https://developers.google.com/maps/documentation/places/web-service/policies 、 https://developers.google.com/maps/documentation/routes/transit-route

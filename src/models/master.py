@@ -318,10 +318,18 @@ class VanzaiStaff(Base, TimestampMixin, SoftDeleteMixin):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    can_drive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    smoking_area_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    management_roles: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    profile_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     linked_worker: Mapped["Worker"] = relationship(foreign_keys=[linked_worker_id])
 
     __table_args__ = (
+        CheckConstraint("profile_revision > 0", name="ck_vanzai_staff_profile_revision"),
         Index("ix_vanzai_staff_is_active", "is_active"),
         Index("ix_vanzai_staff_email", "email"),
         Index("ix_vanzai_staff_linked_worker_id", "linked_worker_id"),

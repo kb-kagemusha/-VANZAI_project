@@ -17,7 +17,7 @@ import {
   intakeToRequest,
   type WorkerIntakeForm,
 } from "../components/WorkerProfileModal";
-import { confirmApp } from "../lib/appDialog";
+import { alertApp, confirmApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
@@ -406,16 +406,24 @@ export function WorkersPage() {
       return updateWorker(selectedWorker.id, { ...intakeToRequest(intakeForm, selectedWorker), edit_guard: editGuard });
     },
     onSuccess: async (updated) => {
-      const fresh = await getWorkerEditGuard(updated.id);
-      const next = intakeFromWorker(fresh.worker);
-      setEditGuard(fresh.edit_guard);
-      setSelectedWorker(fresh.worker);
-      setIntakeForm(next);
-      setIntakeBaseline(JSON.stringify(next));
-      setEditNeedsReload(false);
-      setEditError("");
+      try {
+        const fresh = await getWorkerEditGuard(updated.id);
+        const next = intakeFromWorker(fresh.worker);
+        setEditGuard(fresh.edit_guard);
+        setSelectedWorker(fresh.worker);
+        setIntakeForm(next);
+        setIntakeBaseline(JSON.stringify(next));
+        setEditNeedsReload(false);
+        setEditError("");
+      } catch {
+        // The write succeeded. A refresh failure must not be presented as a failed write or permit a stale resave.
+        setEditGuard("");
+        setEditNeedsReload(true);
+        setEditError("情報は保存済みですが、最新の内容を読み込めませんでした。最新の内容を読み込んでください。");
+      }
       setEditMessage("更新しました");
       await queryClient.invalidateQueries({ queryKey: ["workers-list"] });
+      await alertApp({ title: "更新完了", message: "情報を更新しました" });
     },
     onError: (error: unknown) => {
       setEditMessage("");
@@ -598,6 +606,7 @@ export function WorkersPage() {
           message={editorMode === "edit" ? editMessage : ""}
           pending={editorMode === "create" ? createMutation.isPending : updateMutation.isPending}
           deletePending={deleteMutation.isPending}
+          submitDisabled={editorMode === "edit" && editNeedsReload}
           onChange={setIntakeForm}
           onClose={() => { void requestClose(); }}
           onSubmit={() => {

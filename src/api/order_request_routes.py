@@ -484,6 +484,7 @@ def update_order_request_version(
             site_name=fields.get("site_name"),
             site_id=fields.get("site_id"),
             site_address=fields.get("site_address"),
+            site_address_set="site_address" in fields,
             clear_site_id="site_id" in fields and fields.get("site_id") is None,
             request_conditions=fields.get("request_conditions"),
             body=fields.get("body"),

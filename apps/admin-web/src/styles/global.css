@@ -4157,6 +4157,32 @@ a.primary-button {
 .order-span-8 { grid-column: span 8; }
 .order-span-12 { grid-column: span 12; }
 
+.order-schedule h5 { margin: 1rem 0 .6rem; font-size: 1rem; }
+.order-schedule-row { border: 1px solid var(--border-color, #cbd5e1); border-radius: .7rem; padding: 1rem; margin: .8rem 0; display: grid; gap: .75rem; min-width: 0; }
+.order-schedule-row legend { padding: 0 .4rem; font-weight: 600; }
+.order-schedule-row label, .order-schedule-dates label, .order-schedule-times label { display: grid; gap: .35rem; min-width: 0; }
+.order-schedule-row textarea { width: 100%; min-height: 4rem; resize: vertical; }
+.order-schedule-row input:not([type="checkbox"]), .order-schedule-row select, .order-schedule-row textarea {
+  width: 100%; min-width: 0; padding: .72rem .85rem; border: 1px solid rgba(29,39,49,.14); border-radius: 12px;
+  background: rgba(255,255,255,.94); color: var(--ink); font: inherit;
+}
+html[data-theme="dark"] .order-schedule-row input:not([type="checkbox"]), html[data-theme="dark"] .order-schedule-row select, html[data-theme="dark"] .order-schedule-row textarea { background: var(--surface, #1c2737); color: var(--ink); border-color: var(--border-color, #485365); }
+.order-schedule-dates, .order-schedule-times { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; }
+.order-schedule-row .order-check, .order-check { display: flex; align-items: center; gap: .5rem; }
+.order-check input { width: auto; }
+.operator-profile-fields { border: 0; display: grid; gap: 1rem; min-width: 0; padding: 1rem; }
+.operator-profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.operator-role-options { display: flex; gap: 1rem; flex-wrap: wrap; padding: .6rem; }
+.operator-role-options label { display: flex; gap: .4rem; align-items: center; }
+.order-location { display: grid; gap: .75rem; }
+.order-location-search { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; }
+.order-location-search > label { flex: 1; min-width: 180px; }
+.google-place-results { border: 1px solid var(--border-color, #cbd5e1); border-radius: .5rem; padding: 1rem; }
+.google-place-result { padding: .7rem 0; border-bottom: 1px solid var(--border-color, #cbd5e1); }
+.google-maps-attribution { font: 400 14px sans-serif; color: #5e5e5e; white-space: nowrap; }
+html[data-theme="dark"] .google-maps-attribution { color: white; }
+@media (max-width: 600px) { .order-schedule-dates, .order-schedule-times, .operator-profile-grid { grid-template-columns: 1fr; } }
+
 .order-draft-grid > .order-field {
   height: 100%;
   align-content: stretch;
