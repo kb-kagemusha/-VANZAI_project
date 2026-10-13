@@ -1069,7 +1069,7 @@ export function OrderRequestsPage() {
                       value={form.site_name}
                       disabled={!editable}
                       placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
-                      onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "" }); }}
+                      onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
                     />
                   </label>
                   {!sections.schedule && <div className="order-field order-span-4">
@@ -1102,7 +1102,7 @@ export function OrderRequestsPage() {
                       </span>
                     ) : null}
                   </div>}
-                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId }); if (placeId) setForm({ ...form, site_id: null }); }} />
+                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
                   <label className="order-field order-span-4">
                     <span className="order-field-label">稼働日の詳細</span>
                     <textarea

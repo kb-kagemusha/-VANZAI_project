@@ -1,6 +1,7 @@
 """追加案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
 from src.domain.order_schedule import normalize_schedule, schedule_text
+from src.domain.maps_url import validate_maps_url
 
 FORMAT_ID = "additional-request-v1"
 DOCUMENT_TITLE = "【追加案件依頼】"
@@ -40,6 +41,10 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     for key in ("previous_hours", "previous_fee", "place_id"):
         if key in data:
             sections[key] = _text(data[key])
+    if "maps_url" in data:
+        if not isinstance(data["maps_url"], str):
+            raise ValueError("Google Mapsの共有URLを入力してください")
+        sections["maps_url"] = validate_maps_url(data["maps_url"])
     if sections.get("place_id"):
         import re
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", sections["place_id"]):
@@ -74,6 +79,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
             "■稼働場所",
             _text(site_name),
             *([_text(site_address)] if _text(site_address) else []),
+            *([sections["maps_url"]] if sections.get("maps_url") else []),
             "",
             "■稼働日",
             _text(work_date_label),
@@ -105,7 +111,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
-    for key in ("schedule", "previous_hours", "previous_fee", "place_id"):
+    for key in ("schedule", "previous_hours", "previous_fee", "place_id", "maps_url"):
         if key in sections:
             payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)

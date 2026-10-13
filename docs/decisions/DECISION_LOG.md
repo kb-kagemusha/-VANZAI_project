@@ -1097,3 +1097,13 @@
 - Verification: 日付重複/逆転、夜跨ぎ、単価連動とカバー、別途費用備考、確定版保護、既存自由文、運営CRUD/競合/権限、署名・期限/再使用・友だち解除、Google未設定/失敗時の秘密不表示、成功/競合/再読込失敗時のポップアップとスマートフォン表示を試験する。
 - Version: 運営スタッフ専用ページと日付別勤務条件は利用者向けの機能追加のためYを上げ、0.44.2から0.45.0とする。今回の更新成功通知単体はZ相当。前回の修正をYにした誤りの訂正（DEC-040）とは判定が異なる。
 - Spec Reference: DESIGN_SPEC_v0.3 §6.1・7・16、AGENTS.md §9、DEC-040、ORDER_CONDITIONS_OPERATOR_STAFF_RUNBOOK.md。Google公式資料: https://developers.google.com/maps/documentation/places/web-service/policies 、 https://developers.google.com/maps/documentation/routes/transit-route
+
+### DEC-043: Google Maps共有URLで会場を登録し、起床自動化と権限制御は次段階とする（2026-10-13）
+- Status: Confirmed（ユーザーが今回の範囲を住所・LINE連携の準備まで、ロールは現在付与だけでよいと回答。所在地は検索してGoogleのアドレスを登録する案とAPI料金への懸念を提示）
+- Decision: Googleのアドレスを共有URLと解釈し、その前提をユーザーへ明示してMaps URL方式を採用する。検索リンクでGoogle Mapsを開き、ユーザーが会場の共有リンクを登録する。APIキーや有料のAPI呼び出しは不要。URLをrequest_conditions.maps_urlと本文/PDFの確定版へ保存する。登録住所は主催者提供の住所を別途保存できる。共有リンクから住所や所要時間を自動取得する処理は追加しない。
+- Guard: Google MapsのHTTPS URLをホストとパスで検証し、認証情報付き・非HTTPS・非Google/Mapsホスト・異常ポート・空白/逆スラッシュを拒否する。短縮URLはサーバーで開かない。会場変更で古い共有URL/地点IDを解除する。Maps URLの文字列を表示用チルダ変換で改変しない。
+- Scope: 5ロールを付与・保存し、後々の表示項目・操作制御に使用する。今回は実権限の付与・ログインユーザー生成を行わない。起床報告・公共交通の移動時間・リマインド/運営エスカレーションは今回対象外と確定する。DEC-042のこれらの回答待ち状態を解消する。API検索は未設定時に表示せず、将来の所有者による設定時だけ使用できる準備を保持する。
+- Minimal model/DDL: 依頼書の既存JSONのみ利用し、追加DDLなし。住所/共有URLの確定・改訂は既存版管理と監査を使う。新しい個人情報送信や通知の送付はなし。
+- Verification: Googleの共有URLの保存・再読込・本文出力、改変しないURL、非Google・非HTTPS・偽ホストなどの拒否を試験する。URL登録はAPI未設定でも操作できること、単価/備考・運営登録の既存操作を画面試験する。
+- Version: 0.45.0で追加した所在地登録方式をユーザー回答に合わせて変更するため、Zを上げて0.45.1とする。
+- Sources: https://developers.google.com/maps/documentation/urls/get-started （Maps URLはAPIキー不要）、 https://developers.google.com/maps/billing-and-pricing/pricing （APIは月間無料枠と従量課金、2026-10-13確認）

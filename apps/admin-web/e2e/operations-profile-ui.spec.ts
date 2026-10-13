@@ -93,6 +93,7 @@ test("daily and ranged work preserve matching prices and expense notes in saved 
   await rates.nth(1).getByLabel("交通費：込み").uncheck(); await rates.nth(1).getByLabel("交通費の備考").fill("実費上限1,000円");
   await first.screenshot({ path: "../../artifacts/order-date-groups.png" });
   await page.getByLabel("所在地の登録住所").fill("主催者確認住所");
+  await page.getByLabel("Google Mapsの共有URL").fill("https://maps.app.goo.gl/TEST-location");
   await page.getByLabel(/^期限の案内/).fill("2027-02-20");
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
   await expect(page.getByText("下書きを保存しました。確定するまで送付は始まりません。")).toBeVisible();
@@ -101,6 +102,8 @@ test("daily and ranged work preserve matching prices and expense notes in saved 
   expect(schedule.work_groups).toHaveLength(2); expect(schedule.rate_groups).toHaveLength(2);
   expect(schedule.rate_groups[1].from).toBe("2027-03-02"); expect(schedule.rate_groups[1].to).toBe("2027-03-10");
   expect(payload.body).toContain("¥20,500"); expect(payload.body).toContain("交通費：別途（実費上限1,000円）"); expect(payload.body).toContain("主催者確認住所");
+  expect(JSON.parse(payload.request_conditions).maps_url).toBe("https://maps.app.goo.gl/TEST-location");
+  expect(payload.body).toContain("https://maps.app.goo.gl/TEST-location");
 });
 
 test("date conditions and operator editor fit a mobile screen", async ({ page }) => {
@@ -118,6 +121,7 @@ test("date conditions and operator editor fit a mobile screen", async ({ page })
 test("Google place selection stores ID while address remains user supplied and venue edits clear stale ID", async ({ page }) => {
   await setup(page, { places: true }); await page.goto("/operations/order-requests"); await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
   await page.getByRole("textbox", { name: "稼働場所", exact: true }).fill("横浜赤レンガ倉庫 イベント広場");
+  await page.getByText("APIによる会場検索", { exact: true }).click();
   await page.getByRole("button", { name: "所在地を検索" }).click();
   await expect(page.getByText("Google検索結果の住所")).toBeVisible();
   await page.getByRole("button", { name: "この地点を選択" }).click();

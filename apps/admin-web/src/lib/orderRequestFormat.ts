@@ -10,6 +10,7 @@ export interface OrderDocumentSections {
   previousHours?: string;
   previousFee?: string;
   placeId?: string;
+  mapsUrl?: string;
   projectName: string;
   background: string;
   workDateDetail: string;
@@ -64,6 +65,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     ...(sections.previousHours ? { previous_hours: sections.previousHours } : {}),
     ...(sections.previousFee ? { previous_fee: sections.previousFee } : {}),
     ...(sections.placeId ? { place_id: sections.placeId } : {}),
+    ...(sections.mapsUrl?.trim() ? { maps_url: sections.mapsUrl.trim() } : {}),
   });
 }
 
@@ -86,6 +88,7 @@ export function composeOrderDocument(
     "■稼働場所",
     wavy(siteName.trim()),
     ...(siteAddress.trim() ? [wavy(siteAddress.trim())] : []),
+    ...(sections.mapsUrl?.trim() ? [sections.mapsUrl.trim()] : []),
     "",
     "■稼働日",
     wavy(workDateLabel.trim()),
@@ -124,6 +127,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       previousHours: textOf(data.previous_hours),
       previousFee: textOf(data.previous_fee),
       placeId: textOf(data.place_id),
+      mapsUrl: textOf(data.maps_url),
       projectName: textOf(data.project_name),
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),
