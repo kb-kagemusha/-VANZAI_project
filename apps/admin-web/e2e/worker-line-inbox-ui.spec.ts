@@ -2,8 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 1366, height: 900 } });
 
-async function setupInbox(page: Page, options: { role?: string; listError?: boolean; conflict?: boolean } = {}) {
+async function setupInbox(page: Page, options: { role?: string; listError?: boolean; conflict?: boolean; missingProfile?: boolean; profileError?: boolean } = {}) {
   let approved = false;
+  let profileName: string | null = null;
   const calls: string[] = [];
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "mock-admin-token"));
   await page.route("**/api/**", async (route) => {
@@ -13,6 +14,14 @@ async function setupInbox(page: Page, options: { role?: string; listError?: bool
     const respond = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path.endsWith("/auth/me")) return respond({ id: "test-admin", username: "test-admin", display_name: "試験管理者", role: options.role || "admin", is_active: true });
     if (path.endsWith("/auth/session")) return respond({ access_token: "mock-admin-token", refresh_token: "mock-refresh-token", token_type: "bearer" });
+    if (path === "/api/order-requests/line-links/test-worker/refresh-profile") {
+      if (options.profileError) return respond({ detail: "LINE表示名を取得できませんでした。" }, 502);
+      profileName = "LINEのサンプル名";
+      return respond({ worker_id: "test-worker", line_display_name: profileName });
+    }
+    if (path === "/api/order-requests/line-links" && options.missingProfile) {
+      return respond({ items: [{ worker_id: "test-worker", worker_name: "酒井 サンプル", line_display_name: profileName, linked_at: "2026-10-13T01:00:00Z" }] });
+    }
     if (path === "/api/registration-requests") {
       expect(url.searchParams.get("line_only")).toBe("true");
       expect(url.searchParams.get("status")).toBe("pending");
@@ -105,4 +114,23 @@ test("review popup closes with Escape and returns keyboard focus", async ({ page
   await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+});
+
+test("an unavailable LINE name is retrieved into the existing link", async ({ page }) => {
+  await setupInbox(page, { missingProfile: true });
+  const links = page.locator("section").filter({ has: page.getByRole("heading", { name: "公式LINEの本人紐付け" }) });
+  await expect(links.getByText("未取得", { exact: true })).toBeVisible();
+  await expect(links.getByText("表示名なし", { exact: true })).toHaveCount(0);
+  await links.getByRole("button", { name: "表示名を更新" }).click();
+  await expect(links.getByText("LINEのサンプル名", { exact: true })).toBeVisible();
+  await expect(links.getByText("LINE表示名を更新しました。", { exact: true })).toBeVisible();
+});
+
+test("a failed LINE profile lookup does not present a made-up name", async ({ page }) => {
+  await setupInbox(page, { missingProfile: true, profileError: true });
+  const links = page.locator("section").filter({ has: page.getByRole("heading", { name: "公式LINEの本人紐付け" }) });
+  await links.getByRole("button", { name: "表示名を更新" }).click();
+  await expect(links.getByText("LINE表示名を取得できませんでした。", { exact: true })).toBeVisible();
+  await expect(links.getByText("未取得", { exact: true })).toBeVisible();
+  await expect(links.getByText("LINEのサンプル名", { exact: true })).toHaveCount(0);
 });

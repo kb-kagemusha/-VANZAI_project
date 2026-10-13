@@ -1076,3 +1076,12 @@
 - Impact: admin-web/staff-mobileを同一の0.44.1へ訂正し、CHANGELOGとRUNBOOKを更新する。AGENTS.md §9とrelease-workflow.mdcをX/Y/Zの定義で揃える。DB/model/DDLの追加変更なし、業務監査の追加なし。
 - Verification: 両package.json・CHANGELOGの版一致、両アプリのビルド、公開version.jsonとAPI再起動後のhealthを確認する。画面の更新検知はビルドIDの不一致を使うため、今回の版番号訂正も検知する。
 - Spec Reference: AGENTS.md §9、.cursor/rules/release-workflow.mdc、DEC-039
+
+### DEC-041: LINE新規承認で表示名を保存し、未取得の既存紐付けを補完する（2026-10-13）
+- Status: Confirmed（ユーザーが前回登録者の「表示名なし」を指摘し、LINEで取得できる表示名を一覧へ反映するよう要請）
+- Cause: コード紐付けではMessaging APIプロフィールを取得していたが、LINE新規登録の承認ではline_display_nameを保存していなかった。未取得を「表示名なし」と表示していた。
+- Decision: 新規承認時に検証済みLINE主体のプロフィール表示名を保存する。既存紐付けはadmin/opsの認証済み更新APIから補完できる。保存済みLINE主体を宛先に使い、応答のuserIdを照合する。表示名をWorker.nameや本人識別の正本にせず、クライアント申告の名前で代用しない。
+- Guard: 取得失敗は既存表示名を保持し、新規登録承認そのものは止めない。未取得は「未取得」と表示する。更新は取得後に稼働者と紐付けをロック・再読込し、解除/差し替えがあれば保存を拒否する。
+- Minimal model/DDL: 既存line_worker_links.line_display_nameのみを利用。DB/model/DDL追加なし。既存情報補完と表示修正なので0.44.1から0.44.2へZを上げる（DEC-040）。
+- Audit/Tests: line_profile_refreshedに紐付けID、実行者、Worker ID、取得・変更フラグを保存する。LINE ID・認証情報・表示名全文は監査へ複製しない。新規保存、既存補完、失敗時の保持、解除/差し替え拒否、権限、プロフィール応答主体照合、画面の未取得/取得成功/失敗を試験する。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/040。プロフィール取得の公式仕様: https://developers.line.biz/ja/docs/basics/user-profile/

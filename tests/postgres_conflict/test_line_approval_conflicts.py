@@ -97,6 +97,10 @@ def _cleanup(connection) -> None:
                 {"ids": request_ids},
             )
     connection.execute(
+        text("DELETE FROM audit_logs WHERE target_type = 'line_worker_link' AND target_id IN (SELECT id FROM line_worker_links WHERE line_user_id = :user)"),
+        {"user": LINE_USER},
+    )
+    connection.execute(
         text("DELETE FROM line_worker_links WHERE line_user_id = :user OR id = :link OR worker_id IN :workers").bindparams(
             bindparam("workers", expanding=True)
         ),

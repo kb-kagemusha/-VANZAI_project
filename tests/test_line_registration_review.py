@@ -166,6 +166,7 @@ def test_create_new_links_in_the_same_decision_and_replay_keeps_the_request(api_
     assert created.postal_code == "1000001"
     assert len(links) == 1
     assert links[0].line_user_id == "U-line-review"
+    assert links[0].line_display_name == "テストLINEプロフィール"
     assert db_session.get(Worker, untouched.id).name == "山田 太郎"
     assert db_session.query(LineWorkerLink).filter_by(worker_id=untouched.id).count() == 0
 

@@ -8,6 +8,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from dataclasses import dataclass
 
 
@@ -81,7 +82,7 @@ class LineMessagingClient:
         settings = line_settings()
         if not settings.access_token or not user_id:
             return None
-        url = PROFILE_URL.format(user_id=urllib.request.quote(user_id))
+        url = PROFILE_URL.format(user_id=quote(user_id, safe=""))
         request = urllib.request.Request(
             url,
             headers={"Authorization": f"Bearer {settings.access_token}"},
@@ -91,6 +92,8 @@ class LineMessagingClient:
             with urllib.request.urlopen(request, timeout=10) as response:
                 payload = json.loads(response.read().decode("utf-8") or "{}")
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeError):
+            return None
+        if not isinstance(payload, dict) or payload.get("userId") != user_id:
             return None
         name = payload.get("displayName")
         if not isinstance(name, str):

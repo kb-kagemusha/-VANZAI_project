@@ -675,6 +675,17 @@ def revoke_line_link(
     return {"worker_id": worker_id, "status": "revoked"}
 
 
+@router.post("/line-links/{worker_id}/refresh-profile")
+def refresh_line_profile(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    link = _call(db, lambda: LineOrderService(db).refresh_profile(actor=current_user, worker_id=worker_id))
+    return {"worker_id": worker_id, "line_display_name": link.line_display_name}
+
+
 @router.post("/deliveries/{delivery_id}/line-send")
 def send_order_request_line(
     delivery_id: str,

@@ -32,6 +32,7 @@ import {
   getRegistrationRequests,
   issueLineLinkCode,
   listLineLinks,
+  refreshLineProfile,
   revokeLineLink,
   updateWorkerBankAccount,
   updateWorker,
@@ -151,6 +152,16 @@ function LineWorkerLinkSection() {
     },
     onError: (caught) => setError(messageOf(caught)),
   });
+  const refreshProfile = useMutation({
+    mutationFn: refreshLineProfile,
+    onSuccess: async () => {
+      setError("");
+      setNotice("LINE表示名を更新しました。");
+      await queryClient.invalidateQueries({ queryKey: ["line-links"] });
+      await queryClient.invalidateQueries({ queryKey: ["order-request-workers"] });
+    },
+    onError: (caught) => { setNotice(""); setError(messageOf(caught)); },
+  });
 
   return (
     <section className="card" style={{ padding: "0.9rem 1rem" }}>
@@ -195,14 +206,17 @@ function LineWorkerLinkSection() {
               <th>稼働者</th>
               <th>LINE表示名</th>
               <th>紐付け日時</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {linksQuery.data?.items.map((item) => (
               <tr key={item.worker_id}>
                 <td>{item.worker_name}</td>
-                <td>{item.line_display_name || "表示名なし"}</td>
+                <td>{item.line_display_name || "未取得"}</td>
                 <td>{new Date(item.linked_at).toLocaleString("ja-JP")}</td>
+                <td><button type="button" className="btn btn-ghost" disabled={refreshProfile.isPending}
+                  onClick={() => refreshProfile.mutate(item.worker_id)}>表示名を更新</button></td>
               </tr>
             ))}
           </tbody>

@@ -30,6 +30,7 @@ from src.models.line_order import LINK_ACTIVE, LineWorkerLink
 from src.models.line_registration import LineRegistrationContext
 from src.models.master import RegistrationRequest, User, Worker, WorkerRegistrationRequestDetail
 from src.services.audit import AuditService
+from src.services.line_messaging import build_line_client
 
 CREATE_NEW = "create_new"
 FIXED_UPDATE = "fixed_update"
@@ -303,19 +304,29 @@ class LineRegistrationReviewService:
             before=before,
         )
         after = project_worker_values(before, detail)
+        try:
+            display_name = build_line_client().profile_name(context.line_user_id)
+        except Exception:
+            display_name = None
         worker = Worker(id=generate_ulid(), name=after["name"], is_active=True, tags=[])
         self.session.add(worker)
         self.session.flush()
         assign_worker_values(worker, after)
-        self.session.add(
-            LineWorkerLink(
-                id=generate_ulid(),
-                worker_id=worker.id,
-                line_user_id=context.line_user_id,
-                status=LINK_ACTIVE,
-                linked_at=datetime.now(timezone.utc),
-            )
+        link = LineWorkerLink(
+            id=generate_ulid(),
+            worker_id=worker.id,
+            line_user_id=context.line_user_id,
+            line_display_name=display_name,
+            status=LINK_ACTIVE,
+            linked_at=datetime.now(timezone.utc),
         )
+        self.session.add(link)
+        if display_name:
+            AuditService(self.session).log(
+                "line_profile_refreshed", target_type="line_worker_link", target_id=link.id,
+                actor=reviewer.username, actor_role=reviewer.role,
+                after_value={"worker_id": worker.id, "profile_obtained": True, "changed": True},
+            )
         self.session.flush()
         return worker, before
 

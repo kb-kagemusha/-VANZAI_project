@@ -1710,6 +1710,12 @@ export function listLineLinks() {
   return apiFetch<LineLinkList>("/api/order-requests/line-links");
 }
 
+export function refreshLineProfile(workerId: string) {
+  return apiFetch<{ worker_id: string; line_display_name: string }>(
+    `/api/order-requests/line-links/${workerId}/refresh-profile`, { method: "POST" },
+  );
+}
+
 export function issueLineLinkCode(workerId: string) {
   return apiFetch<LineLinkCode>("/api/order-requests/line-links/codes", {
     method: "POST",
