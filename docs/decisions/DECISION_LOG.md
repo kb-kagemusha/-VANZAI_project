@@ -1068,3 +1068,11 @@
 - UI: 稼働者一覧の内容確認は既存のorder-create-backdrop/worker-profile-modalと同じ枠で表示する。内部スクロール、背景スクロール抑止、Tabのフォーカス維持、Escape/閉じるで元操作へ戻る。審査の反映先・比較票・権限は維持する。
 - Audit/Tests: line_registration_receipt_sent/failedに申請ID・受理状態・試行回数・HTTP状態・区分のみを記録する。本文・LINE ID・電話・住所・トークンはログへ出さない。保存後通知、再送・未保存・ロールバック、失敗再試行、24時間超過防止、受理後DB巻戻し、409判定、migration非遡及、既存発注経路、ポップアップの承認/競合/キーボード操作を試験する。
 - Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/038、LINE_WORKER_INBOX_RUNBOOK.md。LINE再試行の公式仕様: https://developers.line.biz/ja/docs/messaging-api/retrying-api-request/
+
+### DEC-040: 既存LINE登録フローの修正・変更は右側の版を上げる（2026-10-13）
+- Status: Confirmed（ユーザーがXは大きなアップデート、Yは機能追加、Zは修正・変更と明示し、前回はZだと指摘）
+- Decision: 前回の受付通知と内容確認ポップアップは既存登録フローの修正・変更として扱い、正しい版を0.44.0から0.44.1へ更新する。誤って公開した0.45.0は0.44.1へ訂正する。0.44.0以前の版履歴は今回の訂正対象にしない。
+- Why: 修正の実装に通知処理やDB表を追加したことを、利用者向けの新しい業務機能の追加と混同した。判定は利用者にとっての変更内容を基準とする。
+- Impact: admin-web/staff-mobileを同一の0.44.1へ訂正し、CHANGELOGとRUNBOOKを更新する。AGENTS.md §9とrelease-workflow.mdcをX/Y/Zの定義で揃える。DB/model/DDLの追加変更なし、業務監査の追加なし。
+- Verification: 両package.json・CHANGELOGの版一致、両アプリのビルド、公開version.jsonとAPI再起動後のhealthを確認する。画面の更新検知はビルドIDの不一致を使うため、今回の版番号訂正も検知する。
+- Spec Reference: AGENTS.md §9、.cursor/rules/release-workflow.mdc、DEC-039
