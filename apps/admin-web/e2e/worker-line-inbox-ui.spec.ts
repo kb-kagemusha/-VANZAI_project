@@ -49,14 +49,19 @@ test("LINE request appears before approval and moves to workers without a page r
   expect(calls.some((path) => path.endsWith("/approve"))).toBe(false);
   await page.screenshot({ path: "../../artifacts/worker-line-inbox-pending.png", fullPage: true });
   await inbox.getByRole("button", { name: "内容を確認・反映" }).click();
-  await inbox.getByRole("button", { name: "新規の稼働者として比較する" }).click();
-  await expect(inbox.getByText("変更後: 酒井 サンプル")).toBeVisible();
-  await inbox.getByRole("button", { name: "承認", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await dialog.getByRole("button", { name: "新規の稼働者として比較する" }).click();
+  await expect(dialog.getByText("変更後: 酒井 サンプル")).toBeVisible();
+  await page.screenshot({ path: "../../artifacts/worker-line-review-modal.png", fullPage: false });
+  await dialog.getByRole("button", { name: "承認", exact: true }).click();
   await expect(page.getByRole("heading", { name: "LINE登録・確認待ち（0件）" })).toBeVisible();
   await expect(page.getByText("この申請の審査は終わっています。")).toBeVisible();
   await expect(page.locator("tr").filter({ hasText: "酒井 サンプル" })).toHaveCount(1);
   expect(calls).toContain("workers:true");
-  await page.getByRole("button", { name: "審査を閉じる" }).click();
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
   await page.screenshot({ path: "../../artifacts/worker-line-inbox-approved.png", fullPage: true });
 });
 
@@ -82,4 +87,22 @@ test("a failed request load is not presented as an empty inbox", async ({ page }
   await setupInbox(page, { listError: true });
   await expect(page.getByText("LINE登録申請を取得できませんでした。申請を更新してください。")).toBeVisible({ timeout: 20000 });
   await expect(page.getByText("LINEの確認待ち申請はありません")).toHaveCount(0);
+});
+
+test("review popup closes with Escape and returns keyboard focus", async ({ page }) => {
+  await setupInbox(page);
+  const opener = page.getByRole("button", { name: "内容を確認・反映" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await expect(dialog).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "新規の稼働者として比較する" })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "閉じる", exact: true })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByPlaceholder("却下理由")).toBeFocused();
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
 });

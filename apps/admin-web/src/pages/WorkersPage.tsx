@@ -6,7 +6,7 @@ import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
-import { LineRegistrationReviewPanel } from "../components/LineRegistrationReviewPanel";
+import { LineRegistrationReviewModal } from "../components/LineRegistrationReviewModal";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { WorkerTagList } from "../components/WorkerTags";
@@ -30,7 +30,6 @@ import {
   getWorkerEditGuard,
   getWorkers,
   getRegistrationRequests,
-  getLineRegistrationReview,
   issueLineLinkCode,
   listLineLinks,
   revokeLineLink,
@@ -71,14 +70,6 @@ function LineRegistrationInbox({ canReview }: { canReview: boolean }) {
     }),
     refetchInterval: 30_000,
   });
-  const reviewQuery = useQuery({
-    queryKey: ["line-registration-review", requestId],
-    queryFn: () => getLineRegistrationReview(requestId!),
-    enabled: Boolean(requestId),
-    retry: false,
-    // 審査中の反映先選択をバックグラウンド取得で戻さない。
-    refetchOnWindowFocus: false,
-  });
   useEffect(() => {
     if (requestsQuery.data && page > 0 && requestsQuery.data.total <= page * PAGE_SIZE) {
       setPage(Math.max(0, Math.ceil(requestsQuery.data.total / PAGE_SIZE) - 1));
@@ -116,12 +107,7 @@ function LineRegistrationInbox({ canReview }: { canReview: boolean }) {
         </>
       ) : null}
       {requestId ? (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          <div><button type="button" className="btn btn-ghost" onClick={() => setRequestId(null)}>審査を閉じる</button></div>
-          {reviewQuery.isLoading ? <p>申請内容を読み込み中...</p> : null}
-          {reviewQuery.isError ? <p className="form-error">{messageOf(reviewQuery.error)}</p> : null}
-          {reviewQuery.data ? <LineRegistrationReviewPanel key={requestId} review={reviewQuery.data} onReload={() => { void reviewQuery.refetch(); }} /> : null}
-        </div>
+        <LineRegistrationReviewModal requestId={requestId} onClose={() => setRequestId(null)} />
       ) : null}
     </section>
   );

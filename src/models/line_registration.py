@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     text,
 )
@@ -110,3 +111,24 @@ class LineRegistrationSubmitKey(Base, TimestampMixin):
         String(26), ForeignKey("registration_requests.id"), nullable=False
     )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class LineRegistrationReceipt(Base, TimestampMixin):
+    """申請保存と同じ取引で作る受付通知。既存申請へは遡及作成しない。"""
+
+    __tablename__ = "line_registration_receipts"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'sent', 'failed')", name="ck_line_receipt_status"),
+        CheckConstraint("attempt_count >= 0 AND attempt_count <= 5", name="ck_line_receipt_attempts"),
+        CheckConstraint("status <> 'sent' OR sent_at IS NOT NULL", name="ck_line_receipt_sent"),
+        Index("ix_line_receipt_due", "status", "next_attempt_at"),
+    )
+
+    request_id: Mapped[str] = mapped_column(String(26), ForeignKey("registration_requests.id"), primary_key=True)
+    retry_key: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    message_text: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)

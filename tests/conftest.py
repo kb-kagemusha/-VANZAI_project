@@ -32,6 +32,18 @@ from src.api.main import app
 from src.api.deps import get_db
 
 
+@pytest.fixture(autouse=True)
+def fake_line_registration_receipts(monkeypatch):
+    """申請APIの受付通知を本物のLINEへ送らない。個別試験でこのstubを差し替えられる。"""
+    from src.services.line_messaging import LineCallResult
+
+    class FakeReceiptClient:
+        def push_receipt(self, to, text, retry_key):
+            return LineCallResult(200, "", "test-receipt")
+
+    monkeypatch.setattr("src.services.line_registration_receipt.build_line_client", FakeReceiptClient)
+
+
 @pytest.fixture(scope="function")
 def engine():
     """Create in-memory SQLite database for testing"""

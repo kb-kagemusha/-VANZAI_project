@@ -1059,3 +1059,12 @@
 - Minimal model/DDL: 既存5表と申請詳細を利用し、新設列・表・migrationなし。登録申請一覧のline_onlyはline_registration_contextsの存在で判定する。source_typeはpublic_formのまま。
 - Audit/Tests: 既存の専用審査の成功・拒否監査を維持する。LINEと従来フォームの分離、ページング、未承認はWorkerなし、承認後の一覧反映、未認証拒否、画面の即時更新・競合拒否・運用権限・取得失敗を確認する。
 - Spec Reference: DESIGN_SPEC_v0.3 §6.1、DEC-032/033、docs/ops/LINE_WORKER_INBOX_RUNBOOK.md
+
+### DEC-039: LINE登録受付の本人通知とポップアップ審査（2026-10-13）
+- Status: Confirmed（ユーザーが本人への「登録を受付けました」の送信と内容確認のポップアップ化を指示）
+- Trigger: 新しいLINE申請がDBへcommitされた後、認証済みLINE主体へ受付通知を送る。マスタ反映・契約完了の通知とは区別し、管理者承認方式を維持する。今回内容が保存されていない別キー入力、保存失敗、入力エラーへは新しい受付通知を作らない。保存済み再送は既存の送信状態を使う。
+- Minimal model/DDL: line_registration_receiptsを追加。申請IDをPK/FKとし、UUIDリトライキー一意、本文、pending/sent/failed、試行回数、次回試行、受理日時、HTTP状態、作成/更新日時を保存する。既存contextのLINE主体を宛先とし、個人情報を複製しない。DDLは20261013b001。既存申請へ通知行を補完しない。
+- Delivery: commit後のバックグラウンド処理と60秒間隔の専用ジョブが同じキューを処理する。PostgreSQLの通知行ロックとskip_lockedで同時送信を避け、API受理後のDB保存失敗にも同じキー・宛先・本文で再試行する。最大5回、指数的待機、作成から23時間で打ち切る。2xxと受理済みID付き409だけ受理済みとし、4xxは終了、接続障害/5xxは再試行する。sentはLINEのAPI受理を表し、本人の既読やブロック解除を意味しない。
+- UI: 稼働者一覧の内容確認は既存のorder-create-backdrop/worker-profile-modalと同じ枠で表示する。内部スクロール、背景スクロール抑止、Tabのフォーカス維持、Escape/閉じるで元操作へ戻る。審査の反映先・比較票・権限は維持する。
+- Audit/Tests: line_registration_receipt_sent/failedに申請ID・受理状態・試行回数・HTTP状態・区分のみを記録する。本文・LINE ID・電話・住所・トークンはログへ出さない。保存後通知、再送・未保存・ロールバック、失敗再試行、24時間超過防止、受理後DB巻戻し、409判定、migration非遡及、既存発注経路、ポップアップの承認/競合/キーボード操作を試験する。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/038、LINE_WORKER_INBOX_RUNBOOK.md。LINE再試行の公式仕様: https://developers.line.biz/ja/docs/messaging-api/retrying-api-request/

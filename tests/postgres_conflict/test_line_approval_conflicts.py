@@ -87,6 +87,7 @@ def _cleanup(connection) -> None:
     )
     if request_ids:
         for statement in (
+            "DELETE FROM line_registration_receipts WHERE request_id IN :ids",
             "DELETE FROM worker_registration_request_details WHERE request_id IN :ids",
             "DELETE FROM audit_logs WHERE target_id IN :ids",
             "DELETE FROM registration_requests WHERE id IN :ids",

@@ -53,6 +53,7 @@ class LineCallResult:
     status: int
     message: str
     request_id: str | None
+    accepted_request_id: str | None = None
 
 
 class LineNotConfigured(Exception):
@@ -62,6 +63,9 @@ class LineNotConfigured(Exception):
 class LineMessagingClient:
     def push_messages(self, to: str, messages: list[dict]) -> LineCallResult:
         return self._post(PUSH_URL, {"to": to, "messages": messages})
+
+    def push_receipt(self, to: str, text: str, retry_key: str) -> LineCallResult:
+        return self._post(PUSH_URL, {"to": to, "messages": [{"type": "text", "text": text}]}, retry_key=retry_key)
 
     def reply_text(self, reply_token: str, text: str) -> None:
         if not reply_token:
@@ -94,7 +98,7 @@ class LineMessagingClient:
         cleaned = name.strip()
         return cleaned[:200] or None
 
-    def _post(self, url: str, payload: dict) -> LineCallResult:
+    def _post(self, url: str, payload: dict, *, retry_key: str | None = None) -> LineCallResult:
         settings = line_settings()
         if not settings.access_token:
             raise LineNotConfigured()
@@ -104,6 +108,7 @@ class LineMessagingClient:
             headers={
                 "Authorization": f"Bearer {settings.access_token}",
                 "Content-Type": "application/json",
+                **({"X-Line-Retry-Key": retry_key} if retry_key else {}),
             },
             method="POST",
         )
@@ -113,7 +118,8 @@ class LineMessagingClient:
                 return LineCallResult(response.status, "", request_id)
         except urllib.error.HTTPError as exc:
             message = _error_message(exc.read())
-            return LineCallResult(exc.code, message, None)
+            headers = exc.headers or {}
+            return LineCallResult(exc.code, message, headers.get("X-Line-Request-Id"), headers.get("X-Line-Accepted-Request-Id"))
         except (urllib.error.URLError, TimeoutError):
             return LineCallResult(0, "LINEへの接続に失敗しました", None)
 

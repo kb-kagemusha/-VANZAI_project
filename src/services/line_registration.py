@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import secrets
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,7 @@ from src.models.line_registration import (
     LineRegistrationContext,
     LineRegistrationSession,
     LineRegistrationSubmitKey,
+    LineRegistrationReceipt,
 )
 from src.models.master import RegistrationRequest, Worker, WorkerRegistrationRequestDetail
 from src.services.audit import AuditService
@@ -281,6 +283,14 @@ class LineRegistrationService:
         self.session.add(detail)
         self.session.add(context)
         self.session.add(submit_key)
+        self.session.add(LineRegistrationReceipt(
+            request_id=request.id,
+            retry_key=str(uuid4()),
+            message_text="登録を受付けました",
+            status="pending",
+            attempt_count=0,
+            next_attempt_at=datetime.now(timezone.utc),
+        ))
         self._audit_success(request.id, saved=True)
         self.session.flush()
         return SubmitResult(request.id, "pending", True, SAVED_MESSAGE)

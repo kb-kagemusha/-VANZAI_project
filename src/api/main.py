@@ -127,7 +127,13 @@ async def lifespan(_: FastAPI):
 
     load_line_registration_config()
     initialize_default_jobs()
-    yield
+    from src.services.line_registration_receipt import start_registration_receipt_scheduler
+
+    receipt_scheduler = start_registration_receipt_scheduler()
+    try:
+        yield
+    finally:
+        receipt_scheduler.shutdown(wait=False)
 
 
 # FastAPIアプリケーション初期化

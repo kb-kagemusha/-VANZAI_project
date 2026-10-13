@@ -1,6 +1,8 @@
 # LINE登録から稼働者一覧へ反映する
 
-対象: Ver.0.44.0。仕様参照: DESIGN_SPEC_v0.3 §6.1、DEC-032/033、DEC-038。
+対象: Ver.0.45.0（一覧導線は0.44.0から）。仕様参照: DESIGN_SPEC_v0.3 §6.1、DEC-032/033、DEC-038/039。
+
+Ver.0.45.0以降は内容確認をポップアップで表示する（DEC-039）。「閉じる」またはEscapeで一覧へ戻り、内容が長いときはポップアップ内部をスクロールする。
 
 1. 管理者で「稼働者登録・一覧」を開く。上部の「LINE登録・確認待ち」で申請者と申請日時を確認する。新しい申請は30秒ごとに再取得し、「申請を更新」でも取得できる。
 2. 対象者の「内容を確認・反映」を押す。送信時に紐付け済みの方はその稼働者が固定の反映先になる。未紐付けなら、候補を照合して「新規の稼働者として比較する」または既存者を選ぶ。
@@ -13,9 +15,23 @@
 
 比較票不一致・紐付け変更で承認できないときはエラーを確認し、最新の内容を読み込んで再照合する。APIを迂回するDB直接更新は行わない。
 
-最小DB/DDL: 既存のregistration_requests、worker_registration_request_details、line_registration_contexts、workers、line_worker_linksを使う。新設表・列・マイグレーションなし。一覧APIのline_onlyフィルタはLINE申請のcontext存在を条件とし、source_type=public_formだけで判定しない。
+一覧・審査のDB/DDL: 既存のregistration_requests、worker_registration_request_details、line_registration_contexts、workers、line_worker_linksを使う。0.44.0の一覧追加では新設表・列・マイグレーションなし。一覧APIのline_onlyフィルタはLINE申請のcontext存在を条件とし、source_type=public_formだけで判定しない。0.45.0の通知用テーブルは下記。
 
-監査: 一覧の読み取りで新しい業務監査は追加しない。承認・却下・承認拒否は既存のLINE専用審査APIと監査を使う。LINE通知送信は追加しない。
+監査: 一覧の読み取りで新しい業務監査は追加しない。承認・却下・承認拒否は既存のLINE専用審査APIと監査を使う。0.44.0では通知なし、0.45.0で下記の受付通知監査を追加する。
+
+## 受付通知（Ver.0.45.0）
+
+新しいLINE申請の保存後、入力した本人に「登録を受付けました」を自動送信する。送信対象は検証済みLINE主体であり、氏名・電話から宛先を推測しない。旧申請（今回のリリースより前に提出した申請）には送信しない。管理者承認は引き続き必要。
+
+申請と同じ取引でline_registration_receiptsを作成する（migration:20261013b001）。commit後に通知し、送信失敗でも申請は保存済みのまま扱う。APIの各ワーカーで独立した受付通知ジョブが60秒ごとに未処理を確認する。請求生成などの既存スケジューラーを有効化する必要はない。
+
+通知行をロックし、同じUUID・宛先・本文で再試行する。接続障害/5xxの再試行は最大5回、1分・2分・4分・8分の待機で、作成から23時間を過ぎたら送らない。2xxまたは受理済みリクエストID付き409でsentとする。その他4xxや上限超過はfailedとする。LINEのキー保持期間は24時間のため、キーを作り直して無条件に再送しない（[LINE公式仕様](https://developers.line.biz/ja/docs/messaging-api/retrying-api-request/)）。
+
+監査ログでaction=line_registration_receipt_sent / line_registration_receipt_failed、target_type=registration_request、target_id=申請IDを確認する。送信結果はstatus・attempt_count・http_statusと区分だけ。本文・宛先・認証情報はログへ保存しない。failedは通知だけの失敗で、登録申請の却下ではない。再送上限後の追加送信は自動化せず、管理者が原因と相手の状況を確認する。
+
+sentはLINEがAPIリクエストを受理した状態であり、既読や確実な受信を保証するものではない。公式LINEをブロックしている場合などは、申請フォーム上の受付完了表示も確認する。
+
+検証（0.45.0、2026-10-13）: バックエンド664件成功・PostgreSQL接続が必要な競合18件は未実施。LINEフォームとポップアップの画面19件成功。外部LINE通信はモックし、実在者へ試験メッセージを送っていない。実機の受付通知は更新後の新しい登録申請で確認する。
 
 検証（2026-10-13）: LINE審査・公開フォーム審査ガード・マスタ一覧のAPI試験46件成功。LINE入力と稼働者一覧のブラウザー試験18件成功。admin-web / staff-mobileのビルド成功。画面試験の「酒井 サンプル」は架空のモックデータであり、実際の申請状態の証拠ではない。
 
