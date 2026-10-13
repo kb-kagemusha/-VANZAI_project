@@ -100,6 +100,9 @@ class OrderRequestVersion(Base, TimestampMixin):
     contact_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     contact_desk: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     counterparty_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_client_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("clients.id"), nullable=True)
+    internal_client_staff_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("client_staff.id"), nullable=True)
+    internal_source_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pdf_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     draft_worker_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
@@ -135,6 +138,7 @@ class OrderRequestVersion(Base, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("document_id", "version_no", name="uq_order_request_versions_doc_no"),
+        CheckConstraint("internal_client_staff_id IS NULL OR internal_client_id IS NOT NULL", name="ck_order_internal_staff_client"),
         CheckConstraint(
             "status IN ('draft', 'confirmed', 'cancelled')",
             name="ck_order_request_versions_status",

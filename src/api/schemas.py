@@ -1271,11 +1271,26 @@ class ClientListItem(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[str] = None
     billing_email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
 
 
 class ClientListResponse(PageResponse[ClientListItem]):
     """クライアント一覧レスポンス"""
     pass
+
+
+class ClientContactCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("担当者名を入力してください")
+        return value.strip()
 
 
 class ClientCreateRequest(BaseModel):
@@ -1286,6 +1301,15 @@ class ClientCreateRequest(BaseModel):
     contact_name: Optional[str] = Field(None, max_length=100)
     contact_email: Optional[str] = Field(None, max_length=255)
     billing_email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    contacts: List[ClientContactCreate] = Field(default_factory=list, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("クライアント名を入力してください")
+        return value.strip()
 
 
 class SiteListQuery(PaginationQuery, SortQuery):
@@ -2113,6 +2137,13 @@ class ClientStaffCreateRequest(BaseModel):
     email: Optional[str] = Field(None, max_length=255)
     is_active: bool = True
     notes: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("担当者名を入力してください")
+        return value.strip()
 
 
 class ClientStaffUpdateRequest(ClientStaffCreateRequest):

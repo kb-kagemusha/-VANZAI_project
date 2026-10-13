@@ -11,6 +11,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
+import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
 import { emptySchedule, newWorkGroup, scheduleDateLabel, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
@@ -127,6 +128,7 @@ function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink)
 }
 
 const EMPTY_FORM: OrderRequestWrite = {
+  internal_source: null,
   kind: "formal",
   work_date_label: "",
   site_id: null,
@@ -224,6 +226,7 @@ export function OrderRequestsPage() {
 
   function formFromVersion(version: OrderRequestVersion): OrderRequestWrite {
     return {
+      internal_source: version.internal_source ?? null,
       kind: version.kind,
       work_date_label: version.work_date_label,
       site_id: version.site_id,
@@ -250,6 +253,7 @@ export function OrderRequestsPage() {
     const phoneNote = current.phone_note?.trim() ? current.phone_note : null;
     return {
       ...current,
+      internal_source: current.internal_source ? { client_id: current.internal_source.client_id, client_staff_id: current.internal_source.client_staff_id } : null,
       request_conditions: serializeOrderSections(currentSections),
       body: composeOrderDocument(currentSections, current.work_date_label, current.site_name, current.site_address ?? ""),
       contact_desk: "",
@@ -1063,6 +1067,7 @@ export function OrderRequestsPage() {
               </div>
             </section>
 
+            <OrderInternalSourceEditor value={form.internal_source ?? null} disabled={!editable} onChange={(internal_source) => setForm({ ...form, internal_source })} />
             <section className="order-draft-section">
               <h4>追加案件依頼</h4>
               <div className="order-document">
@@ -1204,7 +1209,7 @@ export function OrderRequestsPage() {
               <h4>連絡先</h4>
               <div className="order-draft-grid">
                 <label className="order-field order-field-top order-span-4">
-                  <span className="order-field-label">担当者</span>
+                  <span className="order-field-label">運営側の連絡担当者</span>
                   <input
                     value={form.contact_name}
                     disabled={!editable}

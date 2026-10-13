@@ -1138,3 +1138,15 @@
 - Verification: 階層の小型/中型/大型と複数ロールOR、注釈、全体期間と補足の横並び、詳細編集時の期間保持、追跡フィールド送信停止、期間の保存/確定/改訂と元版固定、逆転/期間外/未完成の確定拒否、旧JSON/LINE経路をテストする。
 - Version: 既存の検索意味・入力画面・保存処理の修正としてZを上げ、0.45.3から0.45.4へ。
 - Spec Reference: DESIGN_SPEC_v0.3 §3・5・6.1・16、DEC-029/043/044/045、AGENTS.md §9/12。
+
+### DEC-047: マスタ追加ポップアップとクライアント連絡先・内部発注元（2026-10-14）
+- Status: Confirmed（ユーザー指定: 一覧優先/新規追加ポップアップ、会社電話・複数担当者電話、切替の縁色、クライアント/担当者の連動選択、内部情報をPDFに含めない）
+- Masters: 全7種の一覧から常設の追加フォームを撤去し、共通ProfileDialogで新規追加と既存編集を行う。入力項目/権限は従来を保持する。切替の縁を7色にし、選択状態を下線・強調・aria-pressedでも示す。
+- Clients: 会社のphoneを追加し、担当者は既存client_staffを正本にする。クライアント新規追加では複数担当者を同じDBトランザクションで作成する。既存会社電話の編集はphone専用PATCHとする。旧contact_name/contact_emailは削除せず、同名担当者がいなければ追加移行する。既存担当者の電話などは上書きしない。担当者一覧のpage/offset不整合をoffset/limitへ修正する。
+- Internal source: OrderRequestVersionにinternal_client_id/client_staff_id（FK）とinternal_source_snapshot（JSON）を追加する。選択の所属関係・有効/未削除をAPIで検証する。会社変更で担当者選択を解除する。選択済みの同じ参照は確認済みスナップショットを保持し、改訂/変更へコピーする。別の参照へ変えた場合は現行マスタから取得し直す。内部項目の確定後変更は拒否する。
+- Privacy: 内部情報をrequest_conditions/body/公開snapshot_jsonに入れない。PDF/LINEの生成引数と稼働者向け経路に渡さない。管理画面のadmin/ops APIだけが返す。既存のcontact_nameは運営側の連絡担当者（公開帳票用）であり、内部のクライアント担当者を自動転記しない。UIで名称を明確にする。電話は業務監査の値へ複製しない。
+- Minimal model/DDL: clients.phone、依頼版の2FK/内部JSON、担当者選択には会社選択が必要というCHECKを20261014a001で追加する。既存client_staffテーブルを再利用する。旧本文・確定スナップショット・金額は移行で変えない。
+- Audit: client_created/client_staff_created、client_updated（電話フィールド名のみ）、client_staff_updated（フィールド名と所属ID）、order_request_internal_source_updated（参照IDと実行者）を出力する。既存確定/改訂の監査も継続する。
+- Verification: 全7一覧の入力非表示/ポップアップ/縁色、複数担当者電話の一括保存、既存電話の編集、発注元/担当者の連動と解除、内部情報の公開本文/PDF生成/LINE非表示、所属検証・権限・確定後固定・改訂引継ぎ、旧データを保持する移行を検証する。
+- Version: マスタ表示の修正単体はZだが、会社電話と内部発注元連携の新しい機能を含むためYを上げて0.45.4から0.46.0とする。
+- Spec Reference: DESIGN_SPEC_v0.3 §3・5・6.1・16、AGENTS.md §9/11/12。

@@ -6934,6 +6934,7 @@ async def list_clients(
             code=c.code,
             contact_name=c.contact_name,
             contact_email=c.contact_email,
+            phone=c.phone, address=c.address, billing_email=c.billing_email,
         )
         for c in rows
     ]
@@ -6968,8 +6969,18 @@ async def create_client(
             address=request.address.strip() if request.address else None,
             contact_name=request.contact_name.strip() if request.contact_name else None,
             contact_email=request.contact_email.strip() if request.contact_email else None,
+            phone=(request.phone or "").strip() or None,
+            billing_email=(request.billing_email or "").strip() or None,
         )
         db.add(client)
+        db.flush()
+        contacts = [contact.model_dump() for contact in request.contacts]
+        if client.contact_name and not any(contact["name"] == client.contact_name for contact in contacts):
+            contacts.insert(0, {"name": client.contact_name, "phone": None, "email": client.contact_email})
+        for contact in contacts:
+            staff = ClientStaff(id=generate_ulid(), client_id=client.id, name=contact["name"], phone=(contact.get("phone") or "").strip() or None, email=(contact.get("email") or "").strip() or None, is_active=True)
+            db.add(staff)
+            AuditService(db).log("client_staff_created", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": client.id})
 
         AuditService(db).log(
             "client_created",
@@ -6993,6 +7004,7 @@ async def create_client(
             code=client.code,
             contact_name=client.contact_name,
             contact_email=client.contact_email,
+            phone=client.phone, address=client.address, billing_email=client.billing_email,
         )
     except HTTPException:
         raise
@@ -8110,13 +8122,13 @@ async def list_client_staff(
     if query.is_active is not None:
         q = q.filter(ClientStaff.is_active == query.is_active)
     total = q.count()
-    items = q.order_by(ClientStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    items = q.order_by(ClientStaff.name).offset(query.offset).limit(query.limit).all()
     return ClientStaffListResponse(
         items=[ClientStaffItem(
             id=r.id, client_id=r.client_id, name=r.name, role=r.role,
             phone=r.phone, email=r.email, is_active=r.is_active, notes=r.notes,
         ) for r in items],
-        total=total, page=query.page, limit=query.limit,
+        total=total, offset=query.offset, limit=query.limit,
     )
 
 
@@ -8138,6 +8150,7 @@ async def create_client_staff(
         phone=body.phone, email=body.email, is_active=body.is_active, notes=body.notes,
     )
     db.add(staff)
+    AuditService(db).log("client_staff_created", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": staff.client_id})
     db.commit()
     db.refresh(staff)
     return ClientStaffItem(
@@ -8169,6 +8182,7 @@ async def update_client_staff(
     staff.email = body.email
     staff.is_active = body.is_active
     staff.notes = body.notes
+    AuditService(db).log("client_staff_updated", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": staff.client_id, "changed_fields": ["name", "phone", "email", "role", "notes", "is_active"]})
     db.commit()
     db.refresh(staff)
     return ClientStaffItem(
@@ -9910,6 +9924,8 @@ from src.api.operator_staff_routes import router as operator_staff_router
 app.include_router(operator_staff_router)
 from src.api.place_routes import router as place_router
 app.include_router(place_router)
+from src.api.client_contact_routes import router as client_contact_router
+app.include_router(client_contact_router)
 app.include_router(line_webhook_router)
 app.include_router(line_registration_router)
 app.include_router(line_registration_review_router)

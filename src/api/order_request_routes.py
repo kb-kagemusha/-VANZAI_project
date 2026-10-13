@@ -48,6 +48,12 @@ router = APIRouter(prefix="/api/order-requests", tags=["Order Requests"])
 _ROLES = {UserRole.ADMIN.value, UserRole.OPS.value}
 
 
+class InternalOrderSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_id: str = Field(min_length=1, max_length=26)
+    client_staff_id: str | None = Field(default=None, min_length=1, max_length=26)
+
+
 class OrderRequestWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +76,7 @@ class OrderRequestWrite(BaseModel):
     follow_up_due_time: str | None = "21:00"
     assign_tracker_self: bool = False
     based_on_version_id: str | None = None
+    internal_source: InternalOrderSource | None = None
 
 
 class OrderRequestUpdate(BaseModel):
@@ -93,6 +100,7 @@ class OrderRequestUpdate(BaseModel):
     follow_up_due_on: date | None = None
     follow_up_due_time: str | None = None
     assign_tracker_self: bool | None = None
+    internal_source: InternalOrderSource | None = None
 
 
 class ReasonBody(BaseModel):
@@ -223,6 +231,7 @@ def _version_out(
         "request_conditions": version.request_conditions,
         "body": version.body,
         "contact_name": version.contact_name,
+        "internal_source": version.internal_source_snapshot,
         "contact_desk": version.contact_desk,
         "counterparty_note": version.counterparty_note,
         "draft_worker_ids": list(version.draft_worker_ids or []),
@@ -432,6 +441,7 @@ def create_order_request(
 
     def action():
         payload = body.model_dump()
+        payload["internal_source_set"] = "internal_source" in body.model_fields_set
         if payload.pop("assign_tracker_self"):
             payload["tracker_user_id"] = current_user.id
         version = _service(db).create_draft(actor=current_user, **payload)
@@ -501,6 +511,9 @@ def update_order_request_version(
             follow_up_due_on=fields.get("follow_up_due_on"),
             follow_up_due_time=fields.get("follow_up_due_time"),
             clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
+            internal_source=fields.get("internal_source"),
+            internal_source_set="internal_source" in fields,
+            actor=current_user,
         )
 
     version = _call(db, action)

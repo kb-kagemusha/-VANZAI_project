@@ -996,6 +996,10 @@ export function createClient(body: ClientCreateRequest) {
   });
 }
 
+export function updateClientPhone(clientId: string, phone: string | null) {
+  return apiFetch<ClientListItem>(`/api/clients/${clientId}/phone`, { method: "PATCH", body: JSON.stringify({ phone }) });
+}
+
 export function getSites(params?: Record<string, string | number | boolean | undefined>) {
   return apiFetch<PageResponse<SiteListItem>>("/api/sites", undefined, params);
 }
@@ -1285,7 +1289,16 @@ export function updateVanzaiStaff(staffId: string, body: VanzaiStaffUpdateReques
 // ===========================
 
 export function getClientStaff(clientId: string, params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<{ items: ClientStaffItem[]; total: number; page: number; limit: number }>(`/api/clients/${clientId}/staff`, undefined, params);
+  return apiFetch<PageResponse<ClientStaffItem>>(`/api/clients/${clientId}/staff`, undefined, params);
+}
+
+export async function getAllClientStaff(clientId: string, isActive?: boolean) {
+  const items: ClientStaffItem[] = [];
+  for (let offset = 0; ; offset += 200) {
+    const page = await getClientStaff(clientId, { offset, limit: 200, is_active: isActive });
+    items.push(...page.items);
+    if (!page.items.length || items.length >= page.total) return { items, total: page.total, offset: 0, limit: items.length };
+  }
 }
 
 export function createClientStaff(clientId: string, body: ClientStaffCreateRequest) {

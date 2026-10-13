@@ -829,6 +829,8 @@ export interface ClientListItem {
   contact_name: string | null;
   contact_email: string | null;
   billing_email: string | null;
+  phone?: string | null;
+  address?: string | null;
 }
 
 export interface ClientCreateRequest {
@@ -838,6 +840,8 @@ export interface ClientCreateRequest {
   contact_name: string | null;
   contact_email: string | null;
   billing_email: string | null;
+  phone?: string | null;
+  contacts?: Array<{ name: string; phone: string | null; email: string | null }>;
 }
 
 export interface SiteListItem {

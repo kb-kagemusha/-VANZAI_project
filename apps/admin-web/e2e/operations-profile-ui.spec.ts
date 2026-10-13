@@ -7,6 +7,8 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
   const worker = { id: "test-worker", name: "試験 太郎", furigana: "しけん たろう", is_active: true, tags: [], profile: null };
   const workers = options.workers ?? [worker];
   let savedVersion: any;
+  let clients: any[] = [{ id: "client-a", name: "内部会社A", phone: "045-111-9999", contact_name: null, contact_email: null, code: null }, { id: "client-b", name: "内部会社B", phone: "03-222-9999", contact_name: null, contact_email: null, code: null }];
+  const contacts: Record<string, any[]> = { "client-a": [{ id: "contact-a1", client_id: "client-a", name: "内部担当A1", phone: "090-1111-9999", is_active: true }, { id: "contact-a2", client_id: "client-a", name: "内部担当A2", phone: "090-2222-9999", is_active: true }], "client-b": [{ id: "contact-b1", client_id: "client-b", name: "内部担当B1", phone: "090-3333-9999", is_active: true }] };
   await page.addInitScript(() => { localStorage.setItem("vanzai.admin.access_token", "mock-token"); });
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -15,6 +17,21 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
     if (path.endsWith("/auth/me")) return respond({ id: "mock-admin", username: "mock-admin", display_name: "試験管理者", role: "admin", is_active: true });
     if (path.endsWith("/auth/session")) return respond({ access_token: "mock-token", refresh_token: "mock-refresh", token_type: "bearer" });
     const method = route.request().method();
+    if (path === "/api/clients" && method === "POST") {
+      const body = route.request().postDataJSON(); writes.push({ path, body });
+      const item = { ...body, id: "client-new" }; clients = [...clients, item];
+      contacts[item.id] = body.contacts.map((contact: any, index: number) => ({ ...contact, id: `new-contact-${index}`, client_id: item.id, is_active: true })); return respond(item);
+    }
+    if (path === "/api/clients") return respond({ items: clients, total: clients.length, offset: 0, limit: 200 });
+    if (/^\/api\/clients\/[^/]+\/staff$/.test(path)) {
+      const clientId = path.split("/")[3];
+      return respond({ items: contacts[clientId] ?? [], total: contacts[clientId]?.length ?? 0, page: 1, limit: 200 });
+    }
+    if (/^\/api\/clients\/[^/]+\/phone$/.test(path)) {
+      const body = route.request().postDataJSON(); writes.push({ path, body });
+      clients = clients.map((item) => item.id === path.split("/")[3] ? { ...item, phone: body.phone } : item);
+      return respond(clients.find((item) => item.id === path.split("/")[3]));
+    }
     if (path === "/api/workers") {
       const params = new URL(route.request().url()).searchParams;
       const offset = Number(params.get("offset") ?? 0), limit = Number(params.get("limit") ?? 200);
@@ -68,6 +85,74 @@ test("worker successful update shows success popup and keeps editor open", async
   expect(writes[0].body.edit_guard).toBe("initial-guard");
   await popup.getByRole("button", { name: "OK" }).click();
   await expect(page.getByRole("button", { name: "更新する", exact: true })).toBeVisible();
+});
+
+test("master tabs initially show only lists and open additions in a popup with distinct borders", async ({ page }) => {
+  await setup(page); await page.goto("/masters/data");
+  const tabs = page.getByRole("group", { name: "表示切替", exact: true });
+  for (const label of ["稼働者", "下請け", "クライアント", "現場", "案件種別", "役割", "VANZAI担当者"]) {
+    await tabs.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "名称", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "新規追加", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: `${label}の新規追加`, exact: true });
+    await expect(dialog.getByLabel("名称", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "閉じる", exact: true }).click();
+  }
+  const colors = await tabs.getByRole("button").evaluateAll((elements) => elements.map((el) => getComputedStyle(el).borderTopColor));
+  expect(new Set(colors).size).toBe(7);
+});
+
+test("client popup saves company phone and multiple contact phones atomically", async ({ page }) => {
+  const writes = await setup(page); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("button", { name: "新規追加", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "クライアントの新規追加" });
+  await dialog.getByLabel("名称", { exact: true }).fill("新規会社");
+  await dialog.getByLabel("会社電話番号", { exact: true }).fill("0451111111");
+  await dialog.getByLabel("担当者1の氏名", { exact: true }).fill("担当一");
+  await dialog.getByLabel("担当者1の電話番号", { exact: true }).fill("09011111111");
+  await dialog.getByRole("button", { name: "担当者を追加", exact: true }).click();
+  await dialog.getByLabel("担当者2の氏名", { exact: true }).fill("担当二");
+  await dialog.getByLabel("担当者2の電話番号", { exact: true }).fill("09022222222");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await dialog.getByRole("button", { name: "クライアントを追加", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes[0].body.phone).toBe("0451111111");
+  expect(writes[0].body.contacts).toEqual([{ name: "担当一", phone: "09011111111", email: null }, { name: "担当二", phone: "09022222222", email: null }]);
+  const row = page.getByRole("row").filter({ hasText: "新規会社" });
+  await row.getByRole("button", { name: "担当者管理", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "新規会社の会社電話・担当者管理" }).getByText("担当二", { exact: true })).toBeVisible();
+});
+
+test("existing company phone updates inside contact management popup", async ({ page }) => {
+  const writes = await setup(page); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "担当者管理" }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの会社電話・担当者管理" });
+  await dialog.getByLabel("会社電話番号", { exact: true }).fill("0459999999");
+  await dialog.getByRole("button", { name: "会社電話番号を更新", exact: true }).click();
+  await expect(dialog.getByText("会社電話番号を更新しました", { exact: true })).toBeVisible();
+  expect(writes[0]).toEqual({ path: "/api/clients/client-a/phone", body: { phone: "0459999999" } });
+});
+
+test("order client selection scopes contacts resets stale selection and stays out of public body", async ({ page }) => {
+  const writes = await setup(page); await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
+  const company = page.getByRole("combobox", { name: "発注元", exact: true });
+  const contact = page.getByRole("combobox", { name: "担当者（発注元）", exact: true });
+  await company.selectOption("client-a"); await contact.selectOption("contact-a2");
+  await expect(page.getByText(/担当者電話：090-2222-9999/)).toBeVisible();
+  await company.selectOption("client-b"); await expect(contact).toHaveValue("");
+  await expect(contact.getByRole("option", { name: "内部担当A2", exact: true })).toHaveCount(0);
+  await contact.selectOption("contact-b1"); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
+  await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].body.internal_source).toEqual({ client_id: "client-b", client_staff_id: "contact-b1" });
+  for (const marker of ["内部会社B", "内部担当B1", "090-3333-9999", "internal_source"]) {
+    expect(writes[0].body.body).not.toContain(marker); expect(writes[0].body.request_conditions).not.toContain(marker);
+  }
 });
 
 test("conflicting worker update does not show success popup", async ({ page }) => {

@@ -2,6 +2,15 @@ export type OrderRequestKind = "formal" | "test";
 export type OrderRequestStatus = "draft" | "confirmed" | "cancelled";
 export type OrderRequestQueue = "all" | "unsent" | "unknown" | "unacked" | "overdue";
 
+export interface InternalOrderSource {
+  client_id: string;
+  client_staff_id: string | null;
+  client_name?: string;
+  client_phone?: string | null;
+  staff_name?: string | null;
+  staff_phone?: string | null;
+}
+
 export interface OrderRequestDelivery {
   id: string;
   worker_id: string;
@@ -57,6 +66,7 @@ export interface OrderRequestNote {
 }
 
 export interface OrderRequestVersion {
+  internal_source?: InternalOrderSource | null;
   document_id: string;
   document_number: string;
   kind: OrderRequestKind;
@@ -177,6 +187,7 @@ export interface OrderRequestReplyList {
 }
 
 export interface OrderRequestWrite {
+  internal_source?: InternalOrderSource | null;
   kind: OrderRequestKind;
   work_date_label: string;
   site_id: string | null;
