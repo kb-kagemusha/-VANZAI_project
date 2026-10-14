@@ -32,6 +32,41 @@ async function setup(page: Page, options: { linked?: boolean; expireOnce?: boole
   return submitted;
 }
 
+test("additional stations can be added, removed, validated, confirmed and sent on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const submitted = await setup(page, { linked: true });
+  await page.getByRole("button", { name: "＋ 最寄り駅を追加", exact: true }).click();
+  await page.getByLabel("最寄り駅2", { exact: true }).fill("代々木駅");
+  await page.getByLabel("最寄り駅2まで徒歩（分）", { exact: true }).fill("301");
+  await page.getByRole("button", { name: "入力内容を確認する" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "0〜300分" })).toBeVisible();
+  expect(submitted).toHaveLength(0);
+  await page.getByLabel("最寄り駅2まで徒歩（分）", { exact: true }).fill("0");
+  await page.getByRole("button", { name: "＋ 最寄り駅を追加", exact: true }).click();
+  await page.getByLabel("最寄り駅3", { exact: true }).fill("新宿三丁目駅");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "../../artifacts/additional-stations-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "最寄り駅2を削除", exact: true }).click();
+  await expect(page.getByLabel("最寄り駅2", { exact: true })).toHaveValue("新宿三丁目駅");
+  await page.getByRole("button", { name: "入力内容を確認する" }).click();
+  await expect(page.getByText("新宿三丁目駅", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "この内容で申請する" }).click();
+  await expect(page.getByRole("heading", { name: "申請を受け付けました" })).toBeVisible();
+  expect(JSON.parse(submitted[0].body.additional_stations)).toEqual([{ nearest_station: "新宿三丁目駅", station_walk_minutes: null }]);
+});
+
+test("removing the last registered additional station submits an explicit empty list", async ({ page }) => {
+  const registered = { last_name: "山田", first_name: "太郎", last_name_furigana: "やまだ", first_name_furigana: "たろう", phone: "09012345678", email: "worker@example.com", birth_date: "1990-01-01", postal_code: "1000001", prefecture: "東京都", address1: "千代田区1", address2: "", nearest_station: "新宿駅", station_walk_minutes: "10", emergency_contact_phone: "09011112222", emergency_contact_name: "連絡先", emergency_contact_relationship: "家族", additional_stations: JSON.stringify([{ nearest_station: "代々木駅", station_walk_minutes: 0 }]) };
+  const submitted = await setup(page, { linked: true, registered });
+  await expect(page.getByLabel("最寄り駅2", { exact: true })).toHaveValue("代々木駅");
+  await page.getByRole("button", { name: "最寄り駅2を削除", exact: true }).click();
+  await page.getByRole("button", { name: "入力内容を確認する" }).click();
+  await expect(page.getByText("（なし）", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "この内容で申請する" }).click();
+  await expect(page.getByRole("heading", { name: "申請を受け付けました" })).toBeVisible();
+  expect(submitted[0].body).toEqual({ additional_stations: "[]" });
+});
+
 test("mobile layout, logo and purpose are shown before input", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

@@ -1,3 +1,4 @@
+import { showAdditionalStations } from "../lib/additionalStations";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -18,6 +19,7 @@ const FIELD_LABELS: Record<string, string> = {
   birth_date: "生年月日",
   postal_code: "郵便番号",
   address: "住所",
+  additional_stations: "追加の最寄り駅",
   nearest_station: "最寄り駅",
   station_walk_minutes: "最寄り駅まで徒歩（分）",
   emergency_contact_phone: "緊急連絡先の電話番号",
@@ -37,6 +39,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   prefecture: "都道府県",
   address1: "市区町村・番地",
   address2: "建物名",
+  additional_stations: "追加の最寄り駅",
   nearest_station: "最寄り駅",
   station_walk_minutes: "最寄り駅まで徒歩（分）",
   emergency_contact_phone: "緊急連絡先の電話番号",
@@ -44,8 +47,8 @@ const COMPONENT_LABELS: Record<string, string> = {
   emergency_contact_relationship: "ご本人との関係",
 };
 
-function show(value: string) {
-  return value || "（空）";
+function show(value: string, field?: string) {
+  return field === "additional_stations" ? showAdditionalStations(value) : value || "（空）";
 }
 
 function targetSentence(review: LineRegistrationReviewResponse) {
@@ -226,8 +229,8 @@ export function LineRegistrationReviewPanel({
               }}
             >
               <strong>{FIELD_LABELS[field]}</strong>
-              <span>変更前: {show(shown.before[field] || "")}</span>
-              <span>変更後: {show(shown.after[field] || "")}</span>
+              <span>変更前: {show(shown.before[field] || "", field)}</span>
+              <span>変更後: {show(shown.after[field] || "", field)}</span>
             </div>
           ))}
         </div>
@@ -235,7 +238,7 @@ export function LineRegistrationReviewPanel({
       <div style={{ display: "grid", gap: "0.35rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         {Object.keys(COMPONENT_LABELS).map((field) => (
           <div key={field}>
-            {COMPONENT_LABELS[field]}: {shown.components[field] || "（未入力）"}
+            {COMPONENT_LABELS[field]}: {show(shown.components[field] || "", field)}
           </div>
         ))}
       </div>

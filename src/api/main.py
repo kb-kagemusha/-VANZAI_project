@@ -6458,6 +6458,7 @@ async def update_worker_master(
             supplier_name = supplier.name
 
         before_value = {
+            "profile": read_worker_profile(worker).model_dump(mode="json"),
             "name": worker.name,
             "furigana": worker.furigana,
             "email": worker.email,

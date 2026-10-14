@@ -31,6 +31,7 @@ class NormalizedRegistration:
     address1: str | None
     address2: str | None
     address_sent: bool
+    additional_stations: list[dict] | None = None
     nearest_station: str | None = None
     station_walk_minutes: int | None = None
     emergency_contact_phone: str | None = None
@@ -46,14 +47,15 @@ class NormalizedRegistration:
                 self.email,
                 self.birth_date,
                 self.address_sent,
+                self.additional_stations is not None,
                 self.nearest_station,
                 self.station_walk_minutes is not None,
                 self.emergency_contact_phone,
             )
         )
 
-    def canonical(self) -> dict[str, str | int | None]:
-        values = {
+    def canonical(self) -> dict[str, object]:
+        values: dict[str, object] = {
             "last_name": self.last_name,
             "first_name": self.first_name,
             "last_name_furigana": self.last_name_furigana,
@@ -66,6 +68,8 @@ class NormalizedRegistration:
             "address1": self.address1,
             "address2": self.address2 if self.address_sent else None,
         }
+        if self.additional_stations is not None:
+            values["additional_stations"] = self.additional_stations
         # Keep hashes of existing requests stable when the new fields are blank.
         if self.nearest_station is not None:
             values["nearest_station"] = self.nearest_station
@@ -91,6 +95,13 @@ def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> Normaliz
         raise LineRegistrationInputError("メールアドレスの形式を確認してください。")
     birth = _birth_date(payload, sent)
     address = _address(payload, sent)
+    extra_stations = None
+    if "additional_stations" in sent and payload.get("additional_stations") not in (None, ""):
+        from src.domain.worker_stations import parse_additional_stations
+        try:
+            extra_stations = parse_additional_stations(payload["additional_stations"])
+        except (ValueError, TypeError) as exc:
+            raise LineRegistrationInputError("追加の最寄り駅は駅名（100文字以内）と徒歩時間（0〜300分の整数・任意）で入力してください。") from exc
     station = _optional_text(payload, sent, "nearest_station")
     if station is not None and len(station) > 100:
         raise LineRegistrationInputError("最寄り駅は100文字以内で入力してください。")
@@ -120,6 +131,7 @@ def canonicalize_line_registration(payload: dict, *, sent: set[str]) -> Normaliz
         address1=address[2],
         address2=address[3],
         address_sent=address[4],
+        additional_stations=extra_stations,
         nearest_station=station,
         station_walk_minutes=int(walk) if walk is not None else None,
         emergency_contact_phone=contact_phone,

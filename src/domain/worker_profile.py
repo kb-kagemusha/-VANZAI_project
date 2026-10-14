@@ -58,6 +58,8 @@ def write_worker_profile(worker, profile) -> None:
     data = profile.model_dump()
     for key in _PROFILE_FIELDS:
         setattr(worker, key, data[key])
+    if "additional_stations" in profile.model_fields_set and profile.additional_stations is not None:
+        worker.additional_stations = data["additional_stations"]
 
 
 def read_worker_profile(worker):
@@ -73,6 +75,7 @@ def read_worker_profile(worker):
             "postal_code": worker.postal_code,
             "address": worker.address,
             "hometown": worker.hometown,
+            "additional_stations": worker.additional_stations or [],
             "nearest_station": worker.nearest_station,
             "station_walk_minutes": worker.station_walk_minutes,
             "final_education": worker.final_education,

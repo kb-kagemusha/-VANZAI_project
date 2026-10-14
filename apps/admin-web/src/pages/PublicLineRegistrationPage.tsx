@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, MapPin, Phone, ShieldCheck, UserRound } from "lucide-react";
+import { AdditionalStationFields } from "../components/AdditionalStationFields";
+import { showAdditionalStations } from "../lib/additionalStations";
 import registrationLogo from "../assets/registration-logo.png";
 import "../styles/lineRegistration.css";
 import { PREFECTURES, REGISTRATION_PRIVACY_NOTICE, todayInJapan, validateRegistrationInput, type RegistrationFieldErrors } from "../lib/lineRegistrationUi";
@@ -48,6 +50,7 @@ const fields: Array<{ key: keyof LineRegistrationInput; label: string; type?: st
   { key: "address2", label: "建物名" },
   { key: "nearest_station", label: "最寄り駅" },
   { key: "station_walk_minutes", label: "最寄り駅までの徒歩時間" },
+  { key: "additional_stations", label: "追加の最寄り駅" },
   { key: "emergency_contact_phone", label: "緊急連絡先の電話番号" },
   { key: "emergency_contact_name", label: "緊急連絡先のお名前" },
   { key: "emergency_contact_relationship", label: "ご本人との関係" },
@@ -425,14 +428,17 @@ export function PublicLineRegistrationPage() {
             <section className="lr-card"><div className="lr-section-heading"><span><UserRound size={19} /></span><div><h2>お名前・生年月日</h2><p>ご本人の情報を入力してください</p></div></div><div className="lr-fields"><div className="lr-pair">{renderField("last_name")}{renderField("first_name")}</div><div className="lr-pair">{renderField("last_name_furigana")}{renderField("first_name_furigana")}</div>{renderField("birth_date")}</div></section>
             {screen.baseline && (!screen.baseline.first_name || !screen.baseline.first_name_furigana) ? <p className="lr-notice">保存されている氏名に区切りがない場合は姓の欄に表示しています。姓・名とふりがなを分けて入力してください。</p> : null}
             <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>連絡先</h2><p>お仕事のご案内や業務連絡に使用します</p></div></div><div className="lr-fields">{renderField("phone")}{renderField("email")}</div></section>
-            <section className="lr-card"><div className="lr-section-heading"><span><MapPin size={19} /></span><div><h2>住所・アクセス</h2><p>住所を変更する場合は、郵便番号から番地まで入力してください</p></div></div><div className="lr-fields">{renderField("postal_code")}{renderField("prefecture")}{renderField("address1")}{renderField("address2")}<div className="lr-divider" />{renderField("nearest_station")}{renderField("station_walk_minutes")}</div></section>
+            <section className="lr-card"><div className="lr-section-heading"><span><MapPin size={19} /></span><div><h2>住所・アクセス</h2><p>住所を変更する場合は、郵便番号から番地まで入力してください</p></div></div><div className="lr-fields">{renderField("postal_code")}{renderField("prefecture")}{renderField("address1")}{renderField("address2")}<div className="lr-divider" />{renderField("nearest_station")}{renderField("station_walk_minutes")}<AdditionalStationFields value={screen.input.additional_stations} disabled={holdingSubmission} error={fieldErrors.additional_stations} onChange={(additional_stations) => {
+              setScreen((current) => ({ ...current, input: { ...current.input, additional_stations }, error: "" }));
+              setFieldErrors((current) => ({ ...current, additional_stations: undefined }));
+            }} /></div></section>
             <section className="lr-card"><div className="lr-section-heading"><span><Phone size={19} /></span><div><h2>緊急連絡先</h2><p>緊急時に連絡できる方をご入力ください</p></div></div><div className="lr-fields">{renderField("emergency_contact_phone")}{renderField("emergency_contact_name")}{renderField("emergency_contact_relationship")}{screen.linked ? <p className="lr-hint">変更する場合は、電話番号・お名前・関係をまとめて入力してください。</p> : null}</div></section>
             {screen.error ? <div className="lr-error" role="alert">{screen.error}</div> : null}
             {screen.message ? <div className="lr-notice" role="status">{screen.message}</div> : null}
             {holdingSubmission ? <p className="lr-hint">直前の送信内容を保持しています。内容を変える場合は「別の内容で申請する」を選んでください。</p> : null}
             <div className="lr-action-bar"><button className="lr-button lr-primary" type="submit" disabled={sending || postalLoading}>{postalLoading ? "住所を検索しています…" : "入力内容を確認する"}<ArrowRight size={18} /></button><p>確認画面で内容を確認してから送信できます</p></div>
           </form> : <>
-            <section className="lr-card lr-confirm-card"><h2>申請する内容</h2><dl>{fields.filter((field) => (screen.baseline ? Object.prototype.hasOwnProperty.call(lineRegistrationPayload(screen.input, screen.linked, screen.baseline), field.key) : screen.input[field.key].trim())).map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === "station_walk_minutes" ? `徒歩${screen.input[field.key]}分` : screen.input[field.key]}</dd></div>)}</dl>{screen.linked ? <p className="lr-hint">表示のない項目は、現在の登録内容を変更しません。</p> : null}</section>
+            <section className="lr-card lr-confirm-card"><h2>申請する内容</h2><dl>{fields.filter((field) => (screen.baseline ? Object.prototype.hasOwnProperty.call(lineRegistrationPayload(screen.input, screen.linked, screen.baseline), field.key) : screen.input[field.key].trim())).map((field) => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === "additional_stations" ? showAdditionalStations(screen.input[field.key]) : field.key === "station_walk_minutes" ? `徒歩${screen.input[field.key]}分` : screen.input[field.key]}</dd></div>)}</dl>{screen.linked ? <p className="lr-hint">表示のない項目は、現在の登録内容を変更しません。</p> : null}</section>
             {screen.error ? <div className="lr-error" role="alert">{screen.error}</div> : null}
             {screen.message ? <div className="lr-notice" role="status">{screen.message}</div> : null}
             {holdingSubmission ? <p className="lr-hint">再送は直前に送った内容で行います。入力は保持しています。</p> : null}

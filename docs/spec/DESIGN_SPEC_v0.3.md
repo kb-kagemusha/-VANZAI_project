@@ -93,6 +93,8 @@
 
 稼働者タグは `workers.tags`（定義済みコードの配列）に保存する。自由入力は受け付けない。定義の正本は `src/domain/worker_tags.py`（DEC-029）。
 
+稼働者の最寄り駅は既存の `nearest_station` / `station_walk_minutes` を1駅目として保持し、任意の2駅目以降は `additional_stations`（駅名・徒歩分数の配列）へ保存する。管理画面・LINE登録の双方で追加・削除でき、LINEは承認後に反映する。詳細はDEC-050。
+
 **トランザクション**: project, shift_slot, assignment, actual, import_batch, expense, incentive, invoice, invoice_line, payout, payout_line, payout_delivery, closing
 
 **監査・通知**: audit_log, staff_notice, staff_notice_read, push_subscription

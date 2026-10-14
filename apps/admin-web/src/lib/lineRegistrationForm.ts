@@ -1,3 +1,5 @@
+import { additionalStationsPayload } from "./additionalStations";
+
 export const LINE_REGISTRATION_NOT_SAVED =
   "前回の申請を管理者が確認中です。今回入力した内容は申請本文に保存していません";
 
@@ -13,6 +15,7 @@ export type LineRegistrationInput = {
   prefecture: string;
   address1: string;
   address2: string;
+  additional_stations: string;
   nearest_station: string;
   station_walk_minutes: string;
   emergency_contact_phone: string;
@@ -32,6 +35,7 @@ export const emptyLineRegistrationInput = (): LineRegistrationInput => ({
   prefecture: "",
   address1: "",
   address2: "",
+  additional_stations: "",
   nearest_station: "",
   station_walk_minutes: "",
   emergency_contact_phone: "",
@@ -134,6 +138,7 @@ export function lineRegistrationPayload(input: LineRegistrationInput, linked: bo
   const trimmed = Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, value.trim()]),
   ) as LineRegistrationInput;
+  trimmed.additional_stations = additionalStationsPayload(trimmed.additional_stations);
   if (!linked) {
     return trimmed;
   }
@@ -156,7 +161,7 @@ export function lineRegistrationPayload(input: LineRegistrationInput, linked: bo
     return payload;
   }
   const payload: Record<string, string> = {};
-  (["last_name", "first_name", "last_name_furigana", "first_name_furigana", "phone", "email", "birth_date", "nearest_station", "station_walk_minutes"] as const)
+  (["last_name", "first_name", "last_name_furigana", "first_name_furigana", "phone", "email", "birth_date", "nearest_station", "station_walk_minutes", "additional_stations"] as const)
     .forEach((key) => {
       if (trimmed[key]) {
         payload[key] = trimmed[key];

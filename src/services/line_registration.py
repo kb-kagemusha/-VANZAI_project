@@ -256,6 +256,7 @@ class LineRegistrationService:
             city_address=normalized.address1,
             building_address=normalized.address2 if normalized.address_sent else None,
             birth_date=normalized.birth_date,
+            additional_stations=normalized.additional_stations,
             nearest_station=normalized.nearest_station,
             station_walk_minutes=normalized.station_walk_minutes,
             emergency_contact_phone=normalized.emergency_contact_phone,
@@ -423,7 +424,7 @@ def _request_is_open(request: RegistrationRequest) -> bool:
     return request.status == "pending" and request.deleted_at is None
 
 
-def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str | int | None]:
+def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, object]:
     address_sent = detail.zipcode is not None or detail.prefecture is not None or detail.city_address is not None
     values = {
         "last_name": detail.last_name,
@@ -438,6 +439,8 @@ def _detail_canonical(detail: WorkerRegistrationRequestDetail) -> dict[str, str 
         "address1": detail.city_address,
         "address2": detail.building_address if address_sent else None,
     }
+    if detail.additional_stations is not None:
+        values["additional_stations"] = detail.additional_stations
     if detail.nearest_station is not None:
         values["nearest_station"] = detail.nearest_station
     if detail.station_walk_minutes is not None:

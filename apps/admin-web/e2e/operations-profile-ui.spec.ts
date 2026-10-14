@@ -1,10 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 
-async function setup(page: Page, options: { workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean } = {}) {
+async function setup(page: Page, options: { workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean; workerProfile?: any } = {}) {
   const writes: { path: string; body: any }[] = [];
   let staff: any[] = [];
   let updatedWorker = false;
-  const worker = { id: "test-worker", name: "試験 太郎", furigana: "しけん たろう", is_active: true, tags: [], profile: null };
+  const worker = { id: "test-worker", name: "試験 太郎", furigana: "しけん たろう", is_active: true, tags: [], profile: options.workerProfile ?? null };
   const workers = options.workers ?? [worker];
   let savedVersion: any;
   let clients: any[] = [{ id: "client-a", name: "内部会社A", phone: "045-111-9999", contact_name: null, contact_email: null, code: null }, { id: "client-b", name: "内部会社B", phone: "03-222-9999", contact_name: null, contact_email: null, code: null }];
@@ -74,6 +74,28 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
   });
   return writes;
 }
+
+test("worker editor keeps the original station and saves optional additional stations", async ({ page }) => {
+  const writes = await setup(page, { workerProfile: { nearest_station: "新宿駅", station_walk_minutes: 12, additional_stations: [{ nearest_station: "代々木駅", station_walk_minutes: 0 }] } });
+  await page.goto("/masters/workers");
+  await page.locator("tr").filter({ hasText: "試験 太郎" }).getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "試験 太郎 を編集", exact: true });
+  await expect(dialog.getByLabel("最寄り駅2", { exact: true })).toHaveValue("代々木駅");
+  await expect(dialog.getByLabel("最寄り駅2まで徒歩（分）", { exact: true })).toHaveValue("0");
+  await dialog.getByRole("button", { name: "＋ 最寄り駅を追加", exact: true }).click();
+  await dialog.getByLabel("最寄り駅3", { exact: true }).fill("新宿三丁目駅");
+  await dialog.getByLabel("最寄り駅3まで徒歩（分）", { exact: true }).fill("15");
+  await dialog.getByRole("button", { name: "最寄り駅2を削除", exact: true }).click();
+  await expect(dialog.getByLabel("最寄り駅2", { exact: true })).toHaveValue("新宿三丁目駅");
+  await dialog.getByRole("button", { name: "＋ 最寄り駅を追加", exact: true }).click();
+  await dialog.getByLabel("最寄り駅3", { exact: true }).fill("南新宿駅");
+  await dialog.getByRole("button", { name: "＋ 最寄り駅を追加", exact: true }).click();
+  await dialog.getByRole("button", { name: "更新する", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "更新完了" })).toBeVisible();
+  expect(writes[0].body.profile.nearest_station).toBe("新宿駅");
+  expect(writes[0].body.profile.station_walk_minutes).toBe(12);
+  expect(writes[0].body.profile.additional_stations).toEqual([{ nearest_station: "新宿三丁目駅", station_walk_minutes: 15 }, { nearest_station: "南新宿駅", station_walk_minutes: null }]);
+});
 
 test("worker successful update shows success popup and keeps editor open", async ({ page }) => {
   const writes = await setup(page);

@@ -1,9 +1,11 @@
-"""LINE申請を稼働者の12項目へ反映する。空欄は消さない。住所は届いた組で置き換える。"""
+"""LINE申請を稼働者へ反映する。追加駅は明示した空配列で削除できる。"""
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from src.domain.worker_edit_guard import GUARDED_FIELDS, guarded_values
+from src.domain.worker_stations import station_comparison_value
 
 
 def empty_worker_values() -> dict[str, str]:
@@ -28,6 +30,8 @@ def project_worker_values(before: dict[str, str], detail) -> dict[str, str]:
         after["email"] = email
     if detail.birth_date is not None:
         after["birth_date"] = detail.birth_date.isoformat()
+    if detail.additional_stations is not None:
+        after["additional_stations"] = station_comparison_value(detail.additional_stations)
     station = _text(detail.nearest_station)
     if station:
         after["nearest_station"] = station
@@ -58,6 +62,7 @@ def assign_worker_values(worker, values: dict[str, str]) -> None:
     worker.birth_date = date.fromisoformat(values["birth_date"]) if values["birth_date"] else None
     worker.postal_code = values["postal_code"] or None
     worker.address = values["address"] or None
+    worker.additional_stations = json.loads(values["additional_stations"]) if values["additional_stations"] else []
     worker.nearest_station = values["nearest_station"] or None
     worker.station_walk_minutes = int(values["station_walk_minutes"]) if values["station_walk_minutes"] else None
     for field in ("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"):
@@ -86,6 +91,7 @@ def submitted_components(detail) -> dict[str, str]:
         "prefecture": _text(detail.prefecture),
         "address1": _text(detail.city_address),
         "address2": _text(detail.building_address),
+        "additional_stations": station_comparison_value(detail.additional_stations) if detail.additional_stations is not None else "",
         "nearest_station": _text(detail.nearest_station),
         "station_walk_minutes": _text(detail.station_walk_minutes),
         "emergency_contact_phone": _text(detail.emergency_contact_phone),

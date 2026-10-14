@@ -4,6 +4,8 @@ import { splitStoredName, splitStoredAddress, joinStoredAddress } from "../lib/w
 import { PREFECTURES } from "../lib/lineRegistrationUi";
 import { lookupPostalAddress, normalizePostalCode, type PostalAddress } from "../lib/postalAddress";
 
+import { AdditionalStationFields } from "./AdditionalStationFields";
+import { additionalStationsPayload } from "../lib/additionalStations";
 import { WorkerTagPicker } from "./WorkerTags";
 import type { WorkerDayAvailability, WorkerDayHours, WorkerListItem, WorkerProfileInput, WorkerTagOption, WorkerWeekday, WorkerWorkHistoryItem } from "../types/api";
 
@@ -69,6 +71,7 @@ export interface WorkerIntakeForm {
   postalCode: string;
   address: string;
   hometown: string;
+  additionalStations: string;
   nearestStation: string;
   stationWalkMinutes: string;
   finalEducation: string;
@@ -125,6 +128,7 @@ export function emptyIntakeForm(): WorkerIntakeForm {
     postalCode: "",
     address: "",
     hometown: "",
+    additionalStations: "",
     nearestStation: "",
     stationWalkMinutes: "",
     finalEducation: "",
@@ -292,6 +296,7 @@ export function intakeFromWorker(worker: WorkerListItem): WorkerIntakeForm {
     postalCode: formatPostal(profile?.postal_code),
     address: profile?.address ?? "",
     hometown: profile?.hometown ?? "",
+    additionalStations: profile?.additional_stations?.length ? JSON.stringify(profile.additional_stations) : "",
     nearestStation: profile?.nearest_station ?? "",
     stationWalkMinutes: profile?.station_walk_minutes == null ? "" : String(profile.station_walk_minutes),
     finalEducation: profile?.final_education ?? "",
@@ -334,6 +339,7 @@ export function intakeToRequest(form: WorkerIntakeForm, base: WorkerListItem | n
     postal_code: postalDigits(form.postalCode),
     address: optionalText(joinStoredAddress(form.prefecture, form.address1, form.address2)),
     hometown: optionalText(form.hometown),
+    additional_stations: JSON.parse(additionalStationsPayload(form.additionalStations) || "[]"),
     nearest_station: optionalText(form.nearestStation),
     station_walk_minutes: optionalBoundedInt(form.stationWalkMinutes, "最寄駅から徒歩", 0, 300),
     final_education: optionalText(form.finalEducation),
@@ -766,6 +772,9 @@ export function WorkerProfileModal({
                   <span>分</span>
                 </span>
               </label>
+              <div className="order-field order-span-12">
+                <AdditionalStationFields value={form.additionalStations} onChange={(additionalStations) => patch({ additionalStations })} />
+              </div>
               <label className="order-field order-span-6">
                 <span className="order-field-label">最終学歴</span>
                 <input value={form.finalEducation} onChange={(event) => patch({ finalEducation: event.target.value })} />

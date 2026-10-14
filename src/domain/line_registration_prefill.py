@@ -26,6 +26,7 @@ def worker_form_values(worker):
         "phone": values["phone"], "email": values["email"], "birth_date": values["birth_date"],
         "postal_code": values["postal_code"], "prefecture": prefecture,
         "address1": address1, "address2": address2,
+        "additional_stations": values["additional_stations"],
         "nearest_station": values["nearest_station"], "station_walk_minutes": values["station_walk_minutes"],
         "emergency_contact_phone": values["emergency_contact_phone"],
         "emergency_contact_name": values["emergency_contact_name"],

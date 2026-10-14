@@ -1,3 +1,4 @@
+import { additionalStationsPayload } from "./additionalStations";
 import type { LineRegistrationInput } from "./lineRegistrationForm";
 
 export const REGISTRATION_PRIVACY_NOTICE =
@@ -66,5 +67,6 @@ export function validateRegistrationInput(input: LineRegistrationInput, linked: 
     if (!v.emergency_contact_name || v.emergency_contact_name.length > 200) errors.emergency_contact_name = "お名前を200文字以内で入力してください";
     if (!v.emergency_contact_relationship || v.emergency_contact_relationship.length > 50) errors.emergency_contact_relationship = "関係を50文字以内で入力してください";
   }
+  try { additionalStationsPayload(v.additional_stations); } catch (error) { errors.additional_stations = error instanceof Error ? error.message : "追加の最寄り駅を確認してください"; }
   return errors;
 }

@@ -7,6 +7,7 @@ from typing import Generic, List, Literal, Optional, TypeVar
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from decimal import Decimal
 
+from src.domain.worker_stations import WorkerStation
 from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_short_id
 
 DEFAULT_PAGE_LIMIT = 50
@@ -965,6 +966,7 @@ class WorkerProfileInput(BaseModel):
     hometown: Optional[str] = Field(None, max_length=100)
     nearest_station: Optional[str] = Field(None, max_length=100)
     station_walk_minutes: Optional[int] = Field(None, ge=0, le=300)
+    additional_stations: list[WorkerStation] | None = None
     final_education: Optional[str] = Field(None, max_length=200)
     licenses_qualifications: Optional[str] = Field(None, max_length=2000)
     car_drive_ok: Optional[bool] = None

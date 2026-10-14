@@ -638,6 +638,7 @@ export interface WorkerProfileInput {
   postal_code: string | null;
   address: string | null;
   hometown: string | null;
+  additional_stations?: { nearest_station: string; station_walk_minutes: number | null }[] | null;
   nearest_station: string | null;
   station_walk_minutes: number | null;
   final_education: string | null;
