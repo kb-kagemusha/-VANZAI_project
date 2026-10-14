@@ -4,7 +4,6 @@
 - ✅ Python 3.13.9 インストール済み
 - ✅ 仮想環境 `.venv` 作成済み
 - ✅ 全パッケージインストール済み（`pip install -e .`）
-- ✅ Kintone アプリ作成済み
 
 ---
 
@@ -27,20 +26,7 @@ API_PORT=8000
 LOG_LEVEL=INFO
 ```
 
-**Kintone連携を使う場合:**
-```env
-KINTONE_SUBDOMAIN=your-company
-# アプリ別トークン（必要なアプリ分だけ設定）
-KINTONE_TOKEN_WORKERS=your-workers-token
-KINTONE_TOKEN_PROJECTS=your-projects-token
-KINTONE_TOKEN_ACTUALS=your-actuals-token
-KINTONE_APP_WORKERS=1
-KINTONE_APP_PROJECTS=2
-KINTONE_APP_ACTUALS=3
-# ... 他のアプリIDを実際の値に変更
-```
-
-**JWT認証を使う場合:**
+**JWT認証（本番必須）:**
 ```env
 JWT_SECRET_KEY=your-generated-secret-key-here
 JWT_ALGORITHM=HS256
@@ -150,31 +136,17 @@ email_templates
 
 ## ステップ3: 初期データの投入
 
-### 3.1 マスタデータCSVの準備
+### 3.1 マスタデータの投入
 
-**方法A: Kintoneから同期（推奨）**
-```python
-# Pythonスクリプトで実行
-from src.services.kintone_service import KintoneService
-from src.models.base import get_db
-
-db = next(get_db())
-kintone = KintoneService()
-
-# Workersを同期
-workers_data = kintone.sync_workers(app_id=1)
-print(f"同期完了: {len(workers_data)} 件")
-
-# Projectsを同期
-projects_data = kintone.sync_projects(app_id=2)
-print(f"同期完了: {len(projects_data)} 件")
-```
-
-**方法B: CSVから直接インポート**
+**推奨: 管理画面または CSV インポート**
 ```powershell
-# CSVインポートスクリプトを実行
+# テスト用マスタ投入
 C:/VANZAI_project/.venv/Scripts/python.exe scripts/import_master_data.py
 ```
+
+本番では admin-web（https://vanzai-portal.com）のマスタ画面から登録する。
+
+> **注記**: Kintone からの同期は廃止。旧手順は `scripts/legacy/kintone/` を参照。
 
 ### 3.2 初期データ投入スクリプト作成
 
@@ -311,19 +283,14 @@ curl -X POST "http://localhost:8000/api/csv/upload" \
   -F "entity_type=shift_slots"
 ```
 
-**実績の取り込み（Kintone連携）:**
-```python
-# Pythonスクリプトで実行
-from src.services.kintone_service import KintoneService
-from datetime import date
-
-kintone = KintoneService()
-actuals = kintone.get_actuals(
-    app_id=3,
-    date_from=date(2026, 1, 20),
-    date_to=date(2026, 1, 26)
-)
-print(f"取得: {len(actuals)} 件")
+**実績の取り込み（管理画面 / API）:**
+```powershell
+# 管理画面の「CSV取込」から実績CSVをアップロード
+# または API 経由:
+curl -X POST "http://localhost:8000/api/csv/upload" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@actuals_202601.csv" \
+  -F "entity_type=actuals"
 ```
 
 詳細は [RUNBOOK_WEEKLY.md](RUNBOOK_WEEKLY.md) を参照。
@@ -544,29 +511,19 @@ alembic upgrade head
 - SendGrid: `SMTP_USERNAME=apikey` に設定
 - 2段階認証を確認
 
-### Kintone接続エラー
-```python
-# 接続テスト
-from src.services.kintone_service import KintoneService
-kintone = KintoneService()
-print(kintone.config.base_url)  # URLを確認
-```
-
----
-
 ## チェックリスト
 
 ### 初回セットアップ
 - [ ] `.env` ファイル作成・設定
 - [ ] `alembic upgrade head` 実行
-- [ ] マスタデータ投入（CSV or Kintone）
+- [ ] マスタデータ投入（CSV または管理画面）
 - [ ] API起動確認（`http://localhost:8000/api/docs`）
 - [ ] テスト実行（`pytest -v`）
 
 ### 運用開始前
 - [ ] SMTP設定テスト（メール送信確認）
 - [ ] JWT認証テスト（トークン発行・検証）
-- [ ] Kintone連携テスト（実績取得確認）
+- [ ] CSV取込テスト（実績アップロード確認）
 - [ ] 請求書PDF生成テスト（`./invoices/` 出力確認）
 - [ ] 銀行振込ファイル生成テスト
 - [ ] スケジューラージョブ確認（週次催促、月次請求書生成）

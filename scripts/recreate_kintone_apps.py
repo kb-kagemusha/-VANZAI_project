@@ -22,7 +22,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
-from src.services.kintone_service import KintoneService, KintoneConfig
+from scripts.legacy.kintone.kintone_service import KintoneService, KintoneConfig
 
 load_dotenv()
 

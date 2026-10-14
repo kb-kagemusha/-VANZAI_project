@@ -11,6 +11,9 @@ import { StatusBadge } from "../components/StatusBadge";
 import { SummaryCard } from "../components/SummaryCard";
 import {
   ApiError,
+  getClosingApprovals,
+  approveClosingRequest,
+  rejectClosingRequest,
   generateMonthlyBilling,
   getDashboard,
   getProjects,
@@ -19,6 +22,7 @@ import {
   releaseSoftCloseProject,
   softCloseProject,
 } from "../lib/api/client";
+import { confirmApp } from "../lib/appDialog";
 import { currentMonthInput, formatDate, formatDateTime, minutesToHours, toPeriodKey } from "../lib/formatters";
 
 type ClosingRowDraft = {
@@ -31,6 +35,23 @@ type AuditLogSearchOptions = {
   quickFilter: string;
   targetType?: string;
   actionType?: string;
+};
+
+type PendingAssignmentResponseDetail = {
+  assignment_id: string;
+  project_id: string;
+  project_name: string;
+  worker_id: string;
+  worker_name: string;
+  worker_email: string | null;
+  work_date: string;
+  shift_label: string | null;
+  worker_response_requested_at: string | null;
+  hours_since_request: number | null;
+  days_until_work: number;
+  escalation_level: "watch" | "escalate";
+  escalation_reasons: string[];
+  reason: string;
 };
 
 const CLOSING_SELECTED_INPUTS_STORAGE_KEY = "vanzai.dashboard.closing.selected";
@@ -66,6 +87,10 @@ export function DashboardPage() {
     queryKey: ["dashboard", periodKey],
     queryFn: () => getDashboard(periodKey),
   });
+  const approvalsQuery = useQuery({ queryKey: ["closing-approvals", periodKey], queryFn: () => getClosingApprovals(periodKey), refetchInterval: 30000 });
+  const approveMutation = useMutation({ mutationFn: approveClosingRequest, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); } });
+  const rejectApprovalMutation = useMutation({ mutationFn: rejectClosingRequest, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] }); } });
   const projectsQuery = useQuery({
     queryKey: ["projects-all"],
     queryFn: () => getProjects({ limit: 200 }),
@@ -75,6 +100,7 @@ export function DashboardPage() {
     mutationFn: () => generateMonthlyBilling(periodKey),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["invoices"] });
       void queryClient.invalidateQueries({ queryKey: ["payouts"] });
     },
@@ -85,6 +111,7 @@ export function DashboardPage() {
       softCloseProject(targetProjectId, periodKey, reason || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
     },
   });
@@ -94,6 +121,7 @@ export function DashboardPage() {
       hardCloseProject(targetProjectId, periodKey, approver, reason || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -104,6 +132,7 @@ export function DashboardPage() {
       releaseSoftCloseProject(targetProjectId, periodKey, approver, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -114,6 +143,7 @@ export function DashboardPage() {
       releaseHardCloseProject(targetProjectId, periodKey, approver, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["closing-approvals"] });
       setSelectedReason("");
       setSelectedApprover("");
     },
@@ -225,20 +255,6 @@ export function DashboardPage() {
     setSelectedClosingRows(nextSelectedRows);
   };
 
-  const selectApproverRequiredRowsWithoutApprover = () => {
-    const closingRows = dashboardQuery.data?.closing_status ?? [];
-    const nextSelectedRows: Record<string, boolean> = {};
-
-    for (const row of closingRows) {
-      const approver = getRowDraft(row.project_id).approver.trim();
-      if (row.status !== "open" && approver.length === 0) {
-        nextSelectedRows[row.project_id] = true;
-      }
-    }
-
-    setSelectedClosingRows(nextSelectedRows);
-  };
-
   const selectReasonRequiredRowsWithoutReason = () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const nextSelectedRows: Record<string, boolean> = {};
@@ -256,9 +272,8 @@ export function DashboardPage() {
   const getRowsAffectedByCopy = (rows: typeof closingRows) =>
     rows.filter((row) => {
       const draft = getRowDraft(row.project_id);
-      const nextApprover = selectedApprover || draft.approver;
       const nextReason = selectedReason || draft.reason;
-      return nextApprover !== draft.approver || nextReason !== draft.reason;
+      return nextReason !== draft.reason;
     });
 
   const buildCopyConfirmationMessage = (rows: typeof closingRows, scopeLabel: string) => {
@@ -273,13 +288,17 @@ export function DashboardPage() {
     return `${scopeLabel} ${affectedRows.length}件の入力を上書きします。対象: ${names.join("、")}${suffix}`;
   };
 
-  const copySelectedInputsToRows = () => {
+  const copySelectedInputsToRows = async () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const confirmationMessage = buildCopyConfirmationMessage(closingRows, "全行");
+    if (!confirmationMessage) return;
 
-    if (!confirmationMessage || !window.confirm(confirmationMessage)) {
-      return;
-    }
+    const confirmed = await confirmApp({
+      title: "一覧へ入力コピー",
+      message: confirmationMessage,
+      confirmLabel: "上書きする",
+    });
+    if (!confirmed) return;
 
     setRowDrafts((current) => {
       const nextDrafts = { ...current };
@@ -293,14 +312,18 @@ export function DashboardPage() {
     });
   };
 
-  const copySelectedInputsToCheckedRows = () => {
+  const copySelectedInputsToCheckedRows = async () => {
     const closingRows = dashboardQuery.data?.closing_status ?? [];
     const targetRows = closingRows.filter((row) => selectedClosingRows[row.project_id]);
     const confirmationMessage = buildCopyConfirmationMessage(targetRows, "選択行");
+    if (!confirmationMessage) return;
 
-    if (!confirmationMessage || !window.confirm(confirmationMessage)) {
-      return;
-    }
+    const confirmed = await confirmApp({
+      title: "選択行へ入力コピー",
+      message: confirmationMessage,
+      confirmLabel: "上書きする",
+    });
+    if (!confirmed) return;
 
     setRowDrafts((current) => {
       const nextDrafts = { ...current };
@@ -347,7 +370,6 @@ export function DashboardPage() {
   const selectedCopyAffectedRows = getRowsAffectedByCopy(closingRows.filter((row) => isClosingRowSelected(row.project_id)));
   const selectedClosingRowCount = closingRows.filter((row) => isClosingRowSelected(row.project_id)).length;
   const allClosingRowsSelected = closingRows.length > 0 && closingRows.every((row) => isClosingRowSelected(row.project_id));
-  const selectedRowsMissingApproverCount = closingRows.filter((row) => isClosingRowSelected(row.project_id) && getRowDraft(row.project_id).approver.trim().length === 0).length;
   const selectedReleaseRowsMissingReasonCount = closingRows.filter(
     (row) => isClosingRowSelected(row.project_id) && (row.status === "soft_closed" || row.status === "hard_closed") && getRowDraft(row.project_id).reason.trim().length === 0,
   ).length;
@@ -368,49 +390,68 @@ export function DashboardPage() {
   const findCount = (itemType: string) =>
     dashboardQuery.data?.unprocessed_items.find((item) => item.item_type === itemType)?.count ?? 0;
 
+  const findDetails = (itemType: string) =>
+    (dashboardQuery.data?.unprocessed_items.find((item) => item.item_type === itemType)?.details ?? []) as PendingAssignmentResponseDetail[];
+
+  const pendingAssignmentResponses = findDetails("pending_assignment_response");
+  const escalatedAssignmentResponses = pendingAssignmentResponses.filter((item) => item.escalation_level === "escalate");
+
+  const formatEscalationReasons = (row: PendingAssignmentResponseDetail) =>
+    row.escalation_reasons.length > 0 ? row.escalation_reasons.join(" / ") : "継続確認中";
+
   return (
     <div className="page-stack">
       <PageHeader title="ダッシュボード" description="未処理、差異、締め状況を月次単位で確認し、そのまま月次処理を進めます。" eyebrow="月次運用" />
-      <FilterBar>
+      <FilterBar className="dashboard-period-bar">
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(event) => setMonthValue(event.target.value)} />
         </label>
-      </FilterBar>
-
-      <section className="upload-card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <h3 className="section-title">月次一括生成</h3>
-            <p style={{ margin: 0, color: "var(--color-muted)" }}>対象月の請求書と支払明細をまとめて生成します。</p>
-          </div>
-          <button onClick={() => monthlyBillingMutation.mutate()} disabled={monthlyBillingMutation.isPending}>
+        <div className="dashboard-monthly-generate">
+          <span>月次一括生成</span>
+          <button
+            type="button"
+            className="btn btn-primary dashboard-action-button"
+            onClick={() => monthlyBillingMutation.mutate()}
+            disabled={monthlyBillingMutation.isPending}
+          >
             {monthlyBillingMutation.isPending ? "実行中..." : "月次一括生成"}
           </button>
         </div>
-        {monthlyBillingMutation.isSuccess ? (
-          <p style={{ margin: 0 }}>
-            請求 {monthlyBillingMutation.data.generated_invoices} 件生成 / {monthlyBillingMutation.data.skipped_invoices} 件スキップ、
-            支払 {monthlyBillingMutation.data.generated_payouts} 件生成 / {monthlyBillingMutation.data.skipped_payouts} 件スキップ
-          </p>
-        ) : null}
-        {monthlyBillingMutation.error instanceof ApiError ? (
-          <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{monthlyBillingMutation.error.message}</p>
-        ) : null}
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
-            請求ログを見る
-          </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
-            支払ログを見る
-          </Link>
-        </div>
-      </section>
+      </FilterBar>
 
+      {monthlyBillingMutation.isSuccess || monthlyBillingMutation.error instanceof ApiError ? (
+        <section className="upload-card dashboard-monthly-feedback">
+          {monthlyBillingMutation.isSuccess ? (
+            <p style={{ margin: 0 }}>
+              請求 {monthlyBillingMutation.data.generated_invoices} 件生成 / {monthlyBillingMutation.data.skipped_invoices} 件スキップ、
+              支払 {monthlyBillingMutation.data.generated_payouts} 件生成 / {monthlyBillingMutation.data.skipped_payouts} 件スキップ
+            </p>
+          ) : null}
+          {monthlyBillingMutation.error instanceof ApiError ? (
+            <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{monthlyBillingMutation.error.message}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="dashboard-action-row dashboard-monthly-links">
+        <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "invoice_all" })}` }}>
+          請求ログを見る
+        </Link>
+        <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { quickFilter: "payout_all" })}` }}>
+          支払ログを見る
+        </Link>
+      </div>
+
+      <section className="upload-card"><h3 className="section-title">締めの承認待ち</h3><p>申請者とは別の権限者が、対象・理由を確認して承認してください。申請の有効期限は24時間です。</p>
+        {approvalsQuery.data?.items.map((item) => <div key={item.id} style={{ padding: "0.75rem", borderBottom: "1px solid var(--color-border)" }}><strong>{item.project_name} / {item.period_key} / {{ hard_close: "本締め", soft_release: "仮締め解除", hard_release: "本締め解除" }[item.action] ?? item.action}</strong><p>申請者：{item.requested_by}　理由：{item.reason}　期限：{formatDateTime(item.expires_at)}</p><button className="btn btn-primary btn-sm" disabled={!item.can_approve || approveMutation.isPending} onClick={async () => { if (await confirmApp({ title: "締めの申請を承認", message: item.project_name + "：" + item.reason, confirmLabel: "承認する" })) approveMutation.mutate(item.id); }}>承認する</button> <button className="btn btn-ghost btn-sm" disabled={rejectApprovalMutation.isPending} onClick={async () => { if (await confirmApp({ title: "申請の取消・却下", message: "この申請を終了します。", confirmLabel: "終了する" })) rejectApprovalMutation.mutate(item.id); }}>取消・却下</button>{!item.can_approve ? <span> 別の権限者による承認が必要です。</span> : null}</div>)}
+        {approveMutation.error ? <p className="form-error">{approveMutation.error instanceof Error ? approveMutation.error.message : "承認できませんでした"}</p> : null}
+        {rejectApprovalMutation.error ? <p className="form-error">{rejectApprovalMutation.error instanceof Error ? rejectApprovalMutation.error.message : "申請を終了できませんでした"}</p> : null}
+      </section>
       <section className="upload-card">
         <div>
           <h3 className="section-title">締め処理</h3>
-          <p style={{ marginTop: 0, color: "var(--color-muted)" }}>案件を選んで仮締め・本締めを実行します。</p>
+          <p style={{ marginTop: 0, color: "var(--color-muted)" }}>仮締めは実行、本締め・解除は申請して別の権限者が承認します。</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
           <label>
@@ -423,59 +464,53 @@ export function DashboardPage() {
             </select>
           </label>
           <label>
-            締め理由
-            <input value={selectedReason} onChange={(event) => setSelectedReason(event.target.value)} placeholder="任意" />
+            締め・申請理由
+            <input value={selectedReason} onChange={(event) => setSelectedReason(event.target.value)} placeholder="本締め・解除の申請は理由を入力" />
           </label>
-          <label>
-            承認者
-            <input value={selectedApprover} onChange={(event) => setSelectedApprover(event.target.value)} placeholder="本締めで必須" />
-          </label>
-        </div>
+          <p>本締め・解除は申請後、別の権限者がログインして承認します。</p>
+       </div>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_all" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_all" })}` }}>
             締め関連ログ
           </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_execute" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_execute" })}` }}>
             締め実行ログ
           </Link>
-          <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_release" })}` }}>
+          <Link className="btn btn-ghost dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(periodKey, { projectId: projectId || undefined, quickFilter: "closing_release" })}` }}>
             締め解除ログ
           </Link>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button onClick={() => softCloseMutation.mutate({ projectId, reason: selectedReason })} disabled={!projectId || softCloseMutation.isPending}>
+        <div className="dashboard-action-row">
+          <button className="btn btn-primary dashboard-action-button" onClick={() => softCloseMutation.mutate({ projectId, reason: selectedReason })} disabled={!projectId || softCloseMutation.isPending}>
             {softCloseMutation.isPending ? "仮締め中..." : "仮締め"}
           </button>
-          <button onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedApprover || hardCloseMutation.isPending}>
-            {hardCloseMutation.isPending ? "本締め中..." : "本締め"}
+          <button className="btn btn-primary dashboard-action-button" onClick={() => hardCloseMutation.mutate({ projectId, approver: selectedApprover, reason: selectedReason })} disabled={!projectId || !selectedReason.trim() || hardCloseMutation.isPending}>
+            {hardCloseMutation.isPending ? "申請中..." : "本締めを申請"}
           </button>
-          <button onClick={copySelectedInputsToRows} disabled={allCopyAffectedRows.length === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={copySelectedInputsToRows} disabled={allCopyAffectedRows.length === 0}>
             一覧へ入力コピー
           </button>
-          <button onClick={copySelectedInputsToCheckedRows} disabled={selectedClosingRowCount === 0 || selectedCopyAffectedRows.length === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={copySelectedInputsToCheckedRows} disabled={selectedClosingRowCount === 0 || selectedCopyAffectedRows.length === 0}>
             選択行へ入力コピー
           </button>
-          <button onClick={clearClosingRowSelection} disabled={selectedClosingRowCount === 0}>
+          <button className="btn btn-ghost dashboard-action-button" onClick={clearClosingRowSelection} disabled={selectedClosingRowCount === 0}>
             選択解除
           </button>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button onClick={() => selectClosingRowsByStatus("open")} disabled={closingRows.length === 0}>
+        <div className="dashboard-action-row">
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("open")} disabled={closingRows.length === 0}>
             未締めを選択
           </button>
-          <button onClick={() => selectClosingRowsByStatus("soft_closed")} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("soft_closed")} disabled={closingRows.length === 0}>
             仮締め済みを選択
           </button>
-          <button onClick={() => selectClosingRowsByStatus("hard_closed")} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={() => selectClosingRowsByStatus("hard_closed")} disabled={closingRows.length === 0}>
             本締め済みを選択
           </button>
-          <button onClick={selectReleaseTargetRows} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={selectReleaseTargetRows} disabled={closingRows.length === 0}>
             解除候補を選択
           </button>
-          <button onClick={selectApproverRequiredRowsWithoutApprover} disabled={closingRows.length === 0}>
-            承認者未入力の必須行を選択
-          </button>
-          <button onClick={selectReasonRequiredRowsWithoutReason} disabled={closingRows.length === 0}>
+          <button className="btn btn-ghost dashboard-selection-button" onClick={selectReasonRequiredRowsWithoutReason} disabled={closingRows.length === 0}>
             理由未入力の解除候補を選択
           </button>
         </div>
@@ -491,23 +526,90 @@ export function DashboardPage() {
         <div style={{ display: "grid", gap: "0.35rem", padding: "0.75rem", border: "1px solid var(--color-border, #d0d5dd)", borderRadius: "0.75rem" }}>
           <strong>選択状態</strong>
           <span>選択行: {selectedClosingRowCount} 件</span>
-          <span>承認者未入力: {selectedRowsMissingApproverCount} 件</span>
           <span>解除理由未入力: {selectedReleaseRowsMissingReasonCount} 件</span>
         </div>
-        <p style={{ margin: 0, color: "var(--color-muted)" }}>選択中の承認者・理由は月ごとに保持されます。全行コピーに加えて、チェックした {selectedClosingRowCount} 件だけへ反映できます。</p>
+        <p style={{ margin: 0, color: "var(--color-muted)" }}>選択中の申請理由は月ごとに保持されます。全行コピーに加えて、チェックした {selectedClosingRowCount} 件だけへ反映できます。</p>
         {closingMutationError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{closingMutationError}</p> : null}
         {softCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締めを実行しました。</p> : null}
-        {hardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締めを実行しました。</p> : null}
-        {releaseSoftCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締め解除を実行しました。</p> : null}
-        {releaseHardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締め解除を実行しました。</p> : null}
+        {hardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締めを申請しました。別の権限者の承認待ちです。</p> : null}
+        {releaseSoftCloseMutation.isSuccess ? <p style={{ margin: 0 }}>仮締め解除を申請しました。別の権限者の承認待ちです。</p> : null}
+        {releaseHardCloseMutation.isSuccess ? <p style={{ margin: 0 }}>本締め解除を申請しました。別の権限者の承認待ちです。</p> : null}
       </section>
 
       <section className="summary-grid">
-        <SummaryCard label="差異アサイン" value={findCount("assignment_variance")} accent="#c8553d" />
+        <SummaryCard label="差異配置" value={findCount("assignment_variance")} accent="#c8553d" />
         <SummaryCard label="単価未設定" value={findCount("missing_price")} accent="#d98f2b" />
         <SummaryCard label="未発行請求" value={findCount("unissued_invoice")} accent="#2a6f97" />
         <SummaryCard label="未処理支払" value={findCount("unprocessed_payout")} accent="#4a7c59" />
+        <SummaryCard label="送信先未設定支払" value={findCount("missing_payout_recipient")} accent="#b42318" />
+        <SummaryCard label="予定確認未回答" value={findCount("pending_assignment_response")} accent="#0f766e" />
+        <SummaryCard label="要対応" value={findCount("escalated_assignment_response")} accent="#9f1239" />
         <SummaryCard label="未締め案件" value={findCount("unclosed_projects")} accent="#6a4c93" />
+      </section>
+
+      <section className="upload-card">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <h3 className="section-title">予定確認監視</h3>
+            <p style={{ margin: 0, color: "var(--color-muted)" }}>
+              未回答の予定確認を一覧化し、稼働日接近・依頼経過・メール未設定を要対応として監視します。
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link className="btn btn-ghost dashboard-chip-link" to={`/operations/assignment-responses?month=${monthValue}`}>
+              監視一覧を開く
+            </Link>
+            <Link
+              className="btn btn-ghost dashboard-chip-link"
+              to={{
+                pathname: "/audit-logs",
+                search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_sent" })}`,
+              }}
+            >
+              催促送信ログ
+            </Link>
+            <Link
+              className="btn btn-ghost dashboard-chip-link"
+              to={{
+                pathname: "/audit-logs",
+                search: `?${buildAuditLogSearch(periodKey, { quickFilter: "all", targetType: "assignment", actionType: "assignment_response_reminder_failed" })}`,
+              }}
+            >
+              催促失敗ログ
+            </Link>
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: "0.35rem", padding: "0.75rem", border: "1px solid var(--color-border, #d0d5dd)", borderRadius: "0.75rem" }}>
+          <strong>監視サマリー</strong>
+          <span>未回答: {pendingAssignmentResponses.length} 件</span>
+          <span>要対応: {escalatedAssignmentResponses.length} 件</span>
+          <span>継続監視: {pendingAssignmentResponses.length - escalatedAssignmentResponses.length} 件</span>
+        </div>
+        <DataTable
+          columns={[
+            { key: "project", header: "案件", render: (row) => row.project_name },
+            { key: "worker", header: "稼働者", render: (row) => row.worker_name },
+            { key: "date", header: "稼働日", render: (row) => formatDate(row.work_date) },
+            { key: "shift", header: "シフト", render: (row) => row.shift_label || "-" },
+            { key: "requestedAt", header: "依頼日時", render: (row) => formatDateTime(row.worker_response_requested_at) },
+            { key: "hours", header: "経過時間", render: (row) => (row.hours_since_request === null ? "-" : `${row.hours_since_request}h`) },
+            { key: "days", header: "稼働まで", render: (row) => `${row.days_until_work}日` },
+            {
+              key: "level",
+              header: "対応水準",
+              render: (row) => (
+                <span className={`status-badge ${row.escalation_level === "escalate" ? "attention" : "neutral"}`}>
+                  {row.escalation_level === "escalate" ? "要対応" : "監視中"}
+                </span>
+              ),
+            },
+            { key: "reason", header: "条件", render: (row) => formatEscalationReasons(row) },
+          ]}
+          rows={pendingAssignmentResponses}
+          getRowKey={(row) => row.assignment_id}
+          emptyTitle="未回答の予定確認はありません"
+          emptyDescription="対象月の未回答配置は現時点で検知されていません。"
+        />
       </section>
 
       <section className="two-column-grid">
@@ -564,17 +666,6 @@ export function DashboardPage() {
               { key: "releasedBy", header: "最終解除者", render: (row) => row.last_released_by || "-" },
               { key: "deadline", header: "再締め期限", render: (row) => formatDateTime(row.reclose_deadline) },
               {
-                key: "rowApprover",
-                header: "承認者入力",
-                render: (row) => (
-                  <input
-                    value={getRowDraft(row.project_id).approver}
-                    onChange={(event) => updateRowDraft(row.project_id, "approver", event.target.value)}
-                    placeholder="username"
-                  />
-                ),
-              },
-              {
                 key: "rowReason",
                 header: "理由入力",
                 render: (row) => (
@@ -590,19 +681,20 @@ export function DashboardPage() {
                 header: "操作",
                 render: (row) => (
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_all" })}` }}>
+                    <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_all" })}` }}>
                       監査ログ
                     </Link>
-                    <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_execute" })}` }}>
+                    <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_execute" })}` }}>
                       実行ログ
                     </Link>
                     {(row.status === "soft_closed" || row.status === "hard_closed") ? (
-                      <Link to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_release" })}` }}>
+                      <Link className="btn btn-ghost btn-sm dashboard-chip-link" to={{ pathname: "/audit-logs", search: `?${buildAuditLogSearch(row.period_key, { projectId: row.project_id, quickFilter: "closing_release" })}` }}>
                         解除ログ
                       </Link>
                     ) : null}
                     {row.status === "open" ? (
                       <button
+                        className="btn btn-primary btn-sm"
                         onClick={() => {
                           setProjectId(row.project_id);
                           softCloseMutation.mutate({ projectId: row.project_id, reason: getRowDraft(row.project_id).reason });
@@ -615,6 +707,7 @@ export function DashboardPage() {
                     {row.status === "soft_closed" ? (
                       <>
                         <button
+                          className="btn btn-primary btn-sm"
                           onClick={() => {
                             setProjectId(row.project_id);
                             hardCloseMutation.mutate({
@@ -623,32 +716,34 @@ export function DashboardPage() {
                               reason: getRowDraft(row.project_id).reason,
                             });
                           }}
-                          disabled={!getRowDraft(row.project_id).approver || hardCloseMutation.isPending}
+                          disabled={!getRowDraft(row.project_id).reason.trim() || hardCloseMutation.isPending}
                         >
-                          本締め
+                          本締めを申請
                         </button>
                         <button
+                          className="btn btn-danger btn-sm"
                           onClick={() => releaseSoftCloseMutation.mutate({
                             projectId: row.project_id,
                             approver: getRowDraft(row.project_id).approver,
                             reason: getRowDraft(row.project_id).reason,
                           })}
-                          disabled={!getRowDraft(row.project_id).approver || !getRowDraft(row.project_id).reason || releaseSoftCloseMutation.isPending}
+                          disabled={!getRowDraft(row.project_id).reason || releaseSoftCloseMutation.isPending}
                         >
-                          仮締め解除
+                          仮締め解除を申請
                         </button>
                       </>
                     ) : null}
                     {row.status === "hard_closed" ? (
                       <button
+                        className="btn btn-danger btn-sm"
                         onClick={() => releaseHardCloseMutation.mutate({
                           projectId: row.project_id,
                           approver: getRowDraft(row.project_id).approver,
                           reason: getRowDraft(row.project_id).reason,
                         })}
-                        disabled={!getRowDraft(row.project_id).approver || !getRowDraft(row.project_id).reason || releaseHardCloseMutation.isPending}
+                        disabled={!getRowDraft(row.project_id).reason || releaseHardCloseMutation.isPending}
                       >
-                        本締め解除
+                        本締め解除を申請
                       </button>
                     ) : null}
                   </div>

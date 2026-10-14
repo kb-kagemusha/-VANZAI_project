@@ -4,5 +4,12 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"/^\\$env:JWT_SECRET_KEY='local-dev-only-2026-04-01-not-for-production'; Push-Location c:/VANZAI_project; c:/VANZAI_project/\\.venv/Scripts/python\\.exe scripts/ensure_local_worker\\.py; Pop-Location$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
+		}
+	}
 }

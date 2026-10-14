@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="VANZAI">
+  <defs>
+    <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d98f2b"/>
+      <stop offset="100%" stop-color="#c8553d"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="url(#brand)"/>
+  <path fill="#fff" d="M9 10h3.2l3.4 9.2L19 10h3.2l-5.4 14h-3.6L9 10z"/>
+</svg>

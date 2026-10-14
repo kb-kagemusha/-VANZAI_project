@@ -256,6 +256,39 @@ def test_unprocessed_payouts(session):
     assert summary.unprocessed_payout_count >= 1
 
 
+def test_missing_payout_recipients(session):
+    """既定送信先未設定の支払明細を検知する"""
+    worker_with_email = Worker(name="Worker With Email", email="worker@example.com")
+    worker_without_email = Worker(name="Worker Without Email", email=None)
+    session.add_all([worker_with_email, worker_without_email])
+    session.flush()
+
+    session.add_all([
+        Payout(
+            worker_id=worker_with_email.id,
+            period_key="202501",
+            payment_date=date(2025, 2, 10),
+            status=PayoutStatus.APPROVED.value,
+            version=1,
+            total_amount=Decimal("50000"),
+        ),
+        Payout(
+            worker_id=worker_without_email.id,
+            period_key="202501",
+            payment_date=date(2025, 2, 10),
+            status=PayoutStatus.APPROVED.value,
+            version=1,
+            total_amount=Decimal("60000"),
+        ),
+    ])
+    session.commit()
+
+    summary = get_dashboard_summary(session, "202501")
+
+    assert summary.missing_payout_recipient_count == 1
+    assert summary.missing_payout_recipients[0].payee_name == "Worker Without Email"
+
+
 def test_dashboard_unprocessed_items_details(session):
     """未処理アイテムの詳細内容チェック"""
     # マスタデータ準備

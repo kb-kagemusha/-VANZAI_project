@@ -27,7 +27,7 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 from src.api.deps import SessionLocal
 from src.models.master import Worker, Client, Site, Role, ProjectType, Supplier
-from src.services.kintone_service import KintoneService, KintoneConfig
+from scripts.legacy.kintone.kintone_service import KintoneService, KintoneConfig
 # from src.services.kintone_field_mappings import format_kintone_record  # マッピング不要
 
 load_dotenv()
