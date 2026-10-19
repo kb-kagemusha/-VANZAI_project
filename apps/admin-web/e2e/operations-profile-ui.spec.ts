@@ -1,13 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
 
-async function setup(page: Page, options: { workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean; workerProfile?: any } = {}) {
+async function setup(page: Page, options: { companyUpdateFailure?: boolean; workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean; workerProfile?: any } = {}) {
   const writes: { path: string; body: any }[] = [];
   let staff: any[] = [];
   let updatedWorker = false;
   const worker = { id: "test-worker", name: "試験 太郎", furigana: "しけん たろう", is_active: true, tags: [], profile: options.workerProfile ?? null };
   const workers = options.workers ?? [worker];
   let savedVersion: any;
-  let clients: any[] = [{ id: "client-a", name: "内部会社A", phone: "045-111-9999", contact_name: null, contact_email: null, code: null }, { id: "client-b", name: "内部会社B", phone: "03-222-9999", contact_name: null, contact_email: null, code: null }];
+  let clients: any[] = [{ id: "client-a", name: "内部会社A", postal_code: "1500043", address: "東京都渋谷区道玄坂1-2", notes: "既存の社内メモ", phone: "045-111-9999", contact_name: null, contact_email: null, code: null }, { id: "client-b", name: "内部会社B", phone: "03-222-9999", contact_name: null, contact_email: null, code: null }];
   const contacts: Record<string, any[]> = { "client-a": [{ id: "contact-a1", client_id: "client-a", name: "内部担当A1", phone: "090-1111-9999", is_active: true }, { id: "contact-a2", client_id: "client-a", name: "内部担当A2", phone: "090-2222-9999", is_active: true }], "client-b": [{ id: "contact-b1", client_id: "client-b", name: "内部担当B1", phone: "090-3333-9999", is_active: true }] };
   await page.addInitScript(() => { localStorage.setItem("vanzai.admin.access_token", "mock-token"); });
   await page.route("**/api/**", async (route) => {
@@ -21,6 +21,12 @@ async function setup(page: Page, options: { workerConflict?: boolean; profileRef
       const body = route.request().postDataJSON(); writes.push({ path, body });
       const item = { ...body, id: "client-new" }; clients = [...clients, item];
       contacts[item.id] = body.contacts.map((contact: any, index: number) => ({ ...contact, id: `new-contact-${index}`, client_id: item.id, is_active: true })); return respond(item);
+    }
+    if (/^\/api\/clients\/[^/]+$/.test(path) && method === "PATCH") {
+      const body = route.request().postDataJSON(); writes.push({ path, body });
+      if (options.companyUpdateFailure) return respond({ detail: "同じコードのクライアントが既に存在します" }, 409);
+      clients = clients.map((item) => item.id === path.split("/")[3] ? { ...item, ...body } : item);
+      return respond(clients.find((item) => item.id === path.split("/")[3]));
     }
     if (path === "/api/clients") return respond({ items: clients, total: clients.length, offset: 0, limit: 200 });
     if (/^\/api\/clients\/[^/]+\/staff$/.test(path)) {
@@ -470,4 +476,53 @@ test("client postal lookup preserves typed addresses and offers multiple matches
   await dialog.getByLabel("郵便番号", { exact: true }).fill("3333333");
   await expect(dialog.getByRole("status")).toContainText("見つかりませんでした");
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都試験区三丁目");
+});
+
+
+test("client company can be edited from its master row and reopened with saved values", async ({ page }) => {
+  const writes = await setup(page); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "編集", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "内部会社Aの企業情報を編集", exact: true });
+  await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("内部会社A");
+  await expect(dialog.getByLabel("郵便番号", { exact: true })).toHaveValue("1500043");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
+  await expect(dialog.getByLabel("社内メモ", { exact: true })).toHaveValue("既存の社内メモ");
+  await dialog.getByLabel("企業名", { exact: true }).fill("修正会社A");
+  await dialog.getByLabel("社内メモ", { exact: true }).fill("変更した社内メモ");
+  await page.route("https://zipcloud.ibsnet.co.jp/**", (route) => route.fulfill({ json: { status: 200, results: [{ zipcode: "1000001", address1: "東京都", address2: "千代田区", address3: "千代田" }] } }));
+  await dialog.getByLabel("郵便番号", { exact: true }).fill("１００－０００１");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
+  await dialog.getByRole("button", { name: "東京都千代田区千代田", exact: true }).click();
+  await dialog.getByLabel("住所", { exact: true }).fill("東京都千代田区千代田1-1");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "修正会社Aの企業情報を編集", exact: true });
+  await expect(dialog.getByText("企業情報を更新しました", { exact: true })).toBeVisible();
+  expect(writes[0]).toEqual({ path: "/api/clients/client-a", body: { name: "修正会社A", postal_code: "1000001", address: "東京都千代田区千代田1-1", notes: "変更した社内メモ" } });
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).last().click();
+  await page.getByRole("row").filter({ hasText: "修正会社A" }).getByRole("button", { name: "編集", exact: true }).click();
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都千代田区千代田1-1");
+  await expect(dialog.getByLabel("会社電話番号", { exact: true })).toHaveValue("045-111-9999");
+  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "artifacts/client-company-editor-mobile.png" });
+});
+
+test("company update errors keep input and cancel sends no update", async ({ page }) => {
+  const writes = await setup(page, { companyUpdateFailure: true }); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  const row = page.getByRole("row").filter({ hasText: "内部会社A" });
+  await row.getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの企業情報を編集", exact: true });
+  await dialog.getByLabel("企業名", { exact: true }).fill("保存しない名前");
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).last().click();
+  expect(writes).toEqual([]);
+  await row.getByRole("button", { name: "編集", exact: true }).click();
+  await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("内部会社A");
+  await dialog.getByLabel("コード", { exact: true }).fill("重複コード");
+  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("同じコード");
+  await expect(dialog.getByLabel("コード", { exact: true })).toHaveValue("重複コード");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
 });

@@ -74,3 +74,59 @@ def test_postal_migration_preserves_existing_company_data():
         row = connection.execute(text("SELECT address, notes, postal_code FROM clients")).one()
         assert tuple(row) == ("existing address", "existing memo", None)
     engine.dispose()
+
+
+def test_company_edit_preserves_contacts_and_audits_changes(api_client, db_session, admin_headers):
+    response = api_client.post("/api/clients", headers=admin_headers, json={
+        "name": "変更前", "phone": "0311111111", "address": "旧住所", "notes": "メモ",
+        "contacts": [{"name": "担当", "role": "部長", "phone": "09011111111"}],
+    })
+    client_id = response.json()["id"]
+    result = api_client.patch(f"/api/clients/{client_id}", headers=admin_headers, json={
+        "name": " 変更後 ", "postal_code": "1234567", "address": "新住所", "notes": None,
+    })
+    assert result.status_code == 200, result.text
+    assert result.json()["name"] == "変更後"
+    assert result.json()["phone"] == "0311111111"
+    assert result.json()["notes"] is None
+    assert result.json()["postal_code"] == "1234567"
+    contact = db_session.query(ClientStaff).filter_by(client_id=client_id).one()
+    assert (contact.name, contact.role, contact.phone) == ("担当", "部長", "09011111111")
+    listed = api_client.get("/api/clients", headers=admin_headers).json()["items"][0]
+    assert listed["name"] == "変更後" and listed["address"] == "新住所"
+    log = db_session.query(AuditLog).filter_by(target_type="client", target_id=client_id, action="client_updated").one()
+    assert log.before_value == {"name": "変更前", "postal_code": None, "address": "旧住所", "notes": "メモ"}
+    assert log.after_value == {"name": "変更後", "postal_code": "1234567", "address": "新住所", "notes": None}
+    assert log.actor == "client_admin"
+
+
+@pytest.mark.parametrize("details", [{"name": " "}, {"name": None}, {"postal_code": "123-4567"}, {"contacts": []}])
+def test_company_edit_rejects_invalid_values(api_client, db_session, admin_headers, details):
+    company = Client(id="company", name="変更不可")
+    db_session.add(company)
+    db_session.commit()
+    result = api_client.patch("/api/clients/company", headers=admin_headers, json=details)
+    assert result.status_code == 422
+    db_session.refresh(company)
+    assert company.name == "変更不可"
+
+
+def test_company_edit_rejects_duplicate_code(api_client, db_session, admin_headers):
+    db_session.add_all([Client(id="first", name="企業一", code="FIRST"), Client(id="second", name="企業二", code="SECOND")])
+    db_session.commit()
+    result = api_client.patch("/api/clients/second", headers=admin_headers, json={"code": " first ", "name": "変わらない"})
+    assert result.status_code == 409
+    db_session.expire_all()
+    assert db_session.get(Client, "second").name == "企業二"
+
+
+def test_company_edit_checks_permission_and_deleted_record(api_client, db_session, admin_headers):
+    from datetime import datetime, timezone
+    company = Client(id="deleted", name="削除済み", deleted_at=datetime.now(timezone.utc))
+    db_session.add(company)
+    user = create_user_with_hashed_password(db=db_session, username="read_only", email="readonly@example.com", password="test-password", role="ops")
+    db_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token({'sub': user.username})}"}
+    assert api_client.patch("/api/clients/deleted", headers=headers, json={"name": "拒否"}).status_code == 403
+    assert api_client.patch("/api/clients/deleted", headers=admin_headers, json={"name": "拒否"}).status_code == 404
+    assert api_client.patch("/api/clients/missing", headers=admin_headers, json={"name": "拒否"}).status_code == 404

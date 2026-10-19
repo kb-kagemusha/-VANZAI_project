@@ -2,6 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ClientCompanyEditor } from "../components/ClientCompanyEditor";
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
@@ -159,6 +160,7 @@ export function MasterDataPage() {
   const [selectedWorker, setSelectedWorker] = useState<WorkerListItem | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierListItem | null>(null);
   const [selectedVanzaiStaff, setSelectedVanzaiStaff] = useState<VanzaiStaffItem | null>(null);
+  const [editingClient, setEditingClient] = useState<ClientListItem | null>(null);
   const [selectedClient, setSelectedClient] = useState<ClientListItem | null>(null);
   const [selectedClientStaff, setSelectedClientStaff] = useState<ClientStaffItem | null>(null);
   const [clientStaffRole, setClientStaffRole] = useState("");
@@ -282,6 +284,7 @@ export function MasterDataPage() {
     setEditNeedsReload(false);
     setSelectedSupplier(null);
     setSelectedVanzaiStaff(null);
+    setEditingClient(null);
     setSelectedClient(null);
     setSelectedClientStaff(null);
     setEditName("");
@@ -1454,7 +1457,9 @@ export function MasterDataPage() {
               { key: "contact_name", header: "担当者", render: (row) => row.contact_name ?? "—" },
               { key: "phone", header: "会社電話番号", render: (row) => row.phone ?? "—" },
               { key: "contact_email", header: "メール", render: (row) => row.contact_email ?? "—" },
-              { key: "actions", header: "担当者", render: (row) => (
+              { key: "actions", header: "操作", render: (row) => (
+                <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
+                {user?.role === "admin" && <button type="button" onClick={() => setEditingClient(row)}>編集</button>}
                 <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => {
                   setSelectedClient(selectedClient?.id === row.id ? null : row);
                   setCompanyPhone(row.phone ?? ""); setCompanyPhoneMessage("");
@@ -1462,7 +1467,7 @@ export function MasterDataPage() {
                   setClientStaffFormError(""); setClientStaffFormMessage("");
                 }}>
                   {selectedClient?.id === row.id ? "閉じる" : "担当者管理"}
-                </button>
+                </button></div>
               ) },
             ]}
             rows={clientsQuery.data?.items ?? []}
@@ -1470,6 +1475,16 @@ export function MasterDataPage() {
             emptyTitle="クライアントはいません"
             emptyDescription="CSV取り込みまたは直接登録で追加してください。"
           />
+          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
+            setEditingClient(updated);
+            if (selectedClient?.id === updated.id) { setSelectedClient(updated); setCompanyPhone(updated.phone ?? ""); }
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["clients-page"] }),
+              queryClient.invalidateQueries({ queryKey: ["clients-project-form"] }),
+              queryClient.invalidateQueries({ queryKey: ["price-form-clients"] }),
+              queryClient.invalidateQueries({ queryKey: ["order-source-clients"] }),
+            ]);
+          }} />}
           {selectedClient ? (
             <ProfileDialog title={`${selectedClient.name}の会社電話・担当者管理`} onClose={() => { if (!companyPhoneMutation.isPending && !createClientStaffMutation.isPending && !updateClientStaffMutation.isPending) { setSelectedClient(null); setSelectedClientStaff(null); } }}>
             <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
