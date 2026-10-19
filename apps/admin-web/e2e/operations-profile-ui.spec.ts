@@ -136,18 +136,31 @@ test("client popup saves company phone and multiple contact phones atomically", 
   await dialog.getByLabel("会社電話番号", { exact: true }).fill("0451111111");
   await dialog.getByLabel("担当者1の氏名", { exact: true }).fill("担当一");
   await dialog.getByLabel("担当者1の電話番号", { exact: true }).fill("09011111111");
+  await dialog.getByLabel("担当者1の役職", { exact: true }).fill("営業部長");
+  await dialog.getByLabel("社内メモ", { exact: true }).fill("請求前に電話確認");
+  await page.route("https://zipcloud.ibsnet.co.jp/**", (route) => route.fulfill({ json: { status: 200, results: [{ zipcode: "1500043", address1: "東京都", address2: "渋谷区", address3: "道玄坂" }] } }));
+  await dialog.getByLabel("郵便番号", { exact: true }).fill("１５０－００４３");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂");
+  await dialog.getByLabel("住所", { exact: true }).fill("東京都渋谷区道玄坂1-2 試験ビル");
   await dialog.getByRole("button", { name: "担当者を追加", exact: true }).click();
   await dialog.getByLabel("担当者2の氏名", { exact: true }).fill("担当二");
   await dialog.getByLabel("担当者2の電話番号", { exact: true }).fill("09022222222");
+  await dialog.getByLabel("担当者2の役職", { exact: true }).fill("課長");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await dialog.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
-  await dialog.getByRole("button", { name: "クライアントを追加", exact: true }).click();
+  const addButton = dialog.getByRole("button", { name: "クライアントを追加", exact: true });
+  expect((await addButton.boundingBox())!.width).toBeLessThan(210);
+  await page.screenshot({ path: "artifacts/client-registration-mobile.png", fullPage: true });
+  await addButton.click();
   await expect(dialog).toHaveCount(0);
   expect(writes[0].body.phone).toBe("0451111111");
-  expect(writes[0].body.contacts).toEqual([{ name: "担当一", phone: "09011111111", email: null }, { name: "担当二", phone: "09022222222", email: null }]);
+  expect(writes[0].body.postal_code).toBe("1500043");
+  expect(writes[0].body.notes).toBe("請求前に電話確認");
+  expect(writes[0].body.contacts).toEqual([{ name: "担当一", role: "営業部長", phone: "09011111111", email: null }, { name: "担当二", role: "課長", phone: "09022222222", email: null }]);
   const row = page.getByRole("row").filter({ hasText: "新規会社" });
   await row.getByRole("button", { name: "担当者管理", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "新規会社の会社電話・担当者管理" }).getByText("担当二", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "新規会社の会社電話・担当者管理" }).getByText("課長", { exact: true })).toBeVisible();
+  await expect(page.getByText("社内メモ: 請求前に電話確認", { exact: true })).toBeVisible();
 });
 
 test("existing company phone updates inside contact management popup", async ({ page }) => {
@@ -435,4 +448,26 @@ test("event director filters include larger qualifications and combine with unre
   await expect(page.locator(".order-recipient-picks").getByText("小型担当")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+
+test("client postal lookup preserves typed addresses and offers multiple matches", async ({ page }) => {
+  await setup(page); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("button", { name: "新規追加", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "クライアントの新規追加" });
+  await page.route("https://zipcloud.ibsnet.co.jp/**", (route) => {
+    const postal = new URL(route.request().url()).searchParams.get("zipcode");
+    return route.fulfill({ json: { status: 200, results: postal === "1111111" ? [{ zipcode: postal, address1: "東京都", address2: "試験区", address3: "一丁目" }] : postal === "2222222" ? [{ zipcode: postal, address1: "東京都", address2: "試験区", address3: "二丁目" }, { zipcode: postal, address1: "東京都", address2: "試験区", address3: "三丁目" }] : null } });
+  });
+  await dialog.getByLabel("住所", { exact: true }).fill("入力済み住所・建物名");
+  await dialog.getByLabel("郵便番号", { exact: true }).fill("1111111");
+  await expect(dialog.getByRole("status")).toContainText("取得しました");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("入力済み住所・建物名");
+  await dialog.getByLabel("郵便番号", { exact: true }).fill("2222222");
+  await dialog.getByRole("button", { name: "東京都試験区三丁目", exact: true }).click();
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都試験区三丁目");
+  await dialog.getByLabel("郵便番号", { exact: true }).fill("3333333");
+  await expect(dialog.getByRole("status")).toContainText("見つかりませんでした");
+  await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都試験区三丁目");
 });

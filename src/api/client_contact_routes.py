@@ -30,4 +30,4 @@ def update_client_phone(client_id: str, body: ClientPhoneWrite, db: Session = De
     client.phone = (body.phone or "").strip() or None
     AuditService(db).log("client_updated", target_type="client", target_id=client.id, actor=user.username, actor_role=user.role, after_value={"changed_fields": ["phone"]})
     db.commit()
-    return ClientListItem(id=client.id, name=client.name, code=client.code, address=client.address, phone=client.phone, contact_name=client.contact_name, contact_email=client.contact_email, billing_email=client.billing_email)
+    return ClientListItem(id=client.id, name=client.name, code=client.code, address=client.address, phone=client.phone, contact_name=client.contact_name, contact_email=client.contact_email, billing_email=client.billing_email, postal_code=client.postal_code, notes=client.notes)

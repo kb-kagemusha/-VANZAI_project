@@ -6935,7 +6935,7 @@ async def list_clients(
             code=c.code,
             contact_name=c.contact_name,
             contact_email=c.contact_email,
-            phone=c.phone, address=c.address, billing_email=c.billing_email,
+            phone=c.phone, address=c.address, billing_email=c.billing_email, postal_code=c.postal_code, notes=c.notes,
         )
         for c in rows
     ]
@@ -6968,6 +6968,8 @@ async def create_client(
             name=request.name.strip(),
             code=normalized_code,
             address=request.address.strip() if request.address else None,
+            postal_code=request.postal_code,
+            notes=(request.notes or "").strip() or None,
             contact_name=request.contact_name.strip() if request.contact_name else None,
             contact_email=request.contact_email.strip() if request.contact_email else None,
             phone=(request.phone or "").strip() or None,
@@ -6979,7 +6981,7 @@ async def create_client(
         if client.contact_name and not any(contact["name"] == client.contact_name for contact in contacts):
             contacts.insert(0, {"name": client.contact_name, "phone": None, "email": client.contact_email})
         for contact in contacts:
-            staff = ClientStaff(id=generate_ulid(), client_id=client.id, name=contact["name"], phone=(contact.get("phone") or "").strip() or None, email=(contact.get("email") or "").strip() or None, is_active=True)
+            staff = ClientStaff(id=generate_ulid(), client_id=client.id, name=contact["name"], role=(contact.get("role") or "").strip() or None, phone=(contact.get("phone") or "").strip() or None, email=(contact.get("email") or "").strip() or None, is_active=True)
             db.add(staff)
             AuditService(db).log("client_staff_created", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": client.id})
 
@@ -6994,6 +6996,8 @@ async def create_client(
                 "code": client.code,
                 "contact_name": client.contact_name,
                 "contact_email": client.contact_email,
+                "postal_code": client.postal_code,
+                "notes": client.notes,
             },
         )
         db.commit()
@@ -7005,7 +7009,7 @@ async def create_client(
             code=client.code,
             contact_name=client.contact_name,
             contact_email=client.contact_email,
-            phone=client.phone, address=client.address, billing_email=client.billing_email,
+            phone=client.phone, address=client.address, billing_email=client.billing_email, postal_code=client.postal_code, notes=client.notes,
         )
     except HTTPException:
         raise

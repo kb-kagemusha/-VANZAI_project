@@ -263,6 +263,7 @@ class Client(Base, TimestampMixin, SoftDeleteMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(7), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

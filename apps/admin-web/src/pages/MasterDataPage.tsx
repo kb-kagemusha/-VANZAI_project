@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
@@ -67,6 +67,8 @@ import type {
   WorkerUpdateRequest,
 } from "../types/api";
 
+import { lookupPostalAddress, normalizePostalCode } from "../lib/postalAddress";
+
 const PAGE_SIZE = 20;
 const VANZAI_STAFF_ROLE_OPTIONS = ["プレイングマネージャー", "事務", "全体統括", "全体統括責任者"];
 const PLAYING_MANAGER_FEE_TYPE_OPTIONS = [
@@ -122,7 +124,7 @@ export function MasterDataPage() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<MasterView>("workers");
   const [createOpen, setCreateOpen] = useState(false);
-  const [extraContacts, setExtraContacts] = useState<Array<{ id: string; name: string; phone: string; email: string }>>([]);
+  const [extraContacts, setExtraContacts] = useState<Array<{ id: string; name: string; role: string; phone: string; email: string }>>([]);
   const [companyPhone, setCompanyPhone] = useState("");
   const [companyPhoneMessage, setCompanyPhoneMessage] = useState("");
   const [page, setPage] = useState(0);
@@ -133,6 +135,11 @@ export function MasterDataPage() {
   const [createEmail, setCreateEmail] = useState("");
   const [createPhone, setCreatePhone] = useState("");
   const [createSupplierId, setCreateSupplierId] = useState("");
+  const [createContactRole, setCreateContactRole] = useState("");
+  const [createPostalCode, setCreatePostalCode] = useState("");
+  const [postalMessage, setPostalMessage] = useState("");
+  const [postalChoices, setPostalChoices] = useState<string[]>([]);
+  const lastAutoAddress = useRef("");
   const [createContactName, setCreateContactName] = useState("");
   const [createContactEmail, setCreateContactEmail] = useState("");
   const [createContactPhone, setCreateContactPhone] = useState("");
@@ -154,6 +161,8 @@ export function MasterDataPage() {
   const [selectedVanzaiStaff, setSelectedVanzaiStaff] = useState<VanzaiStaffItem | null>(null);
   const [selectedClient, setSelectedClient] = useState<ClientListItem | null>(null);
   const [selectedClientStaff, setSelectedClientStaff] = useState<ClientStaffItem | null>(null);
+  const [clientStaffRole, setClientStaffRole] = useState("");
+  const [clientStaffEditRole, setClientStaffEditRole] = useState("");
   const [clientStaffName, setClientStaffName] = useState("");
   const [clientStaffEmail, setClientStaffEmail] = useState("");
   const [clientStaffPhone, setClientStaffPhone] = useState("");
@@ -208,6 +217,35 @@ export function MasterDataPage() {
   const [supplierBankEditError, setSupplierBankEditError] = useState("");
   const [supplierBankEditMessage, setSupplierBankEditMessage] = useState("");
 
+  useEffect(() => {
+    setPostalChoices([]);
+    setPostalMessage("");
+    if (view !== "clients" || !createOpen) return;
+    const postal = normalizePostalCode(createPostalCode);
+    if (!/^[0-9]{7}$/.test(postal)) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const choices = await lookupPostalAddress(postal, controller.signal);
+        if (controller.signal.aborted) return;
+        const addresses = choices.map((choice) => choice.prefecture + choice.address);
+        if (addresses.length === 1) {
+          const previous = lastAutoAddress.current;
+          const address = addresses[0];
+          setCreateAddress((current) => !current || current === previous ? address : current);
+          lastAutoAddress.current = address;
+          setPostalMessage("住所候補を取得しました。番地・建物名を確認・入力してください。");
+        } else if (addresses.length > 1) {
+          setPostalChoices(addresses);
+          setPostalMessage("住所候補を選択してください。");
+        } else setPostalMessage("住所が見つかりませんでした。住所を直接入力してください。");
+      } catch {
+        if (!controller.signal.aborted) setPostalMessage("住所を取得できませんでした。住所を直接入力してください。");
+      }
+    }, 400);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [createPostalCode, view, createOpen]);
+
   function resetCreateForm() {
     setExtraContacts([]);
     setCreateName("");
@@ -215,6 +253,9 @@ export function MasterDataPage() {
     setCreateEmail("");
     setCreatePhone("");
     setCreateSupplierId("");
+    setCreateContactRole("");
+    setCreatePostalCode("");
+    lastAutoAddress.current = "";
     setCreateContactName("");
     setCreateContactEmail("");
     setCreateContactPhone("");
@@ -451,7 +492,7 @@ export function MasterDataPage() {
     onSuccess: async () => {
       setClientStaffFormError("");
       setClientStaffFormMessage("担当者を追加しました");
-      setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
+      setClientStaffRole(""); setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
       await queryClient.invalidateQueries({ queryKey: ["client-staff", selectedClient?.id] });
       await queryClient.invalidateQueries({ queryKey: ["order-source-contacts", selectedClient?.id] });
     },
@@ -694,11 +735,14 @@ export function MasterDataPage() {
         });
         break;
       case "clients":
-        if ((!createContactName.trim() && (createContactPhone.trim() || createContactEmail.trim())) || extraContacts.some((contact) => !contact.name.trim())) {
-          setFormError("電話・メールを入力した担当者、および追加した担当者の氏名を入力してください"); return;
+        if ((!createContactName.trim() && (createContactRole.trim() || createContactPhone.trim() || createContactEmail.trim())) || extraContacts.some((contact) => !contact.name.trim())) {
+          setFormError("役職・電話・メールを入力した担当者、および追加した担当者の氏名を入力してください"); return;
         }
-        createMutation.mutate({ view, body: { name: createName, code: createCode || null, address: createAddress || null, phone: createPhone || null, contact_name: createContactName || null, contact_email: createContactEmail || null, billing_email: null,
-          contacts: [...(createContactName.trim() ? [{ name: createContactName.trim(), phone: createContactPhone || null, email: createContactEmail || null }] : []), ...extraContacts.map((contact) => ({ name: contact.name.trim(), phone: contact.phone || null, email: contact.email || null }))] } });
+        if (createPostalCode && !/^[0-9]{7}$/.test(normalizePostalCode(createPostalCode))) {
+          setFormError("郵便番号は7桁で入力してください"); return;
+        }
+        createMutation.mutate({ view, body: { postal_code: normalizePostalCode(createPostalCode) || null, notes: createNotes || null, name: createName, code: createCode || null, address: createAddress || null, phone: createPhone || null, contact_name: createContactName || null, contact_email: createContactEmail || null, billing_email: null,
+          contacts: [...(createContactName.trim() ? [{ name: createContactName.trim(), role: createContactRole.trim() || null, phone: createContactPhone || null, email: createContactEmail || null }] : []), ...extraContacts.map((contact) => ({ name: contact.name.trim(), role: contact.role.trim() || null, phone: contact.phone || null, email: contact.email || null }))] } });
         break;
       case "sites":
         createMutation.mutate({ view, body: { name: createName, code: createCode || null, address: createAddress || null } });
@@ -961,6 +1005,7 @@ export function MasterDataPage() {
                   担当者1の氏名
                   <input value={createContactName} onChange={(event) => setCreateContactName(event.target.value)} placeholder="任意" />
                 </label>
+                <label>担当者1の役職<input maxLength={100} value={createContactRole} onChange={(event) => setCreateContactRole(event.target.value)} placeholder="任意" /></label>
                 <label>
                   担当者1の電話番号
                   <input type="tel" maxLength={20} value={createContactPhone} onChange={(event) => setCreateContactPhone(event.target.value)} placeholder="任意" />
@@ -998,18 +1043,26 @@ export function MasterDataPage() {
           {view === "clients" && <div className="master-client-contacts">
             {extraContacts.map((contact, index) => <fieldset key={contact.id}><legend>担当者 {index + 2}</legend><div className="master-form-grid">
               <label>氏名<input aria-label={`担当者${index + 2}の氏名`} maxLength={100} value={contact.name} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, name: e.target.value } : row))} /></label>
+              <label>役職<input aria-label={`担当者${index + 2}の役職`} maxLength={100} value={contact.role} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, role: e.target.value } : row))} /></label>
               <label>電話番号<input type="tel" aria-label={`担当者${index + 2}の電話番号`} maxLength={20} value={contact.phone} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, phone: e.target.value } : row))} /></label>
               <label>メール<input type="email" aria-label={`担当者${index + 2}のメール`} value={contact.email} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, email: e.target.value } : row))} /></label>
             </div><button type="button" onClick={() => setExtraContacts((rows) => rows.filter((row) => row.id !== contact.id))}>未保存の担当者 {index + 2} を外す</button></fieldset>)}
-            <button type="button" className="btn btn-ghost" onClick={() => setExtraContacts((rows) => [...rows, { id: crypto.randomUUID(), name: "", phone: "", email: "" }])}>担当者を追加</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setExtraContacts((rows) => [...rows, { id: crypto.randomUUID(), name: "", role: "", phone: "", email: "" }])}>担当者を追加</button>
           </div>}
 
+          {view === "clients" && <>
+            <label style={{ maxWidth: "220px" }}>郵便番号<input value={createPostalCode} onChange={(e) => setCreatePostalCode(e.target.value)} autoComplete="postal-code" inputMode="numeric" placeholder="例: 123-4567" /></label>
+            {postalMessage && <p role="status" style={{ margin: 0 }}>{postalMessage}</p>}
+            {postalChoices.map((address) => <button key={address} type="button" className="ghost-button" onClick={() => { setCreateAddress(address); lastAutoAddress.current = address; setPostalChoices([]); setPostalMessage("番地・建物名を確認・入力してください。"); }}>{address}</button>)}
+          </>}
           {(view === "clients" || view === "sites") ? (
             <label>
               住所
-              <textarea value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
+              <textarea aria-label="住所" value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
             </label>
           ) : null}
+
+          {view === "clients" && <label>社内メモ<textarea value={createNotes} onChange={(e) => setCreateNotes(e.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} /></label>}
 
           {view === "workers" ? (
             <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
@@ -1038,7 +1091,7 @@ export function MasterDataPage() {
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p>{formMessage}</p> : null}
           <div>
-            <button type="button" className="primary-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
+            <button type="button" className="primary-button master-add-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
               {createMutation.isPending ? "作成中..." : `${VIEW_LABELS[view]}を追加`}
             </button>
           </div>
@@ -1405,7 +1458,7 @@ export function MasterDataPage() {
                 <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => {
                   setSelectedClient(selectedClient?.id === row.id ? null : row);
                   setCompanyPhone(row.phone ?? ""); setCompanyPhoneMessage("");
-                  setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
+                  setClientStaffRole(""); setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
                   setClientStaffFormError(""); setClientStaffFormMessage("");
                 }}>
                   {selectedClient?.id === row.id ? "閉じる" : "担当者管理"}
@@ -1423,6 +1476,7 @@ export function MasterDataPage() {
               <label>会社電話番号<input type="tel" maxLength={20} value={companyPhone} disabled={user?.role !== "admin"} onChange={(event) => setCompanyPhone(event.target.value)} /></label>
               {user?.role === "admin" && <button type="button" disabled={companyPhoneMutation.isPending} onClick={() => companyPhoneMutation.mutate()}>会社電話番号を更新</button>}
               {companyPhoneMessage && <p role="status">{companyPhoneMessage}</p>}
+              <p style={{ whiteSpace: "pre-wrap" }}>社内メモ: {selectedClient.notes || "未登録"}</p>
               <strong>{selectedClient.name} — 担当者一覧</strong>
               {clientStaffQuery.isLoading ? <p style={{ margin: 0, color: "#6b7280" }}>読み込み中...</p> : null}
               {clientStaffQuery.data?.items && clientStaffQuery.data.items.length > 0 ? (
@@ -1438,7 +1492,7 @@ export function MasterDataPage() {
                   <tbody>
                     {clientStaffQuery.data.items.map((s: ClientStaffItem) => (
                       <tr key={s.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.name}</td>
+                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.name}<br /><span style={{ fontSize: "0.8rem" }}>{s.role || "役職未登録"}</span></td>
                         <td style={{ padding: "0.25rem 0.5rem" }}>{s.email ?? "—"}</td>
                         <td style={{ padding: "0.25rem 0.5rem" }}>{s.phone ?? "—"}</td>
                         {user?.role === "admin" ? (
@@ -1449,6 +1503,7 @@ export function MasterDataPage() {
                               onClick={() => {
                                 setSelectedClientStaff(s);
                                 setClientStaffEditName(s.name);
+                                setClientStaffEditRole(s.role ?? "");
                                 setClientStaffEditEmail(s.email ?? "");
                                 setClientStaffEditPhone(s.phone ?? "");
                                 setClientStaffEditError("");
@@ -1476,6 +1531,7 @@ export function MasterDataPage() {
                         氏名 *
                         <input value={clientStaffEditName} onChange={(e) => setClientStaffEditName(e.target.value)} />
                       </label>
+                      <label>役職<input maxLength={100} value={clientStaffEditRole} onChange={(e) => setClientStaffEditRole(e.target.value)} /></label>
                       <label style={{ fontSize: "0.85rem" }}>
                         メール
                         <input type="email" value={clientStaffEditEmail} onChange={(e) => setClientStaffEditEmail(e.target.value)} placeholder="任意" />
@@ -1493,7 +1549,7 @@ export function MasterDataPage() {
                         style={{ fontSize: "0.85rem" }}
                         onClick={() => updateClientStaffMutation.mutate({
                           name: clientStaffEditName,
-                          role: selectedClientStaff.role,
+                          role: clientStaffEditRole.trim() || null,
                           phone: clientStaffEditPhone || null,
                           email: clientStaffEditEmail || null,
                           is_active: selectedClientStaff.is_active,
@@ -1527,6 +1583,7 @@ export function MasterDataPage() {
                       氏名 *
                       <input value={clientStaffName} onChange={(e) => setClientStaffName(e.target.value)} placeholder="担当者名" />
                     </label>
+                    <label>役職<input maxLength={100} value={clientStaffRole} onChange={(e) => setClientStaffRole(e.target.value)} /></label>
                     <label style={{ fontSize: "0.85rem" }}>
                       メール
                       <input type="email" value={clientStaffEmail} onChange={(e) => setClientStaffEmail(e.target.value)} placeholder="任意" />
@@ -1541,7 +1598,7 @@ export function MasterDataPage() {
                   <button
                     type="button"
                     style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}
-                    onClick={() => createClientStaffMutation.mutate({ name: clientStaffName, role: null, phone: clientStaffPhone || null, email: clientStaffEmail || null, is_active: true, notes: null })}
+                    onClick={() => createClientStaffMutation.mutate({ name: clientStaffName, role: clientStaffRole.trim() || null, phone: clientStaffPhone || null, email: clientStaffEmail || null, is_active: true, notes: null })}
                     disabled={!clientStaffName.trim() || createClientStaffMutation.isPending}
                   >
                     {createClientStaffMutation.isPending ? "追加中..." : "担当者を追加"}

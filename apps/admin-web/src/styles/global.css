@@ -5480,3 +5480,6 @@ html[data-theme="dark"] .order-line-dialog {
 html[data-theme="dark"] .order-line-banner {
   color: #fca5a5;
 }
+
+/* Keep master creation actions compact inside profile dialogs. */
+.master-form .master-add-button, .master-client-contacts > button { width: fit-content; min-height: 36px; padding: 6px 14px; font-size: 13px; }

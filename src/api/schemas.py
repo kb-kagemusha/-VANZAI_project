@@ -1274,6 +1274,8 @@ class ClientListItem(BaseModel):
     contact_email: Optional[str] = None
     billing_email: Optional[str] = None
     phone: Optional[str] = None
+    postal_code: Optional[str] = None
+    notes: Optional[str] = None
     address: Optional[str] = None
 
 
@@ -1283,6 +1285,7 @@ class ClientListResponse(PageResponse[ClientListItem]):
 
 
 class ClientContactCreate(BaseModel):
+    role: Optional[str] = Field(None, max_length=100)
     name: str = Field(..., min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, max_length=255)
@@ -1304,6 +1307,8 @@ class ClientCreateRequest(BaseModel):
     contact_email: Optional[str] = Field(None, max_length=255)
     billing_email: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=20)
+    postal_code: Optional[str] = Field(None, pattern=r"^[0-9]{7}$")
+    notes: Optional[str] = None
     contacts: List[ClientContactCreate] = Field(default_factory=list, max_length=100)
 
     @field_validator("name")

@@ -1178,3 +1178,13 @@
 - Verification: 複数駅の保存/再表示、旧データ読取、未送信保持、明示削除、入力制約、申請・承認・再送、追加駅のみの同時変更拒否、移行の旧行保持、モバイルでの追加/削除/確認/送信、締め・再計算の既存テスト、両アプリのビルド。
 - Version: 既存の稼働者登録項目の拡張なのでZ。0.45.6 → 0.45.7。
 - Spec Reference: DESIGN_SPEC_v0.3 §6.1、AGENTS.md §9/11/12、DEC-049。
+
+
+### DEC-051: クライアント登録の役職・郵便番号・社内メモ（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: クライアントの担当者情報・社内情報を揃え、住所入力と追加操作の負担を減らす。
+- Decision: 役職は既存の `client_staff.role` に担当者単位で保存し、会社の社内メモは既存の `clients.notes` を使う。いずれも任意。郵便番号はnullableな7桁の `clients.postal_code` を追加し、既存のZipCloud補完を使う。複数候補は選択し、手入力済み住所は自動上書きしない。番地・建物名は手入力。
+- Migration: `20261020a001_client_postal_code.py`。既存住所・レコードを書き換えない。金額・時間・締めには影響しない。
+- Audit: 既存 `client_created` に郵便番号・メモを含める。役職は既存 `client_staff_created` / `client_staff_updated` の経路で保存する。
+- Version: 既存登録画面の項目・表示変更なのでZ。0.45.7 → 0.45.8。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1、§16、AGENTS.md §9/11/12。

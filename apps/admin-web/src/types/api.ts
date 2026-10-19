@@ -831,18 +831,22 @@ export interface ClientListItem {
   contact_email: string | null;
   billing_email: string | null;
   phone?: string | null;
+  postal_code?: string | null;
+  notes?: string | null;
   address?: string | null;
 }
 
 export interface ClientCreateRequest {
   name: string;
   code: string | null;
+  postal_code?: string | null;
+  notes?: string | null;
   address: string | null;
   contact_name: string | null;
   contact_email: string | null;
   billing_email: string | null;
   phone?: string | null;
-  contacts?: Array<{ name: string; phone: string | null; email: string | null }>;
+  contacts?: Array<{ role?: string | null; name: string; phone: string | null; email: string | null }>;
 }
 
 export interface SiteListItem {
