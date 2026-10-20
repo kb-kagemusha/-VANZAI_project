@@ -185,7 +185,7 @@ def test_rename_role_preserves_ids_permissions_and_updates_names(api_client, db_
     before = api_client.get("/api/auth/me", headers=member).json()
     permissions = get_user_permissions(target, db_session)
     response = api_client.patch("/api/access/roles/" + role + "/name", headers=admin,
-                                json={"display_name": " 新しい担当名 ", "reason": " 業務名に合わせる "})
+                                json={"display_name": " 新しい担当名 "})
     assert response.status_code == 200
     assert response.json() == {"role": role, "display_name": "新しい担当名"}
     after = api_client.get("/api/auth/me", headers=member).json()
@@ -202,7 +202,7 @@ def test_rename_role_preserves_ids_permissions_and_updates_names(api_client, db_
     log = db_session.query(AuditLog).filter_by(action="ROLE_NAME_CHANGED").one()
     assert log.before_value == {"display_name": before["role_name"]}
     assert log.after_value == {"display_name": "新しい担当名"}
-    assert log.reason == "業務名に合わせる"
+    assert log.reason is None
 
 
 def test_rename_role_preserves_override_and_rejects_bad_names(api_client, db_session):
@@ -215,7 +215,7 @@ def test_rename_role_preserves_override_and_rejects_bad_names(api_client, db_ses
     assert api_client.patch(url, headers=admin, json=body).status_code == 200
     for name in ["", "  ", "admin", "全体管理者", "現場管理者", "x" * 101]:
         assert api_client.patch(url, headers=admin, json={**body, "display_name": name}).status_code == 422
-    assert api_client.patch(url, headers=admin, json={**body, "reason": "  "}).status_code == 422
+    assert api_client.patch(url, headers=admin, json={**body, "reason": "  "}).status_code == 200
     assert api_client.patch(url, headers=admin, json={**body, "permissions": []}).status_code == 422
     assert api_client.patch("/api/access/roles/accounting/name", headers=admin, json=body).status_code == 409
     assert api_client.patch("/api/access/roles/unknown/name", headers=admin, json=body).status_code == 404

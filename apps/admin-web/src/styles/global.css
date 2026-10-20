@@ -5518,3 +5518,18 @@ html[data-theme="dark"] .order-line-banner {
 .record-form-dialog .card, .record-form-dialog .upload-card { margin: 0; }
 .record-form-dialog label { min-width: 0; }
 .record-form-dialog .access-form { gap: 1rem; }
+
+/* Record forms should fit their content instead of stretching grid rows. */
+.record-dialog.worker-profile-modal.order-draft.is-modal {
+  height: auto;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.record-dialog .order-draft-body,
+.record-dialog .record-form-dialog { align-content: start; }
+.record-dialog--compact.worker-profile-modal.order-draft.is-modal { width: min(560px, 100%); }
+.record-dialog--compact .order-draft-head { display: flex; padding: 1rem; align-items: center; gap: .75rem; }
+.record-dialog--compact .order-draft-head > button { flex-shrink: 0; }
+.record-dialog--compact .order-draft-head h3 { font-size: 1.15rem; }
+.record-dialog--compact .order-draft-body { padding: 1rem; }
+.record-dialog--compact .access-form { padding: 0; }
+.record-dialog--compact .access-form p { margin: 0; }

@@ -27,7 +27,6 @@ export function AccessManagementPage() {
   const [editingPolicy, setEditingPolicy] = useState<RolePolicy | null>(null);
   const [renamingRole, setRenamingRole] = useState<RolePolicy | null>(null);
   const [renameName, setRenameName] = useState("");
-  const [renameReason, setRenameReason] = useState("");
   const [roleName, setRoleName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [policyReason, setPolicyReason] = useState("");
@@ -75,17 +74,16 @@ export function AccessManagementPage() {
         {key: "name", header: "役割", render: row => roleLabel(row)},
         {key: "type", header: "種類", render: row => row.builtin === false ? "独自の役割" : "標準の役割"},
         {key: "permissions", header: "許可する権限", render: row => row.permissions.length + "項目"},
-        {key: "edit", header: "操作", render: row => <div className="record-list-actions"><button onClick={() => { setError(""); setRenamingRole(row); setRenameName(roleLabel(row)); setRenameReason(""); }}>名称を変更</button><button onClick={() => { setError(""); setEditingPolicy(row); setSelected([...row.permissions]); setPolicyReason(""); }}>{row.editable ? "権限を編集" : "権限を確認"}</button></div>},
+        {key: "edit", header: "操作", render: row => <div className="record-list-actions"><button onClick={() => { setError(""); setRenamingRole(row); setRenameName(roleLabel(row)); }}>名称を変更</button><button onClick={() => { setError(""); setEditingPolicy(row); setSelected([...row.permissions]); setPolicyReason(""); }}>{row.editable ? "権限を編集" : "権限を確認"}</button></div>},
       ]} rows={roles} getRowKey={row => row.role} emptyTitle="役割を読み込み中です" emptyDescription="しばらくお待ちください。" />
     </>}
 
-    <FormDialog open={!!renamingRole} title="役割の名称を変更" busy={busy} onClose={() => setRenamingRole(null)}>
-      <form className="card access-form" onSubmit={e => { e.preventDefault(); if (renamingRole) void save("/api/access/roles/" + renamingRole.role + "/name", "PATCH", {display_name: renameName, reason: renameReason}, () => setRenamingRole(null)); }}>
-        <p>この役割を使用するすべてのIDで、役割の表示名が変わります。権限とIDへの割り当ては変わりません。</p>
+    <FormDialog open={!!renamingRole} title="役割の名称を変更" size="compact" busy={busy} onClose={() => setRenamingRole(null)}>
+      <form className="card access-form" onSubmit={e => { e.preventDefault(); if (renamingRole) void save("/api/access/roles/" + renamingRole.role + "/name", "PATCH", {display_name: renameName}, () => setRenamingRole(null)); }}>
+        <p>名称はすべてのIDに反映されます。権限は変わりません。</p>
         <label>役割名<input required maxLength={100} value={renameName} onChange={e => setRenameName(e.target.value)} disabled={busy} /></label>
-        <label>変更理由<input required maxLength={500} value={renameReason} onChange={e => setRenameReason(e.target.value)} disabled={busy} /></label>
         {error && <p role="alert">{error}</p>}
-        <div className="record-list-actions"><button className="primary-button" disabled={busy || !renameName.trim() || !renameReason.trim()}>名称を保存</button><button type="button" disabled={busy} onClick={() => setRenamingRole(null)}>キャンセル</button></div>
+        <div className="record-list-actions"><button className="primary-button" disabled={busy || !renameName.trim()}>名称を保存</button><button type="button" disabled={busy} onClick={() => setRenamingRole(null)}>キャンセル</button></div>
       </form>
     </FormDialog>
 

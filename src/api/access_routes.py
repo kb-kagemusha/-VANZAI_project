@@ -94,13 +94,13 @@ class RoleCreate(PolicyUpdate):
 class RoleRename(BaseModel):
     model_config = ConfigDict(extra="forbid")
     display_name: str = Field(min_length=1, max_length=100)
-    reason: str = Field(min_length=1, max_length=500)
+    reason: str = Field(default="", max_length=500)
 
-    @field_validator("display_name", "reason")
+    @field_validator("display_name")
     @classmethod
     def nonempty(cls, value):
         if not value.strip():
-            raise ValueError("名称と変更理由を入力してください")
+            raise ValueError("役割名を入力してください")
         return value.strip()
 
 
@@ -223,7 +223,7 @@ def rename_role(role: str, body: RoleRename, actor: User = Depends(administrator
         AuditService(db).log("ROLE_NAME_CHANGED", target_type="role_access_policy", target_id=role,
                              actor=actor.id, actor_role=actor.role,
                              before_value={"display_name": before},
-                             after_value={"display_name": row.display_name}, reason=body.reason)
+                             after_value={"display_name": row.display_name}, reason=body.reason.strip() or None)
         db.commit()
     except IntegrityError:
         db.rollback()

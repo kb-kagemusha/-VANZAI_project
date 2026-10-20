@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export function ProfileDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function ProfileDialog({ title, onClose, children, className = "" }: { title: string; onClose: () => void; children: ReactNode; className?: string }) {
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -24,7 +24,7 @@ export function ProfileDialog({ title, onClose, children }: { title: string; onC
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; if (previous?.isConnected) previous.focus(); };
   }, []);
-  return createPortal(<div className="order-create-backdrop"><div className="order-draft is-modal worker-profile-modal" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+  return createPortal(<div className="order-create-backdrop"><div className={`order-draft is-modal worker-profile-modal ${className}`} ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}>
     <header className="order-draft-head"><h3 id={titleId}>{title}</h3><button type="button" className="btn btn-ghost" onClick={onClose}>閉じる</button></header>
     <div className="order-draft-body">{children}</div>
   </div></div>, document.body);
