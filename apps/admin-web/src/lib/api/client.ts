@@ -1000,8 +1000,8 @@ export function updateClientPhone(clientId: string, phone: string | null) {
   return apiFetch<ClientListItem>(`/api/clients/${clientId}/phone`, { method: "PATCH", body: JSON.stringify({ phone }) });
 }
 
-export function updateClientCompany(clientId: string, body: Partial<Pick<ClientCreateRequest, "name" | "code" | "phone" | "postal_code" | "address" | "notes">>) {
-  return apiFetch<ClientListItem>(`/api/clients/${clientId}`, { method: "PATCH", body: JSON.stringify(body) });
+export function updateClientCompany(clientId: string, body: Partial<Pick<ClientCreateRequest, "name" | "code" | "phone" | "postal_code" | "address" | "notes">> & { contacts?: Array<{ id?: string; name: string; role: string | null; phone: string | null; email: string | null }> }) {
+  return apiFetch<ClientListItem & { contacts: ClientStaffItem[] }>(`/api/clients/${clientId}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export function getSites(params?: Record<string, string | number | boolean | undefined>) {

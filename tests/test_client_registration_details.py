@@ -100,7 +100,7 @@ def test_company_edit_preserves_contacts_and_audits_changes(api_client, db_sessi
     assert log.actor == "client_admin"
 
 
-@pytest.mark.parametrize("details", [{"name": " "}, {"name": None}, {"postal_code": "123-4567"}, {"contacts": []}])
+@pytest.mark.parametrize("details", [{"name": " "}, {"name": None}, {"postal_code": "123-4567"}, {"contacts": [{"name": " "}]}])
 def test_company_edit_rejects_invalid_values(api_client, db_session, admin_headers, details):
     company = Client(id="company", name="変更不可")
     db_session.add(company)
@@ -130,3 +130,66 @@ def test_company_edit_checks_permission_and_deleted_record(api_client, db_sessio
     assert api_client.patch("/api/clients/deleted", headers=headers, json={"name": "拒否"}).status_code == 403
     assert api_client.patch("/api/clients/deleted", headers=admin_headers, json={"name": "拒否"}).status_code == 404
     assert api_client.patch("/api/clients/missing", headers=admin_headers, json={"name": "拒否"}).status_code == 404
+
+
+def test_company_and_contacts_save_together_without_replacing_untouched_rows(api_client, db_session, admin_headers):
+    company = Client(id="combined", name="変更前", contact_name="担当一", contact_email="old@example.com")
+    one = ClientStaff(id="one", client_id=company.id, name="担当一", role="課長", email="old@example.com", is_active=False, notes="保持するメモ")
+    two = ClientStaff(id="two", client_id=company.id, name="担当二", is_active=True)
+    db_session.add_all([company, one, two]); db_session.commit()
+    result = api_client.patch("/api/clients/combined", headers=admin_headers, json={"name": "変更後", "contacts": [
+        {"id": "one", "name": "担当一改", "role": "部長", "email": "new@example.com"},
+        {"name": "担当三", "role": "主任", "phone": "09033333333"},
+    ]})
+    assert result.status_code == 200, result.text
+    saved = result.json()
+    assert saved["name"] == "変更後"
+    assert saved["contact_name"] == "担当一改" and saved["contact_email"] == "new@example.com"
+    rows = {row["name"]: row for row in saved["contacts"]}
+    assert set(rows) == {"担当一改", "担当二", "担当三"}
+    assert rows["担当一改"]["id"] == "one"
+    assert rows["担当一改"]["is_active"] is False and rows["担当一改"]["notes"] == "保持するメモ"
+    assert rows["担当二"]["id"] == "two"
+    assert rows["担当三"]["phone"] == "09033333333"
+    logs = db_session.query(AuditLog).filter_by(action="client_staff_updated", target_id="one").all()
+    assert logs[0].before_value["role"] == "課長" and logs[0].after_value["role"] == "部長"
+    assert db_session.query(AuditLog).filter_by(action="client_staff_created", target_id=rows["担当三"]["id"]).count() == 1
+    # Saving again with returned IDs does not duplicate newly created contacts.
+    again = api_client.patch("/api/clients/combined", headers=admin_headers, json={"contacts": [{"id": rows["担当三"]["id"], "name": "担当三"}]})
+    assert again.status_code == 200 and len(again.json()["contacts"]) == 3
+
+
+@pytest.mark.parametrize("contacts", [[{"id": "foreign", "name": "他社"}], [{"id": "one", "name": "変更"}, {"id": "one", "name": "重複"}], [{"id": "deleted", "name": "削除済み"}]])
+def test_invalid_contact_rejects_whole_company_update(api_client, db_session, admin_headers, contacts):
+    from datetime import datetime, timezone
+    db_session.add_all([Client(id="combined", name="変更前"), Client(id="other", name="他社")])
+    db_session.flush()
+    db_session.add_all([ClientStaff(id="one", client_id="combined", name="担当一"), ClientStaff(id="foreign", client_id="other", name="他社担当"), ClientStaff(id="deleted", client_id="combined", name="削除済み", deleted_at=datetime.now(timezone.utc))])
+    db_session.commit()
+    response = api_client.patch("/api/clients/combined", headers=admin_headers, json={"name": "保存されない", "contacts": contacts})
+    assert response.status_code in (404, 422)
+    db_session.expire_all()
+    assert db_session.get(Client, "combined").name == "変更前"
+    assert db_session.get(ClientStaff, "one").name == "担当一"
+    assert db_session.query(AuditLog).count() == 0
+
+
+def test_failed_commit_rolls_back_company_contact_and_audit(api_client, db_session, admin_headers, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    db_session.add(Client(id="combined", name="変更前")); db_session.flush()
+    db_session.add(ClientStaff(id="one", client_id="combined", name="担当一")); db_session.commit()
+
+    def fail_commit():
+        db_session.flush()
+        raise IntegrityError("simulated commit failure", None, Exception("test constraint failure"))
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    response = api_client.patch("/api/clients/combined", headers=admin_headers, json={"name": "反映しない", "contacts": [
+        {"id": "one", "name": "改名しない"}, {"name": "追加しない"},
+    ]})
+    assert response.status_code == 409
+    db_session.expire_all()
+    assert db_session.get(Client, "combined").name == "変更前"
+    assert db_session.get(ClientStaff, "one").name == "担当一"
+    assert db_session.query(ClientStaff).count() == 1
+    assert db_session.query(AuditLog).count() == 0

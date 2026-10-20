@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-async function setup(page: Page, options: { companyUpdateFailure?: boolean; workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean; workerProfile?: any } = {}) {
+async function setup(page: Page, options: { userRole?: string; companyUpdateFailure?: boolean; workerConflict?: boolean; profileRefreshFailure?: boolean; places?: boolean; workers?: any[]; legacyHourly?: boolean; workerProfile?: any } = {}) {
   const writes: { path: string; body: any }[] = [];
   let staff: any[] = [];
   let updatedWorker = false;
@@ -14,7 +14,7 @@ async function setup(page: Page, options: { companyUpdateFailure?: boolean; work
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
     const respond = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-    if (path.endsWith("/auth/me")) return respond({ id: "mock-admin", username: "mock-admin", display_name: "試験管理者", role: "admin", is_active: true });
+    if (path.endsWith("/auth/me")) return respond({ id: "mock-admin", username: "mock-admin", display_name: "試験管理者", role: options.userRole ?? "admin", is_active: true });
     if (path.endsWith("/auth/session")) return respond({ access_token: "mock-token", refresh_token: "mock-refresh", token_type: "bearer" });
     const method = route.request().method();
     if (path === "/api/clients" && method === "POST") {
@@ -26,7 +26,12 @@ async function setup(page: Page, options: { companyUpdateFailure?: boolean; work
       const body = route.request().postDataJSON(); writes.push({ path, body });
       if (options.companyUpdateFailure) return respond({ detail: "同じコードのクライアントが既に存在します" }, 409);
       clients = clients.map((item) => item.id === path.split("/")[3] ? { ...item, ...body } : item);
-      return respond(clients.find((item) => item.id === path.split("/")[3]));
+      const clientId = path.split("/")[3];
+      for (const contact of body.contacts ?? []) {
+        if (contact.id) contacts[clientId] = contacts[clientId].map((item) => item.id === contact.id ? { ...item, ...contact } : item);
+        else (contacts[clientId] ??= []).push({ ...contact, id: `saved-${contacts[clientId].length}`, client_id: clientId, is_active: true, notes: null });
+      }
+      return respond({ ...clients.find((item) => item.id === clientId), contacts: contacts[clientId] ?? [] });
     }
     if (path === "/api/clients") return respond({ items: clients, total: clients.length, offset: 0, limit: 200 });
     if (/^\/api\/clients\/[^/]+\/staff$/.test(path)) {
@@ -164,20 +169,44 @@ test("client popup saves company phone and multiple contact phones atomically", 
   expect(writes[0].body.notes).toBe("請求前に電話確認");
   expect(writes[0].body.contacts).toEqual([{ name: "担当一", role: "営業部長", phone: "09011111111", email: null }, { name: "担当二", role: "課長", phone: "09022222222", email: null }]);
   const row = page.getByRole("row").filter({ hasText: "新規会社" });
-  await row.getByRole("button", { name: "担当者管理", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "新規会社の会社電話・担当者管理" }).getByText("課長", { exact: true })).toBeVisible();
-  await expect(page.getByText("社内メモ: 請求前に電話確認", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "編集", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "新規会社の編集", exact: true });
+  await expect(edit.getByLabel("担当者2の役職", { exact: true })).toHaveValue("課長");
+  await expect(edit.getByLabel("社内メモ", { exact: true })).toHaveValue("請求前に電話確認");
 });
 
-test("existing company phone updates inside contact management popup", async ({ page }) => {
+test("company phone and multiple contacts share one editor and one save", async ({ page }) => {
   const writes = await setup(page); await page.goto("/masters/data");
   await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
-  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "担当者管理" }).click();
-  const dialog = page.getByRole("dialog", { name: "内部会社Aの会社電話・担当者管理" });
+  const row = page.getByRole("row").filter({ hasText: "内部会社A" });
+  await expect(row.getByRole("button", { name: "担当者管理" })).toHaveCount(0);
+  await row.getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
+  await expect(dialog.getByLabel("担当者1の氏名", { exact: true })).toHaveValue("内部担当A1");
   await dialog.getByLabel("会社電話番号", { exact: true }).fill("0459999999");
-  await dialog.getByRole("button", { name: "会社電話番号を更新", exact: true }).click();
-  await expect(dialog.getByText("会社電話番号を更新しました", { exact: true })).toBeVisible();
-  expect(writes[0]).toEqual({ path: "/api/clients/client-a/phone", body: { phone: "0459999999" } });
+  await dialog.getByLabel("担当者1の氏名", { exact: true }).fill("変更担当A1");
+  await dialog.getByLabel("担当者1の役職", { exact: true }).fill("部長");
+  await dialog.getByLabel("担当者2の電話番号", { exact: true }).fill("09099999999");
+  await dialog.getByRole("button", { name: "担当者を追加", exact: true }).click();
+  await dialog.getByLabel("担当者3の氏名", { exact: true }).fill("追加担当A3");
+  expect(writes).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await dialog.getByRole("button", { name: "保存する", exact: true }).click();
+  await expect(dialog.getByText("企業情報・担当者を保存しました", { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0].path).toBe("/api/clients/client-a");
+  expect(writes[0].body.phone).toBe("0459999999");
+  expect(writes[0].body.contacts).toEqual([
+    { id: "contact-a1", name: "変更担当A1", role: "部長", phone: "090-1111-9999", email: null },
+    { id: "contact-a2", name: "内部担当A2", role: null, phone: "09099999999", email: null },
+    { name: "追加担当A3", role: null, phone: null, email: null },
+  ]);
+  await dialog.getByRole("button", { name: "保存する", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].body).toEqual({});
+  await dialog.getByLabel("担当者3の氏名", { exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "artifacts/client-unified-editor-mobile.png" });
 });
 
 test("order client selection scopes contacts resets stale selection and stays out of public body", async ({ page }) => {
@@ -483,7 +512,7 @@ test("client company can be edited from its master row and reopened with saved v
   const writes = await setup(page); await page.goto("/masters/data");
   await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
   await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "編集", exact: true }).click();
-  let dialog = page.getByRole("dialog", { name: "内部会社Aの企業情報を編集", exact: true });
+  let dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
   await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("内部会社A");
   await expect(dialog.getByLabel("郵便番号", { exact: true })).toHaveValue("1500043");
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
@@ -497,15 +526,15 @@ test("client company can be edited from its master row and reopened with saved v
   await dialog.getByLabel("住所", { exact: true }).fill("東京都千代田区千代田1-1");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await dialog.locator(".order-draft-body").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
-  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).click();
-  dialog = page.getByRole("dialog", { name: "修正会社Aの企業情報を編集", exact: true });
-  await expect(dialog.getByText("企業情報を更新しました", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "保存する", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "修正会社Aの編集", exact: true });
+  await expect(dialog.getByText("企業情報・担当者を保存しました", { exact: true })).toBeVisible();
   expect(writes[0]).toEqual({ path: "/api/clients/client-a", body: { name: "修正会社A", postal_code: "1000001", address: "東京都千代田区千代田1-1", notes: "変更した社内メモ" } });
   await dialog.getByRole("button", { name: "閉じる", exact: true }).last().click();
   await page.getByRole("row").filter({ hasText: "修正会社A" }).getByRole("button", { name: "編集", exact: true }).click();
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都千代田区千代田1-1");
   await expect(dialog.getByLabel("会社電話番号", { exact: true })).toHaveValue("045-111-9999");
-  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).scrollIntoViewIfNeeded();
+  await dialog.getByRole("button", { name: "保存する", exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/client-company-editor-mobile.png" });
 });
 
@@ -514,15 +543,69 @@ test("company update errors keep input and cancel sends no update", async ({ pag
   await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: "内部会社A" });
   await row.getByRole("button", { name: "編集", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "内部会社Aの企業情報を編集", exact: true });
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
   await dialog.getByLabel("企業名", { exact: true }).fill("保存しない名前");
   await dialog.getByRole("button", { name: "閉じる", exact: true }).last().click();
   expect(writes).toEqual([]);
   await row.getByRole("button", { name: "編集", exact: true }).click();
   await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("内部会社A");
   await dialog.getByLabel("コード", { exact: true }).fill("重複コード");
-  await dialog.getByRole("button", { name: "企業情報を更新", exact: true }).click();
+  await dialog.getByRole("button", { name: "保存する", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("同じコード");
   await expect(dialog.getByLabel("コード", { exact: true })).toHaveValue("重複コード");
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
+});
+
+
+test("unified editor retains company and contact input when save fails", async ({ page }) => {
+  const writes = await setup(page, { companyUpdateFailure: true }); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
+  await dialog.getByLabel("企業名", { exact: true }).fill("変更する企業名");
+  await dialog.getByLabel("担当者1の氏名", { exact: true }).fill("変更する担当者名");
+  await dialog.getByRole("button", { name: "担当者を追加", exact: true }).click();
+  await dialog.getByLabel("担当者3の氏名", { exact: true }).fill("追加した担当者");
+  await dialog.getByRole("button", { name: "保存する", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("同じコード");
+  await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("変更する企業名");
+  await expect(dialog.getByLabel("担当者1の氏名", { exact: true })).toHaveValue("変更する担当者名");
+  await expect(dialog.getByLabel("担当者3の氏名", { exact: true })).toHaveValue("追加した担当者");
+  expect(writes).toHaveLength(1);
+});
+
+test("read-only users see company and contacts in the same detail dialog", async ({ page }) => {
+  const writes = await setup(page, { userRole: "ops" }); await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "詳細", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの詳細", exact: true });
+  await expect(dialog.getByLabel("担当者1の氏名", { exact: true })).toHaveValue("内部担当A1");
+  await expect(dialog.getByLabel("担当者1の氏名", { exact: true })).toBeDisabled();
+  await expect(dialog.getByLabel("企業名", { exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "保存する", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
+test("unified editor blocks saving while contact loading fails and supports retry", async ({ page }) => {
+  const writes = await setup(page);
+  let fail = true;
+  await page.route("**/api/clients/client-a/staff**", async (route) => {
+    if (fail) return route.fulfill({ status: 500, json: { detail: "test load failure" } });
+    return route.fulfill({ json: { items: [{ id: "contact-a1", client_id: "client-a", name: "再取得担当", role: null, phone: null, email: null, is_active: true, notes: null }], total: 1, offset: 0, limit: 200 } });
+  });
+  await page.goto("/masters/data");
+  await page.getByRole("group", { name: "表示切替", exact: true }).getByRole("button", { name: "クライアント", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
+  await expect(dialog.getByRole("button", { name: "保存する", exact: true })).toBeDisabled();
+  await dialog.getByLabel("社内メモ", { exact: true }).fill("読み込み中も保持するメモ");
+  await expect(dialog.getByRole("alert")).toContainText("担当者を読み込めませんでした", { timeout: 15000 });
+  await expect(dialog.getByRole("button", { name: "保存する", exact: true })).toBeDisabled();
+  fail = false;
+  await dialog.getByRole("button", { name: "再読み込み", exact: true }).click();
+  await expect(dialog.getByLabel("担当者1の氏名", { exact: true })).toHaveValue("再取得担当");
+  await expect(dialog.getByLabel("社内メモ", { exact: true })).toHaveValue("読み込み中も保持するメモ");
+  await expect(dialog.getByRole("button", { name: "保存する", exact: true })).toBeEnabled();
+  expect(writes).toEqual([]);
 });

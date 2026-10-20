@@ -15,7 +15,6 @@ import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
   createClient,
-  createClientStaff,
   createProjectType,
   createRole,
   createSite,
@@ -23,7 +22,6 @@ import {
   createSupplier,
   createVanzaiStaff,
   createWorker,
-  getAllClientStaff,
   getClients,
   getProjectTypeTree,
   getProjectTypes,
@@ -35,8 +33,6 @@ import {
   getWorkerTags,
   getWorkerEditGuard,
   getWorkers,
-  updateClientStaff,
-  updateClientPhone,
   updateSupplierBankAccount,
   updateSupplier,
   updateVanzaiStaff,
@@ -47,9 +43,6 @@ import { workerEditFieldsFromGuard } from "../lib/workerEditForm";
 import type {
   ClientCreateRequest,
   ClientListItem,
-  ClientStaffCreateRequest,
-  ClientStaffItem,
-  ClientStaffUpdateRequest,
   ProjectTypeCreateRequest,
   RoleCreateRequest,
   SiteCreateRequest,
@@ -126,8 +119,6 @@ export function MasterDataPage() {
   const [view, setView] = useState<MasterView>("workers");
   const [createOpen, setCreateOpen] = useState(false);
   const [extraContacts, setExtraContacts] = useState<Array<{ id: string; name: string; role: string; phone: string; email: string }>>([]);
-  const [companyPhone, setCompanyPhone] = useState("");
-  const [companyPhoneMessage, setCompanyPhoneMessage] = useState("");
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState("");
@@ -161,20 +152,6 @@ export function MasterDataPage() {
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierListItem | null>(null);
   const [selectedVanzaiStaff, setSelectedVanzaiStaff] = useState<VanzaiStaffItem | null>(null);
   const [editingClient, setEditingClient] = useState<ClientListItem | null>(null);
-  const [selectedClient, setSelectedClient] = useState<ClientListItem | null>(null);
-  const [selectedClientStaff, setSelectedClientStaff] = useState<ClientStaffItem | null>(null);
-  const [clientStaffRole, setClientStaffRole] = useState("");
-  const [clientStaffEditRole, setClientStaffEditRole] = useState("");
-  const [clientStaffName, setClientStaffName] = useState("");
-  const [clientStaffEmail, setClientStaffEmail] = useState("");
-  const [clientStaffPhone, setClientStaffPhone] = useState("");
-  const [clientStaffFormError, setClientStaffFormError] = useState("");
-  const [clientStaffFormMessage, setClientStaffFormMessage] = useState("");
-  const [clientStaffEditName, setClientStaffEditName] = useState("");
-  const [clientStaffEditEmail, setClientStaffEditEmail] = useState("");
-  const [clientStaffEditPhone, setClientStaffEditPhone] = useState("");
-  const [clientStaffEditError, setClientStaffEditError] = useState("");
-  const [clientStaffEditMessage, setClientStaffEditMessage] = useState("");
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -285,8 +262,6 @@ export function MasterDataPage() {
     setSelectedSupplier(null);
     setSelectedVanzaiStaff(null);
     setEditingClient(null);
-    setSelectedClient(null);
-    setSelectedClientStaff(null);
     setEditName("");
     setEditEmail("");
     setEditPhone("");
@@ -326,11 +301,6 @@ export function MasterDataPage() {
     setSupplierEditIsPrimary(false);
     setSupplierBankEditError("");
     setSupplierBankEditMessage("");
-    setClientStaffEditName("");
-    setClientStaffEditEmail("");
-    setClientStaffEditPhone("");
-    setClientStaffEditError("");
-    setClientStaffEditMessage("");
   }
 
   function handleViewChange(next: MasterView) {
@@ -478,55 +448,10 @@ export function MasterDataPage() {
     enabled: view === "vanzai_staff",
   });
 
-  const clientStaffQuery = useQuery({
-    queryKey: ["client-staff", selectedClient?.id],
-    queryFn: () => getAllClientStaff(selectedClient!.id),
-    enabled: Boolean(selectedClient),
-  });
-
   const supplierBankAccountsQuery = useQuery({
     queryKey: ["supplier-bank-accounts", selectedSupplier?.id],
     queryFn: () => getSupplierBankAccounts(selectedSupplier!.id),
     enabled: Boolean(selectedSupplier),
-  });
-
-  const createClientStaffMutation = useMutation({
-    mutationFn: (body: ClientStaffCreateRequest) => createClientStaff(selectedClient!.id, body),
-    onSuccess: async () => {
-      setClientStaffFormError("");
-      setClientStaffFormMessage("担当者を追加しました");
-      setClientStaffRole(""); setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
-      await queryClient.invalidateQueries({ queryKey: ["client-staff", selectedClient?.id] });
-      await queryClient.invalidateQueries({ queryKey: ["order-source-contacts", selectedClient?.id] });
-    },
-    onError: (error: unknown) => {
-      setClientStaffFormMessage("");
-      setClientStaffFormError(error instanceof ApiError ? error.message : "担当者の追加に失敗しました");
-    },
-  });
-
-  const companyPhoneMutation = useMutation({
-    mutationFn: () => updateClientPhone(selectedClient!.id, companyPhone || null),
-    onSuccess: async (client) => {
-      setSelectedClient(client); setCompanyPhone(client.phone ?? ""); setCompanyPhoneMessage("会社電話番号を更新しました");
-      await queryClient.invalidateQueries({ queryKey: ["clients-page"] });
-      await queryClient.invalidateQueries({ queryKey: ["order-source-clients"] });
-    },
-    onError: (error: unknown) => setCompanyPhoneMessage(error instanceof ApiError ? error.message : "会社電話番号を更新できませんでした"),
-  });
-
-  const updateClientStaffMutation = useMutation({
-    mutationFn: (body: ClientStaffUpdateRequest) => updateClientStaff(selectedClient!.id, selectedClientStaff!.id, body),
-    onSuccess: async () => {
-      setClientStaffEditError("");
-      setClientStaffEditMessage("担当者を更新しました");
-      await queryClient.invalidateQueries({ queryKey: ["client-staff", selectedClient?.id] });
-      await queryClient.invalidateQueries({ queryKey: ["order-source-contacts", selectedClient?.id] });
-    },
-    onError: (error: unknown) => {
-      setClientStaffEditMessage("");
-      setClientStaffEditError(error instanceof ApiError ? error.message : "担当者の更新に失敗しました");
-    },
   });
 
   const createSupplierBankAccountMutation = useMutation({
@@ -1457,173 +1382,25 @@ export function MasterDataPage() {
               { key: "contact_name", header: "担当者", render: (row) => row.contact_name ?? "—" },
               { key: "phone", header: "会社電話番号", render: (row) => row.phone ?? "—" },
               { key: "contact_email", header: "メール", render: (row) => row.contact_email ?? "—" },
-              { key: "actions", header: "操作", render: (row) => (
-                <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
-                {user?.role === "admin" && <button type="button" onClick={() => setEditingClient(row)}>編集</button>}
-                <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => {
-                  setSelectedClient(selectedClient?.id === row.id ? null : row);
-                  setCompanyPhone(row.phone ?? ""); setCompanyPhoneMessage("");
-                  setClientStaffRole(""); setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
-                  setClientStaffFormError(""); setClientStaffFormMessage("");
-                }}>
-                  {selectedClient?.id === row.id ? "閉じる" : "担当者管理"}
-                </button></div>
-              ) },
+              { key: "actions", header: "操作", render: (row) => <button type="button" onClick={() => setEditingClient(row)}>{user?.role === "admin" ? "編集" : "詳細"}</button> },
             ]}
             rows={clientsQuery.data?.items ?? []}
             getRowKey={(row) => row.id}
             emptyTitle="クライアントはいません"
             emptyDescription="CSV取り込みまたは直接登録で追加してください。"
           />
-          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
+          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} readOnly={user?.role !== "admin"} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
             setEditingClient(updated);
-            if (selectedClient?.id === updated.id) { setSelectedClient(updated); setCompanyPhone(updated.phone ?? ""); }
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ["clients-page"] }),
               queryClient.invalidateQueries({ queryKey: ["clients-project-form"] }),
               queryClient.invalidateQueries({ queryKey: ["price-form-clients"] }),
               queryClient.invalidateQueries({ queryKey: ["order-source-clients"] }),
+              queryClient.invalidateQueries({ queryKey: ["client-staff", updated.id] }),
+              queryClient.invalidateQueries({ queryKey: ["order-source-contacts", updated.id] }),
             ]);
           }} />}
-          {selectedClient ? (
-            <ProfileDialog title={`${selectedClient.name}の会社電話・担当者管理`} onClose={() => { if (!companyPhoneMutation.isPending && !createClientStaffMutation.isPending && !updateClientStaffMutation.isPending) { setSelectedClient(null); setSelectedClientStaff(null); } }}>
-            <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
-              <label>会社電話番号<input type="tel" maxLength={20} value={companyPhone} disabled={user?.role !== "admin"} onChange={(event) => setCompanyPhone(event.target.value)} /></label>
-              {user?.role === "admin" && <button type="button" disabled={companyPhoneMutation.isPending} onClick={() => companyPhoneMutation.mutate()}>会社電話番号を更新</button>}
-              {companyPhoneMessage && <p role="status">{companyPhoneMessage}</p>}
-              <p style={{ whiteSpace: "pre-wrap" }}>社内メモ: {selectedClient.notes || "未登録"}</p>
-              <strong>{selectedClient.name} — 担当者一覧</strong>
-              {clientStaffQuery.isLoading ? <p style={{ margin: 0, color: "#6b7280" }}>読み込み中...</p> : null}
-              {clientStaffQuery.data?.items && clientStaffQuery.data.items.length > 0 ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #e5e7eb", textAlign: "left" }}>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>氏名</th>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>メール</th>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>電話</th>
-                      {user?.role === "admin" ? <th style={{ padding: "0.25rem 0.5rem" }}>操作</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientStaffQuery.data.items.map((s: ClientStaffItem) => (
-                      <tr key={s.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.name}<br /><span style={{ fontSize: "0.8rem" }}>{s.role || "役職未登録"}</span></td>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.email ?? "—"}</td>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.phone ?? "—"}</td>
-                        {user?.role === "admin" ? (
-                          <td style={{ padding: "0.25rem 0.5rem" }}>
-                            <button
-                              type="button"
-                              style={{ fontSize: "0.8rem" }}
-                              onClick={() => {
-                                setSelectedClientStaff(s);
-                                setClientStaffEditName(s.name);
-                                setClientStaffEditRole(s.role ?? "");
-                                setClientStaffEditEmail(s.email ?? "");
-                                setClientStaffEditPhone(s.phone ?? "");
-                                setClientStaffEditError("");
-                                setClientStaffEditMessage("");
-                              }}
-                            >
-                              編集
-                            </button>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                !clientStaffQuery.isLoading ? <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.875rem" }}>担当者未登録</p> : null
-              )}
-              {user?.role === "admin" ? (
-                <>
-                {selectedClientStaff ? (
-                  <section style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
-                    <strong style={{ fontSize: "0.9rem" }}>{selectedClientStaff.name} を編集</strong>
-                    <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        氏名 *
-                        <input value={clientStaffEditName} onChange={(e) => setClientStaffEditName(e.target.value)} />
-                      </label>
-                      <label>役職<input maxLength={100} value={clientStaffEditRole} onChange={(e) => setClientStaffEditRole(e.target.value)} /></label>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        メール
-                        <input type="email" value={clientStaffEditEmail} onChange={(e) => setClientStaffEditEmail(e.target.value)} placeholder="任意" />
-                      </label>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        電話
-                        <input value={clientStaffEditPhone} onChange={(e) => setClientStaffEditPhone(e.target.value)} placeholder="任意" />
-                      </label>
-                    </div>
-                    {clientStaffEditError ? <p className="form-error">{clientStaffEditError}</p> : null}
-                    {clientStaffEditMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.85rem" }}>{clientStaffEditMessage}</p> : null}
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        style={{ fontSize: "0.85rem" }}
-                        onClick={() => updateClientStaffMutation.mutate({
-                          name: clientStaffEditName,
-                          role: clientStaffEditRole.trim() || null,
-                          phone: clientStaffEditPhone || null,
-                          email: clientStaffEditEmail || null,
-                          is_active: selectedClientStaff.is_active,
-                          notes: selectedClientStaff.notes,
-                        })}
-                        disabled={!clientStaffEditName.trim() || updateClientStaffMutation.isPending}
-                      >
-                        {updateClientStaffMutation.isPending ? "更新中..." : "担当者を更新"}
-                      </button>
-                      <button
-                        type="button"
-                        style={{ fontSize: "0.85rem" }}
-                        onClick={() => {
-                          setSelectedClientStaff(null);
-                          setClientStaffEditName("");
-                          setClientStaffEditEmail("");
-                          setClientStaffEditPhone("");
-                          setClientStaffEditError("");
-                          setClientStaffEditMessage("");
-                        }}
-                      >
-                        編集を閉じる
-                      </button>
-                    </div>
-                  </section>
-                ) : null}
-                <details>
-                  <summary style={{ cursor: "pointer", fontSize: "0.875rem", color: "#4b5563" }}>担当者を追加</summary>
-                  <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginTop: "0.5rem" }}>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      氏名 *
-                      <input value={clientStaffName} onChange={(e) => setClientStaffName(e.target.value)} placeholder="担当者名" />
-                    </label>
-                    <label>役職<input maxLength={100} value={clientStaffRole} onChange={(e) => setClientStaffRole(e.target.value)} /></label>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      メール
-                      <input type="email" value={clientStaffEmail} onChange={(e) => setClientStaffEmail(e.target.value)} placeholder="任意" />
-                    </label>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      電話
-                      <input value={clientStaffPhone} onChange={(e) => setClientStaffPhone(e.target.value)} placeholder="任意" />
-                    </label>
-                  </div>
-                  {clientStaffFormError ? <p className="form-error">{clientStaffFormError}</p> : null}
-                  {clientStaffFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.85rem" }}>{clientStaffFormMessage}</p> : null}
-                  <button
-                    type="button"
-                    style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}
-                    onClick={() => createClientStaffMutation.mutate({ name: clientStaffName, role: clientStaffRole.trim() || null, phone: clientStaffPhone || null, email: clientStaffEmail || null, is_active: true, notes: null })}
-                    disabled={!clientStaffName.trim() || createClientStaffMutation.isPending}
-                  >
-                    {createClientStaffMutation.isPending ? "追加中..." : "担当者を追加"}
-                  </button>
-                </details>
-                </>
-              ) : null}
-            </section>
-            </ProfileDialog>
-          ) : null}
+
         </>
       ) : null}
 
