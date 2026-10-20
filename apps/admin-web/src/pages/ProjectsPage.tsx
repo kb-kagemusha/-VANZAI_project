@@ -1,3 +1,5 @@
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -27,6 +29,8 @@ function flattenSelectableProjectTypes(nodes: ProjectTypeTreeItem[], depth = 0):
 }
 
 export function ProjectsPage() {
+  const { user } = useAuth();
+  const canEdit = hasPermission(user, "project_write");
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState("");
   const [sortBy, setSortBy] = useState("name");
@@ -208,6 +212,7 @@ export function ProjectsPage() {
     <div className="page-stack">
       <PageHeader title="案件一覧" description="案件の作成と編集、取引先、現場、期間、稼働状態を管理します。" />
 
+      {canEdit && (
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>案件を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -293,8 +298,9 @@ export function ProjectsPage() {
           </button>
         </div>
       </section>
+      )}
 
-      {editingProject ? (
+      {canEdit && editingProject ? (
         <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: "0.2rem" }}>
@@ -442,7 +448,7 @@ export function ProjectsPage() {
           {
             key: "actions",
             header: "操作",
-            render: (row) => (
+            render: (row) => canEdit ? (
               <button
                 type="button"
                 className="ghost-button"
@@ -450,7 +456,7 @@ export function ProjectsPage() {
               >
                 編集
               </button>
-            ),
+            ) : "—",
           },
         ]}
         rows={projectsQuery.data.items}

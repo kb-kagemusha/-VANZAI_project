@@ -1,3 +1,4 @@
+import { queryClient } from "../query/query-client";
 import {
   createContext,
   startTransition,
@@ -124,6 +125,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+    let active = true;
+    async function syncPermissions() {
+      try {
+        const next = await getCurrentUser();
+        if (!active) return;
+        if (!canUseAdminConsole(next)) {
+          clearStoredAccessToken(); queryClient.clear(); setUser(null); setStatus("unauthenticated");
+        } else if (JSON.stringify(next) !== JSON.stringify(user)) {
+          queryClient.clear(); setUser(next);
+        }
+      } catch (error) {
+        if (active && error instanceof ApiError && [401, 403].includes(error.status)) {
+          clearStoredAccessToken(); queryClient.clear(); setUser(null); setStatus("unauthenticated");
+        }
+      }
+    }
+    const timer = window.setInterval(() => { void syncPermissions(); }, 30000);
+    window.addEventListener("focus", syncPermissions);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", syncPermissions); };
+  }, [status, user]);
+
   const value: AuthContextValue = {
     status,
     user,
@@ -137,10 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
         throw new ApiError(403, "このアカウントは管理画面を利用できません");
       }
+      queryClient.clear();
       setUser(currentUser);
       setStatus("authenticated");
     },
     logout() {
+      queryClient.clear();
       clearStoredAccessToken();
       setUser(null);
       setStatus("unauthenticated");

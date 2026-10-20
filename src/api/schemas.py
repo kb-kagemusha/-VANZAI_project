@@ -174,8 +174,8 @@ class ActualListItem(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     calc_minutes_billable: int
-    applied_price_sales: Decimal
-    applied_price_outsource: Decimal
+    applied_price_sales: Optional[Decimal]
+    applied_price_outsource: Optional[Decimal]
     status: str
     needs_review: bool
     review_reason: Optional[str] = None

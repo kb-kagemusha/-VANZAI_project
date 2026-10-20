@@ -10,10 +10,11 @@
 from functools import wraps
 from typing import Callable, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from src.models.enums import UserRole, Permission
 from src.models.master import User
+from src.models.access_policy import RoleAccessPolicy
 
 
 # ロール別権限マッピング（仕様5.1, 5.2）
@@ -94,9 +95,35 @@ ROLE_PERMISSIONS = {
 }
 
 
+for _role in (UserRole.OPS, UserRole.ACCOUNTING, UserRole.SITE_MANAGER):
+    ROLE_PERMISSIONS[_role].add(Permission.DASHBOARD_READ)
+for _role in (UserRole.OPS, UserRole.ACCOUNTING):
+    ROLE_PERMISSIONS[_role].update({Permission.OCR_READ, Permission.OCR_WRITE,
+                                   Permission.REGISTRATION_READ, Permission.ASSIGNMENT_REMIND})
+ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ORDER_READ, Permission.ORDER_WRITE})
+ROLE_PERMISSIONS[UserRole.SITE_MANAGER].add(Permission.AVAILABILITY_READ)
+
+
 class AuthorizationError(Exception):
     """権限エラー"""
     pass
+
+
+def get_user_permissions(user: User, session: Session | None = None) -> set[Permission]:
+    if not user.is_active or user.deleted_at is not None:
+        return set()
+    try:
+        role = UserRole(user.role)
+    except ValueError:
+        return set()
+    if role == UserRole.ADMIN:
+        return set(Permission)
+    db = session if session is not None else object_session(user)
+    if db is not None and role != UserRole.WORKER:
+        policy = db.get(RoleAccessPolicy, role.value)
+        if policy is not None:
+            return {Permission(p) for p in policy.permissions if p in Permission._value2member_map_}
+    return ROLE_PERMISSIONS.get(role, set()).copy()
 
 
 def has_permission(user: User, permission: Permission) -> bool:
@@ -110,11 +137,7 @@ def has_permission(user: User, permission: Permission) -> bool:
     Returns:
         True: 権限あり, False: 権限なし
     """
-    if not user.is_active:
-        return False
-    
-    role = UserRole(user.role)
-    return permission in ROLE_PERMISSIONS.get(role, set())
+    return permission in get_user_permissions(user)
 
 
 def check_permission(user: User, permission: Permission) -> None:
@@ -195,24 +218,10 @@ def can_access_project(
     if role in (UserRole.ADMIN, UserRole.OPS, UserRole.ACCOUNTING):
         return True
     
-    # Site Manager は担当プロジェクトのみ
+    # Site Manager は全案件を参照（DEC-056）
     if role == UserRole.SITE_MANAGER:
-        if user.worker_id:
-            from src.models.transaction import Project
-            
-            project = session.get(Project, project_id)
-            if not project:
-                return False
-            
-            # Method 1: Project の primary/secondary manager
-            if project.primary_manager_id == user.worker_id:
-                return True
-            if project.secondary_manager_id == user.worker_id:
-                return True
-
-            return False
-        return False
-    
+        # DEC-056: all projects are readable. Write operations still require permissions.
+        return user.is_active and user.deleted_at is None
     # Worker は自分がアサインされているプロジェクトのみ
     if role == UserRole.WORKER:
         if user.worker_id:
@@ -230,6 +239,17 @@ def can_access_project(
         return False
     
     return False
+
+
+def can_submit_project_csv(session: Session, user: User, project_id: str) -> bool:
+    """All-project visibility must not broaden the existing CSV submission scope."""
+    if has_permission(user, Permission.CSV_IMPORT):
+        return True
+    if not has_permission(user, Permission.CSV_SUBMIT) or not user.worker_id:
+        return False
+    from src.models.transaction import Project
+    project = session.get(Project, project_id)
+    return project is not None and user.worker_id in (project.primary_manager_id, project.secondary_manager_id)
 
 
 def check_project_access(

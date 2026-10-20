@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { AppShell } from "../components/AppShell";
+import { AccessManagementPage } from "../pages/AccessManagementPage";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { AppDialogHost } from "../lib/appDialog";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
@@ -10,7 +11,7 @@ import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
 import { AvailabilityCalendarPage } from "../pages/AvailabilityCalendarPage";
-import { DashboardPage } from "../pages/DashboardPage";
+import { RoleDashboardPage } from "../pages/RoleDashboardPage";
 import { DashboardPreviewPage } from "../pages/DashboardPreviewPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
@@ -79,12 +80,13 @@ export function App() {
           }
         />
         <Route element={<AppShell />}>
+          <Route path="/settings/access" element={<PermissionRoute allowedRoles={["admin"]}><AccessManagementPage /></PermissionRoute>} />
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"
             element={
               <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
-                <DashboardPage />
+                <RoleDashboardPage />
               </PermissionRoute>
             }
           />

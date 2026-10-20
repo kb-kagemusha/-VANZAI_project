@@ -73,7 +73,7 @@ def test_list_shift_slots_returns_assigned_count(api_client, db_session, client,
     assert payload["items"][0]["required_count"] == 3
 
 
-def test_list_shift_slots_blocks_other_project_for_site_manager(api_client, db_session, client, worker):
+def test_list_shift_slots_allows_other_project_for_site_manager(api_client, db_session, client, worker):
     site_manager = create_user_with_hashed_password(
         db=db_session,
         username="site_manager_shift_slots",
@@ -118,8 +118,9 @@ def test_list_shift_slots_blocks_other_project_for_site_manager(api_client, db_s
         headers=_auth_header(site_manager.username),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Project access denied"
+    # DEC-056: site managers may read every project.
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
 
 
 def test_create_shift_slot_requires_shift_write(api_client, db_session, project):

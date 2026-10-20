@@ -43,7 +43,8 @@ from src.api.schemas import (
 )
 from src.models.master import User
 from src.models.ocr import OcrExtractedRow, OcrParseJob, OcrReconciliationResult, OcrSourceImage
-from src.models.enums import UserRole
+from src.services.auth import has_permission
+from src.models.enums import Permission, UserRole
 from src.services.ocr.confirm_metadata import OcrConfirmRejectedError
 from src.services.ocr.parsers.registry import VALID_SOURCE_TYPES
 from src.services.ocr_service import OcrService
@@ -54,7 +55,7 @@ _OCR_ROLES = {UserRole.ADMIN.value, UserRole.OPS.value, UserRole.ACCOUNTING.valu
 
 
 def _ensure_ocr_permission(user: User) -> None:
-    if user.role not in _OCR_ROLES:
+    if not has_permission(user, Permission.OCR_READ):
         raise HTTPException(status_code=403, detail="OCR機能へのアクセス権限がありません")
 
 

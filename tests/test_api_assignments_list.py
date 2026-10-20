@@ -100,7 +100,7 @@ def test_list_assignments_returns_paginated_items(api_client, db_session, projec
     assert payload["items"][0]["status"] == AssignmentStatus.CONFIRMED.value
 
 
-def test_list_assignments_restricts_site_manager_scope(api_client, db_session, project, worker, role):
+def test_list_assignments_allows_site_manager_all_projects(api_client, db_session, project, worker, role):
     project.primary_manager_id = worker.id
     db_session.add(project)
     db_session.flush()
@@ -138,8 +138,9 @@ def test_list_assignments_restricts_site_manager_scope(api_client, db_session, p
         headers=_auth_header(site_manager.username),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Project access denied"
+    # DEC-056: site managers may read every project.
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
 
 
 def test_create_assignment_requires_assignment_write(api_client, db_session, shift_slot, worker, role):

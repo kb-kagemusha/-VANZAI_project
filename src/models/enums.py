@@ -223,6 +223,14 @@ class Permission(str, Enum):
     権限種別
     仕様参照: 5.1, 5.2
     """
+    DASHBOARD_READ = "dashboard_read"
+    OCR_READ = "ocr_read"
+    OCR_WRITE = "ocr_write"
+    ORDER_READ = "order_read"
+    ORDER_WRITE = "order_write"
+    REGISTRATION_READ = "registration_read"
+    REGISTRATION_WRITE = "registration_write"
+
     # マスタデータ
     MASTER_READ = "master_read"
     MASTER_WRITE = "master_write"
@@ -239,6 +247,7 @@ class Permission(str, Enum):
     SHIFT_READ = "shift_read"
     SHIFT_WRITE = "shift_write"
     ASSIGNMENT_READ = "assignment_read"
+    ASSIGNMENT_REMIND = "assignment_remind"
     ASSIGNMENT_RESPONSE = "assignment_response"
     ASSIGNMENT_WRITE = "assignment_write"
     

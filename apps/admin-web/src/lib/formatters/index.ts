@@ -146,10 +146,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: "管理者",
-  ops: "運用",
-  accounting: "経理",
-  site_manager: "現場責任者",
+  admin: "全体管理者",
+  ops: "運用担当",
+  accounting: "経理担当",
+  site_manager: "現場管理者",
   worker: "稼働者",
 };
 

@@ -1,3 +1,4 @@
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ const ASSIGNMENTS_SELECTED_ROWS_STORAGE_KEY = "vanzai.assignments.selectedRows";
 
 export function AssignmentsPage() {
   const { user } = useAuth();
+  const canEdit = hasPermission(user, "assignment_write");
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
@@ -54,7 +56,7 @@ export function AssignmentsPage() {
   const periodKey = toPeriodKey(monthValue);
   const { from: workDateFrom, to: workDateTo } = periodKeyToDateRange(periodKey);
   const queryClient = useQueryClient();
-  const canShareSelectionSet = user?.role === "admin" || user?.role === "ops";
+  const canShareSelectionSet = canEdit;
 
   const assignmentsQuery = useQuery({
     queryKey: ["assignments", periodKey, status, page],
@@ -411,6 +413,7 @@ export function AssignmentsPage() {
     <div className="page-stack">
       <PageHeader title="配置一覧" description="予定、役割、ロック単価を一覧で確認し、作成・編集・単件/一括の状態変更を行います。" />
 
+      {canEdit && (
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>配置を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -478,6 +481,7 @@ export function AssignmentsPage() {
           </button>
         </div>
       </section>
+      )}
 
       <FilterBar>
         <label>
@@ -569,7 +573,7 @@ export function AssignmentsPage() {
             type="button"
             className="primary-button"
             onClick={submitBulkStatusUpdate}
-            disabled={selectedAssignmentIds.length === 0 || bulkStatusMutation.isPending || (bulkNextStatus === "canceled" && !bulkCancelReason.trim())}
+            disabled={!canEdit || selectedAssignmentIds.length === 0 || bulkStatusMutation.isPending || (bulkNextStatus === "canceled" && !bulkCancelReason.trim())}
           >
             {bulkStatusMutation.isPending ? "一括更新中..." : "選択中配置を更新"}
           </button>
@@ -604,7 +608,7 @@ export function AssignmentsPage() {
                 key: "actions",
                 header: "操作",
                 render: (row) => (
-                  row.current_status === "canceled" ? (
+                  canEdit && row.current_status === "canceled" ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -692,7 +696,7 @@ export function AssignmentsPage() {
           {
             key: "actions",
             header: "操作",
-            render: (row) => (
+            render: (row) => canEdit ? (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button
                   onClick={() => {
@@ -726,7 +730,7 @@ export function AssignmentsPage() {
                   {row.status === "canceled" ? "再開" : "状態変更"}
                 </button>
               </div>
-            ),
+            ) : "—",
           },
         ]}
         rows={assignmentsQuery.data.items}
@@ -735,7 +739,7 @@ export function AssignmentsPage() {
         emptyDescription="条件に一致する配置データは見つかりませんでした。"
       />
 
-      {editingAssignment ? (
+      {canEdit && editingAssignment ? (
         <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>編集: {editingAssignment.worker_name} / {editingAssignment.project_name}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -798,7 +802,7 @@ export function AssignmentsPage() {
         </section>
       ) : null}
 
-      {selectedAssignment ? (
+      {canEdit && selectedAssignment ? (
         <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{selectedAssignment.status === "canceled" ? "再開 / 状態変更" : "状態変更"}: {selectedAssignment.worker_name} / {selectedAssignment.project_name}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>

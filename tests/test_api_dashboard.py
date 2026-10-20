@@ -20,7 +20,7 @@ def test_dashboard_requires_authentication(api_client):
     assert response.status_code == 401
 
 
-def test_dashboard_scopes_site_manager_projects(api_client, db_session):
+def test_dashboard_site_manager_reads_all_projects_without_financial_counters(api_client, db_session):
     client = Client(id=generate_ulid(), name="Client A", code="CA001")
     site = Site(id=generate_ulid(), name="Site A", code="SA001")
     role = Role(id=generate_ulid(), name="Guard", code="GUARD")
@@ -119,13 +119,10 @@ def test_dashboard_scopes_site_manager_projects(api_client, db_session):
     assignment_variance = next(
         item for item in payload["unprocessed_items"] if item["item_type"] == "assignment_variance"
     )
-    missing_price = next(
-        item for item in payload["unprocessed_items"] if item["item_type"] == "missing_price"
-    )
-    assert assignment_variance["count"] == 1
-    assert missing_price["count"] == 2
-    assert all(detail["project_name"] == "Managed Project" for detail in assignment_variance["details"])
-    assert all(detail["project_name"] == "Managed Project" for detail in missing_price["details"])
+    assert assignment_variance["count"] == 2
+    assert {detail["project_name"] for detail in assignment_variance["details"]} == {"Managed Project", "Other Project"}
+    assert not {"missing_price", "unissued_invoice", "unprocessed_payout", "missing_payout_recipient"}.intersection(item["item_type"] for item in payload["unprocessed_items"])
+
 
 
 def test_dashboard_returns_open_closing_rows_for_unclosed_projects(api_client, db_session):

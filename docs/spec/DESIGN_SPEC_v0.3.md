@@ -77,11 +77,24 @@
 | admin | 全体管理、マスタ、監査、締め解除 |
 | ops | 案件運用、CSV取込、請求/支払生成、Soft Close |
 | accounting | 請求発行、支払承認、Hard Close |
-| site_manager | 担当案件の参照・CSV提出（`CSV_SUBMIT`） |
+| site_manager | 全案件の参照、担当案件のCSV提出（`CSV_SUBMIT`）。請求・支払・単価は初期設定で不可（DEC-056） |
 | worker | スタッフモバイル（予定返信、打刻、可否、経費） |
 
-**DEC-011（Proposal）**: 現場管理者の正本は `project.primary_manager_id` / `secondary_manager_id`。  
+**DEC-011 / DEC-056**: CSV提出範囲の担当判定は `project.primary_manager_id` / `secondary_manager_id`。
 `shift_slot.site_manager_id`（CHANGELOG §24）との整合は未確定。
+
+---
+
+### 5.1 ログインIDと役割の管理（DEC-056）
+
+全体管理者だけがログインIDの作成、役割の付与・変更、IDの有効/無効、役割ごとの閲覧・操作権限を設定する。
+役割はadmin/ops/accounting/site_managerを使用し、同じ役割の全IDに同じ権限セットを適用する。
+adminは全権限固定、自分自身の降格・無効化は拒否する。workerの既存モバイル権限は維持する。
+usersの既存列を再利用し、追加テーブルrole_access_policies（role主キー、permissions JSON、created_at/updated_at）に管理者が設定した上書きだけを保存する。
+画面・直接URL・APIの権限を確認し、APIは各リクエストで現在のDB設定を確認する。
+ID作成、役割/有効状態変更、権限セット変更を監査し、変更前後・理由・実行者を残す。パスワードは返却・監査しない。
+現場管理者の全案件閲覧は担当者紐付けを不要とするが、CSV提出の担当案件制限は拡大しない。
+運用手順はdocs/ops/ACCESS_MANAGEMENT_RUNBOOK.mdを参照。
 
 ---
 

@@ -1,3 +1,4 @@
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -403,13 +404,13 @@ export function MasterDataPage() {
   const supplierOptionsQuery = useQuery({
     queryKey: ["suppliers-master-options"],
     queryFn: () => getSuppliers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const workerOptionsQuery = useQuery({
     queryKey: ["workers-master-options"],
     queryFn: () => getWorkers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const clientsQuery = useQuery({
@@ -433,7 +434,7 @@ export function MasterDataPage() {
   const projectTypeTreeQuery = useQuery({
     queryKey: ["project-types-tree"],
     queryFn: () => getProjectTypeTree(),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const projectTypeOptions = flattenProjectTypeOptions(projectTypeTreeQuery.data?.items ?? []);
@@ -613,7 +614,7 @@ export function MasterDataPage() {
   });
 
   function handleCreate() {
-    if (user?.role !== "admin") {
+    if (!hasPermission(user, "master_write")) {
       return;
     }
     setFormError("");
@@ -703,7 +704,7 @@ export function MasterDataPage() {
   }
 
   function handleUpdate() {
-    if (user?.role !== "admin") {
+    if (!hasPermission(user, "master_write")) {
       return;
     }
     setEditError("");
@@ -797,7 +798,7 @@ export function MasterDataPage() {
 
   const total = activeQuery.data.total;
   const showActiveFilter = view === "workers" || view === "suppliers" || view === "vanzai_staff";
-  const canEditMaster = user?.role === "admin" && (selectedWorker || selectedSupplier || selectedVanzaiStaff);
+  const canEditMaster = hasPermission(user, "master_write") && (selectedWorker || selectedSupplier || selectedVanzaiStaff);
 
   return (
     <div className="page-stack">
@@ -814,9 +815,9 @@ export function MasterDataPage() {
         </div>
       </section>
 
-      {user?.role === "admin" && <div className="master-list-actions"><button type="button" className="primary-button" onClick={() => { resetCreateForm(); clearEditor(); setCreateOpen(true); }}>新規追加</button></div>}
+      {hasPermission(user, "master_write") && <div className="master-list-actions"><button type="button" className="primary-button" onClick={() => { resetCreateForm(); clearEditor(); setCreateOpen(true); }}>新規追加</button></div>}
       {formMessage && <p role="status">{formMessage}</p>}
-      {user?.role === "admin" && createOpen ? (
+      {hasPermission(user, "master_write") && createOpen ? (
         <ProfileDialog title={`${VIEW_LABELS[view]}の新規追加`} onClose={() => { if (!createMutation.isPending) setCreateOpen(false); }}>
         <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{VIEW_LABELS[view]}を追加</strong>
@@ -1344,7 +1345,7 @@ export function MasterDataPage() {
             { key: "supplier", header: "紹介会社", render: (row) => row.introducer_supplier_name ?? "—" },
             { key: "tags", header: "タグ", render: (row) => <WorkerTagList options={workerTagOptions} codes={row.tags} /> },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
           ]}
           rows={workersQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -1362,7 +1363,7 @@ export function MasterDataPage() {
             { key: "terms", header: "支払サイト(日)", render: (row) => String(row.payout_terms_days) },
             { key: "price", header: "日額単価", render: (row) => row.default_daily_price != null ? `¥${Number(row.default_daily_price).toLocaleString()}` : "—" },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openSupplierEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => openSupplierEditor(row)}>編集</button> : "—" },
           ]}
           rows={suppliersQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -1379,14 +1380,14 @@ export function MasterDataPage() {
               { key: "code", header: "コード", render: (row) => row.code ?? "—" },
               { key: "phone", header: "会社電話番号", render: (row) => row.phone ?? "—" },
               { key: "contacts", header: "担当者・連絡先", render: (row) => <ClientContactList client={row} /> },
-              { key: "actions", header: "操作", render: (row) => <button type="button" onClick={() => setEditingClient(row)}>{user?.role === "admin" ? "編集" : "詳細"}</button> },
+              { key: "actions", header: "操作", render: (row) => <button type="button" onClick={() => setEditingClient(row)}>{hasPermission(user, "master_write") ? "編集" : "詳細"}</button> },
             ]}
             rows={clientsQuery.data?.items ?? []}
             getRowKey={(row) => row.id}
             emptyTitle="クライアントはいません"
             emptyDescription="CSV取り込みまたは直接登録で追加してください。"
           />
-          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} readOnly={user?.role !== "admin"} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
+          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} readOnly={!hasPermission(user, "master_write")} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
             setEditingClient(updated);
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ["clients-page"] }),
@@ -1453,7 +1454,7 @@ export function MasterDataPage() {
             { key: "email", header: "メール", render: (row) => row.email ?? "—" },
             { key: "phone", header: "電話", render: (row) => row.phone ?? "—" },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => {
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => {
               setSelectedWorker(null);
               setSelectedSupplier(null);
               setSelectedVanzaiStaff(row);

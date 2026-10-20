@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from src.api.deps import get_db
 from src.api.jwt_auth import get_current_active_user
-from src.models.enums import UserRole
+from src.services.auth import has_permission
+from src.models.enums import Permission, UserRole
 from src.models.master import User
 from src.models.order_request import (
     ACK_UNACKED,
@@ -119,7 +120,7 @@ class LineLinkCodeBody(BaseModel):
 
 
 def _ensure(user: User) -> None:
-    if user.role not in _ROLES:
+    if not has_permission(user, Permission.ORDER_READ):
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
 
 

@@ -1,3 +1,5 @@
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -25,6 +27,8 @@ function monitoringLabel(value: string | null): string {
 }
 
 export function AssignmentResponsesPage() {
+  const { user } = useAuth();
+  const canRemind = hasPermission(user, "assignment_remind");
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
@@ -254,11 +258,11 @@ export function AssignmentResponsesPage() {
         </p>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <button type="button" onClick={() => toggleAllRows(true)} disabled={currentRows.length === 0}>このページを全選択</button>
-          <button type="button" onClick={() => toggleAllRows(false)} disabled={selectedAssignmentIds.length === 0}>選択解除</button>
-          <button type="button" onClick={() => submitReminder(selectedAssignmentIds)} disabled={selectedAssignmentIds.length === 0 || reminderMutation.isPending}>
+          <button type="button" onClick={() => toggleAllRows(false)} disabled={ selectedAssignmentIds.length === 0}>選択解除</button>
+          <button type="button" onClick={() => submitReminder(selectedAssignmentIds)} disabled={!canRemind || selectedAssignmentIds.length === 0 || reminderMutation.isPending}>
             {reminderMutation.isPending ? "送信中..." : "選択中へ催促送信"}
           </button>
-          <button type="button" onClick={() => escalationMutation.mutate(selectedEscalatedAssignmentIds)} disabled={selectedEscalatedAssignmentIds.length === 0 || escalationMutation.isPending}>
+          <button type="button" onClick={() => escalationMutation.mutate(selectedEscalatedAssignmentIds)} disabled={!canRemind || selectedEscalatedAssignmentIds.length === 0 || escalationMutation.isPending}>
             {escalationMutation.isPending ? "通知中..." : "選択中の要対応を管理者へ通知"}
           </button>
         </div>
@@ -352,11 +356,11 @@ export function AssignmentResponsesPage() {
             header: "操作",
             render: (row) => (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button type="button" onClick={() => submitReminder([row.id])} disabled={reminderMutation.isPending}>
+                <button type="button" onClick={() => submitReminder([row.id])} disabled={!canRemind || reminderMutation.isPending}>
                   再送
                 </button>
                 {row.monitoring_status === "escalate" ? (
-                  <button type="button" onClick={() => escalationMutation.mutate([row.id])} disabled={escalationMutation.isPending}>
+                  <button type="button" onClick={() => escalationMutation.mutate([row.id])} disabled={!canRemind || escalationMutation.isPending}>
                     通知
                   </button>
                 ) : null}

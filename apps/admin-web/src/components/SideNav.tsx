@@ -24,7 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
+import { NAV_ITEMS, canView } from "../lib/auth/permissions";
 import { useAuth } from "../lib/auth/auth-context";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 import { formatRole } from "../lib/formatters";
@@ -63,7 +63,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const displayedName = user?.display_name || user?.username || "";
-  const visibleItems = NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles));
+  const visibleItems = NAV_ITEMS.filter((item) => canView(user, item.to, item.allowedRoles));
   const sections = NAV_GROUP_ORDER.map((group) => ({
     group,
     items: visibleItems.filter((item) => navGroupFor(item.to) === group),

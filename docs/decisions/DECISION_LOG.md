@@ -1232,3 +1232,17 @@
 - Audit: 読み取り・表示の変更なので新規の監査イベントなし。編集時の既存client_updated/client_staff_updated/client_staff_createdを維持する。
 - Version: 既存一覧・住所入力の修正としてZ。0.45.11 → 0.45.12。
 - Spec Reference: DESIGN_SPEC_v0.3 §5/6.1/16、DEC-051/054。
+
+
+### DEC-056: 管理者によるログインID・役割別権限の管理（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: IDごとに役割を割り当て、閲覧範囲を管理者自身で変更できるようにする。
+- Decision: admin/ops/accounting/site_managerの4役割を使う。現場管理者は担当に関係なく全案件を閲覧でき、請求・支払・単価は初期設定で非表示。CSV提出は従来の担当案件制限を維持する。
+- IDの作成・役割の付与/変更・無効化と役割別の閲覧/操作権限セットの変更はadminだけに許可する。同じ役割の全IDに適用し、個人別例外と役割の自由追加は対象外。
+- Guard: adminは全権限固定、自分自身の降格/無効化を拒否。ID変更時に実行者と対象を固定順でロックし、変更後の実行者権限を再確認する。画面/直接URL/APIを制御し、現行トークンでも次回リクエストから新権限を適用する。画面は30秒ごと/再フォーカスで同期する。
+- Model/Migration: usersを保持し、role_access_policies（role主キー、permissions JSON、タイムスタンプ）だけ追加。既存ID・パスワードを書き換えない。
+- APIの金額漏えい対策: 売上/外注費集計に認証を追加。権限のないダッシュボード集計項目、実績/配置一覧の単価は返さず、銀行口座APIを支払閲覧権限で保護する。
+- Audit: USER_CREATED、USER_ACCESS_CHANGED、ROLE_PERMISSIONS_CHANGED。理由と変更前後を残し、パスワードを記録しない。
+- Validation: tests/test_access_management.py、認証/案件/配置/実績/シフト/ダッシュボード等の回帰、管理者と現場管理者のブラウザテスト。
+- Version: IDの作成・役割付与・役割別権限設定という独立した管理業務を追加するためY（0.45.12 → 0.46.0）。既存画面の項目追加を理由としたY判定ではない。
+- Spec Reference: DESIGN_SPEC_v0.3 §5/16、RUNBOOK: docs/ops/ACCESS_MANAGEMENT_RUNBOOK.md。

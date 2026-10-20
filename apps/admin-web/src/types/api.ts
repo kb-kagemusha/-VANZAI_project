@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   is_active: boolean;
+  permissions: string[];
 }
 
 export interface TokenResponse {
@@ -134,8 +135,8 @@ export interface ActualListItem {
   start_time: string | null;
   end_time: string | null;
   calc_minutes_billable: number;
-  applied_price_sales: string;
-  applied_price_outsource: string;
+  applied_price_sales: string | null;
+  applied_price_outsource: string | null;
   status: string;
   needs_review: boolean;
   review_reason: string | null;
