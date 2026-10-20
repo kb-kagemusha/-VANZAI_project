@@ -3,6 +3,10 @@
 ## 目的
 VANZAIプロジェクトの全ファイルの役割と依存関係を一覧化
 
+## 開発フォルダ統合（2026-10-21）
+
+[Cursor / Codex 引き継ぎ記録](ops/WORKSPACE_SYNC_HANDOVER_2026-10-21.md): 別worktreeを使った理由、元フォルダへの統合結果、保全コミット、競合解消、検証結果とCursorへの引き継ぎ文。
+
 ## 最新更新（2026-10-11）
 
 Kintone 用スクリプトは未使用です。`scripts/` からプロジェクト直下の `.old/` へ移しました。実行しないでください。一覧と理由は `.old/README.md`、経緯は `docs/kintone/README.md`。
