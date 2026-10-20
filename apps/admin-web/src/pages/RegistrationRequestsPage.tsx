@@ -1,3 +1,6 @@
+import { FormDialog } from "../components/FormDialog";
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,6 +66,9 @@ function formatDetailValue(value: unknown): string {
 }
 
 export function RegistrationRequestsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const { user } = useAuth();
+  const canCreate = hasPermission(user, "registration_write");
   const [page, setPage] = useState(0);
   const [requestType, setRequestType] = useState("");
   const [status, setStatus] = useState("");
@@ -254,8 +260,11 @@ export function RegistrationRequestsPage() {
       {actionError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{actionError}</p> : null}
       {actionMessage ? <p style={{ margin: 0, color: "var(--color-success, #027a48)" }}>{actionMessage}</p> : null}
 
-      <section className="upload-card registration-link-card" style={{ display: "grid", gap: "1rem" }}>
+      {canCreate && (<div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setActionError(""); setCreateOpen(true); }}>登録リンクを発行</button></div>)}
+<FormDialog open={canCreate && createOpen} title="登録リンクを発行" onClose={() => setCreateOpen(false)} busy={createLinkMutation.isPending}>
+<section className="upload-card registration-link-card" style={{ display: "grid", gap: "1rem" }}>
         <h3 style={{ margin: 0 }}>公開登録リンク発行</h3>
+        {actionError && <p role="alert">{actionError}</p>}
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <label>
             申請種別
@@ -322,6 +331,7 @@ export function RegistrationRequestsPage() {
           </div>
         ) : null}
       </section>
+</FormDialog>
 
       <FilterBar>
         <label>

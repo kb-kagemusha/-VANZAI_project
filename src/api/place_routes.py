@@ -2,6 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from src.api.jwt_auth import get_current_active_user
 from src.models.master import User
+from src.models.enums import Permission
+from src.services.auth import has_permission
 from src.services.google_places import configured, search_places
 from src.services.order_request_service import OrderRequestError
 from collections import defaultdict, deque
@@ -29,7 +31,7 @@ def throttle(user_id):
 
 
 def ensure(user):
-    if user.role not in ("admin", "ops"):
+    if not any(has_permission(user, p) for p in (Permission.MASTER_WRITE, Permission.PROJECT_WRITE, Permission.ORDER_WRITE)):
         raise HTTPException(403, "所在地検索の権限がありません")
 
 

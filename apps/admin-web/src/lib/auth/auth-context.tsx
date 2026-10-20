@@ -35,6 +35,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function canUseAdminConsole(user: AuthUser): boolean {
+  if (user.can_use_admin_console !== undefined) return user.can_use_admin_console;
   return canAccess(user.role, DASHBOARD_ROLES);
 }
 

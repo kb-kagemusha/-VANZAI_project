@@ -1,3 +1,4 @@
+import { FormDialog } from "../components/FormDialog";
 import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +54,7 @@ function formatUnitType(unitType: string): string {
 }
 
 export function PriceManagementPage() {
+  const [editorOpen, setEditorOpen] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [priceView, setPriceView] = useState<PriceView>("sales");
@@ -207,6 +209,7 @@ export function PriceManagementPage() {
       return variables.mode === "create" ? createPriceRule(variables.body) : updatePriceRule(variables.id, variables.body);
     },
     onSuccess: async (_, variables) => {
+      setEditorOpen(false);
       setFormError("");
       setFormMessage(variables.mode === "create" ? "単価を作成しました" : "単価を更新しました");
       if (variables.view === "sales") {
@@ -228,6 +231,7 @@ export function PriceManagementPage() {
   });
 
   function openSalesEditor(row: PriceSalesListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedSales(row);
@@ -243,6 +247,7 @@ export function PriceManagementPage() {
   }
 
   function openOutsourceEditor(row: PriceOutsourceListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedOutsource(row);
@@ -258,6 +263,7 @@ export function PriceManagementPage() {
   }
 
   function openRuleEditor(row: PriceRuleListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedRule(row);
@@ -384,8 +390,10 @@ export function PriceManagementPage() {
         </div>
       </section>
 
-      {hasPermission(user, "price_write") ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {hasPermission(user, "price_write") ? (<>
+        <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { resetCurrentForm(); setEditorOpen(true); }}>単価を新規作成</button></div>
+<FormDialog open={editorOpen} title="単価の作成・編集" onClose={() => setEditorOpen(false)} busy={saveMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{selectedSales || selectedOutsource || selectedRule ? "単価を編集" : "単価を追加"}</strong>
 
           {priceView === "sales" ? (
@@ -559,7 +567,8 @@ export function PriceManagementPage() {
             <button type="button" className="price-reset-button" onClick={resetCurrentForm}>入力をクリア</button>
           </div>
         </section>
-      ) : null}
+</FormDialog>
+      </>) : null}
 
       <FilterBar>
         {priceView === "rules" ? (

@@ -1,3 +1,4 @@
+import { FormDialog } from "../components/FormDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
@@ -26,6 +27,7 @@ function formatTimeRange(shiftSlot: ShiftSlotListItem) {
 }
 
 export function ShiftSlotsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
   const { user } = useAuth();
   const canEdit = hasPermission(user, "shift_write");
   const [projectId, setProjectId] = useState("");
@@ -88,6 +90,7 @@ export function ShiftSlotsPage() {
         notes: createNotes || null,
       }),
     onSuccess: async () => {
+      setCreateOpen(false);
       setFormError("");
       setCreateWorkDate("");
       setCreateStartTime("09:00");
@@ -166,8 +169,10 @@ export function ShiftSlotsPage() {
     <div className="page-stack">
       <PageHeader title="シフト枠" description="案件ごとの募集枠を作成し、時間帯、人数、メモを編集します。" />
 
-      {canEdit && (
-      <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {canEdit && (<>
+      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しいシフト枠を作成</button></div>
+<FormDialog open={createOpen} title="シフト枠を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>シフト枠を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
           <label>
@@ -216,10 +221,12 @@ export function ShiftSlotsPage() {
           </button>
         </div>
       </section>
-      )}
+</FormDialog>
+      </>)}
 
       {canEdit && editingShiftSlot ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+        <FormDialog open={!!editingShiftSlot} title="シフト枠を編集" onClose={closeShiftSlotEditor} busy={updateMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: "0.2rem" }}>
               <strong>シフト枠を編集</strong>
@@ -282,6 +289,7 @@ export function ShiftSlotsPage() {
             </button>
           </div>
         </section>
+</FormDialog>
       ) : null}
 
       <FilterBar>

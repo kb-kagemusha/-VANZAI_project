@@ -5497,3 +5497,8 @@ html[data-theme="dark"] .order-line-banner {
 .access-permissions { border: 1px solid var(--color-border, #cbd5e1); border-radius: .6rem; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
 .access-permissions label { display: flex; align-items: center; gap: .5rem; }
 .access-permissions input { width: 1.1rem; height: 1.1rem; }
+.record-list-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.record-form-dialog { min-width: 0; }
+.record-form-dialog .card, .record-form-dialog .upload-card { margin: 0; }
+.record-form-dialog label { min-width: 0; }
+.record-form-dialog .access-form { gap: 1rem; }

@@ -1,3 +1,4 @@
+import { FormDialog } from "../components/FormDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
@@ -29,6 +30,7 @@ function flattenSelectableProjectTypes(nodes: ProjectTypeTreeItem[], depth = 0):
 }
 
 export function ProjectsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
   const { user } = useAuth();
   const canEdit = hasPermission(user, "project_write");
   const [search, setSearch] = useState("");
@@ -116,6 +118,7 @@ export function ProjectsPage() {
         is_active: createIsActive,
       }),
     onSuccess: async () => {
+      setCreateOpen(false);
       setFormError("");
       setCreateName("");
       setCreateCode("");
@@ -212,8 +215,10 @@ export function ProjectsPage() {
     <div className="page-stack">
       <PageHeader title="案件一覧" description="案件の作成と編集、取引先、現場、期間、稼働状態を管理します。" />
 
-      {canEdit && (
-      <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {canEdit && (<>
+      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい案件を作成</button></div>
+<FormDialog open={createOpen} title="案件を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>案件を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
           <label>
@@ -298,10 +303,12 @@ export function ProjectsPage() {
           </button>
         </div>
       </section>
-      )}
+</FormDialog>
+      </>)}
 
       {canEdit && editingProject ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+        <FormDialog open={!!editingProject} title="案件を編集" onClose={closeProjectEditor} busy={updateMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: "0.2rem" }}>
               <strong>案件を編集</strong>
@@ -400,6 +407,7 @@ export function ProjectsPage() {
             </button>
           </div>
         </section>
+</FormDialog>
       ) : null}
 
       <FilterBar>

@@ -109,18 +109,33 @@ class AuthorizationError(Exception):
     pass
 
 
+ROLE_NAMES = {"admin": "全体管理者", "ops": "運用担当", "accounting": "経理担当",
+              "site_manager": "現場管理者", "worker": "稼働者"}
+
+
+def is_management_role(role: str, db: Session | None) -> bool:
+    if role in {"admin", "ops", "accounting", "site_manager"}:
+        return True
+    return role != "worker" and db is not None and db.get(RoleAccessPolicy, role) is not None
+
+
+def get_role_name(user: User, db: Session | None = None) -> str:
+    if user.role in ROLE_NAMES:
+        return ROLE_NAMES[user.role]
+    session = db if db is not None else object_session(user)
+    policy = session.get(RoleAccessPolicy, user.role) if session is not None else None
+    return policy.display_name if policy is not None and policy.display_name else user.role
+
+
 def get_user_permissions(user: User, session: Session | None = None) -> set[Permission]:
     if not user.is_active or user.deleted_at is not None:
         return set()
-    try:
-        role = UserRole(user.role)
-    except ValueError:
-        return set()
+    role = user.role
     if role == UserRole.ADMIN:
         return set(Permission)
     db = session if session is not None else object_session(user)
     if db is not None and role != UserRole.WORKER:
-        policy = db.get(RoleAccessPolicy, role.value)
+        policy = db.get(RoleAccessPolicy, role)
         if policy is not None:
             return {Permission(p) for p in policy.permissions if p in Permission._value2member_map_}
     return ROLE_PERMISSIONS.get(role, set()).copy()
@@ -212,10 +227,12 @@ def can_access_project(
     Returns:
         True: アクセス可, False: アクセス不可
     """
-    role = UserRole(user.role)
+    role = user.role
     
     # Admin, Ops, Accounting は全プロジェクトにアクセス可
-    if role in (UserRole.ADMIN, UserRole.OPS, UserRole.ACCOUNTING):
+    if role in (UserRole.ADMIN, UserRole.OPS, UserRole.ACCOUNTING) or (
+        role != UserRole.WORKER and is_management_role(role, session) and has_permission(user, Permission.PROJECT_READ)
+    ):
         return True
     
     # Site Manager は全案件を参照（DEC-056）

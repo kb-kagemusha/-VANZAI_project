@@ -130,7 +130,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
         <span className="side-nav-avatar" aria-hidden="true">{displayedName.slice(0, 1) || "V"}</span>
         <span className="side-nav-user-copy">
           <span className="side-nav-user-name">{displayedName}</span>
-          <span className="side-nav-user-role">{formatRole(user?.role)}</span>
+          <span className="side-nav-user-role">{(user?.role_name || formatRole(user?.role))}</span>
         </span>
       </NavLink>
     </aside>

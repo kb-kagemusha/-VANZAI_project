@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from sqlalchemy import and_, func, or_, select
 from typing import List, Optional
 import base64
@@ -95,7 +95,7 @@ from src.services.document_storage import DocumentStorage, ObjectStorage, build_
 from src.services.email_sender import get_default_sender
 from src.services.email_template import EmailAttachment, EmailTemplateService
 from src.services.scheduler import SchedulerService, initialize_default_jobs
-from src.services.auth import get_user_permissions, AuthorizationError, check_permission, can_access_project, can_submit_project_csv, has_permission
+from src.services.auth import get_role_name, is_management_role, get_user_permissions, AuthorizationError, check_permission, can_access_project, can_submit_project_csv, has_permission
 from src.services.price_resolver import resolve_outsource_price, resolve_sales_price
 from src.services.time_calc import calculate_time
 from src.exceptions import VANZAIException
@@ -1338,7 +1338,7 @@ def _load_accessible_expense(db: Session, expense_id: str, current_user: User):
     if expense is None:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         if expense.worker_id != current_user.worker_id:
@@ -1386,7 +1386,7 @@ def _load_accessible_assignment_for_attendance(db: Session, assignment_id: str, 
         .filter(Assignment.id == assignment_id)
     )
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -1748,6 +1748,8 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
         "display_name": current_user.display_name,
         "email": current_user.email,
         "role": getattr(current_user.role, "value", current_user.role),
+        "role_name": get_role_name(current_user),
+        "can_use_admin_console": is_management_role(current_user.role, object_session(current_user)),
         "permissions": sorted(p.value for p in get_user_permissions(current_user)),
         "is_active": current_user.is_active
     }
@@ -1814,6 +1816,8 @@ async def update_profile(
         "display_name": db_user.display_name,
         "email": db_user.email,
         "role": getattr(db_user.role, "value", db_user.role),
+        "role_name": get_role_name(db_user),
+        "can_use_admin_console": is_management_role(db_user.role, db),
         "permissions": sorted(p.value for p in get_user_permissions(db_user)),
         "is_active": db_user.is_active,
     }
@@ -1980,7 +1984,7 @@ async def list_import_batches(
             )
         )
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, ImportBatch.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -2303,7 +2307,7 @@ async def list_actuals(
     if query.import_batch_id:
         stmt = stmt.filter(Actual.import_batch_id == query.import_batch_id)
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -2544,7 +2548,7 @@ async def list_worker_availability(
     if query.status:
         stmt = stmt.filter(WorkerAvailability.status == query.status)
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(WorkerAvailability.worker_id == current_user.worker_id)
@@ -2576,7 +2580,7 @@ async def upsert_worker_availability(
     from src.models.transaction import WorkerAvailability
 
     target_worker_id = request.worker_id
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         target_worker_id = current_user.worker_id
@@ -2911,7 +2915,7 @@ async def list_assignments(
     if query.work_date_to:
         stmt = stmt.filter(ShiftSlot.work_date <= query.work_date_to)
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -3002,7 +3006,7 @@ def _load_accessible_assignment_selection_rows(db: Session, current_user: User, 
         .filter(Assignment.id.in_(assignment_ids))
     )
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -3195,7 +3199,7 @@ def _load_accessible_assignments_by_ids(db: Session, current_user: User, assignm
         .filter(Assignment.id.in_(assignment_ids))
     )
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -3611,7 +3615,7 @@ async def list_assignment_cancellation_history(
     if query.work_date_to:
         stmt = stmt.filter(ShiftSlot.work_date <= query.work_date_to)
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -4147,7 +4151,7 @@ async def list_projects(
         search_term = f"%{query.search}%"
         stmt = stmt.filter(or_(Project.name.ilike(search_term), Project.code.ilike(search_term)))
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Project.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -4523,7 +4527,7 @@ async def list_shift_slots(
         search_term = f"%{query.search}%"
         stmt = stmt.filter(or_(Project.name.ilike(search_term), ShiftSlot.shift_label.ilike(search_term)))
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, ShiftSlot.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -4816,7 +4820,7 @@ async def list_expenses(
     if query.expense_date_to:
         stmt = stmt.filter(Expense.expense_date <= query.expense_date_to)
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -4851,7 +4855,7 @@ async def submit_expense(
     from src.models.master import Worker
     from src.models.transaction import Assignment, Expense, Project, ShiftSlot
 
-    submitter_role = UserRole(current_user.role)
+    submitter_role = current_user.role
     effective_worker_id = worker_id
     if submitter_role == UserRole.WORKER:
         if not current_user.worker_id:

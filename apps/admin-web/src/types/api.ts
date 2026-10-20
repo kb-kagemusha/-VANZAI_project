@@ -1,10 +1,12 @@
-export type UserRole = "admin" | "ops" | "accounting" | "site_manager" | "worker";
+export type UserRole = string;
 
 export interface AuthUser {
   username: string;
   display_name: string | null;
   email: string;
   role: UserRole;
+  role_name?: string;
+  can_use_admin_console?: boolean;
   is_active: boolean;
   permissions: string[];
 }

@@ -320,7 +320,7 @@ export function DashboardPreviewPage() {
           <span className="apex-preview__avatar" style={{ background: sealColor }} aria-hidden="true">{initial}</span>
           <div className="apex-preview__user-copy">
             <p className="apex-preview__user-name">{displayedName}</p>
-            <p className="apex-preview__user-role">{formatRole(user?.role)}</p>
+            <p className="apex-preview__user-role">{(user?.role_name || formatRole(user?.role))}</p>
           </div>
           <span className="apex-preview__tooltip" aria-hidden="true">{displayedName}</span>
         </Link>

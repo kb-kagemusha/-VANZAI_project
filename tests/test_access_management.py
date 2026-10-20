@@ -113,3 +113,60 @@ def test_disabled_account_cannot_refresh_session(api_client, db_session):
     db_session.commit()
     response = api_client.post("/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     assert response.status_code == 401
+
+
+def test_admin_creates_custom_role_assigns_it_and_enforces_permissions(api_client, db_session, project):
+    _, admin = login(api_client, db_session, "admin", "admin")
+    role_response = api_client.post("/api/access/roles", headers=admin, json={
+        "display_name": "案件閲覧担当", "permissions": ["project_read", "dashboard_read"], "reason": "案件の確認を分担"})
+    assert role_response.status_code == 201
+    role = role_response.json()["role"]
+    assert role not in {"admin", "ops", "accounting", "site_manager", "worker"}
+    account = api_client.post("/api/access/users", headers=admin, json={
+        "username": "custom_member", "display_name": "確認担当", "email": "custom@example.com",
+        "password": "password123", "role": role})
+    assert account.status_code == 201
+    token = api_client.post("/api/auth/token", data={"username": "custom_member", "password": "password123"}).json()["access_token"]
+    headers = {"Authorization": "Bearer " + token}
+    me = api_client.get("/api/auth/me", headers=headers).json()
+    assert me["role_name"] == "案件閲覧担当"
+    assert me["can_use_admin_console"] is True
+    projects = api_client.get("/api/projects", headers=headers)
+    assert projects.status_code == 200
+    assert project.id in {item["id"] for item in projects.json()["items"]}
+    assert api_client.get("/api/dashboard", headers=headers).status_code == 200
+    for path in ["/api/invoices", "/api/payouts", "/api/access/users", "/api/access/roles"]:
+        assert api_client.get(path, headers=headers).status_code == 403
+    assert api_client.post("/api/access/roles", headers=headers, json={"display_name": "無許可", "permissions": [], "reason": "test"}).status_code == 403
+    assert db_session.query(AuditLog).filter_by(action="ROLE_CREATED").count() == 1
+    changed = api_client.put("/api/access/roles/" + role, headers=admin,
+                             json={"permissions": ["invoice_read"], "reason": "請求の確認へ変更"})
+    assert changed.status_code == 200
+    assert api_client.get("/api/invoices", headers=headers).status_code == 200
+    assert api_client.get("/api/projects", headers=headers).status_code == 403
+
+
+def test_custom_role_can_be_assigned_to_existing_id_and_read_operational_lists(api_client, db_session):
+    _, admin = login(api_client, db_session, "admin", "admin")
+    target, member = login(api_client, db_session, "member", "ops")
+    permissions = ["project_read", "shift_read", "assignment_read", "actual_read", "expense_read"]
+    created = api_client.post("/api/access/roles", headers=admin, json={"display_name": "運用閲覧専用", "permissions": permissions, "reason": "閲覧を分担"})
+    assert created.status_code == 201
+    role = created.json()["role"]
+    updated = api_client.put("/api/access/users/" + target.id, headers=admin,
+                             json={"role": role, "is_active": True, "reason": "閲覧専用へ変更"})
+    assert updated.status_code == 200
+    assert updated.json()["role_name"] == "運用閲覧専用"
+    for path in ["/api/projects", "/api/shift-slots", "/api/assignments", "/api/actuals", "/api/expenses"]:
+        assert api_client.get(path, headers=member).status_code == 200, path
+    assert api_client.get("/api/invoices", headers=member).status_code == 403
+
+
+def test_custom_roles_reject_duplicate_reserved_and_unknown_names(api_client, db_session):
+    _, headers = login(api_client, db_session, "admin", "admin")
+    body = {"display_name": "閲覧担当", "permissions": [], "reason": "test"}
+    assert api_client.post("/api/access/roles", headers=headers, json=body).status_code == 201
+    assert api_client.post("/api/access/roles", headers=headers, json=body).status_code == 409
+    for name in ["admin", "全体管理者", "worker", "   "]:
+        assert api_client.post("/api/access/roles", headers=headers, json={**body, "display_name": name}).status_code == 422
+    assert api_client.post("/api/access/users", headers=headers, json={"username": "invalid", "display_name": "Invalid", "email": "invalid@example.com", "password": "password123", "role": "unknown"}).status_code == 422
