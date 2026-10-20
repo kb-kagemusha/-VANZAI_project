@@ -834,6 +834,7 @@ export interface ClientListItem {
   postal_code?: string | null;
   notes?: string | null;
   address?: string | null;
+  contacts?: Array<Pick<ClientStaffItem, "id" | "name" | "role" | "phone" | "email" | "is_active">>;
 }
 
 export interface ClientCreateRequest {

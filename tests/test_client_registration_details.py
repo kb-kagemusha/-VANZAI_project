@@ -29,6 +29,7 @@ def test_client_details_roundtrip(api_client, db_session, admin_headers):
     listed = api_client.get("/api/clients", headers=admin_headers).json()["items"][0]
     assert listed["postal_code"] == saved["postal_code"]
     assert listed["notes"] == saved["notes"]
+    assert {contact["name"]: contact["role"] for contact in listed["contacts"]} == {"担当一": "営業部長", "担当二": "課長"}
     phone = api_client.patch(f"/api/clients/{company.id}/phone", headers=admin_headers, json={"phone": "0312345678"})
     assert phone.status_code == 200
     assert phone.json()["notes"] == saved["notes"]
@@ -193,3 +194,28 @@ def test_failed_commit_rolls_back_company_contact_and_audit(api_client, db_sessi
     assert db_session.get(ClientStaff, "one").name == "担当一"
     assert db_session.query(ClientStaff).count() == 1
     assert db_session.query(AuditLog).count() == 0
+
+
+def test_list_contacts_stays_scoped_to_company_page_and_excludes_deleted(api_client, db_session, admin_headers):
+    from datetime import datetime, timezone
+    db_session.add_all([Client(id="a", name="A社"), Client(id="b", name="B社"), Client(id="legacy", name="C社", contact_name="旧担当", contact_email="legacy@example.com")])
+    db_session.flush()
+    db_session.add_all([
+        ClientStaff(id="a1", client_id="a", name="担当一", role="部長", phone="0311111111", email="first@example.com", is_active=True),
+        ClientStaff(id="a2", client_id="a", name="担当二", role="課長", is_active=False),
+        ClientStaff(id="a3", client_id="a", name="削除済み", deleted_at=datetime.now(timezone.utc)),
+        ClientStaff(id="b1", client_id="b", name="他社担当"),
+    ])
+    db_session.commit()
+    result = api_client.get("/api/clients", headers=admin_headers, params={"limit": 1, "offset": 0, "sort_by": "name", "sort_order": "asc"})
+    assert result.status_code == 200, result.text
+    page = result.json()
+    assert page["total"] == 3 and len(page["items"]) == 1
+    contacts = {contact["id"]: contact for contact in page["items"][0]["contacts"]}
+    assert set(contacts) == {"a1", "a2"}
+    assert contacts["a1"] == {"id": "a1", "name": "担当一", "role": "部長", "phone": "0311111111", "email": "first@example.com", "is_active": True}
+    assert contacts["a2"]["is_active"] is False
+    second = api_client.get("/api/clients", headers=admin_headers, params={"limit": 1, "offset": 1, "sort_by": "name", "sort_order": "asc"}).json()["items"][0]
+    assert [contact["name"] for contact in second["contacts"]] == ["他社担当"]
+    legacy = api_client.get("/api/clients", headers=admin_headers, params={"search": "C社"}).json()["items"][0]
+    assert legacy["contacts"] == [] and legacy["contact_name"] == "旧担当"

@@ -33,7 +33,7 @@ async function setup(page: Page, options: { userRole?: string; companyUpdateFail
       }
       return respond({ ...clients.find((item) => item.id === clientId), contacts: contacts[clientId] ?? [] });
     }
-    if (path === "/api/clients") return respond({ items: clients, total: clients.length, offset: 0, limit: 200 });
+    if (path === "/api/clients") return respond({ items: clients.map((item) => ({ ...item, contacts: contacts[item.id] ?? [] })), total: clients.length, offset: 0, limit: 200 });
     if (/^\/api\/clients\/[^/]+\/staff$/.test(path)) {
       const clientId = path.split("/")[3];
       return respond({ items: contacts[clientId] ?? [], total: contacts[clientId]?.length ?? 0, page: 1, limit: 200 });
@@ -150,6 +150,7 @@ test("client popup saves company phone and multiple contact phones atomically", 
   await dialog.getByLabel("担当者1の役職", { exact: true }).fill("営業部長");
   await dialog.getByLabel("社内メモ", { exact: true }).fill("請求前に電話確認");
   await page.route("https://zipcloud.ibsnet.co.jp/**", (route) => route.fulfill({ json: { status: 200, results: [{ zipcode: "1500043", address1: "東京都", address2: "渋谷区", address3: "道玄坂" }] } }));
+  await expect(dialog.getByRole("group", { name: "住所情報", exact: true }).getByLabel("郵便番号", { exact: true })).toBeVisible();
   await dialog.getByLabel("郵便番号", { exact: true }).fill("１５０－００４３");
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂");
   await dialog.getByLabel("住所", { exact: true }).fill("東京都渋谷区道玄坂1-2 試験ビル");
@@ -207,6 +208,16 @@ test("company phone and multiple contacts share one editor and one save", async 
   expect(writes[1].body).toEqual({});
   await dialog.getByLabel("担当者3の氏名", { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/client-unified-editor-mobile.png" });
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).last().click();
+  const listedContacts = row.getByRole("list", { name: "内部会社Aの担当者一覧", exact: true });
+  await expect(listedContacts.getByRole("listitem")).toHaveCount(3);
+  await expect(listedContacts).toContainText("変更担当A1");
+  await expect(listedContacts).toContainText("部長");
+  await expect(listedContacts).toContainText("内部担当A2");
+  await expect(listedContacts).toContainText("09099999999");
+  await expect(listedContacts).toContainText("追加担当A3");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: "artifacts/client-multiple-contacts-list.png", fullPage: true });
 });
 
 test("order client selection scopes contacts resets stale selection and stays out of public body", async ({ page }) => {
@@ -514,7 +525,8 @@ test("client company can be edited from its master row and reopened with saved v
   await page.getByRole("row").filter({ hasText: "内部会社A" }).getByRole("button", { name: "編集", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "内部会社Aの編集", exact: true });
   await expect(dialog.getByLabel("企業名", { exact: true })).toHaveValue("内部会社A");
-  await expect(dialog.getByLabel("郵便番号", { exact: true })).toHaveValue("1500043");
+  await expect(dialog.getByRole("group", { name: "住所情報", exact: true }).getByLabel("郵便番号", { exact: true })).toHaveValue("1500043");
+  await expect(dialog.getByLabel("郵便番号", { exact: true })).toHaveAttribute("placeholder", "例: 123-4567");
   await expect(dialog.getByLabel("住所", { exact: true })).toHaveValue("東京都渋谷区道玄坂1-2");
   await expect(dialog.getByLabel("社内メモ", { exact: true })).toHaveValue("既存の社内メモ");
   await dialog.getByLabel("企業名", { exact: true }).fill("修正会社A");
@@ -536,6 +548,7 @@ test("client company can be edited from its master row and reopened with saved v
   await expect(dialog.getByLabel("会社電話番号", { exact: true })).toHaveValue("045-111-9999");
   await dialog.getByRole("button", { name: "保存する", exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/client-company-editor-mobile.png" });
+  await dialog.getByRole("group", { name: "住所情報", exact: true }).screenshot({ path: "artifacts/client-edit-address-group.png" });
 });
 
 test("company update errors keep input and cancel sends no update", async ({ page }) => {

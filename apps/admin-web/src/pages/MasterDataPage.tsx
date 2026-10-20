@@ -2,7 +2,9 @@ import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ClientAddressFields } from "../components/ClientAddressFields";
 import { ClientCompanyEditor } from "../components/ClientCompanyEditor";
+import { ClientContactList } from "../components/ClientContactList";
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
@@ -978,12 +980,8 @@ export function MasterDataPage() {
             <button type="button" className="btn btn-ghost" onClick={() => setExtraContacts((rows) => [...rows, { id: crypto.randomUUID(), name: "", role: "", phone: "", email: "" }])}>担当者を追加</button>
           </div>}
 
-          {view === "clients" && <>
-            <label style={{ maxWidth: "220px" }}>郵便番号<input value={createPostalCode} onChange={(e) => setCreatePostalCode(e.target.value)} autoComplete="postal-code" inputMode="numeric" placeholder="例: 123-4567" /></label>
-            {postalMessage && <p role="status" style={{ margin: 0 }}>{postalMessage}</p>}
-            {postalChoices.map((address) => <button key={address} type="button" className="ghost-button" onClick={() => { setCreateAddress(address); lastAutoAddress.current = address; setPostalChoices([]); setPostalMessage("番地・建物名を確認・入力してください。"); }}>{address}</button>)}
-          </>}
-          {(view === "clients" || view === "sites") ? (
+          {view === "clients" && <ClientAddressFields postalCode={createPostalCode} address={createAddress} onPostalChange={setCreatePostalCode} onAddressChange={setCreateAddress} message={postalMessage} choices={postalChoices} onChoose={(address) => { setCreateAddress(address); lastAutoAddress.current = address; setPostalChoices([]); setPostalMessage("番地・建物名を確認・入力してください。"); }} />}
+          {view === "sites" ? (
             <label>
               住所
               <textarea aria-label="住所" value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
@@ -1379,9 +1377,8 @@ export function MasterDataPage() {
             columns={[
               { key: "name", header: "名称", render: (row) => row.name },
               { key: "code", header: "コード", render: (row) => row.code ?? "—" },
-              { key: "contact_name", header: "担当者", render: (row) => row.contact_name ?? "—" },
               { key: "phone", header: "会社電話番号", render: (row) => row.phone ?? "—" },
-              { key: "contact_email", header: "メール", render: (row) => row.contact_email ?? "—" },
+              { key: "contacts", header: "担当者・連絡先", render: (row) => <ClientContactList client={row} /> },
               { key: "actions", header: "操作", render: (row) => <button type="button" onClick={() => setEditingClient(row)}>{user?.role === "admin" ? "編集" : "詳細"}</button> },
             ]}
             rows={clientsQuery.data?.items ?? []}

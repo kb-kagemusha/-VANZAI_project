@@ -4,6 +4,7 @@ import { ApiError, getAllClientStaff, updateClientCompany } from "../lib/api/cli
 import { lookupPostalAddress, normalizePostalCode } from "../lib/postalAddress";
 import type { ClientListItem, ClientStaffItem } from "../types/api";
 import { ProfileDialog } from "./ProfileDialog";
+import { ClientAddressFields } from "./ClientAddressFields";
 
 const companyFields = ["name", "code", "phone", "postal_code", "address", "notes"] as const;
 type CompanyForm = Record<typeof companyFields[number], string>;
@@ -134,11 +135,8 @@ export function ClientCompanyEditor({ client, readOnly = false, onClose, onSaved
           <label>企業名<input required maxLength={200} value={form.name} onChange={(e) => change("name", e.target.value)} /></label>
           <label>コード<input maxLength={50} value={form.code} onChange={(e) => change("code", e.target.value)} /></label>
           <label>会社電話番号<input type="tel" maxLength={20} value={form.phone} onChange={(e) => change("phone", e.target.value)} /></label>
-          <label>郵便番号<input inputMode="numeric" autoComplete="postal-code" value={form.postal_code} onChange={(e) => { postalTouched.current = true; change("postal_code", e.target.value); }} /></label>
         </div>
-        {postalMessage && <p role="status">{postalMessage}</p>}
-        {postalChoices.map((address) => <button key={address} type="button" className="ghost-button" onClick={() => { change("address", address); lastAutoAddress.current = address; setPostalChoices([]); }}>{address}</button>)}
-        <label style={{ marginTop: ".75rem" }}>住所<textarea aria-label="住所" rows={3} value={form.address} onChange={(e) => change("address", e.target.value)} /></label>
+        <ClientAddressFields postalCode={form.postal_code} address={form.address} onPostalChange={(value) => { postalTouched.current = true; change("postal_code", value); }} onAddressChange={(value) => change("address", value)} message={postalMessage} choices={postalChoices} onChoose={(address) => { change("address", address); lastAutoAddress.current = address; setPostalChoices([]); }} />
         <label style={{ marginTop: ".75rem" }}>社内メモ<textarea aria-label="社内メモ" rows={3} value={form.notes} onChange={(e) => change("notes", e.target.value)} /></label>
       </fieldset>
       <fieldset disabled={save.isPending} className="master-client-contacts" style={{ margin: 0, padding: ".75rem", border: "1px solid #a8bace", borderRadius: 9, minWidth: 0 }}>

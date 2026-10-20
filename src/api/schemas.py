@@ -1265,6 +1265,16 @@ class ClientListQuery(PaginationQuery, SortQuery):
     search: Optional[str] = Field(None, max_length=100)
 
 
+class ClientContactListItem(BaseModel):
+    """一覧で担当者ごとの連絡先を表示するための情報。"""
+    id: str
+    name: str
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    is_active: bool = True
+
+
 class ClientListItem(BaseModel):
     """クライアント一覧の1行"""
     id: str
@@ -1277,6 +1287,7 @@ class ClientListItem(BaseModel):
     postal_code: Optional[str] = None
     notes: Optional[str] = None
     address: Optional[str] = None
+    contacts: List[ClientContactListItem] = Field(default_factory=list)
 
 
 class ClientListResponse(PageResponse[ClientListItem]):

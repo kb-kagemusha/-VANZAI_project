@@ -1221,3 +1221,14 @@
 - Guard/Audit: MASTER_WRITEをAPIで検証。読み込み完了前や失敗中は保存不可。入力・所属検証の失敗時は企業情報も保存しない。client_updated/client_staff_updatedに変更前後、client_staff_createdに追加内容と実行者を記録する。
 - Version: 既存マスタの編集画面の統合なのでZ。0.45.10 → 0.45.11。
 - Spec Reference: DESIGN_SPEC_v0.3 §3/5/6.1/16、DEC-051/052。
+
+
+### DEC-055: 複数担当者の一覧表示と郵便番号・住所入力の統一（2026-10-20）
+- Status: Confirmed（ユーザー指摘への修正）
+- Purpose: 編集画面を開かなくても登録した全担当者を確認でき、新規・編集のどちらでも郵便番号による住所補完を見つけられるようにする。
+- Decision: クライアント一覧APIにページ内企業の全担当者をまとめて取得したcontacts配列を追加する。一覧の「担当者・連絡先」に氏名・役職・電話・メールを担当者単位で表示する。削除済みは除外し、無効な担当者は「無効」を表示する。担当者行のない旧データは既存contact_name/contact_emailを表示する。
+- UI: 新規登録・編集で同じ住所入力コンポーネントを使い、見出し「住所情報」の中に郵便番号・補完案内・住所を続けて配置する。既存の補完、全角・ハイフン正規化、番地の手入力、入力済み住所の保護は維持する。
+- Model/Migration: 既存clients/client_staffを読むだけでDB変更なし。企業件数・ページ分割を変えず、担当者はページ内企業IDで一括取得する。
+- Audit: 読み取り・表示の変更なので新規の監査イベントなし。編集時の既存client_updated/client_staff_updated/client_staff_createdを維持する。
+- Version: 既存一覧・住所入力の修正としてZ。0.45.11 → 0.45.12。
+- Spec Reference: DESIGN_SPEC_v0.3 §5/6.1/16、DEC-051/054。

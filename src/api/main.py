@@ -53,7 +53,7 @@ from src.api.schemas import (
     WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerEditGuardResponse, WorkerQualsUpdateRequest,
     WorkerTagCatalogResponse, WorkerTagOption,
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
-    ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
+    ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest, ClientContactListItem,
     SiteListQuery, SiteListItem, SiteListResponse, SiteCreateRequest,
     ProjectTypeListQuery, ProjectTypeListItem, ProjectTypeListResponse, ProjectTypeCreateRequest, ProjectTypeTreeItem, ProjectTypeTreeResponse,
     RegistrationRequestListQuery, RegistrationRequestListItem, RegistrationRequestListResponse, RegistrationRequestDetailResponse,
@@ -6931,6 +6931,17 @@ async def list_clients(
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Client.id.desc()).offset(query.offset).limit(query.limit).all()
 
+    # Fetch contacts for this page together; company pagination remains unchanged.
+    contacts_by_client = {client.id: [] for client in rows}
+    if contacts_by_client:
+        staff_rows = db.query(ClientStaff).filter(
+            ClientStaff.client_id.in_(contacts_by_client), ClientStaff.deleted_at.is_(None),
+        ).order_by(ClientStaff.client_id, ClientStaff.name, ClientStaff.id).all()
+        for staff in staff_rows:
+            contacts_by_client[staff.client_id].append(ClientContactListItem(
+                id=staff.id, name=staff.name, role=staff.role, phone=staff.phone, email=staff.email, is_active=staff.is_active,
+            ))
+
     items = [
         ClientListItem(
             id=c.id,
@@ -6939,6 +6950,7 @@ async def list_clients(
             contact_name=c.contact_name,
             contact_email=c.contact_email,
             phone=c.phone, address=c.address, billing_email=c.billing_email, postal_code=c.postal_code, notes=c.notes,
+            contacts=contacts_by_client[c.id],
         )
         for c in rows
     ]

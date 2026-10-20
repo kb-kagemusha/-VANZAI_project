@@ -5483,3 +5483,10 @@ html[data-theme="dark"] .order-line-banner {
 
 /* Keep master creation actions compact inside profile dialogs. */
 .master-form .master-add-button, .master-client-contacts > button { width: fit-content; min-height: 36px; padding: 6px 14px; font-size: 13px; }
+
+.client-contact-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .65rem; min-width: 150px; }
+.client-contact-summary { display: grid; gap: .2rem; overflow-wrap: anywhere; }
+.client-contact-list > li + li { border-top: 1px solid var(--line); padding-top: .65rem; }
+
+.master-address-group { min-width: 0; margin: .75rem 0 0; padding: .75rem; border: 1px solid #a8bace; border-radius: 9px; display: grid; gap: .65rem; }
+.master-address-help { margin: 0; font-size: .85rem; color: var(--muted); }
