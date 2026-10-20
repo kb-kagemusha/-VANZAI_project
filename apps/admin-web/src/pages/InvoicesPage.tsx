@@ -122,7 +122,7 @@ export function InvoicesPage() {
       <PageHeader title="請求一覧" description="請求書の版、発行状態、金額、PDF 有無を参照します。" />
 
       {/* 請求書生成フォーム */}
-      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>請求書を生成</button></div>)}
+      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>請求書を生成</button></div>)}
 <FormDialog open={canGenerate && createOpen} title="請求書を生成" onClose={() => setCreateOpen(false)} busy={generateMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.9rem" }}>
         <strong style={{ width: "100%" }}>請求書を生成</strong>
@@ -171,7 +171,7 @@ export function InvoicesPage() {
           </p>
         ) : null}
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-          <button
+          <button className="primary-button create-button"
             onClick={() => generateMutation.mutate()}
             disabled={!genProjectId || !genSubject.trim() || generateMutation.isPending}
           >

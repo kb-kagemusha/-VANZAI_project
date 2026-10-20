@@ -815,7 +815,7 @@ export function MasterDataPage() {
         </div>
       </section>
 
-      {hasPermission(user, "master_write") && <div className="master-list-actions"><button type="button" className="primary-button" onClick={() => { resetCreateForm(); clearEditor(); setCreateOpen(true); }}>新規追加</button></div>}
+      {hasPermission(user, "master_write") && <div className="master-list-actions"><button type="button" className="primary-button create-button" onClick={() => { resetCreateForm(); clearEditor(); setCreateOpen(true); }}>新規追加</button></div>}
       {formMessage && <p role="status">{formMessage}</p>}
       {hasPermission(user, "master_write") && createOpen ? (
         <ProfileDialog title={`${VIEW_LABELS[view]}の新規追加`} onClose={() => { if (!createMutation.isPending) setCreateOpen(false); }}>
@@ -1018,7 +1018,7 @@ export function MasterDataPage() {
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p>{formMessage}</p> : null}
           <div>
-            <button type="button" className="primary-button master-add-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
+            <button type="button" className="primary-button master-add-button create-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
               {createMutation.isPending ? "作成中..." : `${VIEW_LABELS[view]}を追加`}
             </button>
           </div>
@@ -1287,7 +1287,7 @@ export function MasterDataPage() {
                 {supplierBankFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.8rem" }}>{supplierBankFormMessage}</p> : null}
                 <button
                   type="button"
-                  className="primary-button"
+                  className="primary-button create-button"
                   style={{ marginTop: "0.5rem" }}
                   onClick={() => createSupplierBankAccountMutation.mutate({
                     bank_name: supplierBankBankName,

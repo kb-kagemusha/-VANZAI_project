@@ -1222,6 +1222,22 @@ button:not([class]):hover:not(:disabled),
   background: #15803d;
 }
 
+/* Creation actions stay distinct from green view switches. */
+button.create-button {
+  border-color: transparent;
+  background: #2563eb;
+  color: #fff;
+}
+
+button.create-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+button.create-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .danger-button {
   background: #dc2626;
   color: #fff;

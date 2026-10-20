@@ -216,7 +216,7 @@ export function ProjectsPage() {
       <PageHeader title="案件一覧" description="案件の作成と編集、取引先、現場、期間、稼働状態を管理します。" />
 
       {canEdit && (<>
-      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい案件を作成</button></div>
+      <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい案件を作成</button></div>
 <FormDialog open={createOpen} title="案件を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>案件を作成</strong>
@@ -295,7 +295,7 @@ export function ProjectsPage() {
         <div>
           <button
             type="button"
-            className="primary-button"
+            className="primary-button create-button"
             onClick={() => createMutation.mutate()}
             disabled={!createName || !createClientId || createMutation.isPending}
           >

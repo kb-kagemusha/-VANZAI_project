@@ -755,7 +755,7 @@ export function OrderRequestsPage() {
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
         titleAction={(
-          <button type="button" className="btn btn-primary" onClick={startNewDraft}>
+          <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>
             新規の依頼書を作成
           </button>
         )}
@@ -814,7 +814,7 @@ export function OrderRequestsPage() {
                       {(row.change_documents ?? []).length > 0 ? null : (
                         <button
                           type="button"
-                          className="btn btn-change btn-sm"
+                          className="btn btn-change btn-sm create-button"
                           disabled={changeLoading}
                           onClick={() => startChange(row.version_id)}
                         >
@@ -914,7 +914,7 @@ export function OrderRequestsPage() {
                     {(item.change_documents ?? []).length > 0 ? null : (
                       <button
                         type="button"
-                        className="btn btn-change btn-sm"
+                        className="btn btn-change btn-sm create-button"
                         disabled={changeLoading}
                         onClick={() => startChange(item.version_id)}
                       >
@@ -1023,7 +1023,7 @@ export function OrderRequestsPage() {
               {!creating && detail ? (
                 <button
                   type="button"
-                  className="btn btn-change btn-sm"
+                  className="btn btn-change btn-sm create-button"
                   disabled={changeLoading}
                   onClick={() => startChange(detail.id)}
                 >

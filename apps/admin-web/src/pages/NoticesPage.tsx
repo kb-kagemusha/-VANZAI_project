@@ -218,7 +218,7 @@ export function NoticesPage() {
           </select>
         </label>
         <button
-          className="btn btn-primary"
+          className={showForm ? "btn btn-primary" : "btn btn-primary create-button"}
           disabled={!canWrite}
           onClick={() => {
             if (showForm) {
@@ -447,7 +447,7 @@ export function NoticesPage() {
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary create-button"
               disabled={
                 createMutation.isPending ||
                 (form.target_type === "worker" && selectedWorkerIds.length === 0)

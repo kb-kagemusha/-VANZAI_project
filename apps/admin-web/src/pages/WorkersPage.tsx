@@ -774,7 +774,7 @@ export function WorkersPage() {
               {bankFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.8rem" }}>{bankFormMessage}</p> : null}
               <button
                 type="button"
-                className="primary-button"
+                className="primary-button create-button"
                 style={{ marginTop: "0.5rem" }}
                 onClick={() => createBankAccountMutation.mutate()}
                 disabled={!bankBankName.trim() || !bankBranchName.trim() || !bankAccountNumber.trim() || !bankHolderKana.trim() || !bankEffectiveFrom || createBankAccountMutation.isPending}
@@ -794,7 +794,7 @@ export function WorkersPage() {
             {total} 件中 {page * PAGE_SIZE + 1}〜{Math.min((page + 1) * PAGE_SIZE, total)} 件を表示
           </span>
           {user?.role === "admin" ? (
-            <button type="button" className="primary-button" onClick={openCreate}>
+            <button type="button" className="primary-button create-button" onClick={openCreate}>
               新規登録
             </button>
           ) : null}

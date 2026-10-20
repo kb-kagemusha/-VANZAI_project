@@ -268,7 +268,7 @@ export function PayoutsPage() {
       <PageHeader title="支払一覧" description="支払明細の相手先、版、承認・支払日時を参照します。" />
 
       {/* 支払明細生成フォーム */}
-      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>支払明細を生成</button></div>)}
+      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>支払明細を生成</button></div>)}
 <FormDialog open={canGenerate && createOpen} title="支払明細を生成" onClose={() => setCreateOpen(false)} busy={generateMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
         <strong style={{ width: "100%" }}>支払明細を生成</strong>
@@ -316,7 +316,7 @@ export function PayoutsPage() {
           対象月
           <input type="month" value={monthValue} onChange={(e) => { setMonthValue(e.target.value); setPage(0); }} />
         </label>
-        <button
+        <button className="primary-button create-button"
           onClick={() => generateMutation.mutate()}
           disabled={(!genProjectId && generationRequiresProject) || !genRecipientId || !generationRecipientTypeSupported || generateMutation.isPending}
         >

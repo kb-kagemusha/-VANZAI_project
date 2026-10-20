@@ -1044,7 +1044,7 @@ export function WorkerProfileModal({
             ) : null}
           </div>
           <div className="order-draft-foot-end">
-            <button type="button" className="btn btn-primary" disabled={!form.name.trim() || pending || deletePending || submitDisabled} onClick={onSubmit}>
+            <button type="button" className={mode === "create" ? "btn btn-primary create-button" : "btn btn-primary"} disabled={!form.name.trim() || pending || deletePending || submitDisabled} onClick={onSubmit}>
               {pending ? (mode === "create" ? "登録中..." : "更新中...") : (mode === "create" ? "登録する" : "更新する")}
             </button>
           </div>

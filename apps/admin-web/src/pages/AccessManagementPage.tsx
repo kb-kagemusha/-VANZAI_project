@@ -54,7 +54,7 @@ export function AccessManagementPage() {
     {error && !hasDialog && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {(users.isError || policies.isError) && <p role="alert">管理情報を取得できませんでした。</p>}
     {tab === "users" ? <>
-      <div className="record-list-actions"><button className="primary-button" disabled={!roles.length} onClick={() => { setError(""); setCreateOpen(true); }}>新しいIDを作成</button></div>
+      <div className="record-list-actions"><button className="primary-button create-button" disabled={!roles.length} onClick={() => { setError(""); setCreateOpen(true); }}>新しいIDを作成</button></div>
       <label>IDを検索<input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="ID・表示名・メール" /></label>
       {users.isLoading ? <p>読み込み中…</p> : <DataTable<Account> columns={[
         {key: "id", header: "ログインID", render: row => row.username},
@@ -66,7 +66,7 @@ export function AccessManagementPage() {
       ]} rows={users.data?.items ?? []} getRowKey={row => row.id} emptyTitle="IDがありません" emptyDescription="新しいIDを作成するか、検索条件を変更してください。" />}
       <div className="record-list-actions"><button disabled={page === 0} onClick={() => setPage(page - 1)}>前へ</button><span>{page + 1}ページ / 全{users.data?.total ?? 0}件</span><button disabled={(page + 1) * 50 >= (users.data?.total ?? 0)} onClick={() => setPage(page + 1)}>次へ</button></div>
     </> : <>
-      <div className="record-list-actions"><button className="primary-button" onClick={() => { setError(""); setRoleName(""); setSelected([]); setPolicyReason(""); setRoleCreateOpen(true); }}>新しい役割を作成</button></div>
+      <div className="record-list-actions"><button className="primary-button create-button" onClick={() => { setError(""); setRoleName(""); setSelected([]); setPolicyReason(""); setRoleCreateOpen(true); }}>新しい役割を作成</button></div>
       <p>権限の変更は同じ役割の全IDに適用されます。全体管理者の権限は固定です。</p>
       <DataTable<RolePolicy> columns={[
         {key: "name", header: "役割", render: row => roleLabel(row)},
@@ -87,7 +87,7 @@ export function AccessManagementPage() {
         </div>
         <p>初期パスワードは8文字以上に設定し、本人に安全な方法で伝えてください。</p>
         {error && <p role="alert">{error}</p>}
-        <div className="record-list-actions"><button className="primary-button" disabled={busy}>IDを作成</button><button type="button" disabled={busy} onClick={() => setCreateOpen(false)}>キャンセル</button></div>
+        <div className="record-list-actions"><button className="primary-button create-button" disabled={busy}>IDを作成</button><button type="button" disabled={busy} onClick={() => setCreateOpen(false)}>キャンセル</button></div>
       </form>
     </FormDialog>
 
@@ -108,7 +108,7 @@ export function AccessManagementPage() {
         <RolePermissionPicker available={policies.data?.available_permissions ?? []} selected={selected} setSelected={setSelected} disabled={busy || (!roleCreateOpen && !editingPolicy?.editable)} />
         {(roleCreateOpen || editingPolicy?.editable) && <><label>変更理由<input required maxLength={500} value={policyReason} onChange={e => setPolicyReason(e.target.value)} /></label>
           {error && <p role="alert">{error}</p>}
-          <div className="record-list-actions"><button className="primary-button" disabled={busy || !policyReason.trim()}>{roleCreateOpen ? "役割を作成" : "この役割の権限を保存"}</button>{editingPolicy && <button type="button" disabled={busy} onClick={() => setSelected(editingPolicy.default_permissions)}>初期設定を選び直す</button>}</div></>}
+          <div className="record-list-actions"><button className={roleCreateOpen ? "primary-button create-button" : "primary-button"} disabled={busy || !policyReason.trim()}>{roleCreateOpen ? "役割を作成" : "この役割の権限を保存"}</button>{editingPolicy && <button type="button" disabled={busy} onClick={() => setSelected(editingPolicy.default_permissions)}>初期設定を選び直す</button>}</div></>}
       </form>
     </FormDialog>
   </div>;

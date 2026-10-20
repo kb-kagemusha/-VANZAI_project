@@ -170,7 +170,7 @@ export function ShiftSlotsPage() {
       <PageHeader title="シフト枠" description="案件ごとの募集枠を作成し、時間帯、人数、メモを編集します。" />
 
       {canEdit && (<>
-      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しいシフト枠を作成</button></div>
+      <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しいシフト枠を作成</button></div>
 <FormDialog open={createOpen} title="シフト枠を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>シフト枠を作成</strong>
@@ -213,7 +213,7 @@ export function ShiftSlotsPage() {
         <div>
           <button
             type="button"
-            className="primary-button"
+            className="primary-button create-button"
             onClick={() => createMutation.mutate()}
             disabled={!createProjectId || !createWorkDate || !createRequiredCount || createMutation.isPending}
           >

@@ -260,7 +260,7 @@ export function RegistrationRequestsPage() {
       {actionError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{actionError}</p> : null}
       {actionMessage ? <p style={{ margin: 0, color: "var(--color-success, #027a48)" }}>{actionMessage}</p> : null}
 
-      {canCreate && (<div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setActionError(""); setCreateOpen(true); }}>登録リンクを発行</button></div>)}
+      {canCreate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setActionError(""); setCreateOpen(true); }}>登録リンクを発行</button></div>)}
 <FormDialog open={canCreate && createOpen} title="登録リンクを発行" onClose={() => setCreateOpen(false)} busy={createLinkMutation.isPending}>
 <section className="upload-card registration-link-card" style={{ display: "grid", gap: "1rem" }}>
         <h3 style={{ margin: 0 }}>公開登録リンク発行</h3>
@@ -303,7 +303,7 @@ export function RegistrationRequestsPage() {
         <div className="registration-action-row">
           <button
             type="button"
-            className="btn btn-primary registration-action-button"
+            className="btn btn-primary registration-action-button create-button"
             onClick={() => createLinkMutation.mutate({ request_type: linkRequestType, expires_in_days: Number(linkExpiresInDays) || 7, notes: linkNotes.trim() || null })}
             disabled={createLinkMutation.isPending}
           >

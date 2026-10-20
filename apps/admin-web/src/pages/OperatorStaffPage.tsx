@@ -50,7 +50,7 @@ export function OperatorStaffPage() {
   }
   return <div className="page-stack">
     <PageHeader title="運営スタッフ登録・一覧" description="運営スタッフの連絡先、担当ロール、公式LINEの本人紐付けを管理します。" />
-    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary" type="button" onClick={() => edit(null)}>運営スタッフを登録</button></div></section>
+    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary create-button" type="button" onClick={() => edit(null)}>運営スタッフを登録</button></div></section>
     {list.isError && <ErrorState title="運営スタッフを取得できませんでした" description={message(list.error)} />}
     {list.isLoading && <p>読み込み中...</p>}
     {list.data && <><DataTable rows={list.data.items} getRowKey={(row) => row.id} emptyTitle="運営スタッフが登録されていません" emptyDescription="運営スタッフを登録してください。" columns={[
@@ -72,7 +72,7 @@ export function OperatorStaffPage() {
           <label className="order-field">備考<textarea rows={3} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value || null })} /></label>
           <label><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />有効</label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button type="submit" className="btn btn-primary">{save.isPending ? "保存中..." : selected ? "更新" : "登録"}</button>
+          <button type="submit" className={selected ? "btn btn-primary" : "btn btn-primary create-button"}>{save.isPending ? "保存中..." : selected ? "更新" : "登録"}</button>
           {selected && form.profile_revision !== current?.profile_revision && <button type="button" className="btn btn-ghost" onClick={() => current && edit(current)}>最新の内容を読み込む</button>}
         </fieldset>
       </form>

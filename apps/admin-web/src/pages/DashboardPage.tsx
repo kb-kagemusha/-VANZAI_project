@@ -411,7 +411,7 @@ export function DashboardPage() {
           <span>月次一括生成</span>
           <button
             type="button"
-            className="btn btn-primary dashboard-action-button"
+            className="btn btn-primary dashboard-action-button create-button"
             onClick={() => monthlyBillingMutation.mutate()}
             disabled={monthlyBillingMutation.isPending}
           >

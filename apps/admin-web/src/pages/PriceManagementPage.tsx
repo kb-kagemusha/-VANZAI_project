@@ -391,7 +391,7 @@ export function PriceManagementPage() {
       </section>
 
       {hasPermission(user, "price_write") ? (<>
-        <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { resetCurrentForm(); setEditorOpen(true); }}>単価を新規作成</button></div>
+        <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { resetCurrentForm(); setEditorOpen(true); }}>単価を新規作成</button></div>
 <FormDialog open={editorOpen} title="単価の作成・編集" onClose={() => setEditorOpen(false)} busy={saveMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{selectedSales || selectedOutsource || selectedRule ? "単価を編集" : "単価を追加"}</strong>
@@ -558,7 +558,7 @@ export function PriceManagementPage() {
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <button
               type="button"
-              className="primary-button"
+              className={selectedSales || selectedOutsource || selectedRule ? "primary-button" : "primary-button create-button"}
               onClick={saveCurrentPrice}
               disabled={saveMutation.isPending || (priceView === "rules" ? !ruleName.trim() : priceView === "sales" ? !salesUnitPrice.trim() : !outUnitPrice.trim())}
             >

@@ -418,7 +418,7 @@ export function AssignmentsPage() {
       <PageHeader title="配置一覧" description="予定、役割、ロック単価を一覧で確認し、作成・編集・単件/一括の状態変更を行います。" />
 
       {canEdit && (<>
-      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい配置を作成</button></div>
+      <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい配置を作成</button></div>
 <FormDialog open={createOpen} title="配置を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
 <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>配置を作成</strong>
@@ -479,7 +479,7 @@ export function AssignmentsPage() {
         <div>
           <button
             type="button"
-            className="primary-button"
+            className="primary-button create-button"
             onClick={() => createMutation.mutate()}
             disabled={!createShiftSlotId || !createWorkerId || !createRoleId || createMutation.isPending}
           >
