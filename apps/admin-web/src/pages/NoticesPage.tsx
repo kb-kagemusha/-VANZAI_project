@@ -1,3 +1,6 @@
+import { FormDialog } from "../components/FormDialog";
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 /**
  * スタッフ通知管理ページ
  *
@@ -89,6 +92,8 @@ const TALL_CHECKBOX_ROW_STYLE = {
 };
 
 export function NoticesPage() {
+  const { user } = useAuth();
+  const canWrite = hasPermission(user, "notice_write");
   const queryClient = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [filterType, setFilterType] = useState("");
@@ -213,7 +218,8 @@ export function NoticesPage() {
           </select>
         </label>
         <button
-          className="btn btn-primary"
+          className={showForm ? "btn btn-primary" : "btn btn-primary create-button"}
+          disabled={!canWrite}
           onClick={() => {
             if (showForm) {
               setSelectedWorkerIds([]);
@@ -231,12 +237,14 @@ export function NoticesPage() {
 
       {/* ========== 作成フォーム ========== */}
       {showForm && (
-        <form
+        <FormDialog open={canWrite && showForm} title="通知を作成" onClose={() => setShowForm(false)} busy={createMutation.isPending}>
+<form
           className="card"
           style={{ marginBottom: "1.5rem", padding: "1.5rem", display: "grid", gap: "1rem" }}
           onSubmit={handleSubmit}
         >
           <h3 style={{ margin: 0 }}>新規通知を作成</h3>
+          {actionError && <p role="alert">{actionError}</p>}
 
           <label style={{ display: "grid", gap: "0.25rem" }}>
             <span>タイトル <span style={{ color: "red" }}>*</span></span>
@@ -439,7 +447,7 @@ export function NoticesPage() {
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary create-button"
               disabled={
                 createMutation.isPending ||
                 (form.target_type === "worker" && selectedWorkerIds.length === 0)
@@ -461,6 +469,7 @@ export function NoticesPage() {
             </button>
           </div>
         </form>
+</FormDialog>
       )}
 
       {/* ========== 通知一覧 ========== */}

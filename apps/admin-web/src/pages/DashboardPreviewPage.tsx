@@ -33,7 +33,7 @@ import { BrandMark } from "../components/BrandMark";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { ApiError, getDashboard } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
-import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
+import { NAV_ITEMS, canView } from "../lib/auth/permissions";
 import { currentMonthInput, formatDate, formatPeriodKey, formatRole, formatStatus, minutesToHours, toPeriodKey } from "../lib/formatters";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 import { useColorTheme } from "../lib/theme";
@@ -146,7 +146,7 @@ export function DashboardPreviewPage() {
     placeholderData: undefined,
   });
 
-  const visibleItems = NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles));
+  const visibleItems = NAV_ITEMS.filter((item) => canView(user, item.to, item.allowedRoles));
   const activeTo = activeNavPath(location.pathname, visibleItems.map((item) => item.to));
   const sections = NAV_GROUP_ORDER.map((group) => ({
     group,
@@ -320,7 +320,7 @@ export function DashboardPreviewPage() {
           <span className="apex-preview__avatar" style={{ background: sealColor }} aria-hidden="true">{initial}</span>
           <div className="apex-preview__user-copy">
             <p className="apex-preview__user-name">{displayedName}</p>
-            <p className="apex-preview__user-role">{formatRole(user?.role)}</p>
+            <p className="apex-preview__user-role">{(user?.role_name || formatRole(user?.role))}</p>
           </div>
           <span className="apex-preview__tooltip" aria-hidden="true">{displayedName}</span>
         </Link>

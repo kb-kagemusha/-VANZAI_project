@@ -21,6 +21,7 @@ from src.models.transaction import (
     Project,
     ShiftSlot,
 )
+from src.services.financial_guards import lock_client_projects, ensure_unallocated, archive_drafts, copy_lines, ancestor_ids, ensure_components_unallocated
 from src.services.audit import log
 from src.services.price_resolver import resolve_sales_price
 from src.exceptions import (
@@ -59,11 +60,10 @@ def generate_invoice(
     Returns:
         生成された Invoice
     """
-    # 1. 既存の preparing 請求書があれば削除
-    _delete_preparing_invoices(session, client_id, project_id, period_key)
-    
-    # 2. 対象 Actual を抽出 (status=valid のみ)
+    lock_client_projects(session, client_id)
     actuals = _fetch_actuals_for_invoice(session, client_id, project_id, period_key)
+    ensure_unallocated(session, [row.id for row in actuals], "invoice")
+    _delete_preparing_invoices(session, client_id, project_id, period_key)
     
     # 3. Invoice 作成
     invoice = Invoice(
@@ -113,7 +113,7 @@ def generate_invoice(
             continue
         
         # 数量 (時間を h 単位で計算)
-        quantity = Decimal(actual.calc_minutes_total) / Decimal("60")
+        quantity = Decimal(actual.calc_minutes_billable) / Decimal("60")
         line_amount = price * quantity
         
         line = InvoiceLine(
@@ -274,15 +274,22 @@ def issue_invoice(
         発行された Invoice
     """
     invoice = session.get(Invoice, invoice_id)
+    if invoice:
+        lock_client_projects(session, invoice.client_id)
+        session.refresh(invoice)
     if not invoice:
         raise RecordNotFoundException("Invoice", invoice_id)
     
     if invoice.status != InvoiceStatus.PREPARING:
         raise InvoiceAlreadyIssuedException(
             f"Invoice already issued: {invoice_id}",
-            details={"invoice_id": invoice_id, "status": invoice.status.value}
+            details={"invoice_id": invoice_id, "status": getattr(invoice.status, "value", invoice.status)}
         )
     
+    if invoice.deleted_at is not None:
+        raise ValidationException("置き換え済みの下書きは発行できません")
+    ensure_unallocated(session, [line.actual_id for line in invoice.lines if line.actual_id], "invoice", ancestor_ids(session, invoice, Invoice, "parent_invoice_id"))
+    ensure_components_unallocated(session, invoice, "invoice")
     invoice.status = InvoiceStatus.ISSUED
     invoice.issued_at = datetime.now()
     
@@ -326,7 +333,7 @@ def correct_invoice(
     if original.status == InvoiceStatus.PREPARING:
         raise ValidationException(
             "Cannot correct preparing invoice",
-            details={"invoice_id": original_invoice_id, "status": original.status.value}
+            details={"invoice_id": original_invoice_id, "status": getattr(original.status, "value", original.status)}
         )
     
     # 元の請求書を closed にする
@@ -342,6 +349,10 @@ def correct_invoice(
         status=InvoiceStatus.PREPARING,
         version=original.version + 1,
         parent_invoice_id=original.id,
+        document_type=original.document_type, invoice_subject=original.invoice_subject,
+        addressee_company_name=original.addressee_company_name, addressee_name=original.addressee_name,
+        addressee_email=original.addressee_email, addressee_address=original.addressee_address,
+        fixed_office_fee_amount=original.fixed_office_fee_amount,
         subtotal=original.subtotal,
         tax_amount=original.tax_amount,
         total_amount=original.total_amount,
@@ -358,23 +369,9 @@ def correct_invoice(
         .all()
     )
     
-    line_number = 1
-    for orig_line in original_lines:
-        line = InvoiceLine(
-            invoice_id=new_invoice.id,
-            line_number=line_number,
-            description=orig_line.description,
-            actual_id=orig_line.actual_id,
-            unit_price_snapshot=orig_line.unit_price_snapshot,
-            quantity_snapshot=orig_line.quantity_snapshot,
-            unit_type=orig_line.unit_type,
-            line_amount=orig_line.line_amount,
-            tax_amount=orig_line.tax_amount,
-            is_correction=False,
-        )
-        session.add(line)
-        line_number += 1
-    
+    copy_lines(session, InvoiceLine, original.id, new_invoice.id, "invoice_id")
+    line_number = len(original_lines) + 1
+
     # 訂正明細を追加
     subtotal_delta = Decimal("0")
     for corr in correction_lines:
@@ -439,13 +436,16 @@ def reissue_invoice(
         再発行された新版Invoice
     """
     original_invoice = session.get(Invoice, invoice_id)
+    if original_invoice:
+        lock_client_projects(session, original_invoice.client_id)
+        session.refresh(original_invoice)
     if not original_invoice:
         raise RecordNotFoundException("Invoice", invoice_id)
     
     if original_invoice.status != InvoiceStatus.ISSUED:
         raise ValidationException(
             f"Invoice is not issued: {invoice_id}",
-            details={"invoice_id": invoice_id, "status": original_invoice.status.value}
+            details={"invoice_id": invoice_id, "status": getattr(original_invoice.status, "value", original_invoice.status)}
         )
     
     # 元の請求書をCLOSEDにする
@@ -465,10 +465,19 @@ def reissue_invoice(
         tax_amount=original_invoice.tax_amount,
         total_amount=original_invoice.total_amount,
         issued_at=datetime.now(),
+        document_type=original_invoice.document_type,
+        invoice_subject=original_invoice.invoice_subject,
+        addressee_company_name=original_invoice.addressee_company_name,
+        addressee_name=original_invoice.addressee_name,
+        addressee_email=original_invoice.addressee_email,
+        addressee_address=original_invoice.addressee_address,
+        fixed_office_fee_amount=original_invoice.fixed_office_fee_amount,
+        notes=original_invoice.notes,
     )
     session.add(new_invoice)
     session.flush()
-    
+    copy_lines(session, InvoiceLine, original_invoice.id, new_invoice.id, "invoice_id")
+    session.flush()
     log(
         session,
         action=AuditAction.INVOICE_REISSUED,
@@ -496,13 +505,11 @@ def _delete_preparing_invoices(
         Invoice.client_id == client_id,
         Invoice.period_key == period_key,
         Invoice.status == InvoiceStatus.PREPARING,
+        Invoice.deleted_at.is_(None),
     )
-    if project_id:
-        stmt = stmt.where(Invoice.project_id == project_id)
-    
+    stmt = stmt.where(Invoice.project_id == project_id) if project_id else stmt.where(Invoice.project_id.is_(None))
     invoices = session.execute(stmt).scalars().all()
-    for inv in invoices:
-        session.delete(inv)
+    archive_drafts(session, invoices, "invoice")
 
 
 def _fetch_actuals_for_invoice(

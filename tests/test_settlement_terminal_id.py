@@ -26,8 +26,9 @@ def test_normalize_terminal_short_id_strips_accents():
 
 
 def test_normalize_terminal_id_fixes_d_with_stroke():
+    from src.services.ocr.parsers.settlement_terminal_id import normalize_ocr_settlement_terminal_id
     assert (
-        normalize_settlement_terminal_id("6bfac729-2983-40e1-8785-\u01119ecf7f5cb39")
+        normalize_ocr_settlement_terminal_id("6bfac729-2983-40e1-8785-\u01119ecf7f5cb39")
         == "6bfac729-2983-40e1-8785-d9ecf7f5cb39"
     )
 

@@ -1,3 +1,5 @@
+import { FormDialog } from "../components/FormDialog";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -19,7 +21,10 @@ const PAGE_SIZE = 20;
 const ASSIGNMENTS_SELECTED_ROWS_STORAGE_KEY = "vanzai.assignments.selectedRows";
 
 export function AssignmentsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const { user } = useAuth();
+  const canEdit = hasPermission(user, "assignment_write");
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
@@ -54,7 +59,7 @@ export function AssignmentsPage() {
   const periodKey = toPeriodKey(monthValue);
   const { from: workDateFrom, to: workDateTo } = periodKeyToDateRange(periodKey);
   const queryClient = useQueryClient();
-  const canShareSelectionSet = user?.role === "admin" || user?.role === "ops";
+  const canShareSelectionSet = canEdit;
 
   const assignmentsQuery = useQuery({
     queryKey: ["assignments", periodKey, status, page],
@@ -172,6 +177,7 @@ export function AssignmentsPage() {
         locked_price_outsource: createLockedPriceOutsource || null,
       }),
     onSuccess: async () => {
+      setCreateOpen(false);
       setFormError("");
       setCreateLockedPriceSales("");
       setCreateLockedPriceOutsource("");
@@ -411,7 +417,10 @@ export function AssignmentsPage() {
     <div className="page-stack">
       <PageHeader title="配置一覧" description="予定、役割、ロック単価を一覧で確認し、作成・編集・単件/一括の状態変更を行います。" />
 
-      <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {canEdit && (<>
+      <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setFormError(""); setCreateOpen(true); }}>新しい配置を作成</button></div>
+<FormDialog open={createOpen} title="配置を作成" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <strong>配置を作成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
           <label>
@@ -470,7 +479,7 @@ export function AssignmentsPage() {
         <div>
           <button
             type="button"
-            className="primary-button"
+            className="primary-button create-button"
             onClick={() => createMutation.mutate()}
             disabled={!createShiftSlotId || !createWorkerId || !createRoleId || createMutation.isPending}
           >
@@ -478,6 +487,8 @@ export function AssignmentsPage() {
           </button>
         </div>
       </section>
+</FormDialog>
+      </>)}
 
       <FilterBar>
         <label>
@@ -495,7 +506,9 @@ export function AssignmentsPage() {
         </label>
       </FilterBar>
 
-      <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      <div className="record-list-actions"><button type="button" className="primary-button" onClick={() => setBulkOpen(true)}>配置の選択・一括変更</button><span>選択中 {selectedAssignmentIds.length} 件</span></div>
+<FormDialog open={bulkOpen} title="配置の選択・一括変更" onClose={() => setBulkOpen(false)} busy={bulkStatusMutation.isPending || saveSelectionSetMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <strong>一括状態更新</strong>
           <span>選択中 {selectedAssignmentIds.length} 件 / このページ {currentPageSelectedCount} 件 / 対象月 {periodKey}</span>
@@ -569,12 +582,13 @@ export function AssignmentsPage() {
             type="button"
             className="primary-button"
             onClick={submitBulkStatusUpdate}
-            disabled={selectedAssignmentIds.length === 0 || bulkStatusMutation.isPending || (bulkNextStatus === "canceled" && !bulkCancelReason.trim())}
+            disabled={!canEdit || selectedAssignmentIds.length === 0 || bulkStatusMutation.isPending || (bulkNextStatus === "canceled" && !bulkCancelReason.trim())}
           >
             {bulkStatusMutation.isPending ? "一括更新中..." : "選択中配置を更新"}
           </button>
         </div>
       </section>
+</FormDialog>
 
       <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -604,7 +618,7 @@ export function AssignmentsPage() {
                 key: "actions",
                 header: "操作",
                 render: (row) => (
-                  row.current_status === "canceled" ? (
+                  canEdit && row.current_status === "canceled" ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -692,7 +706,7 @@ export function AssignmentsPage() {
           {
             key: "actions",
             header: "操作",
-            render: (row) => (
+            render: (row) => canEdit ? (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button
                   onClick={() => {
@@ -726,7 +740,7 @@ export function AssignmentsPage() {
                   {row.status === "canceled" ? "再開" : "状態変更"}
                 </button>
               </div>
-            ),
+            ) : "—",
           },
         ]}
         rows={assignmentsQuery.data.items}
@@ -735,8 +749,9 @@ export function AssignmentsPage() {
         emptyDescription="条件に一致する配置データは見つかりませんでした。"
       />
 
-      {editingAssignment ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {canEdit && editingAssignment ? (
+        <FormDialog open={!!editingAssignment} title="配置を編集" onClose={() => setEditingAssignment(null)} busy={updateMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>編集: {editingAssignment.worker_name} / {editingAssignment.project_name}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -796,10 +811,12 @@ export function AssignmentsPage() {
             </button>
           </div>
         </section>
+</FormDialog>
       ) : null}
 
-      {selectedAssignment ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {canEdit && selectedAssignment ? (
+        <FormDialog open={!!selectedAssignment} title="配置の状態変更" onClose={() => setSelectedAssignment(null)} busy={statusMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{selectedAssignment.status === "canceled" ? "再開 / 状態変更" : "状態変更"}: {selectedAssignment.worker_name} / {selectedAssignment.project_name}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -864,6 +881,7 @@ export function AssignmentsPage() {
             </button>
           </div>
         </section>
+</FormDialog>
       ) : null}
 
       <PaginationBar

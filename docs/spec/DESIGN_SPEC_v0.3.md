@@ -77,11 +77,33 @@
 | admin | 全体管理、マスタ、監査、締め解除 |
 | ops | 案件運用、CSV取込、請求/支払生成、Soft Close |
 | accounting | 請求発行、支払承認、Hard Close |
-| site_manager | 担当案件の参照・CSV提出（`CSV_SUBMIT`） |
+| site_manager | 全案件の参照、担当案件のCSV提出（`CSV_SUBMIT`）。請求・支払・単価は初期設定で不可（DEC-056） |
 | worker | スタッフモバイル（予定返信、打刻、可否、経費） |
 
-**DEC-011（Proposal）**: 現場管理者の正本は `project.primary_manager_id` / `secondary_manager_id`。  
+**DEC-011 / DEC-056**: CSV提出範囲の担当判定は `project.primary_manager_id` / `secondary_manager_id`。
 `shift_slot.site_manager_id`（CHANGELOG §24）との整合は未確定。
+
+---
+
+### 5.1 ログインIDと役割の管理（DEC-056）
+
+全体管理者だけがログインIDの作成、役割の付与・変更、IDの有効/無効、役割ごとの閲覧・操作権限を設定する。
+標準役割admin/ops/accounting/site_managerに加え、管理者が名前と権限を指定して独自役割を作成できる（DEC-057）。同じ役割の全IDに同じ権限セットを適用する。
+adminは全権限固定、自分自身の降格・無効化は拒否する。workerの既存モバイル権限は維持する。
+管理者は標準役割（adminを含む）と独自役割の表示名を名称変更専用ポップアップで変更できる（DEC-059/060）。名称変更には理由入力を要求せず、名称の変更前後・実行者・日時を自動で監査する。識別子・付与済みID・権限は変更しない。空欄・他の役割との重複・他の標準役割名・内部識別子は拒否する。workerはこの画面の対象外。
+usersの既存列を再利用し、role_access_policies（role主キー、display_name、permissions JSON、created_at/updated_at）に役割定義と設定を保存する。標準役割は未設定なら既定値を使用する。独自役割の識別子はシステム発行とし、初期権限なしから選択する。display_nameは重複を拒否する。
+画面・直接URL・APIの権限を確認し、APIは各リクエストで現在のDB設定を確認する。
+ID作成、役割/有効状態変更、権限セット変更を監査し、変更前後・理由・実行者を残す。パスワードは返却・監査しない。
+現場管理者の全案件閲覧は担当者紐付けを不要とするが、CSV提出の担当案件制限は拡大しない。
+運用手順はdocs/ops/ACCESS_MANAGEMENT_RUNBOOK.mdを参照。
+
+### 5.2 一覧からの作成・編集入力（DEC-057）
+
+新規作成・登録・生成のフォームは一覧に常設せず、明示的なボタンからポップアップで開く。
+ID・役割・案件・シフト枠・配置・請求・支払・単価・通知・登録リンクに共通適用し、既存のマスタ・稼働者・依頼書のポップアップ方式を維持する。
+編集フォームも同じポップアップ方式へそろえる。検索・絞り込みは一覧上に残す。
+ポップアップはフォーカスを内部に保ち、Escape/閉じるで閉じ、元の操作ボタンへフォーカスを戻す。送信中の閉じる操作は受け付けない。
+共通レコードフォームのポップアップは内容に合わせた高さとし、項目間を画面の高さまで引き伸ばさない。長いフォームは画面内に収めて内部スクロールにする。名称変更など少数項目の画面は横幅も小さくする（DEC-060）。
 
 ---
 
@@ -92,6 +114,8 @@
 **マスタ**: worker, client, site, project_type, role, price_sales, price_outsource, price_rule, incentive_rule, supplier, vanzai_staff
 
 稼働者タグは `workers.tags`（定義済みコードの配列）に保存する。自由入力は受け付けない。定義の正本は `src/domain/worker_tags.py`（DEC-029）。
+
+稼働者の最寄り駅は既存の `nearest_station` / `station_walk_minutes` を1駅目として保持し、任意の2駅目以降は `additional_stations`（駅名・徒歩分数の配列）へ保存する。管理画面・LINE登録の双方で追加・削除でき、LINEは承認後に反映する。詳細はDEC-050。
 
 **トランザクション**: project, shift_slot, assignment, actual, import_batch, expense, incentive, invoice, invoice_line, payout, payout_line, payout_delivery, closing
 

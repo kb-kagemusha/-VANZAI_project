@@ -7,14 +7,15 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.api.deps import get_db
 from src.domain.line_registration_entry import registration_entry_ready, registration_liff_id, registration_login_channel_id
 from src.domain.line_registration_input import LineRegistrationInputError
 from src.services.audit import AuditService
+from src.services.line_registration_receipt import dispatch_registration_receipt
 from src.services.line_registration import (
     CLOSED_MESSAGE,
     LineRegistrationAuthError,
@@ -63,6 +64,12 @@ class LineRegistrationSubmitRequest(BaseModel):
     prefecture: str | None = None
     address1: str | None = None
     address2: str | None = None
+    nearest_station: str | None = None
+    station_walk_minutes: str | None = None
+    additional_stations: str | None = None
+    emergency_contact_phone: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relationship: str | None = None
 
 
 def verify_line_id_token(id_token: str) -> str:
@@ -139,18 +146,21 @@ def create_registration_session(body: LineRegistrationSessionRequest, db: Sessio
 
 
 @router.get("/form")
-def registration_form(request: Request, db: Session = Depends(get_db)):
+def registration_form(request: Request, response: Response, db: Session = Depends(get_db)):
     try:
+        response.headers["Cache-Control"] = "no-store"
         state = LineRegistrationService(db).form_state(_bearer(request))
     except LineRegistrationClosed as exc:
         raise HTTPException(status_code=403, detail=exc.message) from exc
     except LineRegistrationAuthError as exc:
         raise HTTPException(status_code=401, detail=exc.message) from exc
+    except LineRegistrationRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return state
 
 
 @router.post("/submissions")
-def submit_registration(body: LineRegistrationSubmitRequest, request: Request, db: Session = Depends(get_db)):
+def submit_registration(body: LineRegistrationSubmitRequest, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     sent = set(body.model_fields_set)
     try:
         result = LineRegistrationService(db).submit(
@@ -158,6 +168,7 @@ def submit_registration(body: LineRegistrationSubmitRequest, request: Request, d
             request.headers.get("idempotency-key", ""),
             body.model_dump(),
             sent,
+            form_ticket=request.headers.get("x-registration-form-ticket", ""),
         )
         db.commit()
     except LineRegistrationClosed as exc:
@@ -179,6 +190,8 @@ def submit_registration(body: LineRegistrationSubmitRequest, request: Request, d
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="申請を確定できませんでした。") from None
+    if result.saved:
+        background_tasks.add_task(dispatch_registration_receipt, result.request_id, sessionmaker(bind=db.get_bind()))
     return {
         "request_id": result.request_id,
         "status": result.status,

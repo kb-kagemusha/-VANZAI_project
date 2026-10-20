@@ -130,6 +130,23 @@ import type {
   OrderRequestVersion,
   OrderRequestWrite,
 } from "../../types/orderRequest";
+import type { OperatorStaffItem, OperatorStaffWrite } from "../../types/operatorStaff";
+
+export function getOperatorStaff(params: { search?: string; offset?: number; limit?: number }) {
+  return apiFetch<{ items: OperatorStaffItem[]; total: number; offset: number; limit: number }>("/api/operator-staff", undefined, params);
+}
+export function saveOperatorStaff(body: OperatorStaffWrite, id?: string) {
+  return apiFetch<OperatorStaffItem>(id ? `/api/operator-staff/${id}` : "/api/operator-staff", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+}
+export function issueOperatorLineCode(id: string) {
+  return apiFetch<{ code: string; expires_at: string; instruction: string }>(`/api/operator-staff/${id}/line-code`, { method: "POST" });
+}
+export function revokeOperatorLine(id: string, reason: string) {
+  return apiFetch<void>(`/api/operator-staff/${id}/line-revoke`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+export interface PlaceSearchItem { place_id: string; name: string; address: string; attributions: { provider?: string; providerUri?: string }[] }
+export function getPlaceStatus() { return apiFetch<{ configured: boolean }>("/api/places/status"); }
+export function searchPlaces(query: string) { return apiFetch<{ items: PlaceSearchItem[] }>("/api/places/search", undefined, { query }); }
 
 function resolveApiBaseUrl(): string {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -877,21 +894,21 @@ export function softCloseProject(projectId: string, periodKey: string, reason?: 
 }
 
 export function hardCloseProject(projectId: string, periodKey: string, approver: string, reason?: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/hard", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/hard", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
 }
 
 export function releaseSoftCloseProject(projectId: string, periodKey: string, approver: string, reason: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/soft/release", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/soft/release", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
 }
 
 export function releaseHardCloseProject(projectId: string, periodKey: string, approver: string, reason: string) {
-  return apiFetch<ClosingMutationResponse>("/api/closing/hard/release", {
+  return apiFetch<ClosingApprovalItem>("/api/closing/hard/release", {
     method: "POST",
     body: JSON.stringify({ project_id: projectId, period_key: periodKey, approver, reason }),
   });
@@ -977,6 +994,14 @@ export function createClient(body: ClientCreateRequest) {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function updateClientPhone(clientId: string, phone: string | null) {
+  return apiFetch<ClientListItem>(`/api/clients/${clientId}/phone`, { method: "PATCH", body: JSON.stringify({ phone }) });
+}
+
+export function updateClientCompany(clientId: string, body: Partial<Pick<ClientCreateRequest, "name" | "code" | "phone" | "postal_code" | "address" | "notes">> & { contacts?: Array<{ id?: string; name: string; role: string | null; phone: string | null; email: string | null }> }) {
+  return apiFetch<ClientListItem & { contacts: ClientStaffItem[] }>(`/api/clients/${clientId}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export function getSites(params?: Record<string, string | number | boolean | undefined>) {
@@ -1150,6 +1175,9 @@ export type LineRegistrationSessionResponse = {
 };
 
 export type LineRegistrationFormState = {
+  registered?: Record<string, string> | null;
+  form_ticket?: string | null;
+  target_tag?: string | null;
   linked: boolean;
   pending: boolean;
   message: string;
@@ -1183,12 +1211,14 @@ export function submitLineRegistration(
   token: string,
   idempotencyKey: string,
   body: Record<string, string>,
+  formTicket?: string,
 ) {
   return publicApiFetch<LineRegistrationSubmitResponse>("/api/line/registration/submissions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Idempotency-Key": idempotencyKey,
+      ...(formTicket ? { "X-Registration-Form-Ticket": formTicket } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -1241,7 +1271,7 @@ export function deleteNotice(noticeId: string) {
 // ===========================
 
 export function getVanzaiStaff(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<{ items: VanzaiStaffItem[]; total: number; page: number; limit: number }>("/api/vanzai-staff", undefined, params);
+  return apiFetch<{ items: VanzaiStaffItem[]; total: number; offset: number; limit: number }>("/api/vanzai-staff", undefined, params);
 }
 
 export function createVanzaiStaff(body: VanzaiStaffCreateRequest) {
@@ -1263,7 +1293,16 @@ export function updateVanzaiStaff(staffId: string, body: VanzaiStaffUpdateReques
 // ===========================
 
 export function getClientStaff(clientId: string, params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<{ items: ClientStaffItem[]; total: number; page: number; limit: number }>(`/api/clients/${clientId}/staff`, undefined, params);
+  return apiFetch<PageResponse<ClientStaffItem>>(`/api/clients/${clientId}/staff`, undefined, params);
+}
+
+export async function getAllClientStaff(clientId: string, isActive?: boolean) {
+  const items: ClientStaffItem[] = [];
+  for (let offset = 0; ; offset += 200) {
+    const page = await getClientStaff(clientId, { offset, limit: 200, is_active: isActive });
+    items.push(...page.items);
+    if (!page.items.length || items.length >= page.total) return { items, total: page.total, offset: 0, limit: items.length };
+  }
 }
 
 export function createClientStaff(clientId: string, body: ClientStaffCreateRequest) {
@@ -1705,6 +1744,12 @@ export function listLineLinks() {
   return apiFetch<LineLinkList>("/api/order-requests/line-links");
 }
 
+export function refreshLineProfile(workerId: string) {
+  return apiFetch<{ worker_id: string; line_display_name: string }>(
+    `/api/order-requests/line-links/${workerId}/refresh-profile`, { method: "POST" },
+  );
+}
+
 export function issueLineLinkCode(workerId: string) {
   return apiFetch<LineLinkCode>("/api/order-requests/line-links/codes", {
     method: "POST",
@@ -1724,3 +1769,7 @@ export function sendOrderRequestLine(deliveryId: string) {
     method: "POST",
   });
 }
+export type ClosingApprovalItem = { id: string; project_id: string; project_name: string; period_key: string; action: string; status: string; requested_by: string; reason: string; expires_at: string; can_approve: boolean };
+export function getClosingApprovals(periodKey: string) { return apiFetch<{ items: ClosingApprovalItem[] }>("/api/closing/approvals", undefined, { period_key: periodKey }); }
+export function approveClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/approve", { method: "POST" }); }
+export function rejectClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/reject", { method: "POST" }); }

@@ -22,6 +22,7 @@ from src.models.transaction import (
     Project,
     ShiftSlot,
 )
+from src.services.financial_guards import lock_all_projects, ensure_unallocated, archive_drafts, ancestor_ids, copy_lines, ensure_components_unallocated
 from src.services.audit import log
 from src.services.price_resolver import resolve_outsource_price
 from src.exceptions import (
@@ -52,11 +53,10 @@ def generate_payout(
     Returns:
         生成された Payout
     """
-    # 1. 既存の preparing 支払明細があれば削除
-    _delete_preparing_payouts(session, worker_id, project_id, period_key)
-    
-    # 2. 対象 Actual を抽出 (status=valid のみ)
+    lock_all_projects(session)
     actuals = _fetch_actuals_for_payout(session, worker_id, project_id, period_key)
+    ensure_unallocated(session, [row.id for row in actuals], "payout")
+    _delete_preparing_payouts(session, worker_id, project_id, period_key)
     
     # 3. Payout 作成
     payout = Payout(
@@ -97,7 +97,7 @@ def generate_payout(
             continue
         
         # 数量 (時間を h 単位で計算)
-        quantity = Decimal(actual.calc_minutes_total) / Decimal("60")
+        quantity = Decimal(actual.calc_minutes_billable) / Decimal("60")
         line_amount = price * quantity
         
         line = PayoutLine(
@@ -226,16 +226,21 @@ def approve_payout(
     Returns:
         承認された Payout
     """
-    payout = session.get(Payout, payout_id)
+    lock_all_projects(session)
+    payout = session.get(Payout, payout_id, populate_existing=True)
     if not payout:
         raise RecordNotFoundException("Payout", payout_id)
     
     if payout.status != PayoutStatus.PREPARING:
         raise PayoutAlreadyPaidException(
             f"Payout already approved: {payout_id}",
-            details={"payout_id": payout_id, "status": payout.status.value}
+            details={"payout_id": payout_id, "status": getattr(payout.status, "value", payout.status)}
         )
     
+    if payout.deleted_at is not None:
+        raise ValidationException("置き換え済みの下書きは承認できません")
+    ensure_unallocated(session, [line.actual_id for line in payout.lines if line.actual_id], "payout", ancestor_ids(session, payout, Payout, "parent_payout_id"))
+    ensure_components_unallocated(session, payout, "payout")
     payout.status = PayoutStatus.APPROVED
     payout.approved_at = datetime.now()
     
@@ -276,7 +281,7 @@ def mark_payout_paid(
     if payout.status != PayoutStatus.APPROVED:
         raise ValidationException(
             f"Payout not approved: {payout_id}",
-            details={"payout_id": payout_id, "status": payout.status.value}
+            details={"payout_id": payout_id, "status": getattr(payout.status, "value", payout.status)}
         )
     
     payout.status = PayoutStatus.PAID
@@ -322,7 +327,7 @@ def correct_payout(
     if original.status == PayoutStatus.PREPARING:
         raise ValidationException(
             "Cannot correct preparing payout",
-            details={"payout_id": original_payout_id, "status": original.status.value}
+            details={"payout_id": original_payout_id, "status": getattr(original.status, "value", original.status)}
         )
     
     # 元の支払明細を closed にする
@@ -332,12 +337,15 @@ def correct_payout(
     # 新しい版を作成
     new_payout = Payout(
         worker_id=original.worker_id,
+        supplier_id=original.supplier_id,
         project_id=original.project_id,
         period_key=original.period_key,
         payment_date=original.payment_date,
         status=PayoutStatus.PREPARING,
         version=original.version + 1,
         parent_payout_id=original.id,
+        recipient_type=original.recipient_type, recipient_id=original.recipient_id,
+        payee_name_snapshot=original.payee_name_snapshot,
         total_amount=original.total_amount,
     )
     session.add(new_payout)
@@ -352,22 +360,9 @@ def correct_payout(
         .all()
     )
     
-    line_number = 1
-    for orig_line in original_lines:
-        line = PayoutLine(
-            payout_id=new_payout.id,
-            line_number=line_number,
-            description=orig_line.description,
-            actual_id=orig_line.actual_id,
-            unit_price_snapshot=orig_line.unit_price_snapshot,
-            quantity_snapshot=orig_line.quantity_snapshot,
-            unit_type=orig_line.unit_type,
-            line_amount=orig_line.line_amount,
-            is_correction=False,
-        )
-        session.add(line)
-        line_number += 1
-    
+    copy_lines(session, PayoutLine, original.id, new_payout.id, "payout_id")
+    line_number = len(original_lines) + 1
+
     # 訂正明細を追加
     total_delta = Decimal("0")
     for corr in correction_lines:
@@ -421,13 +416,11 @@ def _delete_preparing_payouts(
         Payout.worker_id == worker_id,
         Payout.period_key == period_key,
         Payout.status == PayoutStatus.PREPARING,
+        Payout.deleted_at.is_(None),
     )
-    if project_id:
-        stmt = stmt.where(Payout.project_id == project_id)
-    
+    stmt = stmt.where(Payout.project_id == project_id) if project_id else stmt.where(Payout.project_id.is_(None))
     payouts = session.execute(stmt).scalars().all()
-    for pyt in payouts:
-        session.delete(pyt)
+    archive_drafts(session, payouts, "payout")
 
 
 def _delete_preparing_payouts_by_recipient(
@@ -442,10 +435,10 @@ def _delete_preparing_payouts_by_recipient(
             Payout.recipient_id == recipient_id,
             Payout.period_key == period_key,
             Payout.status == PayoutStatus.PREPARING,
+        Payout.deleted_at.is_(None),
         )
     ).scalars().all()
-    for payout in payouts:
-        session.delete(payout)
+    archive_drafts(session, payouts, "payout")
 
 
 def _count_vanzai_manager_man_days(
@@ -530,6 +523,7 @@ def generate_supplier_payout(
     """
     from src.models.master import Supplier, Worker
     
+    lock_all_projects(session)
     # 1. Supplier取得
     supplier = session.query(Supplier).filter(
         Supplier.id == supplier_id,
@@ -539,15 +533,18 @@ def generate_supplier_payout(
     if not supplier:
         raise RecordNotFoundException(f"Supplier not found: {supplier_id}")
     
+    existing_fixed = session.scalar(select(Payout.id).where(Payout.supplier_id == supplier_id, Payout.period_key == period_key, Payout.status.in_(("approved", "paid", "closed")), Payout.deleted_at.is_(None)).limit(1))
+    if existing_fixed:
+        raise ValidationException("この紹介者・期間の支払は確定済みです。訂正手順を使用してください。")
     # 2. 既存の preparing 支払明細があれば削除
     stmt = select(Payout).where(
         Payout.supplier_id == supplier_id,
         Payout.period_key == period_key,
         Payout.status == PayoutStatus.PREPARING,
+        Payout.deleted_at.is_(None),
     )
     existing_payouts = session.execute(stmt).scalars().all()
-    for pyt in existing_payouts:
-        session.delete(pyt)
+    archive_drafts(session, existing_payouts, "payout")
     
     # 3. 紹介者配下の稼働者を取得
     workers = session.query(Worker).filter(
@@ -580,6 +577,7 @@ def generate_supplier_payout(
     )
     
     actuals = list(session.execute(stmt).unique().scalars().all())
+    ensure_unallocated(session, [row.id for row in actuals], "payout")
     
     if not actuals:
         raise ValidationException(f"No actuals found for supplier {supplier.name} in period {period_key}")
@@ -681,6 +679,9 @@ def generate_vanzai_staff_payout(
     if not staff:
         raise RecordNotFoundException(f"VANZAI staff not found: {vanzai_staff_id}")
 
+    lock_all_projects(session)
+    if session.scalar(select(Payout.id).where(Payout.recipient_type == "vanzai_staff", Payout.recipient_id == vanzai_staff_id, Payout.period_key == period_key, Payout.status.in_(("approved", "paid", "closed")), Payout.deleted_at.is_(None)).limit(1)):
+        raise ValidationException("この担当者・期間の支払は確定済みです。訂正手順を使用してください。")
     _delete_preparing_payouts_by_recipient(
         session=session,
         recipient_type="vanzai_staff",
@@ -756,7 +757,7 @@ def generate_vanzai_staff_payout(
                 if price is None:
                     continue
 
-                quantity = Decimal(actual.calc_minutes_total) / Decimal("60")
+                quantity = Decimal(actual.calc_minutes_billable) / Decimal("60")
                 line_amount = price * quantity
                 session.add(PayoutLine(
                     payout_id=payout.id,

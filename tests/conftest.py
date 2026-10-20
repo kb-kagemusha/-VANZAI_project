@@ -32,6 +32,22 @@ from src.api.main import app
 from src.api.deps import get_db
 
 
+@pytest.fixture(autouse=True)
+def fake_line_registration_receipts(monkeypatch):
+    """申請APIの受付通知・表示名取得は通信モックを使う。個別試験で差し替えられる。"""
+    from src.services.line_messaging import LineCallResult
+
+    class FakeReceiptClient:
+        def push_receipt(self, to, text, retry_key):
+            return LineCallResult(200, "", "test-receipt")
+
+    monkeypatch.setattr("src.services.line_registration_receipt.build_line_client", FakeReceiptClient)
+    class FakeProfileClient:
+        def profile_name(self, user_id):
+            return "テストLINEプロフィール"
+    monkeypatch.setattr("src.services.line_registration_review.build_line_client", FakeProfileClient)
+
+
 @pytest.fixture(scope="function")
 def engine():
     """Create in-memory SQLite database for testing"""

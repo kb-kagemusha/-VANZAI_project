@@ -47,6 +47,12 @@ def _body(phone: str = "09000001111") -> dict:
         "prefecture": "東京都",
         "address1": "千代田区1-1",
         "address2": "",
+        "nearest_station": "試験用駅",
+        "station_walk_minutes": "0",
+        "email": "worker@example.com",
+        "emergency_contact_phone": "09000002222",
+        "emergency_contact_name": "山田 花子",
+        "emergency_contact_relationship": "実母",
     }
 
 
@@ -89,6 +95,7 @@ def _cleanup(connection) -> None:
     )
     if request_ids:
         for statement in (
+            "DELETE FROM line_registration_receipts WHERE request_id IN :ids",
             "DELETE FROM worker_registration_request_details WHERE request_id IN :ids",
             "DELETE FROM audit_logs WHERE target_id IN :ids AND actor = 'line-registration'",
             "DELETE FROM registration_requests WHERE id IN :ids",

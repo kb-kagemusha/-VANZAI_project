@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from src.api.deps import get_db
 from src.api.jwt_auth import get_current_active_user
-from src.models.enums import UserRole
+from src.services.auth import has_permission
+from src.models.enums import Permission, UserRole
 from src.models.master import User
 from src.models.order_request import (
     ACK_UNACKED,
@@ -48,6 +49,12 @@ router = APIRouter(prefix="/api/order-requests", tags=["Order Requests"])
 _ROLES = {UserRole.ADMIN.value, UserRole.OPS.value}
 
 
+class InternalOrderSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_id: str = Field(min_length=1, max_length=26)
+    client_staff_id: str | None = Field(default=None, min_length=1, max_length=26)
+
+
 class OrderRequestWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -70,6 +77,7 @@ class OrderRequestWrite(BaseModel):
     follow_up_due_time: str | None = "21:00"
     assign_tracker_self: bool = False
     based_on_version_id: str | None = None
+    internal_source: InternalOrderSource | None = None
 
 
 class OrderRequestUpdate(BaseModel):
@@ -93,6 +101,7 @@ class OrderRequestUpdate(BaseModel):
     follow_up_due_on: date | None = None
     follow_up_due_time: str | None = None
     assign_tracker_self: bool | None = None
+    internal_source: InternalOrderSource | None = None
 
 
 class ReasonBody(BaseModel):
@@ -111,7 +120,7 @@ class LineLinkCodeBody(BaseModel):
 
 
 def _ensure(user: User) -> None:
-    if user.role not in _ROLES:
+    if not has_permission(user, Permission.ORDER_READ):
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
 
 
@@ -223,6 +232,7 @@ def _version_out(
         "request_conditions": version.request_conditions,
         "body": version.body,
         "contact_name": version.contact_name,
+        "internal_source": version.internal_source_snapshot,
         "contact_desk": version.contact_desk,
         "counterparty_note": version.counterparty_note,
         "draft_worker_ids": list(version.draft_worker_ids or []),
@@ -432,6 +442,7 @@ def create_order_request(
 
     def action():
         payload = body.model_dump()
+        payload["internal_source_set"] = "internal_source" in body.model_fields_set
         if payload.pop("assign_tracker_self"):
             payload["tracker_user_id"] = current_user.id
         version = _service(db).create_draft(actor=current_user, **payload)
@@ -484,6 +495,7 @@ def update_order_request_version(
             site_name=fields.get("site_name"),
             site_id=fields.get("site_id"),
             site_address=fields.get("site_address"),
+            site_address_set="site_address" in fields,
             clear_site_id="site_id" in fields and fields.get("site_id") is None,
             request_conditions=fields.get("request_conditions"),
             body=fields.get("body"),
@@ -500,6 +512,9 @@ def update_order_request_version(
             follow_up_due_on=fields.get("follow_up_due_on"),
             follow_up_due_time=fields.get("follow_up_due_time"),
             clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
+            internal_source=fields.get("internal_source"),
+            internal_source_set="internal_source" in fields,
+            actor=current_user,
         )
 
     version = _call(db, action)
@@ -673,6 +688,17 @@ def revoke_line_link(
 
     _call(db, action)
     return {"worker_id": worker_id, "status": "revoked"}
+
+
+@router.post("/line-links/{worker_id}/refresh-profile")
+def refresh_line_profile(
+    worker_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    link = _call(db, lambda: LineOrderService(db).refresh_profile(actor=current_user, worker_id=worker_id))
+    return {"worker_id": worker_id, "line_display_name": link.line_display_name}
 
 
 @router.post("/deliveries/{delivery_id}/line-send")

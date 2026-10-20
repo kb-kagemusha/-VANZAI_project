@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, object_session
 
 from src.models.base import generate_ulid
 from src.models.enums import AuditAction
-from src.models.master import Site, User, Worker
+from src.models.master import Client, ClientStaff, Site, User, Worker
 from src.models.order_request import (
     ACK_ACKED,
     ACK_UNACKED,
@@ -37,6 +37,7 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -142,6 +143,8 @@ class OrderRequestService:
         follow_up_due_on: date | None,
         follow_up_due_time: str | None = DEFAULT_DUE_TIME,
         based_on_version_id: str | None = None,
+        internal_source: dict | None = None,
+        internal_source_set: bool = False,
     ) -> OrderRequestVersion:
         self._validate_kind(kind)
         worker_ids = self._normalize_worker_ids(worker_ids)
@@ -175,6 +178,11 @@ class OrderRequestService:
             follow_up_due_time=follow_up_due_time,
         )
         if source is not None:
+            self._copy_internal_source(source, version)
+        if internal_source_set:
+            self._set_internal_source(version, internal_source, actor=actor)
+        self.session.flush()
+        if source is not None:
             source_document = self._document(source)
             self.audit.log(
                 AuditAction.ORDER_REQUEST_REVISED,
@@ -203,8 +211,12 @@ class OrderRequestService:
         site_name: str | None = None,
         site_id: str | None = None,
         site_address: str | None = None,
+        site_address_set: bool = False,
         clear_site_id: bool = False,
+        internal_source: dict | None = None,
+        internal_source_set: bool = False,
         request_conditions: str | None = None,
+        actor: User | None = None,
         body: str | None = None,
         contact_name: str | None = None,
         contact_desk: str | None = None,
@@ -235,7 +247,7 @@ class OrderRequestService:
             worker_ids,
             site_address,
         ]
-        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None
+        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set or internal_source_set
         if content_change and version.status != STATUS_DRAFT:
             raise OrderRequestError(409, "確定済みの本文と送付先は変更できません。改訂で新しい版を作ってください")
 
@@ -275,7 +287,7 @@ class OrderRequestService:
             work_date_label=version.work_date_label if work_date_label is None else work_date_label,
             site_name=version.site_name if site_name is None else site_name,
             site_id=next_site_id,
-            site_address=version.site_address if site_address is None else site_address,
+            site_address=version.site_address if site_address is None and not site_address_set else site_address,
             request_conditions=version.request_conditions if request_conditions is None else request_conditions,
             body=version.body if body is None else body,
             contact_name=version.contact_name if contact_name is None else contact_name,
@@ -293,8 +305,48 @@ class OrderRequestService:
             ),
             follow_up_due_time=follow_up_due_time,
         )
+        if internal_source_set:
+            self._set_internal_source(version, internal_source, actor=actor)
         self.session.flush()
         return version
+
+    def _set_internal_source(self, version, source, *, actor=None):
+        before = {"client_id": version.internal_client_id, "client_staff_id": version.internal_client_staff_id}
+        previous_snapshot = version.internal_source_snapshot
+        if source and before == {"client_id": source["client_id"], "client_staff_id": source.get("client_staff_id")} and previous_snapshot:
+            return  # Keep the reviewed source snapshot, including archived contacts, on unrelated edits.
+        if source is None:
+            version.internal_client_id = None
+            version.internal_client_staff_id = None
+            version.internal_source_snapshot = None
+            self._audit_internal_source(version, before, previous_snapshot, actor)
+            return
+        client = self.session.get(Client, source["client_id"])
+        if client is None or client.deleted_at is not None:
+            raise OrderRequestError(400, "発注元のクライアントを選び直してください")
+        staff_id = source.get("client_staff_id")
+        staff = self.session.get(ClientStaff, staff_id) if staff_id else None
+        if staff_id and (staff is None or staff.deleted_at is not None or not staff.is_active or staff.client_id != client.id):
+            raise OrderRequestError(400, "選択した発注元に属する有効な担当者を選んでください")
+        version.internal_client_id = client.id
+        version.internal_client_staff_id = staff_id
+        version.internal_source_snapshot = {
+            "client_id": client.id, "client_staff_id": staff_id,
+            "client_name": client.name, "client_phone": client.phone,
+            "staff_name": staff.name if staff else None, "staff_phone": staff.phone if staff else None,
+        }
+        self._audit_internal_source(version, before, previous_snapshot, actor)
+
+    def _audit_internal_source(self, version, before, previous_snapshot, actor):
+        if previous_snapshot == version.internal_source_snapshot:
+            return
+        self.audit.log("order_request_internal_source_updated", target_type="order_request_version", target_id=version.id, actor=_user_label(actor) if actor else None, actor_role=actor.role if actor else None, before_value=before, after_value={"client_id": version.internal_client_id, "client_staff_id": version.internal_client_staff_id})
+
+    @staticmethod
+    def _copy_internal_source(source, target):
+        target.internal_client_id = source.internal_client_id
+        target.internal_client_staff_id = source.internal_client_staff_id
+        target.internal_source_snapshot = dict(source.internal_source_snapshot) if source.internal_source_snapshot else None
 
     def confirm(self, version: OrderRequestVersion, *, actor: User) -> OrderRequestVersion:
         if version.status != STATUS_DRAFT:
@@ -308,7 +360,14 @@ class OrderRequestService:
         if len(worker_ids) > MAX_RECIPIENTS:
             raise OrderRequestError(400, f"1回の送付先は{MAX_RECIPIENTS}人までです")
 
-        sections = parse_sections(version.request_conditions)
+        try:
+            sections = parse_sections(version.request_conditions)
+            if sections and "schedule" in sections:
+                normalize_schedule(sections["schedule"], complete=True)
+            if sections and "work_period" in sections:
+                normalize_work_period(sections["work_period"], sections.get("schedule"), complete=True)
+        except ValueError as exc:
+            raise OrderRequestError(400, str(exc)) from None
         required = (
             (
                 ("案件名", sections.get("project_name") if sections else ""),
@@ -461,6 +520,7 @@ class OrderRequestService:
             follow_up_due_at=version.follow_up_due_at,
             created_by_user_id=actor.id,
         )
+        self._copy_internal_source(version, draft)
         self.session.add(draft)
         self.session.flush()
         self.audit.log(
@@ -783,12 +843,18 @@ class OrderRequestService:
         version.site_name = _case_text(fields["site_name"])
         version.site_id = fields["site_id"]
         version.site_address = fields["site_address"]
-        request_conditions, body = apply_template_fields(
-            fields["request_conditions"] or "",
-            fields["body"] or "",
-            work_date_label=version.work_date_label,
-            site_name=version.site_name,
-        )
+        try:
+            sections = parse_sections(fields["request_conditions"] or "")
+            if sections and "work_period" in sections:
+                version.work_date_label = work_period_label(sections["work_period"])
+            elif sections and "schedule" in sections:
+                version.work_date_label, _, _ = schedule_text(sections["schedule"])
+            request_conditions, body = apply_template_fields(
+                fields["request_conditions"] or "", fields["body"] or "",
+                work_date_label=version.work_date_label, site_name=version.site_name, site_address=version.site_address,
+            )
+        except ValueError as exc:
+            raise OrderRequestError(400, str(exc)) from None
         version.request_conditions = request_conditions
         version.body = body
         version.contact_name = _case_text(fields["contact_name"])

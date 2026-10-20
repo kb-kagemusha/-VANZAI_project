@@ -1,5 +1,8 @@
+from src.models.closing_approval import ClosingApprovalRequest
 # Models package
 from src.models.base import Base
+from src.models.access_policy import RoleAccessPolicy  # noqa: F401
+from src.models.operator_staff import LineStaffLink, LineStaffLinkCode  # noqa: F401
 from src.models.master import Worker, Client, Site, ProjectType, Role, RegistrationRequest
 from src.models.transaction import (
     Project,

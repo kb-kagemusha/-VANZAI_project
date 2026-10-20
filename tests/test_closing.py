@@ -308,3 +308,28 @@ def test_get_closing_status(db_session):
     closing = get_closing_status(db_session, project.id, "202401")
     assert closing is not None
     assert closing.status == ClosingStatus.SOFT_CLOSED
+
+# Service regressions above exercise real request/approval records using two
+# active users. Production raw name-only entry points remain rejected.
+def _operation(db, project_id, period_key, user_id, approver_id, action, reason):
+    from src.models.master import User
+    from src.services.closing_approval import request_operation, approve_operation
+    from src.services import closing as operations
+    if user_id == approver_id:
+        func = {"hard_close": operations.hard_close, "soft_release": operations.release_soft_close, "hard_release": operations.release_hard_close}[action]
+        return func(db, project_id, period_key, user_id, approver_id, **({"notes": reason} if action == "hard_close" else {"reason": reason}))
+    people=[]
+    for name in (user_id, approver_id):
+        person=db.query(User).filter_by(username=name).first()
+        if not person:
+            person=User(username=name,email=name+"@example.com",role="admin",is_active=True);db.add(person);db.flush()
+        people.append(person)
+    request=request_operation(db,project_id,period_key,action,people[0],reason or "review")
+    return approve_operation(db,request.id,people[1])
+
+def hard_close(session,project_id,period_key,user_id,approver_id,notes=None):
+    return _operation(session,project_id,period_key,user_id,approver_id,"hard_close",notes)
+def release_soft_close(session,project_id,period_key,user_id,approver_id,reason):
+    return _operation(session,project_id,period_key,user_id,approver_id,"soft_release",reason)
+def release_hard_close(session,project_id,period_key,user_id,approver_id,reason):
+    return _operation(session,project_id,period_key,user_id,approver_id,"hard_release",reason)

@@ -988,7 +988,9 @@ def test_close_hard_rejects_same_approver(api_client, db_session, project):
         json={"project_id": project.id, "period_key": "202601", "approver": user.username, "reason": "月次確定"},
         headers=_auth_header(user.username),
     )
-    assert hard_response.status_code == 400
+    assert hard_response.status_code == 202
+    denied = api_client.post(f"/api/closing/approvals/{hard_response.json()['id']}/approve", headers=_auth_header(user.username))
+    assert denied.status_code == 409
 
 
 def test_release_soft_close_requires_auth(api_client, project):
@@ -1042,8 +1044,13 @@ def test_release_soft_close_admin_succeeds(api_client, db_session, project):
         json={"project_id": project.id, "period_key": "202601", "approver": "admin2", "reason": "再取込"},
         headers=_auth_header(user.username),
     )
-    assert release_response.status_code == 200
-    payload = release_response.json()
+    assert release_response.status_code == 202
+    approval_response = _approve_as_second(api_client, db_session, release_response)
+    assert approval_response.status_code == 200, approval_response.text
+    from src.models.transaction import Closing
+    from src.api.main import _build_closing_response
+    current_closing = db_session.query(Closing).filter_by(project_id=project.id, period_key="202601").one()
+    payload = _build_closing_response(current_closing).model_dump()
     assert payload["status"] == "open"
     assert payload["release_count"] == 1
     assert payload["last_release_reason"] == "再取込"
@@ -1081,15 +1088,30 @@ def test_release_hard_close_admin_succeeds(api_client, db_session, project):
         json={"project_id": project.id, "period_key": "202601", "approver": "admin2", "reason": "締め"},
         headers=_auth_header(user.username),
     )
-    assert hard_response.status_code == 200
+    assert hard_response.status_code == 202
+    assert _approve_as_second(api_client, db_session, hard_response).status_code == 200
 
     release_response = api_client.post(
         "/api/closing/hard/release",
         json={"project_id": project.id, "period_key": "202601", "approver": "admin2", "reason": "例外解除"},
         headers=_auth_header(user.username),
     )
-    assert release_response.status_code == 200
-    payload = release_response.json()
+    assert release_response.status_code == 202
+    approval_response = _approve_as_second(api_client, db_session, release_response)
+    assert approval_response.status_code == 200, approval_response.text
+    from src.models.transaction import Closing
+    from src.api.main import _build_closing_response
+    current_closing = db_session.query(Closing).filter_by(project_id=project.id, period_key="202601").one()
+    payload = _build_closing_response(current_closing).model_dump()
     assert payload["status"] == "soft_closed"
     assert payload["release_count"] == 1
     assert payload["last_release_reason"].startswith("HARD_CLOSE_RELEASE:")
+
+def _approve_as_second(api_client, db_session, response):
+    from src.models.master import User
+    from src.api.jwt_auth import create_user_with_hashed_password
+    second = db_session.query(User).filter_by(username="authenticated_second_admin").first()
+    if not second:
+        second=create_user_with_hashed_password(db_session,"authenticated_second_admin","second@example.com","test-only-pass","admin")
+        db_session.commit()
+    return api_client.post(f"/api/closing/approvals/{response.json()['id']}/approve",headers=_auth_header(second.username))

@@ -5,6 +5,7 @@ FastAPI メインアプリケーション
 """
 from contextlib import asynccontextmanager
 import hashlib
+import logging
 import mimetypes
 import os
 from pathlib import Path, PurePath
@@ -17,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from sqlalchemy import and_, func, or_, select
 from typing import List, Optional
 import base64
@@ -52,7 +53,7 @@ from src.api.schemas import (
     WorkerListQuery, WorkerListItem, WorkerListResponse, WorkerCreateRequest, WorkerUpdateRequest, WorkerEditGuardResponse, WorkerQualsUpdateRequest,
     WorkerTagCatalogResponse, WorkerTagOption,
     SupplierListQuery, SupplierListItem, SupplierListResponse, SupplierCreateRequest, SupplierUpdateRequest,
-    ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest,
+    ClientListQuery, ClientListItem, ClientListResponse, ClientCreateRequest, ClientContactListItem,
     SiteListQuery, SiteListItem, SiteListResponse, SiteCreateRequest,
     ProjectTypeListQuery, ProjectTypeListItem, ProjectTypeListResponse, ProjectTypeCreateRequest, ProjectTypeTreeItem, ProjectTypeTreeResponse,
     RegistrationRequestListQuery, RegistrationRequestListItem, RegistrationRequestListResponse, RegistrationRequestDetailResponse,
@@ -79,7 +80,7 @@ from src.api.schemas import (
     ErrorResponse
 )
 from src.models.base import generate_ulid
-from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription, RegistrationRequest, RegistrationRequestFile, VanzaiStaff, ClientStaff, WorkerBankAccount, SupplierBankAccount, Client
+from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription, RegistrationRequest, RegistrationRequestFile, VanzaiStaff, ClientStaff, WorkerBankAccount, SupplierBankAccount, Client, Worker
 
 from src.services.csv_import import CsvImportService
 from src.services.dashboard import build_assignment_response_monitoring, get_dashboard_summary, get_project_closings_for_period
@@ -94,12 +95,14 @@ from src.services.document_storage import DocumentStorage, ObjectStorage, build_
 from src.services.email_sender import get_default_sender
 from src.services.email_template import EmailAttachment, EmailTemplateService
 from src.services.scheduler import SchedulerService, initialize_default_jobs
-from src.services.auth import AuthorizationError, check_permission, can_access_project, has_permission
+from src.services.auth import get_role_name, is_management_role, get_user_permissions, AuthorizationError, check_permission, can_access_project, can_submit_project_csv, has_permission
 from src.services.price_resolver import resolve_outsource_price, resolve_sales_price
 from src.services.time_calc import calculate_time
 from src.exceptions import VANZAIException
 from src.models.enums import ActualStatus, AssignmentStatus, AssignmentWorkerResponseStatus, AuditAction, AvailabilityStatus, ExpenseStatus, ImportMode, ImportScopeType, NoticeTargetType, NoticeType, Permission, UserRole, ClosingStatus
 
+
+logger = logging.getLogger(__name__)
 
 CSV_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
 RECEIPT_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
@@ -123,11 +126,23 @@ REGISTRATION_ALLOWED_DOCUMENT_PARTS = {"front", "back", "single"}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from src.domain.line_registration_config import load_line_registration_config
+
+    load_line_registration_config()
     initialize_default_jobs()
-    yield
+    from src.services.line_registration_receipt import start_registration_receipt_scheduler
+
+    receipt_scheduler = start_registration_receipt_scheduler()
+    try:
+        yield
+    finally:
+        receipt_scheduler.shutdown(wait=False)
 
 
 # FastAPIアプリケーション初期化
+from src.api.closing_approval_routes import router as closing_approval_router, approval_item
+from src.services.closing_approval import request_operation
+
 app = FastAPI(
     title="VANZAI API",
     description="案件・シフト・実績・請求・支払 一元管理システム",
@@ -151,6 +166,8 @@ _cors_origins = (
     if _cors_origins_env
     else _default_origins
 )
+app.include_router(closing_approval_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -1321,7 +1338,7 @@ def _load_accessible_expense(db: Session, expense_id: str, current_user: User):
     if expense is None:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         if expense.worker_id != current_user.worker_id:
@@ -1369,7 +1386,7 @@ def _load_accessible_assignment_for_attendance(db: Session, assignment_id: str, 
         .filter(Assignment.id == assignment_id)
     )
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -1547,7 +1564,7 @@ def _ensure_csv_import_permission(db: Session, user: User, project_id: str) -> N
         return
 
     if has_permission(user, Permission.CSV_SUBMIT):
-        if not can_access_project(db, user, project_id):
+        if not can_submit_project_csv(db, user, project_id):
             raise HTTPException(status_code=403, detail="Project access denied")
         return
 
@@ -1699,7 +1716,7 @@ async def refresh_access_token(
     """
     username = get_refresh_token_subject(payload.refresh_token)
     user = db.query(User).filter(User.username == username).first()
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -1731,6 +1748,9 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
         "display_name": current_user.display_name,
         "email": current_user.email,
         "role": getattr(current_user.role, "value", current_user.role),
+        "role_name": get_role_name(current_user),
+        "can_use_admin_console": is_management_role(current_user.role, object_session(current_user)),
+        "permissions": sorted(p.value for p in get_user_permissions(current_user)),
         "is_active": current_user.is_active
     }
 
@@ -1796,6 +1816,9 @@ async def update_profile(
         "display_name": db_user.display_name,
         "email": db_user.email,
         "role": getattr(db_user.role, "value", db_user.role),
+        "role_name": get_role_name(db_user),
+        "can_use_admin_console": is_management_role(db_user.role, db),
+        "permissions": sorted(p.value for p in get_user_permissions(db_user)),
         "is_active": db_user.is_active,
     }
 
@@ -1961,17 +1984,7 @@ async def list_import_batches(
             )
         )
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, ImportBatch.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -2017,33 +2030,13 @@ async def get_dashboard(
     未処理項目、差異アラート、締め状況を一括取得
     """
     try:
-        check_permission(current_user, Permission.PROJECT_READ)
+        check_permission(current_user, Permission.DASHBOARD_READ)
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
     try:
         period_key = _default_period_key(period_key)
         project_ids: list[str] | None = None
-
-        if UserRole(current_user.role) == UserRole.SITE_MANAGER:
-            if not current_user.worker_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-
-            from src.models.transaction import Project
-
-            project_ids = [
-                project_id
-                for project_id, in (
-                    db.query(Project.id)
-                    .filter(
-                        or_(
-                            Project.primary_manager_id == current_user.worker_id,
-                            Project.secondary_manager_id == current_user.worker_id,
-                        )
-                    )
-                    .all()
-                )
-            ]
 
         # ダッシュボードサマリー取得
         summary = get_dashboard_summary(db, period_key, project_ids=project_ids)
@@ -2241,6 +2234,15 @@ async def get_dashboard(
                 )
             )
 
+        hidden_types = set()
+        if not has_permission(current_user, Permission.INVOICE_READ):
+            hidden_types.add("unissued_invoice")
+        if not has_permission(current_user, Permission.PAYOUT_READ):
+            hidden_types.update({"unprocessed_payout", "missing_payout_recipient"})
+        if not has_permission(current_user, Permission.PRICE_READ):
+            hidden_types.add("missing_price")
+        unprocessed_items = [item for item in unprocessed_items if item.item_type not in hidden_types]
+
         return DashboardResponse(
             unprocessed_items=unprocessed_items,
             variance_alerts=variance_alerts,
@@ -2305,20 +2307,8 @@ async def list_actuals(
     if query.import_batch_id:
         stmt = stmt.filter(Actual.import_batch_id == query.import_batch_id)
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        if query.project_id and not can_access_project(db, current_user, query.project_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-    elif role == UserRole.WORKER:
+    role = current_user.role
+    if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Actual.worker_id == current_user.worker_id)
@@ -2347,8 +2337,8 @@ async def list_actuals(
             start_time=actual.start_time.isoformat() if actual.start_time else None,
             end_time=actual.end_time.isoformat() if actual.end_time else None,
             calc_minutes_billable=actual.calc_minutes_billable,
-            applied_price_sales=actual.applied_price_sales,
-            applied_price_outsource=actual.applied_price_outsource,
+            applied_price_sales=actual.applied_price_sales if has_permission(current_user, Permission.PRICE_READ) else None,
+            applied_price_outsource=actual.applied_price_outsource if has_permission(current_user, Permission.PRICE_READ) else None,
             status=actual.status,
             needs_review=actual.needs_review,
             review_reason=actual.review_reason,
@@ -2558,7 +2548,7 @@ async def list_worker_availability(
     if query.status:
         stmt = stmt.filter(WorkerAvailability.status == query.status)
 
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(WorkerAvailability.worker_id == current_user.worker_id)
@@ -2590,7 +2580,7 @@ async def upsert_worker_availability(
     from src.models.transaction import WorkerAvailability
 
     target_worker_id = request.worker_id
-    if UserRole(current_user.role) == UserRole.WORKER:
+    if current_user.role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         target_worker_id = current_user.worker_id
@@ -2925,19 +2915,8 @@ async def list_assignments(
     if query.work_date_to:
         stmt = stmt.filter(ShiftSlot.work_date <= query.work_date_to)
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        if query.project_id and not can_access_project(db, current_user, query.project_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-    elif role == UserRole.WORKER:
+    role = current_user.role
+    if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -2993,8 +2972,8 @@ async def list_assignments(
                 monitoring_reasons=monitoring_reasons,
                 hours_since_response_request=hours_since_response_request,
                 days_until_work=days_until_work,
-                locked_price_sales=assignment.locked_price_sales,
-                locked_price_outsource=assignment.locked_price_outsource,
+                locked_price_sales=assignment.locked_price_sales if has_permission(current_user, Permission.PRICE_READ) else None,
+                locked_price_outsource=assignment.locked_price_outsource if has_permission(current_user, Permission.PRICE_READ) else None,
             )
         )
 
@@ -3027,17 +3006,8 @@ def _load_accessible_assignment_selection_rows(db: Session, current_user: User, 
         .filter(Assignment.id.in_(assignment_ids))
     )
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-    elif role == UserRole.WORKER:
+    role = current_user.role
+    if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -3229,17 +3199,8 @@ def _load_accessible_assignments_by_ids(db: Session, current_user: User, assignm
         .filter(Assignment.id.in_(assignment_ids))
     )
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-    elif role == UserRole.WORKER:
+    role = current_user.role
+    if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -3311,7 +3272,7 @@ async def send_assignment_response_reminders(
 ):
     """選択した未回答アサインに予定確認催促を送信"""
     try:
-        check_permission(current_user, Permission.ASSIGNMENT_READ)
+        check_permission(current_user, Permission.ASSIGNMENT_REMIND)
 
         assignment_ids = list(dict.fromkeys(request.assignment_ids))
         if not assignment_ids:
@@ -3445,7 +3406,7 @@ async def send_assignment_response_escalation(
 ):
     """選択した要エスカレーション assignment を管理者へ通知する"""
     try:
-        check_permission(current_user, Permission.ASSIGNMENT_READ)
+        check_permission(current_user, Permission.ASSIGNMENT_REMIND)
 
         assignment_ids = list(dict.fromkeys(request.assignment_ids))
         assignments = _load_accessible_assignments_by_ids(db, current_user, assignment_ids)
@@ -3654,19 +3615,8 @@ async def list_assignment_cancellation_history(
     if query.work_date_to:
         stmt = stmt.filter(ShiftSlot.work_date <= query.work_date_to)
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        if query.project_id and not can_access_project(db, current_user, query.project_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-    elif role == UserRole.WORKER:
+    role = current_user.role
+    if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
         stmt = stmt.filter(Assignment.worker_id == current_user.worker_id)
@@ -3732,7 +3682,7 @@ async def list_assignment_cancellation_history(
     )
 
 
-def _serialize_assignment_item(assignment) -> AssignmentListItem:
+def _serialize_assignment_item(assignment, user: User) -> AssignmentListItem:
     return AssignmentListItem(
         id=assignment.id,
         shift_slot_id=assignment.shift_slot_id,
@@ -3750,8 +3700,8 @@ def _serialize_assignment_item(assignment) -> AssignmentListItem:
         worker_response_requested_at=assignment.worker_response_requested_at,
         worker_response_at=assignment.worker_response_at,
         worker_response_note=assignment.worker_response_note,
-        locked_price_sales=assignment.locked_price_sales,
-        locked_price_outsource=assignment.locked_price_outsource,
+        locked_price_sales=assignment.locked_price_sales if has_permission(user, Permission.PRICE_READ) else None,
+        locked_price_outsource=assignment.locked_price_outsource if has_permission(user, Permission.PRICE_READ) else None,
     )
 
 
@@ -3894,7 +3844,7 @@ async def create_assignment(
         db.commit()
         db.refresh(assignment)
 
-        return _serialize_assignment_item(assignment)
+        return _serialize_assignment_item(assignment, current_user)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -3997,7 +3947,7 @@ async def update_assignment(
 
         db.commit()
         db.refresh(assignment)
-        return _serialize_assignment_item(assignment)
+        return _serialize_assignment_item(assignment, current_user)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -4074,7 +4024,7 @@ async def update_assignment_status(
         db.commit()
         db.refresh(assignment)
 
-        return _serialize_assignment_item(assignment)
+        return _serialize_assignment_item(assignment, current_user)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -4140,7 +4090,7 @@ async def update_assignment_worker_response(
 
         db.commit()
         db.refresh(assignment)
-        return _serialize_assignment_item(assignment)
+        return _serialize_assignment_item(assignment, current_user)
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -4201,17 +4151,7 @@ async def list_projects(
         search_term = f"%{query.search}%"
         stmt = stmt.filter(or_(Project.name.ilike(search_term), Project.code.ilike(search_term)))
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Project.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -4587,19 +4527,7 @@ async def list_shift_slots(
         search_term = f"%{query.search}%"
         stmt = stmt.filter(or_(Project.name.ilike(search_term), ShiftSlot.shift_label.ilike(search_term)))
 
-    role = UserRole(current_user.role)
-    if role == UserRole.SITE_MANAGER:
-        if not current_user.worker_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site manager is not linked to worker")
-        if query.project_id and not can_access_project(db, current_user, query.project_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project access denied")
-        stmt = stmt.filter(
-            or_(
-                Project.primary_manager_id == current_user.worker_id,
-                Project.secondary_manager_id == current_user.worker_id,
-            )
-        )
-
+    role = current_user.role
     total = stmt.count()
     rows = stmt.order_by(sort_expression, ShiftSlot.id.desc()).offset(query.offset).limit(query.limit).all()
 
@@ -4892,7 +4820,7 @@ async def list_expenses(
     if query.expense_date_to:
         stmt = stmt.filter(Expense.expense_date <= query.expense_date_to)
 
-    role = UserRole(current_user.role)
+    role = current_user.role
     if role == UserRole.WORKER:
         if not current_user.worker_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worker is not linked to worker record")
@@ -4927,7 +4855,7 @@ async def submit_expense(
     from src.models.master import Worker
     from src.models.transaction import Assignment, Expense, Project, ShiftSlot
 
-    submitter_role = UserRole(current_user.role)
+    submitter_role = current_user.role
     effective_worker_id = worker_id
     if submitter_role == UserRole.WORKER:
         if not current_user.worker_id:
@@ -6205,6 +6133,8 @@ async def list_workers(
             sole_proprietor_name=w.sole_proprietor_name,
             emergency_contact_name_kana=w.emergency_contact_name_kana,
             emergency_contact_phone=w.emergency_contact_phone,
+            emergency_contact_name=w.emergency_contact_name,
+            emergency_contact_relationship=w.emergency_contact_relationship,
             gender=w.gender,
             invoice_registration_status=w.invoice_registration_status,
             invoice_number=w.invoice_number,
@@ -6248,6 +6178,12 @@ async def create_worker_master(
                 raise HTTPException(status_code=404, detail="Supplier not found")
             supplier_name = supplier.name
 
+        if request.profile is not None and not all((
+            (request.emergency_contact_phone or "").strip(),
+            (request.emergency_contact_name or "").strip(),
+            (request.emergency_contact_relationship or "").strip(),
+        )):
+            raise HTTPException(status_code=422, detail="緊急連絡先の電話番号・お名前・関係を入力してください。")
         worker = Worker(
             name=request.name.strip(),
             furigana=request.furigana.strip() if request.furigana else None,
@@ -6256,6 +6192,8 @@ async def create_worker_master(
             sole_proprietor_name=request.sole_proprietor_name.strip() if request.sole_proprietor_name else None,
             emergency_contact_name_kana=request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None,
             emergency_contact_phone=request.emergency_contact_phone.strip() if request.emergency_contact_phone else None,
+            emergency_contact_name=request.emergency_contact_name.strip() if request.emergency_contact_name else None,
+            emergency_contact_relationship=request.emergency_contact_relationship.strip() if request.emergency_contact_relationship else None,
             gender=request.gender.strip() if request.gender else None,
             invoice_registration_status=request.invoice_registration_status.strip() if request.invoice_registration_status else None,
             invoice_number=request.invoice_number.strip() if request.invoice_number else None,
@@ -6304,6 +6242,8 @@ async def create_worker_master(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,
@@ -6343,6 +6283,8 @@ def _worker_list_item(worker, supplier_name: str | None) -> WorkerListItem:
         sole_proprietor_name=worker.sole_proprietor_name,
         emergency_contact_name_kana=worker.emergency_contact_name_kana,
         emergency_contact_phone=worker.emergency_contact_phone,
+        emergency_contact_name=worker.emergency_contact_name,
+        emergency_contact_relationship=worker.emergency_contact_relationship,
         gender=worker.gender,
         invoice_registration_status=worker.invoice_registration_status,
         invoice_number=worker.invoice_number,
@@ -6430,6 +6372,7 @@ async def update_worker_master(
             supplier_name = supplier.name
 
         before_value = {
+            "profile": read_worker_profile(worker).model_dump(mode="json"),
             "name": worker.name,
             "furigana": worker.furigana,
             "email": worker.email,
@@ -6437,6 +6380,8 @@ async def update_worker_master(
             "sole_proprietor_name": worker.sole_proprietor_name,
             "emergency_contact_name_kana": worker.emergency_contact_name_kana,
             "emergency_contact_phone": worker.emergency_contact_phone,
+            "emergency_contact_name": worker.emergency_contact_name,
+            "emergency_contact_relationship": worker.emergency_contact_relationship,
             "gender": worker.gender,
             "invoice_registration_status": worker.invoice_registration_status,
             "invoice_number": worker.invoice_number,
@@ -6452,7 +6397,10 @@ async def update_worker_master(
         worker.phone = request.phone.strip() if request.phone else None
         worker.sole_proprietor_name = request.sole_proprietor_name.strip() if request.sole_proprietor_name else None
         worker.emergency_contact_name_kana = request.emergency_contact_name_kana.strip() if request.emergency_contact_name_kana else None
-        worker.emergency_contact_phone = request.emergency_contact_phone.strip() if request.emergency_contact_phone else None
+        for field in ("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"):
+            if field in request.model_fields_set:
+                value = getattr(request, field)
+                setattr(worker, field, value.strip() if value else None)
         worker.gender = request.gender.strip() if request.gender else None
         worker.invoice_registration_status = request.invoice_registration_status.strip() if request.invoice_registration_status else None
         worker.invoice_number = request.invoice_number.strip() if request.invoice_number else None
@@ -6491,6 +6439,8 @@ async def update_worker_master(
                 "sole_proprietor_name": worker.sole_proprietor_name,
                 "emergency_contact_name_kana": worker.emergency_contact_name_kana,
                 "emergency_contact_phone": worker.emergency_contact_phone,
+                "emergency_contact_name": worker.emergency_contact_name,
+                "emergency_contact_relationship": worker.emergency_contact_relationship,
                 "gender": worker.gender,
                 "invoice_registration_status": worker.invoice_registration_status,
                 "invoice_number": worker.invoice_number,
@@ -6513,6 +6463,8 @@ async def update_worker_master(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,
@@ -6597,6 +6549,8 @@ async def patch_worker_quals(
             sole_proprietor_name=worker.sole_proprietor_name,
             emergency_contact_name_kana=worker.emergency_contact_name_kana,
             emergency_contact_phone=worker.emergency_contact_phone,
+            emergency_contact_name=worker.emergency_contact_name,
+            emergency_contact_relationship=worker.emergency_contact_relationship,
             gender=worker.gender,
             invoice_registration_status=worker.invoice_registration_status,
             invoice_number=worker.invoice_number,
@@ -6702,7 +6656,7 @@ async def list_suppliers(
             supplier_type=s.supplier_type,
             entity_type=s.entity_type,
             payout_terms_days=s.payout_terms_days,
-            default_daily_price=s.default_daily_price,
+            default_daily_price=s.default_daily_price if has_permission(current_user, Permission.PRICE_READ) else None,
             is_active=s.is_active,
             notes=s.notes,
         )
@@ -6888,6 +6842,17 @@ async def list_clients(
     total = stmt.count()
     rows = stmt.order_by(sort_expression, Client.id.desc()).offset(query.offset).limit(query.limit).all()
 
+    # Fetch contacts for this page together; company pagination remains unchanged.
+    contacts_by_client = {client.id: [] for client in rows}
+    if contacts_by_client:
+        staff_rows = db.query(ClientStaff).filter(
+            ClientStaff.client_id.in_(contacts_by_client), ClientStaff.deleted_at.is_(None),
+        ).order_by(ClientStaff.client_id, ClientStaff.name, ClientStaff.id).all()
+        for staff in staff_rows:
+            contacts_by_client[staff.client_id].append(ClientContactListItem(
+                id=staff.id, name=staff.name, role=staff.role, phone=staff.phone, email=staff.email, is_active=staff.is_active,
+            ))
+
     items = [
         ClientListItem(
             id=c.id,
@@ -6895,6 +6860,8 @@ async def list_clients(
             code=c.code,
             contact_name=c.contact_name,
             contact_email=c.contact_email,
+            phone=c.phone, address=c.address, billing_email=c.billing_email, postal_code=c.postal_code, notes=c.notes,
+            contacts=contacts_by_client[c.id],
         )
         for c in rows
     ]
@@ -6927,10 +6894,22 @@ async def create_client(
             name=request.name.strip(),
             code=normalized_code,
             address=request.address.strip() if request.address else None,
+            postal_code=request.postal_code,
+            notes=(request.notes or "").strip() or None,
             contact_name=request.contact_name.strip() if request.contact_name else None,
             contact_email=request.contact_email.strip() if request.contact_email else None,
+            phone=(request.phone or "").strip() or None,
+            billing_email=(request.billing_email or "").strip() or None,
         )
         db.add(client)
+        db.flush()
+        contacts = [contact.model_dump() for contact in request.contacts]
+        if client.contact_name and not any(contact["name"] == client.contact_name for contact in contacts):
+            contacts.insert(0, {"name": client.contact_name, "phone": None, "email": client.contact_email})
+        for contact in contacts:
+            staff = ClientStaff(id=generate_ulid(), client_id=client.id, name=contact["name"], role=(contact.get("role") or "").strip() or None, phone=(contact.get("phone") or "").strip() or None, email=(contact.get("email") or "").strip() or None, is_active=True)
+            db.add(staff)
+            AuditService(db).log("client_staff_created", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": client.id})
 
         AuditService(db).log(
             "client_created",
@@ -6943,6 +6922,8 @@ async def create_client(
                 "code": client.code,
                 "contact_name": client.contact_name,
                 "contact_email": client.contact_email,
+                "postal_code": client.postal_code,
+                "notes": client.notes,
             },
         )
         db.commit()
@@ -6954,6 +6935,7 @@ async def create_client(
             code=client.code,
             contact_name=client.contact_name,
             contact_email=client.contact_email,
+            phone=client.phone, address=client.address, billing_email=client.billing_email, postal_code=client.postal_code, notes=client.notes,
         )
     except HTTPException:
         raise
@@ -7241,7 +7223,7 @@ async def create_registration_link(
 ):
     """公開登録リンク作成"""
     try:
-        check_permission(current_user, Permission.MASTER_WRITE)
+        check_permission(current_user, Permission.REGISTRATION_WRITE)
 
         request_record = RegistrationRequest(
             id=generate_ulid(),
@@ -7289,7 +7271,7 @@ async def reset_registration_link_pin_lock(
 ):
     """公開登録リンクの PIN ロック解除"""
     try:
-        check_permission(current_user, Permission.MASTER_WRITE)
+        check_permission(current_user, Permission.REGISTRATION_WRITE)
 
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
@@ -7335,7 +7317,7 @@ async def reissue_registration_link(
 ):
     """公開登録リンク再発行"""
     try:
-        check_permission(current_user, Permission.MASTER_WRITE)
+        check_permission(current_user, Permission.REGISTRATION_WRITE)
 
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
@@ -7589,7 +7571,7 @@ async def list_registration_requests(
 ):
     """登録申請一覧取得"""
     try:
-        check_permission(current_user, Permission.MASTER_READ)
+        check_permission(current_user, Permission.REGISTRATION_READ)
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -7611,6 +7593,14 @@ async def list_registration_requests(
         stmt = stmt.filter(RegistrationRequest.status == query.status)
     if query.source_type:
         stmt = stmt.filter(RegistrationRequest.source_type == query.source_type)
+    if query.line_only:
+        from src.models.line_registration import LineRegistrationContext
+
+        stmt = stmt.filter(
+            select(LineRegistrationContext.id)
+            .where(LineRegistrationContext.request_id == RegistrationRequest.id)
+            .exists()
+        )
     if query.search:
         pattern = f"%{query.search}%"
         stmt = stmt.filter(
@@ -7635,7 +7625,7 @@ async def get_registration_request(
 ):
     """登録申請詳細取得"""
     try:
-        check_permission(current_user, Permission.MASTER_READ)
+        check_permission(current_user, Permission.REGISTRATION_READ)
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -7662,7 +7652,7 @@ async def approve_registration_request(
 ):
     """登録申請承認"""
     try:
-        check_permission(current_user, Permission.MASTER_WRITE)
+        check_permission(current_user, Permission.REGISTRATION_WRITE)
 
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
@@ -7726,7 +7716,7 @@ async def reject_registration_request(
 ):
     """登録申請却下"""
     try:
-        check_permission(current_user, Permission.MASTER_WRITE)
+        check_permission(current_user, Permission.REGISTRATION_WRITE)
 
         request_record = db.get(RegistrationRequest, request_id)
         if not request_record or request_record.deleted_at is not None:
@@ -7786,7 +7776,7 @@ async def download_registration_request_file(
 ):
     """登録申請添付ファイルをダウンロードする"""
     try:
-        check_permission(current_user, Permission.MASTER_READ)
+        check_permission(current_user, Permission.REGISTRATION_READ)
     except AuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -7953,7 +7943,7 @@ async def list_vanzai_staff(
     if query.is_active is not None:
         q = q.filter(VanzaiStaff.is_active == query.is_active)
     total = q.count()
-    items = q.order_by(VanzaiStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    items = q.order_by(VanzaiStaff.name).offset(query.offset).limit(query.limit).all()
     return VanzaiStaffListResponse(
         items=[VanzaiStaffItem(
             id=staff.id,
@@ -7968,7 +7958,7 @@ async def list_vanzai_staff(
             is_active=staff.is_active,
             notes=staff.notes,
         ) for staff, linked_worker_name in items],
-        total=total, page=query.page, limit=query.limit,
+        total=total, offset=query.offset, limit=query.limit,
     )
 
 
@@ -8013,7 +8003,7 @@ async def update_vanzai_staff(
 ):
     """VANZAI担当者更新"""
     check_permission(current_user, Permission.MASTER_WRITE)
-    staff = db.query(VanzaiStaff).filter(VanzaiStaff.id == staff_id, VanzaiStaff.deleted_at.is_(None)).first()
+    staff = db.query(VanzaiStaff).filter(VanzaiStaff.id == staff_id, VanzaiStaff.deleted_at.is_(None)).with_for_update().first()
     if not staff:
         raise HTTPException(status_code=404, detail="VANZAI担当者が見つかりません")
     linked_worker = None
@@ -8022,6 +8012,7 @@ async def update_vanzai_staff(
         if not linked_worker or linked_worker.deleted_at is not None:
             raise HTTPException(status_code=400, detail="対応する稼働者が見つかりません")
     staff.name = body.name
+    staff.profile_revision += 1
     staff.role = body.role
     staff.linked_worker_id = body.linked_worker_id
     staff.playing_manager_fee_type = body.playing_manager_fee_type
@@ -8062,13 +8053,13 @@ async def list_client_staff(
     if query.is_active is not None:
         q = q.filter(ClientStaff.is_active == query.is_active)
     total = q.count()
-    items = q.order_by(ClientStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    items = q.order_by(ClientStaff.name).offset(query.offset).limit(query.limit).all()
     return ClientStaffListResponse(
         items=[ClientStaffItem(
             id=r.id, client_id=r.client_id, name=r.name, role=r.role,
             phone=r.phone, email=r.email, is_active=r.is_active, notes=r.notes,
         ) for r in items],
-        total=total, page=query.page, limit=query.limit,
+        total=total, offset=query.offset, limit=query.limit,
     )
 
 
@@ -8090,6 +8081,7 @@ async def create_client_staff(
         phone=body.phone, email=body.email, is_active=body.is_active, notes=body.notes,
     )
     db.add(staff)
+    AuditService(db).log("client_staff_created", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": staff.client_id})
     db.commit()
     db.refresh(staff)
     return ClientStaffItem(
@@ -8121,6 +8113,7 @@ async def update_client_staff(
     staff.email = body.email
     staff.is_active = body.is_active
     staff.notes = body.notes
+    AuditService(db).log("client_staff_updated", target_type="client_staff", target_id=staff.id, actor=current_user.username, actor_role=current_user.role, after_value={"client_id": staff.client_id, "changed_fields": ["name", "phone", "email", "role", "notes", "is_active"]})
     db.commit()
     db.refresh(staff)
     return ClientStaffItem(
@@ -8991,17 +8984,10 @@ async def close_hard(
     """
     try:
         check_permission(current_user, Permission.HARD_CLOSE)
-        result = closing.hard_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            notes=request.reason
-        )
+        result = request_operation(db, request.project_id, request.period_key, "hard_close", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -9028,17 +9014,10 @@ async def release_close_soft(
     """
     try:
         check_permission(current_user, Permission.SOFT_CLOSE_RELEASE)
-        result = closing.release_soft_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            reason=request.reason,
-        )
+        result = request_operation(db, request.project_id, request.period_key, "soft_release", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -9065,17 +9044,10 @@ async def release_close_hard(
     """
     try:
         check_permission(current_user, Permission.HARD_CLOSE_RELEASE)
-        result = closing.release_hard_close(
-            session=db,
-            project_id=request.project_id,
-            period_key=request.period_key,
-            user_id=current_user.username,
-            approver_id=request.approver,
-            reason=request.reason,
-        )
+        result = request_operation(db, request.project_id, request.period_key, "hard_release", current_user, request.reason)
         db.commit()
 
-        return _build_closing_response(result)
+        return JSONResponse(status_code=202, content=approval_item(db, result, current_user))
     except HTTPException:
         raise
     except AuthorizationError as exc:
@@ -9099,6 +9071,7 @@ async def get_sales_aggregation(
     month: int,
     project_id: str = None,
     client_id: str = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -9164,6 +9137,7 @@ async def get_outsource_aggregation(
     year: int,
     month: int,
     worker_id: str = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -9608,7 +9582,7 @@ async def list_worker_notices(
         # worker_id が紐付いていない（管理者などが誤って呼んでも空返す）
         return WorkerNoticeListResponse(items=[], unread_count=0, total=0)
 
-    from src.models.transaction import Assignment, ShiftSlot
+    from src.models.transaction import Assignment, ShiftSlot, Project
 
     # 自分がアサインされている案件ID一覧（ShiftSlot 経由で取得）
     assigned_project_ids = [
@@ -9661,7 +9635,7 @@ async def list_worker_notices(
         r = reads_map.get(n.id)
         proj_name: str | None = None
         if n.target_project_id:
-            p = db.get(Proj, n.target_project_id)
+            p = db.get(Project, n.target_project_id)
             proj_name = p.name if p else None
 
         items.append(WorkerNoticeItem(
@@ -9879,10 +9853,19 @@ app.include_router(ocr_router)
 app.include_router(inventory_router)
 app.include_router(public_ocr_router)
 app.include_router(order_request_router)
+from src.api.operator_staff_routes import router as operator_staff_router
+app.include_router(operator_staff_router)
+from src.api.place_routes import router as place_router
+app.include_router(place_router)
+from src.api.client_contact_routes import router as client_contact_router
+app.include_router(client_contact_router)
 app.include_router(line_webhook_router)
 app.include_router(line_registration_router)
 app.include_router(line_registration_review_router)
 
+
+from src.api.access_routes import router as access_router
+app.include_router(access_router)
 
 if __name__ == "__main__":
     import uvicorn

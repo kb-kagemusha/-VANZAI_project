@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SideNav } from "./SideNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "../lib/auth/auth-context";
-import { canAccess } from "../lib/auth/permissions";
+import { hasPermission } from "../lib/auth/permissions";
 
 const NAV_COLLAPSED_KEY = "vanzai.admin.navCollapsed";
 
@@ -20,7 +20,7 @@ export function AppShell() {
   const [showRegistrationUrls, setShowRegistrationUrls] = useState(false);
   const [urlCopyMessage, setUrlCopyMessage] = useState<string | null>(null);
   const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
-  const canCheckRegistrationUrls = canAccess(user?.role, ["admin", "ops", "accounting"]);
+  const canCheckRegistrationUrls = hasPermission(user, "registration_read");
   const registrationFormUrls = REGISTRATION_FORM_DEFINITIONS.map((item) => ({
     ...item,
     url: `${window.location.origin}${item.path}`,

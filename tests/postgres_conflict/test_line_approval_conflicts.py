@@ -4,6 +4,7 @@
 受付の同時送信試験ではない。この試験が作った行だけを消す。
 """
 import threading
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -86,6 +87,7 @@ def _cleanup(connection) -> None:
     )
     if request_ids:
         for statement in (
+            "DELETE FROM line_registration_receipts WHERE request_id IN :ids",
             "DELETE FROM worker_registration_request_details WHERE request_id IN :ids",
             "DELETE FROM audit_logs WHERE target_id IN :ids",
             "DELETE FROM registration_requests WHERE id IN :ids",
@@ -94,6 +96,10 @@ def _cleanup(connection) -> None:
                 text(statement).bindparams(bindparam("ids", expanding=True)),
                 {"ids": request_ids},
             )
+    connection.execute(
+        text("DELETE FROM audit_logs WHERE target_type = 'line_worker_link' AND target_id IN (SELECT id FROM line_worker_links WHERE line_user_id = :user)"),
+        {"user": LINE_USER},
+    )
     connection.execute(
         text("DELETE FROM line_worker_links WHERE line_user_id = :user OR id = :link OR worker_id IN :workers").bindparams(
             bindparam("workers", expanding=True)
@@ -147,7 +153,7 @@ def _prepare(Session):
             role="admin",
             is_active=True,
         )
-        worker = Worker(id=WORKER_ID, name="承認前", phone="09000000000", email="keep@example.com", is_active=True, tags=[])
+        worker = Worker(id=WORKER_ID, name="承認前", phone="09000000000", email="keep@example.com", nearest_station="旧駅", station_walk_minutes=10, is_active=True, tags=[])
         link = LineWorkerLink(
             id=LINK_ID,
             worker_id=WORKER_ID,
@@ -163,7 +169,8 @@ def _prepare(Session):
         setup.commit()
         token, _expires, linked, _tag = LineRegistrationService(setup).issue_session(LINE_USER)
         assert linked is True
-        result = LineRegistrationService(setup).submit(token, "approve-key", {"phone": "09000001111"}, {"phone"})
+        body = {"phone": "09000001111", "nearest_station": "新宿駅", "station_walk_minutes": "0"}
+        result = LineRegistrationService(setup).submit(token, "approve-key", body, set(body))
         setup.commit()
         review = LineRegistrationReviewService(setup).view(result.request_id, reviewer)
         edit_ticket = issue_worker_edit_guard(worker, reviewer.id)
@@ -177,8 +184,12 @@ def _until(engine, predicate) -> bool:
     try:
         deadline = connection.execute(text("SELECT clock_timestamp() + interval '8 seconds'")).scalar()
         while connection.execute(text("SELECT clock_timestamp() < :deadline"), {"deadline": deadline}).scalar():
+            # PostgreSQL caches activity snapshots within a transaction. Refresh
+            # before polling so a waiter that starts later can be observed.
+            connection.execute(text("SELECT pg_stat_clear_snapshot()"))
             if predicate(connection):
                 return True
+            time.sleep(0.02)
         return False
     finally:
         connection.close()
@@ -204,7 +215,8 @@ def _waiting_while_holding(connection, waiting_table: str, held_table: str) -> b
     return pid is not None
 
 
-def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine):
+@pytest.mark.parametrize("changed_field", ["phone", "nearest_station", "station_walk_minutes", "emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship"])
+def test_approve_holds_the_request_while_waiting_for_the_worker(approval_sessions, conflict_engine, changed_field):
     request_id, ticket, _edit, _token = _prepare(approval_sessions)
     holder = conflict_engine.connect()
     transaction = holder.begin()
@@ -240,7 +252,8 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
             conflict_engine,
             lambda connection: _waiting_while_holding(connection, "workers", "registration_requests"),
         )
-        holder.execute(text("UPDATE workers SET phone = '09000000099' WHERE id = :id"), {"id": WORKER_ID})
+        values = {"phone": "09000000099", "nearest_station": "別の管理者の駅", "station_walk_minutes": 99, "emergency_contact_phone": "09000008888", "emergency_contact_name": "変更された連絡先", "emergency_contact_relationship": "実兄"}
+        holder.execute(text(f"UPDATE workers SET {changed_field} = :value WHERE id = :id"), {"id": WORKER_ID, "value": values[changed_field]})
         transaction.commit()
     finally:
         if transaction.is_active:
@@ -254,7 +267,13 @@ def test_approve_holds_the_request_while_waiting_for_the_worker(approval_session
         assert outcome == ["ticket_mismatch"]
         phone = check.execute(text("SELECT phone FROM workers WHERE id = :id"), {"id": WORKER_ID}).scalar_one()
         status = check.execute(text("SELECT status FROM registration_requests WHERE id = :id"), {"id": request_id}).scalar_one()
-        assert phone == "09000000099"
+        assert phone == ("09000000099" if changed_field == "phone" else "09000000000")
+        station = check.execute(text("SELECT nearest_station, station_walk_minutes FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+        assert station.nearest_station == ("別の管理者の駅" if changed_field == "nearest_station" else "旧駅")
+        assert station.station_walk_minutes == (99 if changed_field == "station_walk_minutes" else 10)
+        emergency = check.execute(text("SELECT emergency_contact_phone, emergency_contact_name, emergency_contact_relationship FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+        for index, field in enumerate(("emergency_contact_phone", "emergency_contact_name", "emergency_contact_relationship")):
+            assert emergency[index] == (values[field] if changed_field == field else None)
         assert status == "pending"
     finally:
         check.rollback()
@@ -393,6 +412,8 @@ def test_submit_approve_unlink_and_edit_keep_one_result(approval_sessions, confl
         if approve_detail == "ok":
             assert status == "approved"
             assert phone == "09000001111"
+            station = check.execute(text("SELECT nearest_station, station_walk_minutes FROM workers WHERE id = :id"), {"id": WORKER_ID}).one()
+            assert tuple(station) == ("新宿駅", 0)
         else:
             assert status == "pending"
             assert approve_detail in {"ticket_mismatch", "link_changed", "fixed_target"}

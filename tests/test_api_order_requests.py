@@ -682,14 +682,30 @@ def test_rejects_too_many_or_duplicate_recipients(api_client, db_session, ops_us
     )
     assert duplicated.status_code == 400
 
-    ids = [_worker(db_session, f"人{index}").id for index in range(31)]
+    ids = [_worker(db_session, f"人{index}").id for index in range(41)]
     too_many = api_client.post(
         "/api/order-requests",
         json=_body(ids),
         headers=_auth(ops_user.username),
     )
     assert too_many.status_code == 400
+    assert "40人" in too_many.json()["detail"]
     assert db_session.query(OrderRequestDelivery).count() == 0
+
+
+def test_40_recipients_can_be_saved_and_confirmed_but_update_to_41_rejected(api_client, db_session, ops_user, pdf_root):
+    workers = [Worker(id=generate_ulid(), name=f"上限確認{index}", is_active=True) for index in range(41)]
+    db_session.add_all(workers); db_session.commit()
+    ids = [worker.id for worker in workers]
+    saved = api_client.post("/api/order-requests", json=_body(ids[:40]), headers=_auth(ops_user.username))
+    assert saved.status_code == 200, saved.text
+    version_id = saved.json()["id"]
+    rejected = api_client.patch(f"/api/order-requests/versions/{version_id}", json={"worker_ids": ids}, headers=_auth(ops_user.username))
+    assert rejected.status_code == 400 and "40人" in rejected.json()["detail"]
+    assert len(db_session.get(OrderRequestVersion, version_id).draft_worker_ids) == 40
+    confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
+    assert len(confirmed.json()["deliveries"]) == 40
 
 
 def test_follow_up_due_date_is_required_and_defaults_to_21(api_client, db_session, ops_user):
@@ -1102,3 +1118,94 @@ def test_changed_field_captions_marks_only_differences():
     current = [("案件名", "横浜おいも万博2026"), ("内容", "新しい内容"), ("備考", "同じ")]
     previous = [("案件名", "横浜おいも万博2026"), ("内容", "古い内容"), ("備考", "同じ")]
     assert changed_field_captions(current, previous) == {"内容"}
+
+
+def test_structured_schedule_address_and_prices_survive_confirm_and_revision(api_client, db_session, ops_user, pdf_root):
+    import json
+    from tests.test_order_schedule import schedule
+    worker = _worker(db_session, "条件確認用")
+    conditions = json.dumps({"format": "additional-request-v1", "project_name": "日付別イベント", "schedule": schedule(), "place_id": "ChIJ-test"})
+    response = api_client.post("/api/order-requests", json=_body([worker.id], request_conditions=conditions, work_date_label="間違った日付", site_address="主催者確認住所"), headers=_auth(ops_user.username))
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved["work_date_label"] == "2027年3月1日\n2027年3月2日～2027年3月10日"
+    assert "主催者確認住所" in saved["body"] and "¥20,500" in saved["body"]
+    assert json.loads(saved["request_conditions"])["place_id"] == "ChIJ-test"
+    confirmed = api_client.post(f"/api/order-requests/versions/{saved['id']}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
+    version = db_session.get(OrderRequestVersion, saved["id"])
+    frozen = dict(version.snapshot_json)
+    assert api_client.patch(f"/api/order-requests/versions/{saved['id']}", json={"request_conditions": conditions}, headers=_auth(ops_user.username)).status_code == 409
+    revised = api_client.post(f"/api/order-requests/versions/{saved['id']}/revise", json={"reason": "単価変更"}, headers=_auth(ops_user.username))
+    assert revised.status_code == 200
+    assert json.loads(revised.json()["request_conditions"])["schedule"] == json.loads(saved["request_conditions"])["schedule"]
+    db_session.refresh(version)
+    assert version.snapshot_json == frozen
+
+
+def test_overall_work_period_stays_fixed_through_detail_update_confirm_and_revision(api_client, db_session, ops_user, pdf_root):
+    import json
+    from tests.test_order_schedule import schedule
+    worker = _worker(db_session, "全体期間確認用")
+    period = {"from": "2027-02-28", "to": "2027-03-12"}
+    conditions = {"format": "additional-request-v1", "project_name": "期間イベント", "schedule": schedule(), "work_period": period, "work_date_detail": "予備日を含む"}
+    response = api_client.post("/api/order-requests", json=_body([worker.id], request_conditions=json.dumps(conditions), work_date_label="不正な入力文面"), headers=_auth(ops_user.username))
+    assert response.status_code == 200, response.text
+    version_id = response.json()["id"]
+    assert response.json()["work_date_label"] == "2027年2月28日～2027年3月12日"
+    conditions["schedule"]["work_groups"][0]["start_time"] = "07:00"
+    updated = api_client.patch(f"/api/order-requests/versions/{version_id}", json={"request_conditions": json.dumps(conditions)}, headers=_auth(ops_user.username))
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["work_date_label"] == response.json()["work_date_label"]
+    confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
+    version = db_session.get(OrderRequestVersion, version_id)
+    frozen = dict(version.snapshot_json)
+    assert frozen["work_date_label"] == "2027年2月28日～2027年3月12日"
+    assert "予備日を含む" in frozen["body"] and "07:00～17:00" in frozen["body"]
+    assert json.loads(frozen["request_conditions"])["work_period"] == period
+    assert api_client.patch(f"/api/order-requests/versions/{version_id}", json={"request_conditions": json.dumps(conditions)}, headers=_auth(ops_user.username)).status_code == 409
+    revised = api_client.post(f"/api/order-requests/versions/{version_id}/revise", json={"reason": "時間変更"}, headers=_auth(ops_user.username))
+    assert revised.status_code == 200, revised.text
+    assert json.loads(revised.json()["request_conditions"])["work_period"] == period
+    db_session.refresh(version)
+    assert version.snapshot_json == frozen
+
+
+def test_overall_period_incomplete_and_outside_details_are_guarded(api_client, db_session, ops_user, pdf_root):
+    import json
+    from tests.test_order_schedule import schedule
+    worker = _worker(db_session, "期間検証用")
+    conditions = {"format": "additional-request-v1", "project_name": "期間イベント", "schedule": schedule(), "work_period": {"from": "2027-03-01", "to": ""}}
+    response = api_client.post("/api/order-requests", json=_body([worker.id], request_conditions=json.dumps(conditions)), headers=_auth(ops_user.username))
+    assert response.status_code == 200, response.text
+    version_id = response.json()["id"]
+    rejected = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert rejected.status_code == 400 and "開始日・終了日" in rejected.json()["detail"]
+    conditions["work_period"]["to"] = "2027-03-09"
+    rejected = api_client.patch(f"/api/order-requests/versions/{version_id}", json={"request_conditions": json.dumps(conditions)}, headers=_auth(ops_user.username))
+    assert rejected.status_code == 400 and "全体の稼働期間内" in rejected.json()["detail"]
+    detail = api_client.get(f"/api/order-requests/versions/{version_id}", headers=_auth(ops_user.username))
+    assert json.loads(detail.json()["request_conditions"])["work_period"]["to"] == ""
+
+
+def test_schedule_incomplete_allowed_as_draft_but_not_confirmed(api_client, db_session, ops_user, pdf_root):
+    import json
+    from tests.test_order_schedule import schedule
+    worker = _worker(db_session, "条件確認用")
+    value = schedule(); value["rate_groups"][0]["amount"] = ""
+    response = api_client.post("/api/order-requests", json=_body([worker.id], request_conditions=json.dumps({"format": "additional-request-v1", "project_name": "イベント", "schedule": value})), headers=_auth(ops_user.username))
+    assert response.status_code == 200, response.text
+    result = api_client.post(f"/api/order-requests/versions/{response.json()['id']}/confirm", headers=_auth(ops_user.username))
+    assert result.status_code == 400 and "単価" in result.json()["detail"]
+
+
+def test_address_can_be_cleared_in_draft_but_not_in_confirmed_version(api_client, db_session, ops_user, pdf_root):
+    worker = _worker(db_session, "住所確認用")
+    result = api_client.post("/api/order-requests", json=_body([worker.id], site_address="旧住所"), headers=_auth(ops_user.username))
+    version_id = result.json()["id"]
+    cleared = api_client.patch(f"/api/order-requests/versions/{version_id}", json={"site_address": None}, headers=_auth(ops_user.username))
+    assert cleared.status_code == 200 and cleared.json()["site_address"] is None
+    confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200
+    assert api_client.patch(f"/api/order-requests/versions/{version_id}", json={"site_address": None}, headers=_auth(ops_user.username)).status_code == 409

@@ -63,7 +63,7 @@ def test_list_projects_returns_paginated_items(api_client, db_session, client, s
     assert payload["items"][0]["project_type_name"] == project_type.name
 
 
-def test_list_projects_limits_site_manager_scope(api_client, db_session, client, worker):
+def test_list_projects_allows_site_manager_all_projects(api_client, db_session, client, worker):
     site_manager = create_user_with_hashed_password(
         db=db_session,
         username="site_manager_projects",
@@ -109,8 +109,8 @@ def test_list_projects_limits_site_manager_scope(api_client, db_session, client,
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["total"] == 1
-    assert payload["items"][0]["id"] == project_allowed.id
+    assert payload["total"] == 2
+    assert {item["id"] for item in payload["items"]} == {project_allowed.id, project_hidden.id}
 
 
 def test_create_project_requires_project_write(api_client, db_session, client):

@@ -1,7 +1,11 @@
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ClientAddressFields } from "../components/ClientAddressFields";
+import { ClientCompanyEditor } from "../components/ClientCompanyEditor";
+import { ClientContactList } from "../components/ClientContactList";
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
 import { FilterBar } from "../components/FilterBar";
@@ -9,11 +13,11 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { WorkerTagList, WorkerTagPicker } from "../components/WorkerTags";
+import { ProfileDialog } from "../components/ProfileDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   ApiError,
   createClient,
-  createClientStaff,
   createProjectType,
   createRole,
   createSite,
@@ -21,7 +25,6 @@ import {
   createSupplier,
   createVanzaiStaff,
   createWorker,
-  getClientStaff,
   getClients,
   getProjectTypeTree,
   getProjectTypes,
@@ -33,7 +36,6 @@ import {
   getWorkerTags,
   getWorkerEditGuard,
   getWorkers,
-  updateClientStaff,
   updateSupplierBankAccount,
   updateSupplier,
   updateVanzaiStaff,
@@ -44,9 +46,6 @@ import { workerEditFieldsFromGuard } from "../lib/workerEditForm";
 import type {
   ClientCreateRequest,
   ClientListItem,
-  ClientStaffCreateRequest,
-  ClientStaffItem,
-  ClientStaffUpdateRequest,
   ProjectTypeCreateRequest,
   RoleCreateRequest,
   SiteCreateRequest,
@@ -64,6 +63,8 @@ import type {
   WorkerListItem,
   WorkerUpdateRequest,
 } from "../types/api";
+
+import { lookupPostalAddress, normalizePostalCode } from "../lib/postalAddress";
 
 const PAGE_SIZE = 20;
 const VANZAI_STAFF_ROLE_OPTIONS = ["プレイングマネージャー", "事務", "全体統括", "全体統括責任者"];
@@ -107,6 +108,8 @@ const VIEW_LABELS: Record<MasterView, string> = {
   vanzai_staff: "VANZAI担当者",
 };
 
+const VIEW_COLORS: Record<MasterView, string> = { workers: "#2563eb", suppliers: "#c2410c", clients: "#7e22ce", sites: "#0f766e", project_types: "#b45309", roles: "#be123c", vanzai_staff: "#64748b" };
+
 function validateEffectiveRange(effectiveFrom: string, effectiveUntil: string): void {
   if (effectiveUntil && effectiveUntil < effectiveFrom) {
     throw new ApiError(400, "有効終了日は有効開始日以降を指定してください");
@@ -117,6 +120,8 @@ export function MasterDataPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [view, setView] = useState<MasterView>("workers");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [extraContacts, setExtraContacts] = useState<Array<{ id: string; name: string; role: string; phone: string; email: string }>>([]);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState("");
@@ -125,6 +130,11 @@ export function MasterDataPage() {
   const [createEmail, setCreateEmail] = useState("");
   const [createPhone, setCreatePhone] = useState("");
   const [createSupplierId, setCreateSupplierId] = useState("");
+  const [createContactRole, setCreateContactRole] = useState("");
+  const [createPostalCode, setCreatePostalCode] = useState("");
+  const [postalMessage, setPostalMessage] = useState("");
+  const [postalChoices, setPostalChoices] = useState<string[]>([]);
+  const lastAutoAddress = useRef("");
   const [createContactName, setCreateContactName] = useState("");
   const [createContactEmail, setCreateContactEmail] = useState("");
   const [createContactPhone, setCreateContactPhone] = useState("");
@@ -144,18 +154,7 @@ export function MasterDataPage() {
   const [selectedWorker, setSelectedWorker] = useState<WorkerListItem | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierListItem | null>(null);
   const [selectedVanzaiStaff, setSelectedVanzaiStaff] = useState<VanzaiStaffItem | null>(null);
-  const [selectedClient, setSelectedClient] = useState<ClientListItem | null>(null);
-  const [selectedClientStaff, setSelectedClientStaff] = useState<ClientStaffItem | null>(null);
-  const [clientStaffName, setClientStaffName] = useState("");
-  const [clientStaffEmail, setClientStaffEmail] = useState("");
-  const [clientStaffPhone, setClientStaffPhone] = useState("");
-  const [clientStaffFormError, setClientStaffFormError] = useState("");
-  const [clientStaffFormMessage, setClientStaffFormMessage] = useState("");
-  const [clientStaffEditName, setClientStaffEditName] = useState("");
-  const [clientStaffEditEmail, setClientStaffEditEmail] = useState("");
-  const [clientStaffEditPhone, setClientStaffEditPhone] = useState("");
-  const [clientStaffEditError, setClientStaffEditError] = useState("");
-  const [clientStaffEditMessage, setClientStaffEditMessage] = useState("");
+  const [editingClient, setEditingClient] = useState<ClientListItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -200,12 +199,45 @@ export function MasterDataPage() {
   const [supplierBankEditError, setSupplierBankEditError] = useState("");
   const [supplierBankEditMessage, setSupplierBankEditMessage] = useState("");
 
+  useEffect(() => {
+    setPostalChoices([]);
+    setPostalMessage("");
+    if (view !== "clients" || !createOpen) return;
+    const postal = normalizePostalCode(createPostalCode);
+    if (!/^[0-9]{7}$/.test(postal)) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const choices = await lookupPostalAddress(postal, controller.signal);
+        if (controller.signal.aborted) return;
+        const addresses = choices.map((choice) => choice.prefecture + choice.address);
+        if (addresses.length === 1) {
+          const previous = lastAutoAddress.current;
+          const address = addresses[0];
+          setCreateAddress((current) => !current || current === previous ? address : current);
+          lastAutoAddress.current = address;
+          setPostalMessage("住所候補を取得しました。番地・建物名を確認・入力してください。");
+        } else if (addresses.length > 1) {
+          setPostalChoices(addresses);
+          setPostalMessage("住所候補を選択してください。");
+        } else setPostalMessage("住所が見つかりませんでした。住所を直接入力してください。");
+      } catch {
+        if (!controller.signal.aborted) setPostalMessage("住所を取得できませんでした。住所を直接入力してください。");
+      }
+    }, 400);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [createPostalCode, view, createOpen]);
+
   function resetCreateForm() {
+    setExtraContacts([]);
     setCreateName("");
     setCreateCode("");
     setCreateEmail("");
     setCreatePhone("");
     setCreateSupplierId("");
+    setCreateContactRole("");
+    setCreatePostalCode("");
+    lastAutoAddress.current = "";
     setCreateContactName("");
     setCreateContactEmail("");
     setCreateContactPhone("");
@@ -232,8 +264,7 @@ export function MasterDataPage() {
     setEditNeedsReload(false);
     setSelectedSupplier(null);
     setSelectedVanzaiStaff(null);
-    setSelectedClient(null);
-    setSelectedClientStaff(null);
+    setEditingClient(null);
     setEditName("");
     setEditEmail("");
     setEditPhone("");
@@ -273,14 +304,10 @@ export function MasterDataPage() {
     setSupplierEditIsPrimary(false);
     setSupplierBankEditError("");
     setSupplierBankEditMessage("");
-    setClientStaffEditName("");
-    setClientStaffEditEmail("");
-    setClientStaffEditPhone("");
-    setClientStaffEditError("");
-    setClientStaffEditMessage("");
   }
 
   function handleViewChange(next: MasterView) {
+    setCreateOpen(false);
     setView(next);
     setPage(0);
     setSearch("");
@@ -377,13 +404,13 @@ export function MasterDataPage() {
   const supplierOptionsQuery = useQuery({
     queryKey: ["suppliers-master-options"],
     queryFn: () => getSuppliers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const workerOptionsQuery = useQuery({
     queryKey: ["workers-master-options"],
     queryFn: () => getWorkers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const clientsQuery = useQuery({
@@ -407,7 +434,7 @@ export function MasterDataPage() {
   const projectTypeTreeQuery = useQuery({
     queryKey: ["project-types-tree"],
     queryFn: () => getProjectTypeTree(),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "master_write"),
   });
 
   const projectTypeOptions = flattenProjectTypeOptions(projectTypeTreeQuery.data?.items ?? []);
@@ -424,43 +451,10 @@ export function MasterDataPage() {
     enabled: view === "vanzai_staff",
   });
 
-  const clientStaffQuery = useQuery({
-    queryKey: ["client-staff", selectedClient?.id],
-    queryFn: () => getClientStaff(selectedClient!.id),
-    enabled: Boolean(selectedClient),
-  });
-
   const supplierBankAccountsQuery = useQuery({
     queryKey: ["supplier-bank-accounts", selectedSupplier?.id],
     queryFn: () => getSupplierBankAccounts(selectedSupplier!.id),
     enabled: Boolean(selectedSupplier),
-  });
-
-  const createClientStaffMutation = useMutation({
-    mutationFn: (body: ClientStaffCreateRequest) => createClientStaff(selectedClient!.id, body),
-    onSuccess: async () => {
-      setClientStaffFormError("");
-      setClientStaffFormMessage("担当者を追加しました");
-      setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
-      await queryClient.invalidateQueries({ queryKey: ["client-staff", selectedClient?.id] });
-    },
-    onError: (error: unknown) => {
-      setClientStaffFormMessage("");
-      setClientStaffFormError(error instanceof ApiError ? error.message : "担当者の追加に失敗しました");
-    },
-  });
-
-  const updateClientStaffMutation = useMutation({
-    mutationFn: (body: ClientStaffUpdateRequest) => updateClientStaff(selectedClient!.id, selectedClientStaff!.id, body),
-    onSuccess: async () => {
-      setClientStaffEditError("");
-      setClientStaffEditMessage("担当者を更新しました");
-      await queryClient.invalidateQueries({ queryKey: ["client-staff", selectedClient?.id] });
-    },
-    onError: (error: unknown) => {
-      setClientStaffEditMessage("");
-      setClientStaffEditError(error instanceof ApiError ? error.message : "担当者の更新に失敗しました");
-    },
   });
 
   const createSupplierBankAccountMutation = useMutation({
@@ -554,6 +548,7 @@ export function MasterDataPage() {
     },
     onSuccess: async (_, variables) => {
       resetCreateForm();
+      setCreateOpen(false);
       setPage(0);
       setFormMessage(`${VIEW_LABELS[variables.view]}を作成しました`);
 
@@ -566,6 +561,7 @@ export function MasterDataPage() {
       }
       if (variables.view === "clients") {
         await queryClient.invalidateQueries({ queryKey: ["clients-project-form"] });
+        await queryClient.invalidateQueries({ queryKey: ["order-source-clients"] });
       }
       if (variables.view === "sites") {
         await queryClient.invalidateQueries({ queryKey: ["sites-project-form"] });
@@ -618,7 +614,7 @@ export function MasterDataPage() {
   });
 
   function handleCreate() {
-    if (user?.role !== "admin") {
+    if (!hasPermission(user, "master_write")) {
       return;
     }
     setFormError("");
@@ -670,7 +666,14 @@ export function MasterDataPage() {
         });
         break;
       case "clients":
-        createMutation.mutate({ view, body: { name: createName, code: createCode || null, address: createAddress || null, contact_name: createContactName || null, contact_email: createContactEmail || null, billing_email: null } });
+        if ((!createContactName.trim() && (createContactRole.trim() || createContactPhone.trim() || createContactEmail.trim())) || extraContacts.some((contact) => !contact.name.trim())) {
+          setFormError("役職・電話・メールを入力した担当者、および追加した担当者の氏名を入力してください"); return;
+        }
+        if (createPostalCode && !/^[0-9]{7}$/.test(normalizePostalCode(createPostalCode))) {
+          setFormError("郵便番号は7桁で入力してください"); return;
+        }
+        createMutation.mutate({ view, body: { postal_code: normalizePostalCode(createPostalCode) || null, notes: createNotes || null, name: createName, code: createCode || null, address: createAddress || null, phone: createPhone || null, contact_name: createContactName || null, contact_email: createContactEmail || null, billing_email: null,
+          contacts: [...(createContactName.trim() ? [{ name: createContactName.trim(), role: createContactRole.trim() || null, phone: createContactPhone || null, email: createContactEmail || null }] : []), ...extraContacts.map((contact) => ({ name: contact.name.trim(), role: contact.role.trim() || null, phone: contact.phone || null, email: contact.email || null }))] } });
         break;
       case "sites":
         createMutation.mutate({ view, body: { name: createName, code: createCode || null, address: createAddress || null } });
@@ -701,7 +704,7 @@ export function MasterDataPage() {
   }
 
   function handleUpdate() {
-    if (user?.role !== "admin") {
+    if (!hasPermission(user, "master_write")) {
       return;
     }
     setEditError("");
@@ -795,25 +798,28 @@ export function MasterDataPage() {
 
   const total = activeQuery.data.total;
   const showActiveFilter = view === "workers" || view === "suppliers" || view === "vanzai_staff";
-  const canEditMaster = user?.role === "admin" && (selectedWorker || selectedSupplier || selectedVanzaiStaff);
+  const canEditMaster = hasPermission(user, "master_write") && (selectedWorker || selectedSupplier || selectedVanzaiStaff);
 
   return (
     <div className="page-stack">
       <PageHeader title="マスタ一覧" description="稼働者・下請け・クライアント等のマスタデータを参照します。" />
 
       <section className="upload-card">
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="master-view-switch" role="group" aria-label="表示切替">
           <strong>表示切替</strong>
           {(Object.keys(VIEW_LABELS) as MasterView[]).map((v) => (
-            <button key={v} type="button" onClick={() => handleViewChange(v)} style={{ opacity: view === v ? 1 : 0.7 }}>
+            <button key={v} type="button" aria-pressed={view === v} onClick={() => handleViewChange(v)} style={{ borderColor: VIEW_COLORS[v] }}>
               {VIEW_LABELS[v]}
             </button>
           ))}
         </div>
       </section>
 
-      {user?.role === "admin" ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {hasPermission(user, "master_write") && <div className="master-list-actions"><button type="button" className="primary-button create-button" onClick={() => { resetCreateForm(); clearEditor(); setCreateOpen(true); }}>新規追加</button></div>}
+      {formMessage && <p role="status">{formMessage}</p>}
+      {hasPermission(user, "master_write") && createOpen ? (
+        <ProfileDialog title={`${VIEW_LABELS[view]}の新規追加`} onClose={() => { if (!createMutation.isPending) setCreateOpen(false); }}>
+        <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{VIEW_LABELS[view]}を追加</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -923,11 +929,20 @@ export function MasterDataPage() {
             {view === "clients" ? (
               <>
                 <label>
-                  担当者
-                  <input value={createContactName} onChange={(event) => setCreateContactName(event.target.value)} placeholder="任意" />
+                  会社電話番号
+                  <input type="tel" maxLength={20} value={createPhone} onChange={(event) => setCreatePhone(event.target.value)} placeholder="任意" />
                 </label>
                 <label>
-                  メール
+                  担当者1の氏名
+                  <input value={createContactName} onChange={(event) => setCreateContactName(event.target.value)} placeholder="任意" />
+                </label>
+                <label>担当者1の役職<input maxLength={100} value={createContactRole} onChange={(event) => setCreateContactRole(event.target.value)} placeholder="任意" /></label>
+                <label>
+                  担当者1の電話番号
+                  <input type="tel" maxLength={20} value={createContactPhone} onChange={(event) => setCreateContactPhone(event.target.value)} placeholder="任意" />
+                </label>
+                <label>
+                  担当者1のメール
                   <input value={createContactEmail} onChange={(event) => setCreateContactEmail(event.target.value)} placeholder="任意" />
                 </label>
               </>
@@ -956,12 +971,25 @@ export function MasterDataPage() {
             ) : null}
           </div>
 
-          {(view === "clients" || view === "sites") ? (
+          {view === "clients" && <div className="master-client-contacts">
+            {extraContacts.map((contact, index) => <fieldset key={contact.id}><legend>担当者 {index + 2}</legend><div className="master-form-grid">
+              <label>氏名<input aria-label={`担当者${index + 2}の氏名`} maxLength={100} value={contact.name} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, name: e.target.value } : row))} /></label>
+              <label>役職<input aria-label={`担当者${index + 2}の役職`} maxLength={100} value={contact.role} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, role: e.target.value } : row))} /></label>
+              <label>電話番号<input type="tel" aria-label={`担当者${index + 2}の電話番号`} maxLength={20} value={contact.phone} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, phone: e.target.value } : row))} /></label>
+              <label>メール<input type="email" aria-label={`担当者${index + 2}のメール`} value={contact.email} onChange={(e) => setExtraContacts((rows) => rows.map((row) => row.id === contact.id ? { ...row, email: e.target.value } : row))} /></label>
+            </div><button type="button" onClick={() => setExtraContacts((rows) => rows.filter((row) => row.id !== contact.id))}>未保存の担当者 {index + 2} を外す</button></fieldset>)}
+            <button type="button" className="btn btn-ghost" onClick={() => setExtraContacts((rows) => [...rows, { id: crypto.randomUUID(), name: "", role: "", phone: "", email: "" }])}>担当者を追加</button>
+          </div>}
+
+          {view === "clients" && <ClientAddressFields postalCode={createPostalCode} address={createAddress} onPostalChange={setCreatePostalCode} onAddressChange={setCreateAddress} message={postalMessage} choices={postalChoices} onChoose={(address) => { setCreateAddress(address); lastAutoAddress.current = address; setPostalChoices([]); setPostalMessage("番地・建物名を確認・入力してください。"); }} />}
+          {view === "sites" ? (
             <label>
               住所
-              <textarea value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
+              <textarea aria-label="住所" value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} />
             </label>
           ) : null}
+
+          {view === "clients" && <label>社内メモ<textarea value={createNotes} onChange={(e) => setCreateNotes(e.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} /></label>}
 
           {view === "workers" ? (
             <WorkerTagPicker options={workerTagOptions} selected={createTags} onChange={setCreateTags} />
@@ -990,15 +1018,17 @@ export function MasterDataPage() {
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p>{formMessage}</p> : null}
           <div>
-            <button type="button" className="primary-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
+            <button type="button" className="primary-button master-add-button create-button" onClick={handleCreate} disabled={!createName.trim() || createMutation.isPending}>
               {createMutation.isPending ? "作成中..." : `${VIEW_LABELS[view]}を追加`}
             </button>
           </div>
         </section>
+        </ProfileDialog>
       ) : null}
 
       {canEditMaster ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+        <ProfileDialog title={selectedWorker ? "稼働者を編集" : selectedSupplier ? "下請けを編集" : "VANZAI担当者を編集"} onClose={() => { if (!updateMutation.isPending) clearEditor(); }}>
+        <section className="card master-form" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
       <strong>{selectedWorker ? "稼働者を編集" : selectedSupplier ? "下請けを編集" : "VANZAI担当者を編集"}</strong>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label>
@@ -1257,7 +1287,7 @@ export function MasterDataPage() {
                 {supplierBankFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.8rem" }}>{supplierBankFormMessage}</p> : null}
                 <button
                   type="button"
-                  className="primary-button"
+                  className="primary-button create-button"
                   style={{ marginTop: "0.5rem" }}
                   onClick={() => createSupplierBankAccountMutation.mutate({
                     bank_name: supplierBankBankName,
@@ -1286,6 +1316,7 @@ export function MasterDataPage() {
             </div>
           ) : null}
         </section>
+        </ProfileDialog>
       ) : null}
 
       <FilterBar>
@@ -1314,7 +1345,7 @@ export function MasterDataPage() {
             { key: "supplier", header: "紹介会社", render: (row) => row.introducer_supplier_name ?? "—" },
             { key: "tags", header: "タグ", render: (row) => <WorkerTagList options={workerTagOptions} codes={row.tags} /> },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => openWorkerEditor(row)}>編集</button> : "—" },
           ]}
           rows={workersQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -1332,7 +1363,7 @@ export function MasterDataPage() {
             { key: "terms", header: "支払サイト(日)", render: (row) => String(row.payout_terms_days) },
             { key: "price", header: "日額単価", render: (row) => row.default_daily_price != null ? `¥${Number(row.default_daily_price).toLocaleString()}` : "—" },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => openSupplierEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => openSupplierEditor(row)}>編集</button> : "—" },
           ]}
           rows={suppliersQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -1347,153 +1378,27 @@ export function MasterDataPage() {
             columns={[
               { key: "name", header: "名称", render: (row) => row.name },
               { key: "code", header: "コード", render: (row) => row.code ?? "—" },
-              { key: "contact_name", header: "担当者", render: (row) => row.contact_name ?? "—" },
-              { key: "contact_email", header: "メール", render: (row) => row.contact_email ?? "—" },
-              { key: "actions", header: "担当者", render: (row) => (
-                <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => {
-                  setSelectedClient(selectedClient?.id === row.id ? null : row);
-                  setClientStaffName(""); setClientStaffEmail(""); setClientStaffPhone("");
-                  setClientStaffFormError(""); setClientStaffFormMessage("");
-                }}>
-                  {selectedClient?.id === row.id ? "閉じる" : "担当者管理"}
-                </button>
-              ) },
+              { key: "phone", header: "会社電話番号", render: (row) => row.phone ?? "—" },
+              { key: "contacts", header: "担当者・連絡先", render: (row) => <ClientContactList client={row} /> },
+              { key: "actions", header: "操作", render: (row) => <button type="button" onClick={() => setEditingClient(row)}>{hasPermission(user, "master_write") ? "編集" : "詳細"}</button> },
             ]}
             rows={clientsQuery.data?.items ?? []}
             getRowKey={(row) => row.id}
             emptyTitle="クライアントはいません"
             emptyDescription="CSV取り込みまたは直接登録で追加してください。"
           />
-          {selectedClient ? (
-            <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
-              <strong>{selectedClient.name} — 担当者一覧</strong>
-              {clientStaffQuery.isLoading ? <p style={{ margin: 0, color: "#6b7280" }}>読み込み中...</p> : null}
-              {clientStaffQuery.data?.items && clientStaffQuery.data.items.length > 0 ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #e5e7eb", textAlign: "left" }}>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>氏名</th>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>メール</th>
-                      <th style={{ padding: "0.25rem 0.5rem" }}>電話</th>
-                      {user?.role === "admin" ? <th style={{ padding: "0.25rem 0.5rem" }}>操作</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientStaffQuery.data.items.map((s: ClientStaffItem) => (
-                      <tr key={s.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.name}</td>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.email ?? "—"}</td>
-                        <td style={{ padding: "0.25rem 0.5rem" }}>{s.phone ?? "—"}</td>
-                        {user?.role === "admin" ? (
-                          <td style={{ padding: "0.25rem 0.5rem" }}>
-                            <button
-                              type="button"
-                              style={{ fontSize: "0.8rem" }}
-                              onClick={() => {
-                                setSelectedClientStaff(s);
-                                setClientStaffEditName(s.name);
-                                setClientStaffEditEmail(s.email ?? "");
-                                setClientStaffEditPhone(s.phone ?? "");
-                                setClientStaffEditError("");
-                                setClientStaffEditMessage("");
-                              }}
-                            >
-                              編集
-                            </button>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                !clientStaffQuery.isLoading ? <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.875rem" }}>担当者未登録</p> : null
-              )}
-              {user?.role === "admin" ? (
-                <>
-                {selectedClientStaff ? (
-                  <section style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
-                    <strong style={{ fontSize: "0.9rem" }}>{selectedClientStaff.name} を編集</strong>
-                    <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        氏名 *
-                        <input value={clientStaffEditName} onChange={(e) => setClientStaffEditName(e.target.value)} />
-                      </label>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        メール
-                        <input type="email" value={clientStaffEditEmail} onChange={(e) => setClientStaffEditEmail(e.target.value)} placeholder="任意" />
-                      </label>
-                      <label style={{ fontSize: "0.85rem" }}>
-                        電話
-                        <input value={clientStaffEditPhone} onChange={(e) => setClientStaffEditPhone(e.target.value)} placeholder="任意" />
-                      </label>
-                    </div>
-                    {clientStaffEditError ? <p className="form-error">{clientStaffEditError}</p> : null}
-                    {clientStaffEditMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.85rem" }}>{clientStaffEditMessage}</p> : null}
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        style={{ fontSize: "0.85rem" }}
-                        onClick={() => updateClientStaffMutation.mutate({
-                          name: clientStaffEditName,
-                          role: selectedClientStaff.role,
-                          phone: clientStaffEditPhone || null,
-                          email: clientStaffEditEmail || null,
-                          is_active: selectedClientStaff.is_active,
-                          notes: selectedClientStaff.notes,
-                        })}
-                        disabled={!clientStaffEditName.trim() || updateClientStaffMutation.isPending}
-                      >
-                        {updateClientStaffMutation.isPending ? "更新中..." : "担当者を更新"}
-                      </button>
-                      <button
-                        type="button"
-                        style={{ fontSize: "0.85rem" }}
-                        onClick={() => {
-                          setSelectedClientStaff(null);
-                          setClientStaffEditName("");
-                          setClientStaffEditEmail("");
-                          setClientStaffEditPhone("");
-                          setClientStaffEditError("");
-                          setClientStaffEditMessage("");
-                        }}
-                      >
-                        編集を閉じる
-                      </button>
-                    </div>
-                  </section>
-                ) : null}
-                <details>
-                  <summary style={{ cursor: "pointer", fontSize: "0.875rem", color: "#4b5563" }}>担当者を追加</summary>
-                  <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginTop: "0.5rem" }}>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      氏名 *
-                      <input value={clientStaffName} onChange={(e) => setClientStaffName(e.target.value)} placeholder="担当者名" />
-                    </label>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      メール
-                      <input type="email" value={clientStaffEmail} onChange={(e) => setClientStaffEmail(e.target.value)} placeholder="任意" />
-                    </label>
-                    <label style={{ fontSize: "0.85rem" }}>
-                      電話
-                      <input value={clientStaffPhone} onChange={(e) => setClientStaffPhone(e.target.value)} placeholder="任意" />
-                    </label>
-                  </div>
-                  {clientStaffFormError ? <p className="form-error">{clientStaffFormError}</p> : null}
-                  {clientStaffFormMessage ? <p style={{ margin: 0, color: "#16a34a", fontSize: "0.85rem" }}>{clientStaffFormMessage}</p> : null}
-                  <button
-                    type="button"
-                    style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}
-                    onClick={() => createClientStaffMutation.mutate({ name: clientStaffName, role: null, phone: clientStaffPhone || null, email: clientStaffEmail || null, is_active: true, notes: null })}
-                    disabled={!clientStaffName.trim() || createClientStaffMutation.isPending}
-                  >
-                    {createClientStaffMutation.isPending ? "追加中..." : "担当者を追加"}
-                  </button>
-                </details>
-                </>
-              ) : null}
-            </section>
-          ) : null}
+          {editingClient && <ClientCompanyEditor key={editingClient.id} client={editingClient} readOnly={!hasPermission(user, "master_write")} onClose={() => setEditingClient(null)} onSaved={async (updated) => {
+            setEditingClient(updated);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["clients-page"] }),
+              queryClient.invalidateQueries({ queryKey: ["clients-project-form"] }),
+              queryClient.invalidateQueries({ queryKey: ["price-form-clients"] }),
+              queryClient.invalidateQueries({ queryKey: ["order-source-clients"] }),
+              queryClient.invalidateQueries({ queryKey: ["client-staff", updated.id] }),
+              queryClient.invalidateQueries({ queryKey: ["order-source-contacts", updated.id] }),
+            ]);
+          }} />}
+
         </>
       ) : null}
 
@@ -1549,7 +1454,7 @@ export function MasterDataPage() {
             { key: "email", header: "メール", render: (row) => row.email ?? "—" },
             { key: "phone", header: "電話", render: (row) => row.phone ?? "—" },
             { key: "status", header: "有効", render: (row) => <span className={`status-badge ${row.is_active ? "active" : "inactive"}`}>{row.is_active ? "有効" : "無効"}</span> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" onClick={() => {
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "master_write") ? <button type="button" onClick={() => {
               setSelectedWorker(null);
               setSelectedSupplier(null);
               setSelectedVanzaiStaff(row);

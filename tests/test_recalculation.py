@@ -407,7 +407,7 @@ class TestRecalculationExecution:
         assert result.skipped_count == 1
     
     def test_recalculate_with_force(self, db_session: Session):
-        """force=True で発行済みも再計算"""
+        """force=True でも発行済みは再計算しない（仕様7.4）"""
         # データ準備
         worker = Worker(name="Worker1", email="w1@example.com")
         client = Client(name="Client1")
@@ -487,6 +487,6 @@ class TestRecalculationExecution:
             force=True,  # 強制実行
         )
         
-        # 検証: 強制実行で再計算される
-        assert result.recalculated_count == 1
-        assert result.skipped_count == 0
+        # 検証: 強制指定でも発行済み実績は保持される
+        assert result.recalculated_count == 0
+        assert result.skipped_count == 1

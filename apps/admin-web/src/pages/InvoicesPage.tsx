@@ -1,3 +1,6 @@
+import { FormDialog } from "../components/FormDialog";
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -15,6 +18,9 @@ import { currentMonthInput, formatCurrency, formatDateTime, toPeriodKey } from "
 const PAGE_SIZE = 20;
 
 export function InvoicesPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const { user } = useAuth();
+  const canGenerate = hasPermission(user, "invoice_generate");
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [status, setStatus] = useState("");
   const [sortBy, setSortBy] = useState("issued_at");
@@ -79,6 +85,7 @@ export function InvoicesPage() {
       fixedOfficeFeeAmount: genFixedOfficeFee.trim() || null,
     }),
     onSuccess: () => {
+      setCreateOpen(false);
       setGenError("");
       void queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },
@@ -115,7 +122,9 @@ export function InvoicesPage() {
       <PageHeader title="請求一覧" description="請求書の版、発行状態、金額、PDF 有無を参照します。" />
 
       {/* 請求書生成フォーム */}
-      <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.9rem" }}>
+      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>請求書を生成</button></div>)}
+<FormDialog open={canGenerate && createOpen} title="請求書を生成" onClose={() => setCreateOpen(false)} busy={generateMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.9rem" }}>
         <strong style={{ width: "100%" }}>請求書を生成</strong>
         <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <label>
@@ -133,10 +142,10 @@ export function InvoicesPage() {
           </label>
           <label>
             帳票種別
-            <select value={genDocumentType} onChange={(e) => setGenDocumentType(e.target.value as "invoice" | "estimate")}>
-              <option value="invoice">請求書</option>
-              <option value="estimate">見積書</option>
-            </select>
+            <div className="record-list-actions" role="group" aria-label="帳票種別">
+              <button type="button" aria-pressed={genDocumentType === "invoice"} className={genDocumentType === "invoice" ? "primary-button" : "ghost-button"} onClick={() => setGenDocumentType("invoice")}>請求書</button>
+              <button type="button" aria-pressed={genDocumentType === "estimate"} className={genDocumentType === "estimate" ? "primary-button" : "ghost-button"} onClick={() => setGenDocumentType("estimate")}>見積書</button>
+            </div>
           </label>
           <label>
             クライアント責任者
@@ -162,7 +171,7 @@ export function InvoicesPage() {
           </p>
         ) : null}
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-          <button
+          <button className="primary-button create-button"
             onClick={() => generateMutation.mutate()}
             disabled={!genProjectId || !genSubject.trim() || generateMutation.isPending}
           >
@@ -172,6 +181,7 @@ export function InvoicesPage() {
         {genError && <span style={{ color: "var(--color-danger, red)", fontSize: "0.875rem" }}>{genError}</span>}
         {generateMutation.isSuccess && <span style={{ color: "green", fontSize: "0.875rem" }}>生成しました</span>}
       </section>
+</FormDialog>
 
       {actionError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{actionError}</p> : null}
 

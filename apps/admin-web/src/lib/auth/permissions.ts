@@ -1,4 +1,4 @@
-import type { UserRole } from "../../types/api";
+import type { AuthUser, UserRole } from "../../types/api";
 
 export interface NavItem {
   to: string;
@@ -10,6 +10,7 @@ export interface NavItem {
 export const DASHBOARD_ROLES: UserRole[] = ["admin", "ops", "accounting", "site_manager"];
 
 export const NAV_ITEMS: NavItem[] = [
+  { to: "/settings/access", label: "ID・権限管理", description: "ログインIDと役割ごとの権限を設定", allowedRoles: ["admin"] },
   {
     to: "/dashboard",
     label: "ダッシュボード",
@@ -119,6 +120,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/operator-staff",
+    label: "運営スタッフ登録・一覧",
+    description: "運営スタッフの登録、連絡先、付与ロール、公式LINEの本人紐付け",
+    allowedRoles: ["admin"],
+  },
+  {
     to: "/masters/data",
     label: "マスタ一覧",
     description: "稼働者・下請け・クライアント等のマスタデータを参照",
@@ -135,4 +142,31 @@ export const NAV_ITEMS: NavItem[] = [
 
 export function canAccess(role: UserRole | null | undefined, allowedRoles: UserRole[]): boolean {
   return role ? allowedRoles.includes(role) : false;
+}
+
+export function hasPermission(user: AuthUser | null, permission: string): boolean {
+  return !!user && user.is_active && (user.role === "admin" || !!user.permissions?.includes(permission));
+}
+
+export const PATH_PERMISSIONS: Record<string, string[]> = {
+  "/dashboard": ["dashboard_read"], "/dashboard/preview": ["dashboard_read"],
+  "/operations/projects": ["project_read"], "/operations/shift-slots": ["shift_read"],
+  "/operations/actuals": ["actual_read"], "/operations/assignments": ["assignment_read"],
+  "/operations/assignment-responses": ["assignment_read"],
+  "/operations/availability-calendar": ["availability_read"],
+  "/operations/csv-import": ["csv_import", "csv_submit"],
+  "/operations/ocr": ["ocr_read"], "/operations/order-requests": ["order_read"],
+  "/operations/notices": ["notice_read"], "/operations/registration-requests": ["registration_read"],
+  "/billing/invoices": ["invoice_read"], "/billing/payouts": ["payout_read"], "/billing/expenses": ["expense_read"],
+  "/masters/workers": ["master_read"], "/masters/data": ["master_read"],
+  "/masters/prices": ["price_read"], "/audit-logs": ["audit_log_read"],
+};
+
+export function canView(user: AuthUser | null, path: string, fallbackRoles: UserRole[] = []): boolean {
+  if (!user?.is_active) return false;
+  if (user.role === "admin") return true;
+  if (path.startsWith("/dashboard/preview")) return false;
+  if (path.startsWith("/settings/") || path === "/operations/order-requests/deleted") return false;
+  const key = Object.keys(PATH_PERMISSIONS).sort((a, b) => b.length - a.length).find(item => path === item || path.startsWith(item + "/"));
+  return key ? PATH_PERMISSIONS[key].some(permission => hasPermission(user, permission)) : canAccess(user.role, fallbackRoles);
 }

@@ -1,5 +1,7 @@
 """追加案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
+from src.domain.maps_url import validate_maps_url
 
 FORMAT_ID = "additional-request-v1"
 DOCUMENT_TITLE = "【追加案件依頼】"
@@ -36,6 +38,22 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     if not isinstance(data, dict) or data.get("format") != FORMAT_ID:
         return None
     sections = {key: _text(data.get(key)) for key in (*_SECTION_KEYS, *_LEGACY_KEYS)}
+    for key in ("previous_hours", "previous_fee", "place_id"):
+        if key in data:
+            sections[key] = _text(data[key])
+    if "maps_url" in data:
+        if not isinstance(data["maps_url"], str):
+            raise ValueError("Google Mapsの共有URLを入力してください")
+        sections["maps_url"] = validate_maps_url(data["maps_url"])
+    if sections.get("place_id"):
+        import re
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", sections["place_id"]):
+            raise ValueError("Google Mapsの地点を選択し直してください")
+    if "schedule" in data:
+        sections["schedule"] = normalize_schedule(data["schedule"])
+        _, sections["hours"], sections["fee"] = schedule_text(sections["schedule"])
+    if "work_period" in data:
+        sections["work_period"] = normalize_work_period(data["work_period"], sections.get("schedule"))
     if not sections["hours"]:
         sections["hours"] = _legacy_hours(sections)
     if not sections["fee"]:
@@ -43,7 +61,9 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     return sections
 
 
-def compose_document(sections: dict, *, work_date_label: str, site_name: str) -> str:
+def compose_document(sections: dict, *, work_date_label: str, site_name: str, site_address: str | None = None) -> str:
+    if "work_period" in sections:
+        work_date_label = work_period_label(sections["work_period"])
     notes = _text(sections.get("notes"))
     if notes and not notes.startswith("・"):
         notes = f"・{notes}"
@@ -62,6 +82,8 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
             "",
             "■稼働場所",
             _text(site_name),
+            *([_text(site_address)] if _text(site_address) else []),
+            *([sections["maps_url"]] if sections.get("maps_url") else []),
             "",
             "■稼働日",
             _text(work_date_label),
@@ -93,17 +115,20 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str) ->
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
+    for key in ("schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url"):
+        if key in sections:
+            payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)
 
 
-def apply_template_fields(request_conditions: str, body: str, *, work_date_label: str, site_name: str) -> tuple[str, str]:
+def apply_template_fields(request_conditions: str, body: str, *, work_date_label: str, site_name: str, site_address: str | None = None) -> tuple[str, str]:
     """新しい書式なら本文を見出し順に組み直す。古い自由文はそのまま残す。"""
     sections = parse_sections(request_conditions)
     if sections is None:
         return _text(request_conditions), _text(body)
     return (
         canonical_conditions(sections),
-        compose_document(sections, work_date_label=work_date_label, site_name=site_name),
+        compose_document(sections, work_date_label=work_date_label, site_name=site_name, site_address=site_address),
     )
 
 

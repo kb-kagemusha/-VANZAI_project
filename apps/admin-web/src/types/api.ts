@@ -1,11 +1,14 @@
-export type UserRole = "admin" | "ops" | "accounting" | "site_manager" | "worker";
+export type UserRole = string;
 
 export interface AuthUser {
   username: string;
   display_name: string | null;
   email: string;
   role: UserRole;
+  role_name?: string;
+  can_use_admin_console?: boolean;
   is_active: boolean;
+  permissions: string[];
 }
 
 export interface TokenResponse {
@@ -134,8 +137,8 @@ export interface ActualListItem {
   start_time: string | null;
   end_time: string | null;
   calc_minutes_billable: number;
-  applied_price_sales: string;
-  applied_price_outsource: string;
+  applied_price_sales: string | null;
+  applied_price_outsource: string | null;
   status: string;
   needs_review: boolean;
   review_reason: string | null;
@@ -638,6 +641,7 @@ export interface WorkerProfileInput {
   postal_code: string | null;
   address: string | null;
   hometown: string | null;
+  additional_stations?: { nearest_station: string; station_walk_minutes: number | null }[] | null;
   nearest_station: string | null;
   station_walk_minutes: number | null;
   final_education: string | null;
@@ -679,6 +683,8 @@ export interface WorkerListItem {
   sole_proprietor_name: string | null;
   emergency_contact_name_kana: string | null;
   emergency_contact_phone: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
   gender: string | null;
   invoice_registration_status: string | null;
   invoice_number: string | null;
@@ -705,6 +711,8 @@ export interface WorkerCreateRequest {
   sole_proprietor_name: string | null;
   emergency_contact_name_kana: string | null;
   emergency_contact_phone: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
   gender: string | null;
   invoice_registration_status: string | null;
   invoice_number: string | null;
@@ -825,15 +833,24 @@ export interface ClientListItem {
   contact_name: string | null;
   contact_email: string | null;
   billing_email: string | null;
+  phone?: string | null;
+  postal_code?: string | null;
+  notes?: string | null;
+  address?: string | null;
+  contacts?: Array<Pick<ClientStaffItem, "id" | "name" | "role" | "phone" | "email" | "is_active">>;
 }
 
 export interface ClientCreateRequest {
   name: string;
   code: string | null;
+  postal_code?: string | null;
+  notes?: string | null;
   address: string | null;
   contact_name: string | null;
   contact_email: string | null;
   billing_email: string | null;
+  phone?: string | null;
+  contacts?: Array<{ role?: string | null; name: string; phone: string | null; email: string | null }>;
 }
 
 export interface SiteListItem {

@@ -165,21 +165,7 @@ else
     echo "  .env ファイル確認OK"
 fi
 
-# OCR 外部アップロード用シークレット（未設定時のみ追記）
-if [ -f "${APP_DIR}/.env" ]; then
-    append_env_if_missing() {
-        local key="$1"
-        local value="$2"
-        if ! grep -q "^${key}=" "${APP_DIR}/.env"; then
-            echo "${key}=${value}" >> "${APP_DIR}/.env"
-            echo "  .env に ${key} を追加しました"
-        fi
-    }
-    append_env_if_missing "OCR_UPLOAD_TOKEN_SECRET" "$(openssl rand -hex 32)"
-    append_env_if_missing "OCR_UPLOAD_SESSION_SECRET" "$(openssl rand -hex 32)"
-    append_env_if_missing "OCR_UPLOAD_IP_SECRET" "$(openssl rand -hex 32)"
-    append_env_if_missing "OCR_PUBLIC_PAYGATE_PRECHECK_ENABLED" "true"
-fi
+# Existing secrets are managed separately; deployment never appends to .env.
 
 set -a
 source "${APP_DIR}/.env"

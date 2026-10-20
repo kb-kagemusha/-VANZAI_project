@@ -16,6 +16,7 @@ import {
   Tag,
   Database,
   ShieldCheck,
+  ShieldUser,
   MessageSquare,
   ScanLine,
   Eye,
@@ -24,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { NAV_ITEMS, canAccess } from "../lib/auth/permissions";
+import { NAV_ITEMS, canView } from "../lib/auth/permissions";
 import { useAuth } from "../lib/auth/auth-context";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 import { formatRole } from "../lib/formatters";
@@ -49,6 +50,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/masters/prices": Tag,
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
+  "/settings/access": ShieldUser,
   "/operations/order-requests": ScrollText,
   "/operations/notices": MessageSquare,
   "/operations/registration-requests": ClipboardList,
@@ -63,7 +65,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const displayedName = user?.display_name || user?.username || "";
-  const visibleItems = NAV_ITEMS.filter((item) => canAccess(user?.role, item.allowedRoles));
+  const visibleItems = NAV_ITEMS.filter((item) => canView(user, item.to, item.allowedRoles));
   const sections = NAV_GROUP_ORDER.map((group) => ({
     group,
     items: visibleItems.filter((item) => navGroupFor(item.to) === group),
@@ -130,7 +132,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
         <span className="side-nav-avatar" aria-hidden="true">{displayedName.slice(0, 1) || "V"}</span>
         <span className="side-nav-user-copy">
           <span className="side-nav-user-name">{displayedName}</span>
-          <span className="side-nav-user-role">{formatRole(user?.role)}</span>
+          <span className="side-nav-user-role">{(user?.role_name || formatRole(user?.role))}</span>
         </span>
       </NavLink>
     </aside>

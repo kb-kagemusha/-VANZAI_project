@@ -21,6 +21,7 @@ from src.models.transaction import Actual, Assignment, Closing, Invoice, Payout,
 from src.services.audit import log
 from src.services.price_resolver import resolve_sales_price, resolve_outsource_price
 from src.services.time_calc import calculate_time
+from src.services.financial_guards import lock_all_projects
 from dataclasses import field
 
 
@@ -116,14 +117,16 @@ class RecalculationService:
                 warnings.append(
                     f"Actual {actual.id} is in issued invoice or approved payout"
                 )
+                blocked_count += 1
+                continue
             
             # 現在の金額
             if actual.applied_price_sales:
-                hours = Decimal(actual.calc_minutes_billable or actual.calc_minutes_total) / Decimal("60")
+                hours = Decimal(actual.calc_minutes_billable) / Decimal("60")
                 current_total_sales += actual.applied_price_sales * hours
             
             if actual.applied_price_outsource:
-                hours = Decimal(actual.calc_minutes_billable or actual.calc_minutes_total) / Decimal("60")
+                hours = Decimal(actual.calc_minutes_billable) / Decimal("60")
                 current_total_outsource += actual.applied_price_outsource * hours
             
             # 再計算後の見込み金額
@@ -131,7 +134,7 @@ class RecalculationService:
             new_outsource_price = resolve_outsource_price(self.session, actual.assignment, actual.work_date)
             
             # 時間も再計算（簡易版：既存の calc_minutes_billable を使用）
-            hours = Decimal(actual.calc_minutes_billable or actual.calc_minutes_total) / Decimal("60")
+            hours = Decimal(actual.calc_minutes_billable) / Decimal("60")
             
             if new_sales_price:
                 estimated_total_sales += new_sales_price * hours
@@ -167,7 +170,7 @@ class RecalculationService:
         
         仕様参照: 7.4
         - Hard Close済みは再計算対象から除外
-        - 発行済み請求・支払に紐づくactualは原則再計算対象から除外（force=Trueで許可）
+        - 発行済み請求・支払に紐づくactualは強制指定でも再計算対象から除外
         
         Args:
             user_id: 実行ユーザー
@@ -176,11 +179,13 @@ class RecalculationService:
             date_from: 開始日
             date_to: 終了日
             worker_id: 稼働者ID
-            force: 強制実行（発行済みも再計算）
+            force: 呼び出し互換のため保持。確定済み実績の変更は許可しない
         
         Returns:
             RecalcResult
         """
+        # 帳票の発行・承認・締めと同じロックで直列化し、待機後の値を取得する。
+        lock_all_projects(self.session)
         # 対象のActualを取得
         actuals = self._fetch_target_actuals(
             project_id=project_id,
@@ -208,12 +213,12 @@ class RecalculationService:
                     continue
                 
                 # 発行済み請求・支払チェック
-                if not force and self._is_in_issued_invoice_or_payout(actual):
+                if self._is_in_issued_invoice_or_payout(actual):
                     skipped_count += 1
                     continue
                 
                 # 現在の金額を記録
-                hours = Decimal(actual.calc_minutes_billable or actual.calc_minutes_total) / Decimal("60")
+                hours = Decimal(actual.calc_minutes_billable) / Decimal("60")
                 if actual.applied_price_sales:
                     total_sales_before += actual.applied_price_sales * hours
                 if actual.applied_price_outsource:
@@ -260,7 +265,7 @@ class RecalculationService:
                 actual.applied_price_outsource = new_outsource_price
                 
                 # 新しい金額を記録
-                hours = Decimal(actual.calc_minutes_billable or actual.calc_minutes_total) / Decimal("60")
+                hours = Decimal(actual.calc_minutes_billable) / Decimal("60")
                 if new_sales_price:
                     total_sales_after += new_sales_price * hours
                 if new_outsource_price:
@@ -281,6 +286,7 @@ class RecalculationService:
             user_id=user_id,
             extra_metadata={
                 "action": "recalculate",
+                "force_requested": force,
                 "project_id": project_id,
                 "period_key": period_key,
                 "date_from": str(date_from) if date_from else None,
@@ -353,7 +359,7 @@ class RecalculationService:
         if worker_id:
             stmt = stmt.where(Actual.worker_id == worker_id)
         
-        return list(self.session.execute(stmt).scalars().all())
+        return list(self.session.execute(stmt.execution_options(populate_existing=True)).scalars().all())
     
     def _is_hard_closed(self, actual: Actual) -> bool:
         """

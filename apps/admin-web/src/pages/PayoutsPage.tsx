@@ -1,3 +1,6 @@
+import { FormDialog } from "../components/FormDialog";
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -17,6 +20,9 @@ import type { PayoutListItem } from "../types/api";
 const PAGE_SIZE = 20;
 
 export function PayoutsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
+  const { user } = useAuth();
+  const canGenerate = hasPermission(user, "payout_generate");
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [recipientType, setRecipientType] = useState("");
   const [status, setStatus] = useState("");
@@ -116,6 +122,7 @@ export function PayoutsPage() {
         periodKey,
       }),
     onSuccess: () => {
+      setCreateOpen(false);
       setGenError("");
       void queryClient.invalidateQueries({ queryKey: ["payouts"] });
     },
@@ -261,7 +268,9 @@ export function PayoutsPage() {
       <PageHeader title="支払一覧" description="支払明細の相手先、版、承認・支払日時を参照します。" />
 
       {/* 支払明細生成フォーム */}
-      <section className="card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+      {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>支払明細を生成</button></div>)}
+<FormDialog open={canGenerate && createOpen} title="支払明細を生成" onClose={() => setCreateOpen(false)} busy={generateMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
         <strong style={{ width: "100%" }}>支払明細を生成</strong>
         <label>
           案件
@@ -307,7 +316,7 @@ export function PayoutsPage() {
           対象月
           <input type="month" value={monthValue} onChange={(e) => { setMonthValue(e.target.value); setPage(0); }} />
         </label>
-        <button
+        <button className="primary-button create-button"
           onClick={() => generateMutation.mutate()}
           disabled={(!genProjectId && generationRequiresProject) || !genRecipientId || !generationRecipientTypeSupported || generateMutation.isPending}
         >
@@ -318,6 +327,7 @@ export function PayoutsPage() {
         {genError && <span style={{ color: "var(--color-danger, red)", fontSize: "0.875rem" }}>{genError}</span>}
         {generateMutation.isSuccess && <span style={{ color: "green", fontSize: "0.875rem" }}>生成しました</span>}
       </section>
+</FormDialog>
 
       {actionError ? <p style={{ margin: 0, color: "var(--color-danger, #b42318)" }}>{actionError}</p> : null}
       {actionMessage ? <p style={{ margin: 0, color: "var(--color-success, #067647)" }}>{actionMessage}</p> : null}

@@ -10,6 +10,7 @@
 htmlcov/
 
 # Environment files（中身は読まない。雛形の .env.example / .env.template は対象外）
+line-registration-config.json
 .env
 .env.bak
 .env.*.local
@@ -39,6 +40,8 @@ apps/staff-mobile/.vite/
 apps/staff-mobile/*.tsbuildinfo
 playwright-report/
 test-results/
+artifacts/
+.test-temp*/
 
 # Editor / OS
 .DS_Store

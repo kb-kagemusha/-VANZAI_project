@@ -86,7 +86,7 @@ export function AccountProfilePage() {
         <span className="account-profile-avatar" aria-hidden="true">{initial}</span>
         <div>
           <h2>{displayedName || "名前未設定"}</h2>
-          <p>{formatRole(user?.role)}</p>
+          <p>{(user?.role_name || formatRole(user?.role))}</p>
           <dl>
             <div>
               <dt>メール</dt>

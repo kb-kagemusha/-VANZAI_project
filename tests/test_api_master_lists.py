@@ -223,7 +223,8 @@ def test_worker_intake_profile_round_trip(api_client, db_session):
 
     created = api_client.post(
         "/api/workers",
-        json={"name": "Profile Worker", "is_active": True, "profile": profile},
+        json={"name": "Profile Worker", "is_active": True, "profile": profile,
+              "emergency_contact_phone": "09000002222", "emergency_contact_name": "山田 花子", "emergency_contact_relationship": "実母"},
         headers=headers,
     )
     assert created.status_code == 200

@@ -9,6 +9,11 @@ import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
+import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
+import { OrderLocationEditor } from "../components/OrderLocationEditor";
+import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
+import { emptySchedule, newWorkGroup, scheduleDateLabel, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
   addOrderRequestNote,
@@ -19,6 +24,7 @@ import {
   fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
   getWorkers,
+  getWorkerTags,
   hideOrderRequest,
   listLineLinks,
   listOrderRequestReplies,
@@ -67,6 +73,21 @@ const SEND_LABEL: Record<string, string> = {
   unknown: "結果不明",
 };
 
+const MAX_ORDER_RECIPIENTS = 40;
+
+async function loadOrderRecipients() {
+  const first = await getWorkers({ limit: 200, offset: 0, is_active: true, sort_by: "name", sort_order: "asc" });
+  const items = [...first.items];
+  let offset = first.items.length;
+  while (offset < first.total) {
+    const page = await getWorkers({ limit: 200, offset, is_active: true, sort_by: "name", sort_order: "asc" });
+    if (!page.items.length) break;
+    items.push(...page.items);
+    offset += page.items.length;
+  }
+  return { ...first, items: [...new Map(items.map((item) => [item.id, item])).values()] };
+}
+
 const REPLY_LABEL: Record<string, string> = {
   unacked: "未回答",
   acked: "受諾",
@@ -107,6 +128,7 @@ function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink)
 }
 
 const EMPTY_FORM: OrderRequestWrite = {
+  internal_source: null,
   kind: "formal",
   work_date_label: "",
   site_id: null,
@@ -143,6 +165,7 @@ export function OrderRequestsPage() {
   const [form, setForm] = useState<OrderRequestWrite>(EMPTY_FORM);
   const [sections, setSections] = useState<OrderDocumentSections>(EMPTY_ORDER_SECTIONS);
   const [workerSearch, setWorkerSearch] = useState("");
+  const [workerRoleFilters, setWorkerRoleFilters] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
@@ -176,8 +199,10 @@ export function OrderRequestsPage() {
   });
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
-    queryFn: () => getWorkers({ limit: 200, is_active: true, sort_by: "name", sort_order: "asc" }),
+    queryFn: loadOrderRecipients,
   });
+  const workerRolesQuery = useQuery({ queryKey: ["worker-tags"], queryFn: getWorkerTags });
+  const workerRoles = workerRolesQuery.data?.items ?? [];
   const detailQuery = useQuery({
     queryKey: ["order-request", selectedId],
     queryFn: () => getOrderRequestVersion(selectedId as string),
@@ -186,10 +211,14 @@ export function OrderRequestsPage() {
 
   const workers = workersQuery.data?.items ?? [];
   const visibleWorkers = useMemo(() => {
-    const query = workerSearch.trim();
-    if (!query) return workers;
-    return workers.filter((worker) => worker.name.includes(query) || (worker.furigana ?? "").includes(query));
-  }, [workerSearch, workers]);
+    const query = workerSearch.trim().toLocaleLowerCase();
+    return workers.filter((worker) => {
+      if (!matchesWorkerRoles(worker.tags ?? [], workerRoleFilters)) return false;
+      if (!query) return true;
+      const roles = (worker.tags ?? []).map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join(" ");
+      return [worker.name, worker.furigana ?? "", roles].some((text) => text.toLocaleLowerCase().includes(query));
+    });
+  }, [workerSearch, workerRoleFilters, workerRoles, workers]);
   const selectedWorkers = workers.filter((worker) => form.worker_ids.includes(worker.id));
 
   const detail = creating ? null : detailQuery.data;
@@ -197,6 +226,7 @@ export function OrderRequestsPage() {
 
   function formFromVersion(version: OrderRequestVersion): OrderRequestWrite {
     return {
+      internal_source: version.internal_source ?? null,
       kind: version.kind,
       work_date_label: version.work_date_label,
       site_id: version.site_id,
@@ -223,12 +253,14 @@ export function OrderRequestsPage() {
     const phoneNote = current.phone_note?.trim() ? current.phone_note : null;
     return {
       ...current,
+      internal_source: current.internal_source ? { client_id: current.internal_source.client_id, client_staff_id: current.internal_source.client_staff_id } : null,
       request_conditions: serializeOrderSections(currentSections),
-      body: composeOrderDocument(currentSections, current.work_date_label, current.site_name),
+      body: composeOrderDocument(currentSections, current.work_date_label, current.site_name, current.site_address ?? ""),
       contact_desk: "",
       counterparty_note: current.counterparty_note || null,
       phone_first: Boolean(current.phone_first),
-      assign_tracker_self: Boolean(current.assign_tracker_self),
+      assign_tracker_self: undefined,
+      tracker_user_id: undefined,
       phone_note: phoneNote,
       site_address: current.site_address || null,
       follow_up_due_on: current.follow_up_due_on || null,
@@ -316,21 +348,39 @@ export function OrderRequestsPage() {
   const previewProjectCut = `案件名: ${withFullwidthTilde(sections.projectName)}`.length > 80;
   const previewDateCut = `稼働日: ${withFullwidthTilde(form.work_date_label)}`.length > 80;
   const previewSiteCut = `現場: ${withFullwidthTilde(form.site_name)}`.length > 80;
-  const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name);
+  const previewDocument = composeOrderDocument(sections, form.work_date_label, form.site_name, form.site_address ?? "");
   const pdfNotice = !creating && detail?.status === "cancelled"
     ? "cancel"
     : (basedOn || detail?.based_on_document_number)
       ? "change"
       : "new";
   const parsedWorkDates = parseWorkDateRange(form.work_date_label);
-  const workDateFrom = parsedWorkDates?.from ?? "";
-  const workDateTo = parsedWorkDates?.to ?? "";
-  const legacyWorkDate = parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
+  const storedWorkDates = sections.schedule?.work_groups.flatMap((group) => [group.from, group.to]).filter(Boolean).sort() ?? [];
+  const workDateFrom = sections.workPeriod?.from ?? parsedWorkDates?.from ?? storedWorkDates[0] ?? "";
+  const workDateTo = sections.workPeriod?.to ?? parsedWorkDates?.to ?? storedWorkDates[storedWorkDates.length - 1] ?? "";
+  const legacyWorkDate = sections.workPeriod || parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
 
   function setWorkDateBound(bound: "from" | "to", value: string) {
     const from = bound === "from" ? value : workDateFrom;
     const to = bound === "to" ? value : workDateTo;
+    setSections({ ...sections, workPeriod: { from, to } });
     setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
+  }
+  function changeSchedule(schedule: OrderSchedule) {
+    const next = syncSchedule(schedule);
+    setSections({ ...sections, schedule: next });
+  }
+  async function enableSchedule() {
+    const accepted = await confirmApp({ title: "日付・期間ごとの入力", message: "勤務時間・単価を日付別の入力に切り替えます。既存の文面は参考として残し、依頼書は新しい日付別の入力から作成します。", confirmLabel: "切り替える" });
+    if (!accepted) return;
+    const first = newWorkGroup();
+    if (parsedWorkDates?.from) {
+      first.from = parsedWorkDates.from;
+      first.to = parsedWorkDates.to || first.from;
+      first.date_mode = parsedWorkDates.to ? "range" : "single";
+    }
+    setSections({ ...sections, previousHours: sections.hours, previousFee: sections.fee, schedule: syncSchedule({ ...emptySchedule(), work_groups: [first] }) });
+    setForm({ ...form, work_date_label: scheduleDateLabel({ ...emptySchedule(), work_groups: [first] }) });
   }
   const previewPdfBody = previewDocument.startsWith(ORDER_DOCUMENT_TITLE)
     ? previewDocument.slice(ORDER_DOCUMENT_TITLE.length).replace(/^\n+/, "")
@@ -358,13 +408,15 @@ export function OrderRequestsPage() {
   function startNewDraft() {
     loadedForRef.current = null;
     formRef.current = EMPTY_FORM;
-    sectionsRef.current = EMPTY_ORDER_SECTIONS;
+    const initialSections = { ...EMPTY_ORDER_SECTIONS, workPeriod: { from: "", to: "" }, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
+    sectionsRef.current = initialSections;
     setCreating(true);
     setBasedOn(null);
     setSelectedId(null);
     setForm(EMPTY_FORM);
-    setSections(EMPTY_ORDER_SECTIONS);
+    setSections(initialSections);
     setWorkerSearch("");
+    setWorkerRoleFilters([]);
     setActionError("");
     setActionMessage("");
     setReason("");
@@ -584,7 +636,7 @@ export function OrderRequestsPage() {
     if (!form.contact_name.trim()) missing.push("担当者");
     if (!form.follow_up_due_on) missing.push("期限の案内");
     if (form.worker_ids.length === 0) missing.push("送付先");
-    if (form.worker_ids.length > 30) missing.push("送付先は30人まで");
+    if (form.worker_ids.length > MAX_ORDER_RECIPIENTS) missing.push(`送付先は${MAX_ORDER_RECIPIENTS}人まで`);
     return missing;
   }
 
@@ -703,7 +755,7 @@ export function OrderRequestsPage() {
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
         titleAction={(
-          <button type="button" className="btn btn-primary" onClick={startNewDraft}>
+          <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>
             新規の依頼書を作成
           </button>
         )}
@@ -762,7 +814,7 @@ export function OrderRequestsPage() {
                       {(row.change_documents ?? []).length > 0 ? null : (
                         <button
                           type="button"
-                          className="btn btn-change btn-sm"
+                          className="btn btn-change btn-sm create-button"
                           disabled={changeLoading}
                           onClick={() => startChange(row.version_id)}
                         >
@@ -826,7 +878,6 @@ export function OrderRequestsPage() {
               <th>現場</th>
               <th>日付</th>
               <th>作成者</th>
-              <th>追跡</th>
               <th>送付先</th>
               <th>期限</th>
               <th>変更</th>
@@ -856,7 +907,6 @@ export function OrderRequestsPage() {
                 <td className="order-cell-multiline">{siteLabelForList(item.site_name)}</td>
                 <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
-                <td>{item.tracker_name ?? "—"}</td>
                 <td>{item.recipient_count}</td>
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
@@ -864,7 +914,7 @@ export function OrderRequestsPage() {
                     {(item.change_documents ?? []).length > 0 ? null : (
                       <button
                         type="button"
-                        className="btn btn-change btn-sm"
+                        className="btn btn-change btn-sm create-button"
                         disabled={changeLoading}
                         onClick={() => startChange(item.version_id)}
                       >
@@ -973,7 +1023,7 @@ export function OrderRequestsPage() {
               {!creating && detail ? (
                 <button
                   type="button"
-                  className="btn btn-change btn-sm"
+                  className="btn btn-change btn-sm create-button"
                   disabled={changeLoading}
                   onClick={() => startChange(detail.id)}
                 >
@@ -1017,6 +1067,7 @@ export function OrderRequestsPage() {
               </div>
             </section>
 
+            <OrderInternalSourceEditor value={form.internal_source ?? null} disabled={!editable} onChange={(internal_source) => setForm({ ...form, internal_source })} />
             <section className="order-draft-section">
               <h4>追加案件依頼</h4>
               <div className="order-document">
@@ -1041,17 +1092,18 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, background: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  <label className="order-field order-span-6">
                     <span className="order-field-label">稼働場所</span>
                     <textarea
                       className="is-short is-site"
                       value={form.site_name}
                       disabled={!editable}
                       placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
-                      onChange={(event) => setForm({ ...form, site_name: withFullwidthTilde(event.target.value) })}
+                      onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
                     />
                   </label>
-                  <div className="order-field order-span-4">
+                  <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
+                  <div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <input
@@ -1065,6 +1117,7 @@ export function OrderRequestsPage() {
                       <input
                         type="date"
                         aria-label="稼働日の終了"
+                        min={workDateFrom || undefined}
                         value={workDateTo}
                         disabled={!editable}
                         onChange={(event) => setWorkDateBound("to", event.target.value)}
@@ -1081,8 +1134,8 @@ export function OrderRequestsPage() {
                       </span>
                     ) : null}
                   </div>
-                  <label className="order-field order-span-4">
-                    <span className="order-field-label">稼働日の詳細</span>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">稼働日の補足（全体）</span>
                     <textarea
                       className="is-short"
                       value={sections.workDateDetail}
@@ -1091,7 +1144,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, workDateDetail: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  {!sections.schedule && <label className="order-field order-span-4">
                     <span className="order-field-label">稼働時間</span>
                     <textarea
                       className="is-tall"
@@ -1100,7 +1153,9 @@ export function OrderRequestsPage() {
                       placeholder={"10/9(金)　※初日30分前集合\n　8:30　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散\n\n10/10(土)～10/13(火)\n　9:00　集合・準備\n　10:00～18:00　実施\n　19:00　片付け・解散"}
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
-                  </label>
+                  </label>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button></div>}
+                  {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
                     <textarea
@@ -1117,7 +1172,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, belongings: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-4">
+                  {!sections.schedule && <label className="order-field order-span-4">
                     <span className="order-field-label">単価</span>
                     <textarea
                       className="is-tall"
@@ -1126,7 +1181,7 @@ export function OrderRequestsPage() {
                       placeholder={"10/9(金)\n報酬：¥20,500(税抜)\n　(昼食代、交通費込み)\n\n10/10(土)～10/13(火)\n報酬：¥19,500(税抜)\n　(昼食代、交通費込み)"}
                       onChange={(event) => setSections({ ...sections, fee: withFullwidthTilde(event.target.value) })}
                     />
-                  </label>
+                  </label>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">インセンティブ</span>
                     <textarea
@@ -1154,7 +1209,7 @@ export function OrderRequestsPage() {
               <h4>連絡先</h4>
               <div className="order-draft-grid">
                 <label className="order-field order-field-top order-span-4">
-                  <span className="order-field-label">担当者</span>
+                  <span className="order-field-label">運営側の連絡担当者</span>
                   <input
                     value={form.contact_name}
                     disabled={!editable}
@@ -1239,26 +1294,8 @@ export function OrderRequestsPage() {
                     <span className="order-choice-hint">電話しただけでは、送付済み・受領済みにはしません。</span>
                   </span>
                 </label>
-                <label className={`order-choice${form.assign_tracker_self ? " is-on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.assign_tracker_self}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      const assignTrackerSelf = event.target.checked;
-                      setForm((current) => {
-                        const next = { ...current, assign_tracker_self: assignTrackerSelf };
-                        formRef.current = next;
-                        return next;
-                      });
-                    }}
-                  />
-                  <span>
-                    <span className="order-choice-title">追跡担当は自分</span>
-                    <span className="order-choice-hint">保存すると、追跡担当が自分になります。</span>
-                  </span>
-                </label>
               </div>
+              <p className="order-field-hint">依頼書の作成者と管理ロールを持つ担当者が、送付・回答状況を確認します。</p>
             </section>
 
             <section className="order-draft-section">
@@ -1266,20 +1303,35 @@ export function OrderRequestsPage() {
                 <div className="order-recipients-head">
                   <div>
                     <h4>送付先</h4>
-                    <p>最大30人まで選べます。</p>
+                    <p>最大{MAX_ORDER_RECIPIENTS}人まで選べます。</p>
                   </div>
-                  <span className={`order-count${form.worker_ids.length > 30 ? " is-over" : ""}`}>
-                    {form.worker_ids.length} / 30
+                  <span className={`order-count${form.worker_ids.length > MAX_ORDER_RECIPIENTS ? " is-over" : ""}`}>
+                    {form.worker_ids.length} / {MAX_ORDER_RECIPIENTS}
                   </span>
                 </div>
                 <div className="order-recipients-search">
+                  <label className="order-field">氏名・付与ロールで検索
                   <input
-                    placeholder="氏名で絞り込み"
+                    placeholder="氏名・商業Dなどで絞り込み"
                     value={workerSearch}
                     disabled={!editable}
                     onChange={(event) => setWorkerSearch(event.target.value)}
                   />
+                  </label>
                 </div>
+                <fieldset className="order-role-filters" disabled={!editable || workerRolesQuery.isLoading}>
+                  <legend>付与ロールで絞り込み</legend>
+                  <p className="order-field-hint">複数選択できます。選んだいずれかのロールを持つ人を表示します。未選択なら全員を表示します。</p>
+                  <p className="order-field-hint">イベントDは対応できる最大規模です。小型を選ぶと小型・中型・大型、中型を選ぶと中型・大型、大型を選ぶと大型のロールを持つ人を表示します。</p>
+                  <div className="order-role-options">
+                    {workerRoles.map((role) => <label key={role.code} className={`order-role-option${workerRoleFilters.includes(role.code) ? " is-on" : ""}`}>
+                      <input type="checkbox" checked={workerRoleFilters.includes(role.code)} onChange={(event) => setWorkerRoleFilters((current) => event.target.checked ? [...current, role.code] : current.filter((code) => code !== role.code))} />
+                      {role.label}
+                    </label>)}
+                  </div>
+                  {workerRoleFilters.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => setWorkerRoleFilters([])}>ロールの絞り込みを解除</button>}
+                </fieldset>
+                {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
                 {selectedWorkers.length > 0 ? (
                   <div className="order-recipient-picks">
                     {selectedWorkers.map((worker) => (
@@ -1298,7 +1350,7 @@ export function OrderRequestsPage() {
                       <input
                         type="checkbox"
                         checked={form.worker_ids.includes(worker.id)}
-                        disabled={!editable}
+                        disabled={!editable || (!form.worker_ids.includes(worker.id) && form.worker_ids.length >= MAX_ORDER_RECIPIENTS)}
                         onChange={(event) => {
                           const next = event.target.checked
                             ? [...form.worker_ids, worker.id]
@@ -1306,7 +1358,7 @@ export function OrderRequestsPage() {
                           setForm({ ...form, worker_ids: next });
                         }}
                       />
-                      <span>{worker.name}</span>
+                      <span>{worker.name}{(worker.tags ?? []).length > 0 && <small className="order-recipient-roles">{worker.tags!.map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join("・")}</small>}</span>
                     </label>
                   ))}
                   {visibleWorkers.length === 0 ? (

@@ -182,6 +182,35 @@ class LineOrderService:
         )
         return rows
 
+    def refresh_profile(self, *, actor: User, worker_id: str) -> LineWorkerLink:
+        self._active_worker(worker_id)
+        link = self._active_link_for_worker(worker_id)
+        if link is None:
+            raise OrderRequestError(404, "有効なLINE紐付けがありません")
+        expected_id, expected_subject = link.id, link.line_user_id
+        try:
+            display_name = self.client.profile_name(expected_subject)
+        except Exception:
+            display_name = None
+        if not display_name:
+            raise OrderRequestError(502, "LINE表示名を取得できませんでした。時間をおいて再度更新してください。")
+        lock_worker_row(self.session, worker_id)
+        lock_link_rows(self.session, line_user_id=expected_subject, worker_id=worker_id)
+        self.session.expire_all()
+        self._active_worker(worker_id)
+        current = self._active_link_for_worker(worker_id)
+        if current is None or current.id != expected_id or current.line_user_id != expected_subject:
+            raise OrderRequestError(409, "LINEの紐付けが変わったため、表示名を保存しませんでした。最新の一覧を読み込んでください。")
+        changed = current.line_display_name != display_name
+        current.line_display_name = display_name
+        self.audit.log(
+            "line_profile_refreshed", target_type="line_worker_link", target_id=current.id,
+            actor=actor.username, actor_role=actor.role,
+            after_value={"worker_id": worker_id, "profile_obtained": True, "changed": changed},
+        )
+        self.session.flush()
+        return current
+
     def revoke_link(self, *, actor: User, worker_id: str, reason: str) -> LineWorkerLink:
         cleaned = reason.strip()
         if not cleaned:
@@ -368,6 +397,10 @@ class LineOrderService:
         elif event_type == "postback":
             outcome, reply = self._handle_postback(event, line_user_id)
             self._reply(reply_token, reply)
+        elif event_type == "unfollow":
+            from src.services.operator_staff import OperatorStaffService
+            OperatorStaffService(self.session).unfollow(line_user_id)
+            outcome = "staff_unfollow"
 
         self.session.add(
             LineWebhookEvent(
@@ -385,6 +418,12 @@ class LineOrderService:
         if message.get("type") != "text" or not isinstance(message.get("text"), str):
             return "ignored", None
         normalized = normalize_link_code(message["text"])
+        if normalized.startswith("OPS-"):
+            source = event.get("source") if isinstance(event.get("source"), dict) else {}
+            if source.get("type") != "user":
+                return "staff_rejected", "運営スタッフ用コードは公式LINEとの個別トークから送ってください。"
+            from src.services.operator_staff import OperatorStaffService
+            return OperatorStaffService(self.session).consume_code(normalized, line_user_id, self.client)
         if len(normalized) != CODE_LENGTH or any(char not in CODE_ALPHABET for char in normalized):
             return self._take_decline_reason(line_user_id, message["text"])
         if not line_user_id:

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import os
@@ -163,7 +163,7 @@ async def get_current_user(
     
     # データベースからユーザー取得
     user = db.query(User).filter(User.username == username).first()
-    if user is None:
+    if user is None or user.deleted_at is not None:
         raise credentials_exception
     
     if not user.is_active:
@@ -176,6 +176,7 @@ async def get_current_user(
 
 
 async def get_current_active_user(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ) -> User:
     """
@@ -187,6 +188,8 @@ async def get_current_active_user(
     Returns:
         Userオブジェクト
     """
+    from src.api.access_guard import guard_request
+    guard_request(current_user, request)
     return current_user
 
 
@@ -205,7 +208,7 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return None
-    if not user.is_active:
+    if not user.is_active or user.deleted_at is not None:
         return None
     if not user.hashed_password:
         return None

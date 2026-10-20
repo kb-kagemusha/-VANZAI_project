@@ -1,3 +1,5 @@
+import { FormDialog } from "../components/FormDialog";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -52,6 +54,7 @@ function formatUnitType(unitType: string): string {
 }
 
 export function PriceManagementPage() {
+  const [editorOpen, setEditorOpen] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [priceView, setPriceView] = useState<PriceView>("sales");
@@ -172,25 +175,25 @@ export function PriceManagementPage() {
   const projectsQuery = useQuery({
     queryKey: ["price-form-projects"],
     queryFn: () => getProjects({ limit: 200, sort_by: "name", sort_order: "asc" }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "price_write"),
   });
 
   const clientsQuery = useQuery({
     queryKey: ["price-form-clients"],
     queryFn: () => getClients({ limit: 200, sort_by: "name", sort_order: "asc" }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "price_write"),
   });
 
   const workersQuery = useQuery({
     queryKey: ["price-form-workers"],
     queryFn: () => getWorkers({ limit: 200, sort_by: "name", sort_order: "asc", is_active: true }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "price_write"),
   });
 
   const rolesQuery = useQuery({
     queryKey: ["price-form-roles"],
     queryFn: () => getRoles({ limit: 200, sort_by: "name", sort_order: "asc" }),
-    enabled: user?.role === "admin",
+    enabled: hasPermission(user, "price_write"),
   });
 
   const activeQuery = priceView === "sales" ? salesQuery : priceView === "outsource" ? outsourceQuery : rulesQuery;
@@ -206,6 +209,7 @@ export function PriceManagementPage() {
       return variables.mode === "create" ? createPriceRule(variables.body) : updatePriceRule(variables.id, variables.body);
     },
     onSuccess: async (_, variables) => {
+      setEditorOpen(false);
       setFormError("");
       setFormMessage(variables.mode === "create" ? "単価を作成しました" : "単価を更新しました");
       if (variables.view === "sales") {
@@ -227,6 +231,7 @@ export function PriceManagementPage() {
   });
 
   function openSalesEditor(row: PriceSalesListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedSales(row);
@@ -242,6 +247,7 @@ export function PriceManagementPage() {
   }
 
   function openOutsourceEditor(row: PriceOutsourceListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedOutsource(row);
@@ -257,6 +263,7 @@ export function PriceManagementPage() {
   }
 
   function openRuleEditor(row: PriceRuleListItem) {
+    setEditorOpen(true);
     clearSelection();
     clearStatus();
     setSelectedRule(row);
@@ -383,8 +390,10 @@ export function PriceManagementPage() {
         </div>
       </section>
 
-      {user?.role === "admin" ? (
-        <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      {hasPermission(user, "price_write") ? (<>
+        <div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { resetCurrentForm(); setEditorOpen(true); }}>単価を新規作成</button></div>
+<FormDialog open={editorOpen} title="単価の作成・編集" onClose={() => setEditorOpen(false)} busy={saveMutation.isPending}>
+<section className="card" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
           <strong>{selectedSales || selectedOutsource || selectedRule ? "単価を編集" : "単価を追加"}</strong>
 
           {priceView === "sales" ? (
@@ -549,7 +558,7 @@ export function PriceManagementPage() {
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <button
               type="button"
-              className="primary-button"
+              className={selectedSales || selectedOutsource || selectedRule ? "primary-button" : "primary-button create-button"}
               onClick={saveCurrentPrice}
               disabled={saveMutation.isPending || (priceView === "rules" ? !ruleName.trim() : priceView === "sales" ? !salesUnitPrice.trim() : !outUnitPrice.trim())}
             >
@@ -558,7 +567,8 @@ export function PriceManagementPage() {
             <button type="button" className="price-reset-button" onClick={resetCurrentForm}>入力をクリア</button>
           </div>
         </section>
-      ) : null}
+</FormDialog>
+      </>) : null}
 
       <FilterBar>
         {priceView === "rules" ? (
@@ -628,7 +638,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "default", header: "適用", render: (row) => (row.is_default ? "既定" : "個別") },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openSalesEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "price_write") ? <button type="button" className="price-edit-button" onClick={() => openSalesEditor(row)}>編集</button> : "—" },
           ]}
           rows={salesQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -648,7 +658,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "default", header: "適用", render: (row) => (row.is_default ? "既定" : "個別") },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openOutsourceEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "price_write") ? <button type="button" className="price-edit-button" onClick={() => openOutsourceEditor(row)}>編集</button> : "—" },
           ]}
           rows={outsourceQuery.data?.items ?? []}
           getRowKey={(row) => row.id}
@@ -667,7 +677,7 @@ export function PriceManagementPage() {
             { key: "validFrom", header: "開始日", render: (row) => formatDate(row.valid_from) },
             { key: "validTo", header: "終了日", render: (row) => formatDate(row.valid_to) },
             { key: "status", header: "状態", render: (row) => <StatusBadge value={row.is_active ? "active" : "inactive"} /> },
-            { key: "actions", header: "操作", render: (row) => user?.role === "admin" ? <button type="button" className="price-edit-button" onClick={() => openRuleEditor(row)}>編集</button> : "—" },
+            { key: "actions", header: "操作", render: (row) => hasPermission(user, "price_write") ? <button type="button" className="price-edit-button" onClick={() => openRuleEditor(row)}>編集</button> : "—" },
           ]}
           rows={rulesQuery.data?.items ?? []}
           getRowKey={(row) => row.id}

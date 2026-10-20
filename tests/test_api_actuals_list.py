@@ -124,7 +124,7 @@ def test_list_actuals_returns_paginated_items(api_client, db_session, project, w
     assert payload["items"][0]["import_batch_file_name"] == "actuals.csv"
 
 
-def test_list_actuals_restricts_site_manager_scope(api_client, db_session, project, worker, role):
+def test_list_actuals_allows_site_manager_all_projects(api_client, db_session, project, worker, role):
     project.primary_manager_id = worker.id
     db_session.add(project)
     db_session.flush()
@@ -166,8 +166,14 @@ def test_list_actuals_restricts_site_manager_scope(api_client, db_session, proje
         headers=_auth_header(site_manager.username),
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Project access denied"
+    all_rows = api_client.get("/api/actuals", headers=_auth_header(site_manager.username))
+    assert all_rows.status_code == 200
+    assert all_rows.json()["total"] == 1
+    assert all_rows.json()["items"][0]["applied_price_sales"] is None
+    assert all_rows.json()["items"][0]["applied_price_outsource"] is None
+    # DEC-056: site managers may read every project.
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
 
 
 def test_worker_can_check_in_and_out_assignment(api_client, db_session, assignment, project, worker, role):

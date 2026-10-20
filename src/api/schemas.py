@@ -7,6 +7,7 @@ from typing import Generic, List, Literal, Optional, TypeVar
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from decimal import Decimal
 
+from src.domain.worker_stations import WorkerStation
 from src.services.ocr.parsers.settlement_terminal_id import normalize_settlement_terminal_short_id
 
 DEFAULT_PAGE_LIMIT = 50
@@ -173,8 +174,8 @@ class ActualListItem(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     calc_minutes_billable: int
-    applied_price_sales: Decimal
-    applied_price_outsource: Decimal
+    applied_price_sales: Optional[Decimal]
+    applied_price_outsource: Optional[Decimal]
     status: str
     needs_review: bool
     review_reason: Optional[str] = None
@@ -965,6 +966,7 @@ class WorkerProfileInput(BaseModel):
     hometown: Optional[str] = Field(None, max_length=100)
     nearest_station: Optional[str] = Field(None, max_length=100)
     station_walk_minutes: Optional[int] = Field(None, ge=0, le=300)
+    additional_stations: list[WorkerStation] | None = None
     final_education: Optional[str] = Field(None, max_length=200)
     licenses_qualifications: Optional[str] = Field(None, max_length=2000)
     car_drive_ok: Optional[bool] = None
@@ -1108,6 +1110,8 @@ class WorkerListItem(BaseModel):
     sole_proprietor_name: Optional[str] = None
     emergency_contact_name_kana: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
     gender: Optional[str] = None
     invoice_registration_status: Optional[str] = None
     invoice_number: Optional[str] = None
@@ -1153,6 +1157,8 @@ class WorkerCreateRequest(BaseModel):
     sole_proprietor_name: Optional[str] = Field(None, max_length=200)
     emergency_contact_name_kana: Optional[str] = Field(None, max_length=200)
     emergency_contact_phone: Optional[str] = Field(None, max_length=20)
+    emergency_contact_name: Optional[str] = Field(None, max_length=200)
+    emergency_contact_relationship: Optional[str] = Field(None, max_length=50)
     gender: Optional[str] = Field(None, max_length=20)
     invoice_registration_status: Optional[str] = Field(None, max_length=30)
     invoice_number: Optional[str] = Field(None, max_length=20)
@@ -1169,6 +1175,15 @@ class WorkerCreateRequest(BaseModel):
     license_type: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     profile: Optional[WorkerProfileInput] = None
+
+    @field_validator("emergency_contact_phone")
+    @classmethod
+    def validate_emergency_phone(cls, value: str | None) -> str | None:
+        import re
+        cleaned = (value or "").strip()
+        if cleaned and not re.fullmatch(r"[0-9+\-]{1,20}", cleaned):
+            raise ValueError("緊急連絡先の電話番号は半角数字・ハイフン・+で入力してください")
+        return cleaned or None
 
     @field_validator("tags")
     @classmethod
@@ -1250,6 +1265,16 @@ class ClientListQuery(PaginationQuery, SortQuery):
     search: Optional[str] = Field(None, max_length=100)
 
 
+class ClientContactListItem(BaseModel):
+    """一覧で担当者ごとの連絡先を表示するための情報。"""
+    id: str
+    name: str
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    is_active: bool = True
+
+
 class ClientListItem(BaseModel):
     """クライアント一覧の1行"""
     id: str
@@ -1258,11 +1283,30 @@ class ClientListItem(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[str] = None
     billing_email: Optional[str] = None
+    phone: Optional[str] = None
+    postal_code: Optional[str] = None
+    notes: Optional[str] = None
+    address: Optional[str] = None
+    contacts: List[ClientContactListItem] = Field(default_factory=list)
 
 
 class ClientListResponse(PageResponse[ClientListItem]):
     """クライアント一覧レスポンス"""
     pass
+
+
+class ClientContactCreate(BaseModel):
+    role: Optional[str] = Field(None, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("担当者名を入力してください")
+        return value.strip()
 
 
 class ClientCreateRequest(BaseModel):
@@ -1273,6 +1317,17 @@ class ClientCreateRequest(BaseModel):
     contact_name: Optional[str] = Field(None, max_length=100)
     contact_email: Optional[str] = Field(None, max_length=255)
     billing_email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    postal_code: Optional[str] = Field(None, pattern=r"^[0-9]{7}$")
+    notes: Optional[str] = None
+    contacts: List[ClientContactCreate] = Field(default_factory=list, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("クライアント名を入力してください")
+        return value.strip()
 
 
 class SiteListQuery(PaginationQuery, SortQuery):
@@ -1354,6 +1409,7 @@ class RegistrationRequestListQuery(PaginationQuery, SortQuery):
     request_type: Optional[str] = None
     status: Optional[str] = None
     source_type: Optional[str] = None
+    line_only: bool = False
     search: Optional[str] = Field(None, max_length=100)
 
 
@@ -1602,6 +1658,8 @@ class RoleListItem(BaseModel):
     """役割一覧の1行"""
     id: str
     name: str
+    code: Optional[str] = None
+    description: Optional[str] = None
 
 
 # ===========================
@@ -1940,7 +1998,7 @@ class HardCloseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: Optional[str] = Field(None, description="締め理由")
 
 
@@ -1949,7 +2007,7 @@ class SoftCloseReleaseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: str = Field(..., min_length=1, description="解除理由")
 
 
@@ -1958,7 +2016,7 @@ class HardCloseReleaseRequest(BaseModel):
     project_id: str
     period_key: str = Field(..., pattern=r"^\d{6}$")
     actor: Optional[str] = Field(None, description="実行者")
-    approver: str = Field(..., description="承認者")
+    approver: Optional[str] = Field(None, description="旧画面互換。承認は別ログインの承認操作で行う")
     reason: str = Field(..., min_length=1, description="解除理由")
 
 
@@ -2097,6 +2155,13 @@ class ClientStaffCreateRequest(BaseModel):
     email: Optional[str] = Field(None, max_length=255)
     is_active: bool = True
     notes: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("担当者名を入力してください")
+        return value.strip()
 
 
 class ClientStaffUpdateRequest(ClientStaffCreateRequest):

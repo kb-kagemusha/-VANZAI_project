@@ -68,6 +68,8 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     sole_proprietor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(50), nullable=True)
     gender: Mapped[str | None] = mapped_column(String(20), nullable=True)
     invoice_registration_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     invoice_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -101,6 +103,7 @@ class Worker(Base, TimestampMixin, SoftDeleteMixin):
     hometown: Mapped[str | None] = mapped_column(String(100), nullable=True)
     nearest_station: Mapped[str | None] = mapped_column(String(100), nullable=True)
     station_walk_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    additional_stations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     final_education: Mapped[str | None] = mapped_column(String(200), nullable=True)
     licenses_qualifications: Mapped[str | None] = mapped_column(Text, nullable=True)
     car_drive_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
@@ -260,10 +263,12 @@ class Client(Base, TimestampMixin, SoftDeleteMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(7), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
@@ -316,10 +321,18 @@ class VanzaiStaff(Base, TimestampMixin, SoftDeleteMixin):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    can_drive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    smoking_area_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    management_roles: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    profile_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     linked_worker: Mapped["Worker"] = relationship(foreign_keys=[linked_worker_id])
 
     __table_args__ = (
+        CheckConstraint("profile_revision > 0", name="ck_vanzai_staff_profile_revision"),
         Index("ix_vanzai_staff_is_active", "is_active"),
         Index("ix_vanzai_staff_email", "email"),
         Index("ix_vanzai_staff_linked_worker_id", "linked_worker_id"),
@@ -395,6 +408,9 @@ class RegistrationRequest(Base, TimestampMixin, SoftDeleteMixin):
 class WorkerRegistrationRequestDetail(Base, TimestampMixin):
     """稼働者登録申請の生データ"""
     __tablename__ = "worker_registration_request_details"
+    __table_args__ = (
+        CheckConstraint("station_walk_minutes IS NULL OR (station_walk_minutes >= 0 AND station_walk_minutes <= 300)", name="ck_worker_registration_station_walk"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=generate_ulid
@@ -417,8 +433,14 @@ class WorkerRegistrationRequestDetail(Base, TimestampMixin):
     city_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     building_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nearest_station: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    station_walk_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    additional_stations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     emergency_contact_name_kana: Mapped[str | None] = mapped_column(String(200), nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    line_registration_form_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bank_branch: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bank_branch_number: Mapped[str | None] = mapped_column(String(10), nullable=True)

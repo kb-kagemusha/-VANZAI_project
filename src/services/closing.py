@@ -8,7 +8,7 @@ Hard Close:
 - 請求書発行・支払承認完了後に実施
 - 解除不可（例外対応は監査ログで記録）
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import and_, select
@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 
 from src.models.enums import AuditAction, ClosingStatus
 from src.models.transaction import Closing
+from src.services.financial_guards import lock_projects
+from src.services.closing_approval import require_approval, aware
 from src.services.audit import log
 from src.exceptions import ClosingViolationException, RecordNotFoundException
 
@@ -44,6 +46,7 @@ def soft_close(
     Returns:
         締めレコード
     """
+    lock_projects(session, [project_id])
     # 既存の締めレコードを検索
     stmt = select(Closing).where(
         Closing.project_id == project_id,
@@ -76,7 +79,7 @@ def soft_close(
     
     # Soft Close 実施
     closing.status = ClosingStatus.SOFT_CLOSED.value
-    closing.soft_closed_at = datetime.now()
+    closing.soft_closed_at = datetime.now(timezone.utc)
     closing.soft_closed_by = user_id
     if notes:
         closing.notes = notes
@@ -104,6 +107,7 @@ def hard_close(
     user_id: str,
     approver_id: str,
     notes: Optional[str] = None,
+    *, approval_request_id: str | None = None,
 ) -> Closing:
     """Hard Close を実施する
     
@@ -118,6 +122,7 @@ def hard_close(
     Returns:
         締めレコード
     """
+    lock_projects(session, [project_id])
     # 既存の締めレコードを検索
     stmt = select(Closing).where(
         Closing.project_id == project_id,
@@ -140,9 +145,10 @@ def hard_close(
             details={"user_id": user_id, "approver_id": approver_id}
         )
     
+    require_approval(session, approval_request_id, project_id, period_key, "hard_close", user_id, approver_id)
     # Hard Close 実施
     closing.status = ClosingStatus.HARD_CLOSED.value
-    closing.hard_closed_at = datetime.now()
+    closing.hard_closed_at = datetime.now(timezone.utc)
     closing.hard_closed_by = user_id
     if notes:
         closing.notes = notes
@@ -171,6 +177,7 @@ def release_soft_close(
     user_id: str,
     approver_id: str,
     reason: str,
+    *, approval_request_id: str | None = None,
 ) -> Closing:
     """Soft Close を解除する（ガードレール付き）
     
@@ -188,6 +195,7 @@ def release_soft_close(
     Raises:
         ValueError: ガードレール違反時
     """
+    lock_projects(session, [project_id])
     # 既存の締めレコードを検索
     stmt = select(Closing).where(
         Closing.project_id == project_id,
@@ -225,7 +233,7 @@ def release_soft_close(
     
     # ガードレール 3: 再締め期限チェック（前回解除からの経過日数）
     if closing.last_released_at and closing.reclose_deadline:
-        if datetime.now() > closing.reclose_deadline:
+        if datetime.now(timezone.utc) > aware(closing.reclose_deadline):
             raise ClosingViolationException(
                 f"Reclose deadline exceeded: {closing.reclose_deadline}",
                 details={
@@ -235,15 +243,16 @@ def release_soft_close(
                 }
             )
     
+    require_approval(session, approval_request_id, project_id, period_key, "soft_release", user_id, approver_id)
     # Soft Close 解除
     closing.status = ClosingStatus.OPEN.value
     closing.release_count += 1
-    closing.last_released_at = datetime.now()
+    closing.last_released_at = datetime.now(timezone.utc)
     closing.last_released_by = f"{user_id} (approved by {approver_id})"
     closing.last_release_reason = reason
     
     # 再締め期限を設定（営業日カウント簡易版：7日後）
-    closing.reclose_deadline = datetime.now() + timedelta(days=RECLOSE_DEADLINE_DAYS)
+    closing.reclose_deadline = datetime.now(timezone.utc) + timedelta(days=RECLOSE_DEADLINE_DAYS)
     
     log(
         session,
@@ -271,6 +280,7 @@ def release_hard_close(
     user_id: str,
     approver_id: str,
     reason: str,
+    *, approval_request_id: str | None = None,
 ) -> Closing:
     """Hard Close を解除する（例外対応、監査ログ記録）
     
@@ -288,6 +298,7 @@ def release_hard_close(
     Raises:
         ValueError: 二者承認なし
     """
+    lock_projects(session, [project_id])
     # 既存の締めレコードを検索
     stmt = select(Closing).where(
         Closing.project_id == project_id,
@@ -311,15 +322,20 @@ def release_hard_close(
             details={"user_id": user_id, "approver_id": approver_id}
         )
     
+    if closing.release_count >= MAX_RELEASE_COUNT:
+        raise ClosingViolationException("Release count exceeded: 締め解除は合計2回までです")
+    if closing.reclose_deadline and datetime.now(timezone.utc) > aware(closing.reclose_deadline):
+        raise ClosingViolationException("再締め期限を過ぎたため追加の解除はできません")
+    require_approval(session, approval_request_id, project_id, period_key, "hard_release", user_id, approver_id)
     # Hard Close 解除（例外対応）
     closing.status = ClosingStatus.SOFT_CLOSED.value
     closing.release_count += 1
-    closing.last_released_at = datetime.now()
+    closing.last_released_at = datetime.now(timezone.utc)
     closing.last_released_by = f"{user_id} (approved by {approver_id})"
     closing.last_release_reason = f"HARD_CLOSE_RELEASE: {reason}"
     
     # 再締め期限を設定
-    closing.reclose_deadline = datetime.now() + timedelta(days=3)  # Hard Close 解除は 3 日以内
+    closing.reclose_deadline = datetime.now(timezone.utc) + timedelta(days=3)  # Hard Close 解除は 3 日以内
     
     log(
         session,
