@@ -5,6 +5,7 @@ FastAPI メインアプリケーション
 """
 from contextlib import asynccontextmanager
 import hashlib
+import logging
 import mimetypes
 import os
 from pathlib import Path, PurePath
@@ -79,7 +80,7 @@ from src.api.schemas import (
     ErrorResponse
 )
 from src.models.base import generate_ulid
-from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription, RegistrationRequest, RegistrationRequestFile, VanzaiStaff, ClientStaff, WorkerBankAccount, SupplierBankAccount, Client
+from src.models.master import User, StaffNotice, StaffNoticeRead, PushSubscription, RegistrationRequest, RegistrationRequestFile, VanzaiStaff, ClientStaff, WorkerBankAccount, SupplierBankAccount, Client, Worker
 
 from src.services.csv_import import CsvImportService
 from src.services.dashboard import build_assignment_response_monitoring, get_dashboard_summary, get_project_closings_for_period
@@ -100,6 +101,8 @@ from src.services.time_calc import calculate_time
 from src.exceptions import VANZAIException
 from src.models.enums import ActualStatus, AssignmentStatus, AssignmentWorkerResponseStatus, AuditAction, AvailabilityStatus, ExpenseStatus, ImportMode, ImportScopeType, NoticeTargetType, NoticeType, Permission, UserRole, ClosingStatus
 
+
+logger = logging.getLogger(__name__)
 
 CSV_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
 RECEIPT_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
@@ -8017,7 +8020,7 @@ async def list_vanzai_staff(
     if query.is_active is not None:
         q = q.filter(VanzaiStaff.is_active == query.is_active)
     total = q.count()
-    items = q.order_by(VanzaiStaff.name).offset((query.page - 1) * query.limit).limit(query.limit).all()
+    items = q.order_by(VanzaiStaff.name).offset(query.offset).limit(query.limit).all()
     return VanzaiStaffListResponse(
         items=[VanzaiStaffItem(
             id=staff.id,
@@ -8032,7 +8035,7 @@ async def list_vanzai_staff(
             is_active=staff.is_active,
             notes=staff.notes,
         ) for staff, linked_worker_name in items],
-        total=total, page=query.page, limit=query.limit,
+        total=total, offset=query.offset, limit=query.limit,
     )
 
 
@@ -9654,7 +9657,7 @@ async def list_worker_notices(
         # worker_id が紐付いていない（管理者などが誤って呼んでも空返す）
         return WorkerNoticeListResponse(items=[], unread_count=0, total=0)
 
-    from src.models.transaction import Assignment, ShiftSlot
+    from src.models.transaction import Assignment, ShiftSlot, Project
 
     # 自分がアサインされている案件ID一覧（ShiftSlot 経由で取得）
     assigned_project_ids = [
@@ -9707,7 +9710,7 @@ async def list_worker_notices(
         r = reads_map.get(n.id)
         proj_name: str | None = None
         if n.target_project_id:
-            p = db.get(Proj, n.target_project_id)
+            p = db.get(Project, n.target_project_id)
             proj_name = p.name if p else None
 
         items.append(WorkerNoticeItem(

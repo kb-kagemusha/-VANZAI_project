@@ -1,7 +1,7 @@
 """Field-level OCR confidence for receipt rows (reference display only)."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from src.services.ocr.models import OcrEngineResult, OcrTextLine, ParsedOcrRow
 from src.services.ocr.parsers.paygate_payment import payment_method_confidence_from_lines
@@ -23,7 +23,7 @@ def clamp_confidence(value: float) -> float:
     return max(0.0, min(1.0, round(value, 4)))
 
 
-def confidence_tone(value: float | None) -> "high" | "medium" | "low" | "unknown":
+def confidence_tone(value: float | None) -> Literal["high", "medium", "low", "unknown"]:
     if value is None:
         return "unknown"
     percent = round(value * 100)

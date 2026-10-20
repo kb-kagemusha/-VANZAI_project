@@ -1271,7 +1271,7 @@ export function deleteNotice(noticeId: string) {
 // ===========================
 
 export function getVanzaiStaff(params?: Record<string, string | number | boolean | undefined>) {
-  return apiFetch<{ items: VanzaiStaffItem[]; total: number; page: number; limit: number }>("/api/vanzai-staff", undefined, params);
+  return apiFetch<{ items: VanzaiStaffItem[]; total: number; offset: number; limit: number }>("/api/vanzai-staff", undefined, params);
 }
 
 export function createVanzaiStaff(body: VanzaiStaffCreateRequest) {

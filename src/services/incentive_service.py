@@ -8,11 +8,13 @@ from typing import List, Optional
 from dataclasses import dataclass
 import json
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy import and_
 
-from ..models.enums import Permission, IncentiveStatus, AuditAction
+from ..models.enums import Permission, IncentiveStatus, AuditAction, ActualStatus, AssignmentStatus
 from ..models.master import User, IncentiveRule, Worker
-from ..models.transaction import Incentive, Project, Actual
+from ..models.transaction import Incentive, Project, Actual, Assignment
+from ..exceptions import RecordNotFoundException
+from ..domain.period import month_date_range
 from .audit import AuditService
 from .auth import require_permission
 
@@ -287,27 +289,23 @@ class IncentiveService:
         
         # 実績データで皆勤判定
         # period_keyフォーマット: "YYYYMM" または "YYYY-MM"
-        if "-" in period_key:
-            year, month = period_key.split("-")
-            date_filter = func.strftime('%Y-%m', Actual.work_date) == period_key
-        else:
-            # "YYYYMM" 形式の場合
-            year = period_key[:4]
-            month = period_key[4:6]
-            date_filter = func.strftime('%Y%m', Actual.work_date) == period_key
+        date_filter = Actual.work_date.between(*month_date_range(period_key))
         
-        actuals = self.session.query(Actual).filter(
+        actuals = self.session.query(Actual.work_date).join(
+            Assignment, Actual.assignment_id == Assignment.id
+        ).filter(
             and_(
                 Actual.worker_id == worker_id,
                 date_filter,
-                Actual.status == "valid",
+                Actual.status == ActualStatus.ACTIVE.value,
+                Assignment.status != AssignmentStatus.CANCELED.value,
             )
         )
         
         if project_id:
             actuals = actuals.filter(Actual.project_id == project_id)
         
-        actual_count = actuals.count()
+        actual_count = actuals.distinct().count()
         
         # ルールの条件をパース（例: {"required_days": 20}）
         condition = json.loads(rule.condition_json)
