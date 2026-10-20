@@ -91,6 +91,19 @@ class RoleCreate(PolicyUpdate):
         return name
 
 
+class RoleRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(min_length=1, max_length=100)
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("display_name", "reason")
+    @classmethod
+    def nonempty(cls, value):
+        if not value.strip():
+            raise ValueError("名称と変更理由を入力してください")
+        return value.strip()
+
+
 def validate_permissions(permissions):
     values = sorted(set(p.value for p in permissions))
     for value in values:
@@ -184,6 +197,38 @@ def create_role(body: RoleCreate, actor: User = Depends(administrator), db: Sess
         db.rollback()
         raise HTTPException(409, "この役割名は既に登録されています")
     return {"role": row.role, "display_name": row.display_name, "permissions": values}
+
+
+@router.patch("/roles/{role}/name")
+def rename_role(role: str, body: RoleRename, actor: User = Depends(administrator), db: Session = Depends(get_db)):
+    if not is_management_role(role, db):
+        raise HTTPException(404, "役割が見つかりません")
+    if body.display_name in ROLE_NAMES or any(
+        body.display_name == name and key != role for key, name in ROLE_NAMES.items()
+    ):
+        raise HTTPException(422, "他の標準役割名・予約名は使用できません")
+    row = db.scalar(select(RoleAccessPolicy).where(RoleAccessPolicy.role == role).with_for_update())
+    if row is not None:
+        db.refresh(row)
+    before = get_role_name(User(role=role), db)
+    if before == body.display_name:
+        return {"role": role, "display_name": before}
+    try:
+        if row is None:
+            # A name-only override must preserve the existing default permissions.
+            row = RoleAccessPolicy(role=role, permissions=sorted(p.value for p in ROLE_PERMISSIONS[role]))
+            db.add(row)
+        row.display_name = body.display_name
+        db.flush()
+        AuditService(db).log("ROLE_NAME_CHANGED", target_type="role_access_policy", target_id=role,
+                             actor=actor.id, actor_role=actor.role,
+                             before_value={"display_name": before},
+                             after_value={"display_name": row.display_name}, reason=body.reason)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "この役割名は既に登録されています")
+    return {"role": role, "display_name": row.display_name}
 
 
 @router.put("/roles/{role}")

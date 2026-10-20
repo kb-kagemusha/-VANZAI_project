@@ -120,11 +120,9 @@ def is_management_role(role: str, db: Session | None) -> bool:
 
 
 def get_role_name(user: User, db: Session | None = None) -> str:
-    if user.role in ROLE_NAMES:
-        return ROLE_NAMES[user.role]
     session = db if db is not None else object_session(user)
     policy = session.get(RoleAccessPolicy, user.role) if session is not None else None
-    return policy.display_name if policy is not None and policy.display_name else user.role
+    return policy.display_name if policy is not None and policy.display_name else ROLE_NAMES.get(user.role, user.role)
 
 
 def get_user_permissions(user: User, session: Session | None = None) -> set[Permission]:

@@ -5,7 +5,7 @@ async function mockAdmin(page: Page) {
   const roles = ["admin", "ops", "accounting", "site_manager"].map((role, index) => ({role,
     display_name: ["全体管理者", "運用担当", "経理担当", "現場管理者"][index], editable: role !== "admin",
     permissions: ["project_read"], default_permissions: ["project_read"], builtin: true}));
-  const captured: { account?: Record<string, unknown>; policy?: Record<string, unknown>; role?: Record<string, unknown> } = {};
+  const captured: { account?: Record<string, unknown>; policy?: Record<string, unknown>; role?: Record<string, unknown>; rename?: Record<string, unknown> } = {};
   await page.addInitScript(() => { localStorage.setItem("vanzai.admin.access_token", "test-access"); localStorage.setItem("vanzai.admin.refresh_token", "test-refresh"); });
   await page.route(/^https?:\/\/[^/]+\/api\//, async route => {
     const url = new URL(route.request().url());
@@ -18,6 +18,12 @@ async function mockAdmin(page: Page) {
     } else if (url.pathname === "/api/access/roles") body = {available_permissions: ["project_read", "invoice_read"], roles};
     if (url.pathname === "/api/access/users" && route.request().method() === "POST") {captured.account = route.request().postDataJSON(); body = {id: "new", ...captured.account};}
     if (url.pathname === "/api/access/roles/site_manager") {captured.policy = route.request().postDataJSON(); body = captured.policy;}
+    if (url.pathname.endsWith("/name") && route.request().method() === "PATCH") {
+      captured.rename = route.request().postDataJSON();
+      const role = roles.find(item => item.role === url.pathname.split("/")[4]);
+      if (role) role.display_name = String(captured.rename?.display_name);
+      body = role;
+    }
     if (url.pathname === "/api/dashboard") body = {unprocessed_items: [], variance_alerts: [], closing_status: []};
     if (url.pathname.endsWith("/project-types/tree")) body = {items: []};
     if (url.pathname.endsWith("/worker-tags")) body = {options: []};
@@ -47,6 +53,40 @@ test("administrator creates an ID and changes role permissions in popups", async
   await dialog.getByLabel("変更理由", {exact: true}).fill("請求の確認担当を兼任");
   await dialog.getByRole("button", {name: "この役割の権限を保存"}).click();
   await expect.poll(() => captured.policy?.permissions).toEqual(["project_read", "invoice_read"]);
+  await expect(dialog).toHaveCount(0);
+});
+
+test("administrator renames a standard role without changing permissions", async ({page}) => {
+  const captured = await mockAdmin(page);
+  await page.goto("/settings/access");
+  await page.getByRole("button", {name: "役割ごとの権限", exact: true}).click();
+  await page.getByRole("row").filter({hasText: "全体管理者"}).getByRole("button", {name: "名称を変更"}).click();
+  const dialog = page.getByRole("dialog", {name: "役割の名称を変更"});
+  await expect(dialog.getByLabel("役割名", {exact: true})).toHaveValue("全体管理者");
+  await dialog.getByLabel("役割名", {exact: true}).fill("システム管理者");
+  await dialog.getByLabel("変更理由", {exact: true}).fill("社内の名称に合わせる");
+  await dialog.getByRole("button", {name: "名称を保存"}).click();
+  await expect(dialog).toHaveCount(0);
+  expect(captured.rename).toEqual({display_name: "システム管理者", reason: "社内の名称に合わせる"});
+  await expect(page.getByRole("cell", {name: "システム管理者", exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "ログインID", exact: true}).click();
+  await page.getByRole("button", {name: "新しいIDを作成"}).click();
+  await expect(page.getByRole("dialog").getByLabel("役割", {exact: true}).getByRole("option", {name: "システム管理者"})).toHaveCount(1);
+});
+
+test("duplicate role name keeps the rename popup and input", async ({page}) => {
+  await mockAdmin(page);
+  await page.route("**/api/access/roles/ops/name", route => route.fulfill({status: 409, contentType: "application/json", body: JSON.stringify({detail: "この役割名は既に登録されています"})}));
+  await page.goto("/settings/access");
+  await page.getByRole("button", {name: "役割ごとの権限", exact: true}).click();
+  await page.getByRole("row").filter({hasText: "運用担当"}).getByRole("button", {name: "名称を変更"}).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("役割名", {exact: true}).fill("重複する役割");
+  await dialog.getByLabel("変更理由", {exact: true}).fill("test");
+  await dialog.getByRole("button", {name: "名称を保存"}).click();
+  await expect(dialog.getByRole("alert")).toHaveText("この役割名は既に登録されています");
+  await expect(dialog.getByLabel("役割名", {exact: true})).toHaveValue("重複する役割");
+  await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 });
 

@@ -170,3 +170,63 @@ def test_custom_roles_reject_duplicate_reserved_and_unknown_names(api_client, db
     for name in ["admin", "全体管理者", "worker", "   "]:
         assert api_client.post("/api/access/roles", headers=headers, json={**body, "display_name": name}).status_code == 422
     assert api_client.post("/api/access/users", headers=headers, json={"username": "invalid", "display_name": "Invalid", "email": "invalid@example.com", "password": "password123", "role": "unknown"}).status_code == 422
+
+
+@pytest.mark.parametrize("role", ["admin", "ops", "accounting", "site_manager", "custom"])
+def test_rename_role_preserves_ids_permissions_and_updates_names(api_client, db_session, role):
+    from src.services.auth import get_user_permissions
+    _, admin = login(api_client, db_session, "administrator", "admin")
+    if role == "custom":
+        role = api_client.post("/api/access/roles", headers=admin, json={
+            "display_name": "旧担当名", "permissions": ["project_read"], "reason": "test"}).json()["role"]
+    target, member = login(api_client, db_session, "member", role if role in {"admin", "ops", "accounting", "site_manager"} else "ops")
+    target.role = role
+    db_session.commit()
+    before = api_client.get("/api/auth/me", headers=member).json()
+    permissions = get_user_permissions(target, db_session)
+    response = api_client.patch("/api/access/roles/" + role + "/name", headers=admin,
+                                json={"display_name": " 新しい担当名 ", "reason": " 業務名に合わせる "})
+    assert response.status_code == 200
+    assert response.json() == {"role": role, "display_name": "新しい担当名"}
+    after = api_client.get("/api/auth/me", headers=member).json()
+    assert after["role_name"] == "新しい担当名"
+    assert after["role"] == before["role"]
+    assert after["permissions"] == before["permissions"]
+    db_session.refresh(target)
+    assert get_user_permissions(target, db_session) == permissions
+    account = next(u for u in api_client.get("/api/access/users", headers=admin).json()["items"] if u["id"] == target.id)
+    assert account["role_name"] == "新しい担当名"
+    policy = next(r for r in api_client.get("/api/access/roles", headers=admin).json()["roles"] if r["role"] == role)
+    assert policy["display_name"] == "新しい担当名"
+    assert policy["editable"] == (role != "admin")
+    log = db_session.query(AuditLog).filter_by(action="ROLE_NAME_CHANGED").one()
+    assert log.before_value == {"display_name": before["role_name"]}
+    assert log.after_value == {"display_name": "新しい担当名"}
+    assert log.reason == "業務名に合わせる"
+
+
+def test_rename_role_preserves_override_and_rejects_bad_names(api_client, db_session):
+    from src.models.access_policy import RoleAccessPolicy
+    _, admin = login(api_client, db_session, "admin", "admin")
+    api_client.put("/api/access/roles/ops", headers=admin, json={"permissions": ["invoice_read"], "reason": "test"})
+    url = "/api/access/roles/ops/name"
+    body = {"display_name": "会計補助", "reason": "test"}
+    assert api_client.patch(url, headers=admin, json=body).status_code == 200
+    assert api_client.patch(url, headers=admin, json=body).status_code == 200
+    for name in ["", "  ", "admin", "全体管理者", "現場管理者", "x" * 101]:
+        assert api_client.patch(url, headers=admin, json={**body, "display_name": name}).status_code == 422
+    assert api_client.patch(url, headers=admin, json={**body, "reason": "  "}).status_code == 422
+    assert api_client.patch(url, headers=admin, json={**body, "permissions": []}).status_code == 422
+    assert api_client.patch("/api/access/roles/accounting/name", headers=admin, json=body).status_code == 409
+    assert api_client.patch("/api/access/roles/unknown/name", headers=admin, json=body).status_code == 404
+    assert api_client.patch("/api/access/roles/worker/name", headers=admin, json=body).status_code == 404
+    assert db_session.get(RoleAccessPolicy, "ops").permissions == ["invoice_read"]
+    assert db_session.query(AuditLog).filter_by(action="ROLE_NAME_CHANGED").count() == 1
+    assert api_client.post("/api/access/roles", headers=admin, json={**body, "permissions": []}).status_code == 409
+
+
+@pytest.mark.parametrize("role", ["ops", "accounting", "site_manager", "worker"])
+def test_rename_role_requires_admin(api_client, db_session, role):
+    _, headers = login(api_client, db_session, "member", role)
+    assert api_client.patch("/api/access/roles/ops/name", headers=headers,
+                            json={"display_name": "無許可", "reason": "test"}).status_code == 403
