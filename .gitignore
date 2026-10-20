@@ -9,10 +9,13 @@
 .coverage.*
 htmlcov/
 
-# Environment files
+# Environment files（中身は読まない。雛形の .env.example / .env.template は対象外）
 .env
 .env.bak
 .env.*.local
+.env.rebuild
+.env20261006
+.env[0-9]*
 
 # Local databases and generated storage
 *.db

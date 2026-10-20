@@ -1001,3 +1001,85 @@
   - なし
 - Spec Reference: DEC-030
 
+---
+
+### DEC-032: 公式LINEの稼働者登録はLIFF送信後に申請し、既存者は有効紐付けを必須にする（2026-10-11）
+- Date: 2026-10-11
+- Status: Confirmed（Q05の利用目的・保持期間、Q06の本番入口有効化は未決）
+- Decision: 公式LINEの「登録」には全員共通のLIFFボタンだけを返す。申請は、サーバーがLINEのIDトークンを検証したあとのフォーム送信時に作る。有効なLINE紐付けは成立経路を問わず次回から再利用する。未紐付けの既存Workerへの初回反映には、一次性コードによる有効紐付けを必須にする。新規Workerを作る承認だけが、同じ取引で紐付けを作る。
+- Context:
+  - 本人入力と管理者承認を分け、別人への反映と二重登録を防ぎたい
+  - 既存の公開登録は期限付きリンクとPINであり、`source_type` は DEC-019 の4種類に固定されている
+  - DEC-028 の紐付けは、管理画面が発行した一次性コードを本人が送ったときに成立する
+  - Webhookの共有セッションを途中で確定すると、同じ受信に含まれる受諾・辞退まで確定し得る
+- Options:
+  - A: 「登録」の受信時に個人別の受付を作り、既存の未紐付け者も管理者照合だけで更新・紐付けする
+  - B: 共通LIFFボタンとし、申請は送信時に作る。有効紐付けは再利用し、未紐付けの既存者にはコードを必須にする
+- Chosen: B
+- Why:
+  - ボタン返信の成否に申請の存在を依存させず、再送と取引境界を既存Webhookに追加しない
+  - 自己申告の氏名や電話だけでは、既存稼働者へ他人の情報とLINEを結び得る
+  - 新規承認で作った紐付けを、次回の補完でも有効紐付けとして再利用できる
+- Impact:
+  - Data model:
+    - `worker_registration_request_details.birth_date` を DATE NULL で追加する。Worker の `name`（100）、`furigana`（200）、`birth_date`、`postal_code`、`address` は既存列を使う
+    - `line_registration_sessions`：セッションIDハッシュは一意。検証済みLINE主体、期限、開始時の紐付けIDとWorker IDを持つ。住所と生年月日は持たない。期限は60分、延長なし
+    - `line_registration_contexts`：申請IDは一意。検証済みLINE主体、送信時の紐付けIDとWorker ID、継続中フラグを持つ。継続中の主体は部分ユニークで1件。返信結果と発行時の更新日時は持たない
+    - `line_registration_submit_keys`：主体と冪等キーの組は一意。申請IDと正規化内容のハッシュを持つ。1申請に複数キーを結び付けられる
+    - `line_registration_review_snapshots`：申請、選択Worker、期待する紐付け、審査者、影響項目のサーバー取得値、期限を持つ。期限は60分。恒久保存しない
+    - `registration_requests.source_type` は `public_form` のままにする。LIFF申請にはPINと公開tokenを発行しない
+  - UI/UX:
+    - 「登録」は共通LIFFボタン。フォームは送信時に確認待ちの申請になる
+    - 有効紐付け済みは部分入力。未紐付けは基本項目を必須にする
+    - 氏名は「姓＋半角スペース＋名」、ふりがなも同様。住所は都道府県と住所1を連結し、住所2があれば改行を挟む
+  - Ops/Runbook:
+    - 入口フラグの初期値は無効。本番有効化はQ05、PostgreSQL競合試験、実機確認、チャネルのPublished確認の後
+    - 競合時は当該取引だけを巻き戻す。他の取引が確定した状態は戻さない
+    - 成功監査は業務更新と同じ取引で確定する。失敗記録は巻き戻し後の別取引で、申請ID、実行者、理由分類だけを残す
+  - Migration: 上記の表と列。ファイルの追加と適用は機能実装時に行う
+- Follow-ups:
+  - Q05：利用目的、取得項目、保持期間、削除または匿名化。確定前は架空情報だけ
+  - Q06：本番入口の有効化。今回は公開状態も入口フラグも変えない
+  - 通知（Q04）と書類アップロードは今回含めない
+  - DEC-033は2026-10-11に採用済み。審査スナップショット表は作らない。このConfirmedの基本方針は置き換えない
+- Spec Reference: DEC-019、DEC-020、DEC-028、`docs/ops/LINE_WORKER_REGISTRATION_PLAN_2026-10-11.md`
+
+---
+
+### DEC-033: LINE稼働者登録の認証・比較票・編集ガードを改める（2026-10-11）
+- Date: 2026-10-11
+- Status: Confirmed（2026-10-11に採用。DEC-032の基本方針は維持する）
+- Decision: 登録専用認証はメモリ上のBearerにする。審査用の現在値をDBへ複製せず、サーバーが発行する期限付きの署名付き比較票を使う。通常のWorker更新にも、本機能が変える7項目の比較ガードを足す。再送キーの対応表は残し、送信内容は平文のハッシュではなく認証付きハッシュで対応づける。
+- Context:
+  - DEC-032は共通LIFF、送信時の申請作成、有効紐付けの再利用、未紐付け既存者への一次性コード必須を確定している
+  - 画面とAPIは別オリジンで、既存APIもBearerである
+  - 現行のWorker更新はプロフィールを一括保存し、古い編集画面が承認後の値を戻し得る
+  - 再送キーを捨てると、承認後の遅延再送で申請が増える
+- Options:
+  - A: DEC-032の4表、Cookie認証、審査スナップショット表のまま実装する
+  - B: セッション表、申請context、再送キー対応の3表にし、比較は署名付き票、認証はメモリBearer、通常編集にも逆方向のガードを置く
+- Chosen: B
+- Why:
+  - 個人情報の複製と期限切れ行を減らし、承認と通常編集で同じ比較の考え方を使える
+  - CookieとCSRFを新設せず、既存のBearer方式に寄せられる
+  - 再送キー対応を残すと、確認中に保存しなかった別キーの遅延再送で申請を増やさない
+- Impact:
+  - Data model:
+    - 新設は `line_registration_sessions`、`line_registration_contexts`、`line_registration_submit_keys` の3表。DEC-032の `line_registration_review_snapshots` は作らない
+    - `worker_registration_request_details.birth_date` は DATE NULL のまま。新しい変換と生年月日・住所の承認反映はLINE起点だけに適用する
+    - 継続中は `status=pending` かつ `deleted_at IS NULL` のLINE申請に限る
+  - UI/UX:
+    - 登録Bearerはメモリだけに置き、Cookie、localStorage、sessionStorage、URLへ保存しない。管理者APIへ転用しない
+    - 確認中の別キーは、今回の入力を本文に保存していないことを案内する
+    - Worker編集は開始時の最新値と比較票から始め、7項目の不一致は409で再読込を案内する
+  - Ops/Runbook:
+    - PostgreSQLの独立接続試験を、送信・審査の取引実装より前に用意する。入力変換などの準備実装はそれまで止めない
+    - 期限切れセッションの削除担当、頻度、失敗時の再実行をRUNBOOKに書く
+    - 入口は無効のまま。Q05確定前は架空情報だけ
+  - Migration: `alembic/versions/20261011a001_line_registration_tables.py`。3表、制約、`birth_date`。本番DBへは未適用。入口は有効にしない
+- Follow-ups:
+  - 試験用PostgreSQLの基盤準備と、実装後のLINE承認競合試験合格は別である。後者は未実施
+  - Q05に送信キー対応の保持と、再送を識別できる期間を含める
+  - 試験用PostgreSQLでは本番DBとsecretsを使わない
+- Spec Reference: DEC-032、`docs/ops/LINE_WORKER_REGISTRATION_PLAN_2026-10-11.md`
+

@@ -10,11 +10,15 @@
 
 ## レガシーコードの所在
 
+旧 Kintone 用スクリプトは **現在未使用** です。本番・ローカル開発とも実行しません。
+
 | 種別 | パス |
 |------|------|
-| Python サービス（旧） | `scripts/legacy/kintone/` |
-| 同期・移行スクリプト | `scripts/sync_db_to_kintone.py` 等（ルート `scripts/`） |
-| CSV・カスタマイズ資産 | `kintone_app/` |
+| 旧スクリプト一式 | `.old/`（2026-10-11 に `scripts/` から移動） |
+| Python サービス（旧） | `.old/kintone/`（旧 `scripts/legacy/kintone/`） |
+| CSV・カスタマイズ資産 | `kintone_app/`（過去の書き出し。現行取込の正本ではない） |
+
+このフォルダ内の古い手順が `scripts/sync_db_to_kintone.py` などを指していても、実体は `.old/` にあります。パスを直して実行しないでください。
 
 ## 現行運用ドキュメント
 

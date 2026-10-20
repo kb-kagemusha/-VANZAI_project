@@ -13,7 +13,7 @@
 | 領域 | Kintone 参照 |
 |------|-------------|
 | `src/api/main.py` ほか API | なし |
-| `src/services/` | なし（旧 `kintone_service` は `scripts/legacy/kintone/` へ移動） |
+| `src/services/` | なし（旧 `kintone_service` は `.old/` へ移動） |
 | `apps/admin-web`, `apps/staff-mobile` | なし |
 | `scripts/deploy/` | なし |
 | `.env.example` | `KINTONE_*` 変数なし |
@@ -27,9 +27,8 @@
 
 ### レガシー資産（本番未使用）
 
-- `scripts/legacy/kintone/`
-- `scripts/sync_db_to_kintone.py` 等
-- `kintone_app/`, `docs/kintone/`（アーカイブ）
+- `.old/` — 旧 Kintone 用スクリプト一式。現在は使わない。実行しない
+- `kintone_app/`, `docs/kintone/`（アーカイブ。手順の記録）
 
 詳細: `CHANGELOG.md` [0.11.36]〜[0.11.37]、`docs/kintone/README.md`
 
@@ -586,6 +585,10 @@ ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
 ---
 
 ## 🔗 Kintone連携（マスタ同期）
+
+この節は 2026-01 時点の作業記録です。ここに書いた `scripts/` の Kintone 用スクリプトは、2026-10-11 に `.old/` へ移しました。現在は使用していません。
+
+
 
 ### 同期対象（6マスタ）
 - workers

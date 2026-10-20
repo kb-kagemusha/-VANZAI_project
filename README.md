@@ -4,7 +4,7 @@
 
 ### Kintone 連携の本番除去（Ver.0.11.36〜0.11.37）
 - 本番運用は **VPS（admin-web + staff-mobile + API）のみ**で完結
-- `kintone_service` は `scripts/legacy/kintone/` へ移動（本番パッケージから除外）
+- `kintone_service` と Kintone 用スクリプトは `.old/` へ移動済み（本番では未使用。実行しない）
 - 運用ドキュメントを admin-web 前提に更新（USER_MANUAL / FAQ / CLIENT_FEATURE_SUMMARY 等）
 
 詳細: [CHANGELOG.md](CHANGELOG.md)、[docs/CLIENT_FEATURE_SUMMARY.md](docs/CLIENT_FEATURE_SUMMARY.md)

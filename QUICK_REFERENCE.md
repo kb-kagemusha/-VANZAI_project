@@ -46,7 +46,7 @@ pytest --cov=src --cov-report=html
 alembic upgrade head
 
 # APIサーバー起動
-c:/VANZAI_project/.venv/Scripts/python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+C:\AI_Projects\VANZAI_project\.venv\Scripts\python.exe -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
 
 # 別ターミナルで admin-web 起動
 Set-Location apps/admin-web
@@ -66,6 +66,12 @@ npm run smoke:e2e
 - 月次画面の from/to は月末日に依存するため、ローカル確認前に古い DB スキーマや古いフロントビルドが残っていないことを確認する
 
 ---
+
+## 使っていないファイル（Kintone）
+
+Kintone 連携は本番から外れています。旧スクリプトはプロジェクト直下の `.old/` にまとめてあり、**現在は使用しません。** 実行しないでください。説明は `.old/README.md` と `docs/kintone/README.md` にあります。
+
+現行の起動・テストコマンドは、このファイルの上の節を使います。
 
 ## 📁 重要ファイルの場所
 

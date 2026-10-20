@@ -1,0 +1,8 @@
+﻿# 秘密情報。エージェントは中身を読まない。
+# 雛形（.env.example / .env.template）はここには入れない。
+.env
+.env.bak
+.env.*.local
+.env.rebuild
+.env20261006
+.env[0-9]*
