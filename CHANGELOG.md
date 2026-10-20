@@ -2,7 +2,9 @@
 
 バージョン管理ルール（AGENTS.md セクション9 参照）
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
-- **CHANGELOG の `## [0.46.0] - 2026-10-20
+- **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
+
+## [0.46.0] - 2026-10-20
 
 ### Added
 - 全体管理者専用の「ID・権限管理」を追加。ログインIDの作成、役割の付与・変更、無効化、役割ごとの閲覧・操作権限の変更と監査履歴に対応。
