@@ -572,6 +572,75 @@ def test_additional_request_format_replaces_condition_and_body_blob(api_client, 
     assert confirmed.status_code == 200, confirmed.text
 
 
+@pytest.mark.parametrize("meeting_place", ["正面入口前\n雨天時は1階ロビー", ""])
+def test_meeting_place_is_optional_and_frozen_on_confirm(
+    api_client, db_session, ops_user, pdf_root, meeting_place,
+):
+    import json
+
+    from src.services.order_request_pdf import _headed_fields
+
+    worker = _worker(db_session, "稼働者A")
+    conditions = {"format": "additional-request-v1", "project_name": "集合案内の案件"}
+    created = api_client.post(
+        "/api/order-requests",
+        json=_body([worker.id], request_conditions=json.dumps(conditions)),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    version_id = created.json()["id"]
+    assert "■集合場所" not in created.json()["body"]
+
+    # 旧データに項目がなくても編集でき、複数行の入力と空欄への変更を保存できる。
+    for value in ("仮の集合場所", meeting_place):
+        conditions["meeting_place"] = value
+        updated = api_client.patch(
+            f"/api/order-requests/versions/{version_id}",
+            json={"request_conditions": json.dumps(conditions, ensure_ascii=False)},
+            headers=_auth(ops_user.username),
+        )
+        assert updated.status_code == 200, updated.text
+    loaded = api_client.get(
+        f"/api/order-requests/versions/{version_id}", headers=_auth(ops_user.username),
+    )
+    assert loaded.status_code == 200, loaded.text
+    assert json.loads(loaded.json()["request_conditions"])["meeting_place"] == meeting_place
+    # PDFが使う見出し解析でも、稼働場所とは独立した欄として扱われる。
+    fields = dict(_headed_fields(loaded.json()["body"]))
+    if meeting_place:
+        assert fields["集合場所"] == meeting_place
+        assert fields["稼働場所"] == "渋谷現場"
+    else:
+        assert "集合場所" not in fields
+
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    version = db_session.get(OrderRequestVersion, version_id)
+    snapshot = dict(version.snapshot_json)
+    assert json.loads(snapshot["request_conditions"])["meeting_place"] == meeting_place
+    pdf_before = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf", headers=_auth(ops_user.username),
+    )
+    assert pdf_before.status_code == 200
+    assert pdf_before.content.startswith(b"%PDF")
+
+    conditions["meeting_place"] = "確定後の変更"
+    rejected = api_client.patch(
+        f"/api/order-requests/versions/{version_id}",
+        json={"request_conditions": json.dumps(conditions, ensure_ascii=False)},
+        headers=_auth(ops_user.username),
+    )
+    assert rejected.status_code == 409
+    db_session.refresh(version)
+    assert version.snapshot_json == snapshot
+    pdf_after = api_client.get(
+        f"/api/order-requests/versions/{version_id}/pdf", headers=_auth(ops_user.username),
+    )
+    assert pdf_after.content == pdf_before.content
+
+
 def test_multiline_hours_and_fee_are_kept_as_written(api_client, db_session, ops_user):
     import json
 

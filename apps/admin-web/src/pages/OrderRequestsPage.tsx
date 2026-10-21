@@ -1098,11 +1098,21 @@ export function OrderRequestsPage() {
                       className="is-short is-site"
                       value={form.site_name}
                       disabled={!editable}
-                      placeholder={"会場名\n（住所）\n※集合場所が後から決まるときはその旨"}
+                      placeholder={"会場名\n（住所）"}
                       onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
                     />
                   </label>
                   <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">集合場所（任意）</span>
+                    <textarea
+                      className="is-short"
+                      value={sections.meetingPlace}
+                      disabled={!editable}
+                      placeholder={"例：会場の正面入口前\n※未定の場合はその旨を記載"}
+                      onChange={(event) => setSections({ ...sections, meetingPlace: withFullwidthTilde(event.target.value) })}
+                    />
+                  </label>
                   <div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">

@@ -12,6 +12,7 @@ export interface OrderDocumentSections {
   previousFee?: string;
   placeId?: string;
   mapsUrl?: string;
+  meetingPlace: string;
   projectName: string;
   background: string;
   workDateDetail: string;
@@ -24,6 +25,7 @@ export interface OrderDocumentSections {
 }
 
 export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
+  meetingPlace: "",
   projectName: "",
   background: "",
   workDateDetail: "",
@@ -55,6 +57,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     format: ORDER_FORMAT_ID,
     project_name: wavy(sections.projectName.trim()),
     background: wavy(sections.background.trim()),
+    meeting_place: wavy(sections.meetingPlace.trim()),
     work_date_detail: wavy(sections.workDateDetail.trim()),
     hours: wavy(sections.schedule ? scheduleHours(sections.schedule) : sections.hours.trim()),
     content: wavy(sections.content.trim()),
@@ -91,6 +94,7 @@ export function composeOrderDocument(
     wavy(siteName.trim()),
     ...(siteAddress.trim() ? [wavy(siteAddress.trim())] : []),
     ...(sections.mapsUrl?.trim() ? [sections.mapsUrl.trim()] : []),
+    ...(sections.meetingPlace.trim() ? ["", "■集合場所", wavy(sections.meetingPlace.trim())] : []),
     "",
     "■稼働日",
     wavy(workDateLabel.trim()),
@@ -131,6 +135,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       previousFee: textOf(data.previous_fee),
       placeId: textOf(data.place_id),
       mapsUrl: textOf(data.maps_url),
+      meetingPlace: textOf(data.meeting_place),
       projectName: textOf(data.project_name),
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),

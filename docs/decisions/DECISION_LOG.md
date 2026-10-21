@@ -1380,3 +1380,13 @@
 - Validation: 画像で指摘された操作・対象種別、全AuditActionと静的な監査記録箇所の日本語対応、未知コード維持、管理・スタッフ画面ビルドを確認する。
 - Version: 既存監査画面の改善なのでZ（0.46.5 → 0.46.6）。
 - Spec Reference: DESIGN_SPEC_v0.3 §3/16。
+
+### DEC-062: 発注依頼書の任意の集合場所（2026-10-21）
+- Status: Confirmed（ユーザー指定）
+- Purpose: 稼働場所と集合場所が異なる場合にも、依頼書の専用欄で案内できるようにする。
+- Decision: 既存の作成・編集ポップアップの稼働場所の下に「集合場所（任意）」を複数行の自由入力欄として追加する。入力時は本文・PDFの稼働場所の次に独立した「集合場所」を表示し、空欄の場合は帳票の項目を省略する。
+- Model/Migration: 既存order_request_versions.request_conditionsのJSONにmeeting_placeを保存し、bodyと確定時snapshot_jsonへ反映する。旧データの項目欠落は空欄として読み込み、DDL・マイグレーション・既存データの書換えは不要。
+- Guard/Audit: 確定済み本文・PDFの編集拒否と変更版作成を維持する。既存ORDER_REQUEST_CONFIRMED / ORDER_REQUEST_REVISED監査を利用し、新規イベントは追加しない。
+- Validation: 旧データからの追加、複数行保存・再取得・空欄への変更、任意のままの確定、PDF用項目解析、スナップショット保存、確定後編集拒否とPDF不変を検証する。
+- Version: 既存依頼書への項目追加なのでZ（0.46.6 → 0.46.7）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/16、AGENTS.md §12。
