@@ -31,6 +31,7 @@ import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
 import { WakeStatusPage } from "../pages/WakeStatusPage";
 import { ParticipationCalendarPage } from "../pages/ParticipationCalendarPage";
+import { OrderOverviewPage } from "../pages/OrderOverviewPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
 import { PublicLineWorkerPage } from "../pages/PublicLineWorkerPage";
@@ -231,6 +232,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops"]}>
                 <OrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/order-overview"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <OrderOverviewPage />
               </PermissionRoute>
             }
           />

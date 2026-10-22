@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   CalendarDays,
+  CalendarRange,
   Upload,
   ClipboardList,
   Users,
@@ -57,6 +58,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/notices": MessageSquare,
   "/operations/wake-status": AlarmClock,
   "/operations/participation-calendar": CalendarCheck,
+  "/operations/order-overview": CalendarRange,
   "/operations/registration-requests": ClipboardList,
 };
 

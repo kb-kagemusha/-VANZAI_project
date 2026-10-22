@@ -35,7 +35,7 @@ def _in_range(day: str, start: str | None, end: str | None) -> bool:
     return (start is None or day >= start) and (end is None or day <= end)
 
 
-def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None) -> list[dict]:
+def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False) -> list[dict]:
     """日付ごとに、イベントの人数と名前を返す。[{date, events: [{series_id, version_id, document_number, project_name, ok, changing, unanswered}]}]"""
     query = session.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None))
     if series_id:
@@ -45,7 +45,7 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
         answerable = session.get(OrderRequestVersion, series.answerable_version_id)
         document = session.get(OrderRequestDocument, answerable.document_id)
         # 月のカレンダーは正式だけ。依頼書ごとの確認（series_id 指定）はテストも表示する
-        if (document.kind != KIND_FORMAL and not series_id) or document.deleted_at is not None:
+        if (document.kind != KIND_FORMAL and not series_id and not include_test) or document.deleted_at is not None:
             continue
         display = ws.version_display(answerable)
         # 稼働者ごとの分類と日付
@@ -78,6 +78,8 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                     "document_id": document.id,
                     "document_number": document.document_number,
                     "project_name": display["project_name"],
+                    "site_name": display.get("site_name") or "",
+                    "is_test": document.kind != KIND_FORMAL,
                     OK: [],
                     CHANGING: [],
                     UNANSWERED: [],

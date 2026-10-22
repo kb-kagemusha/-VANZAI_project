@@ -672,6 +672,7 @@ def add_order_request_note(
 def participation_calendar(
     month: str | None = Query(default=None, pattern=r"^[0-9]{4}-[0-9]{2}$"),
     version_id: str | None = Query(default=None, max_length=26),
+    include_test: bool = Query(default=False),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -694,7 +695,7 @@ def participation_calendar(
         raise HTTPException(status_code=400, detail="month が不正です")
     start = f"{month}-01"
     end = f"{month}-{monthrange(year, mon)[1]:02d}"
-    return {"month": month, "days": pc.build(db, start=start, end=end)}
+    return {"month": month, "days": pc.build(db, start=start, end=end, include_test=include_test)}
 
 
 @router.get("/replies")

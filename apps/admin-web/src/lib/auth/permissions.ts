@@ -36,6 +36,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops"],
   },
   {
+    to: "/operations/order-overview",
+    label: "依頼の俯瞰カレンダー",
+    description: "依頼済みのイベントと稼働者を月の横長カレンダーで一覧",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
     to: "/operations/participation-calendar",
     label: "参加カレンダー",
     description: "イベントごと・日ごとの参加OKの人数",
@@ -170,6 +176,7 @@ export const PATH_PERMISSIONS: Record<string, string[]> = {
   "/operations/ocr": ["ocr_read"], "/operations/order-requests": ["order_read"],
   "/operations/wake-status": ["wake_status_read"],
   "/operations/participation-calendar": ["order_read"],
+  "/operations/order-overview": ["order_read"],
   "/operations/notices": ["notice_read"], "/operations/registration-requests": ["registration_read"],
   "/billing/invoices": ["invoice_read"], "/billing/payouts": ["payout_read"], "/billing/expenses": ["expense_read"],
   "/masters/workers": ["master_read"], "/masters/data": ["master_read"],

@@ -290,6 +290,10 @@ def test_participation_shows_zero_days_and_test_documents(api_client, db_session
     month = _day(1)[:7]
     monthly = api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username)).json()["days"]
     assert all(e["version_id"] != confirmed["id"] for d in monthly for e in d["events"])
+    # 俯瞰カレンダーでテストも含めるときは出す
+    with_test = api_client.get(f"/api/order-requests/participation-calendar?month={month}&include_test=true", headers=_auth(ops_user.username)).json()["days"]
+    events = [e for d in with_test for e in d["events"] if e["version_id"] == confirmed["id"]]
+    assert events and all(e["is_test"] for e in events)
 
 
 def test_document_body_lists_holidays_under_work_date():

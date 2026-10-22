@@ -1811,16 +1811,19 @@ export type ParticipationEvent = {
   document_id: string;
   document_number: string;
   project_name: string;
+  site_name?: string;
+  is_test?: boolean;
   ok: ParticipationPerson[];
   changing: ParticipationPerson[];
   unanswered: ParticipationPerson[];
 };
 export type ParticipationDay = { date: string; events: ParticipationEvent[] };
 
-export function getParticipationCalendar(params: { month?: string; versionId?: string }) {
+export function getParticipationCalendar(params: { month?: string; versionId?: string; includeTest?: boolean }) {
   return apiFetch<{ month?: string; days: ParticipationDay[] }>("/api/order-requests/participation-calendar", undefined, {
     month: params.month,
     version_id: params.versionId,
+    include_test: params.includeTest ? true : undefined,
   });
 }
 
