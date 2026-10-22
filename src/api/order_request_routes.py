@@ -370,6 +370,14 @@ def _project_name(request_conditions: str | None) -> str:
     return str(sections.get("project_name") or "")
 
 
+def _categories(request_conditions: str | None) -> list[str]:
+    """カテゴリ（0.48.10）。一覧の表示だけに使い、本文・PDFには入れない。"""
+    sections = parse_sections(request_conditions)
+    if not sections:
+        return []
+    return list(sections.get("categories") or [])
+
+
 def _list_item(
     db: Session,
     document: OrderRequestDocument,
@@ -393,6 +401,7 @@ def _list_item(
         "version_no": version.version_no,
         "status": version.status,
         "project_name": _project_name(version.request_conditions),
+        "categories": _categories(version.request_conditions),
         "site_name": version.site_name,
         "work_date_label": version.work_date_label,
         "created_by_name": names.get(document.created_by_user_id),
@@ -721,6 +730,7 @@ def list_order_request_replies(
                 **_relation_fields(version, sources, changes),
                 "kind": document.kind,
                 "project_name": _project_name(version.request_conditions),
+                "categories": _categories(version.request_conditions),
                 "site_name": version.site_name,
                 "work_date_label": version.work_date_label,
                 "worker_name": delivery.worker_name_snapshot,

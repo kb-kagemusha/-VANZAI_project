@@ -54,6 +54,10 @@ import {
   sectionsFromStored,
   serializeOrderSections,
   siteLabelForList,
+  categoryLabelForList,
+  ORDER_CATEGORY_OPTIONS,
+  TRAINING_CATEGORY,
+  toggleOrderCategory,
   withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
@@ -760,7 +764,7 @@ export function OrderRequestsPage() {
   const detailLead = creating
     ? basedOn
       ? `${basedOn.documentNumber} 第${basedOn.versionNo}版を基に、新しい依頼書を作成します。確定するまで送付は始まりません。`
-      : "追加案件依頼の項目で下書きします。確定するまで送付は始まりません。"
+      : "案件依頼の項目で下書きします。確定するまで送付は始まりません。"
     : [detailSourceNote, detail ? STATUS_LABEL[detail.status] : "", detail?.created_by_name].filter(Boolean).join(" · ");
 
   const canSend = Boolean(
@@ -806,6 +810,7 @@ export function OrderRequestsPage() {
   function missingSendFields(): string[] {
     const missing: string[] = [];
     if (!sections.projectName.trim()) missing.push("案件名");
+    if (sections.categories.length === 0) missing.push("カテゴリ");
     if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
     if (!form.site_name.trim()) missing.push("稼働場所");
     if (!form.follow_up_due_on) missing.push("期限の案内");
@@ -981,6 +986,7 @@ export function OrderRequestsPage() {
               <tr>
                 <th>文書番号</th>
                 <th>案件名</th>
+                <th>カテゴリ</th>
                 <th>日付</th>
                 <th>送付先</th>
                 <th>返事</th>
@@ -1001,6 +1007,7 @@ export function OrderRequestsPage() {
                     ) : null}
                   </td>
                   <td className="order-cell-multiline">{siteLabelForList(row.project_name)}</td>
+                  <td className="order-cell-multiline">{categoryLabelForList(row.categories)}</td>
                   <td className="order-cell-multiline">{row.work_date_label}</td>
                   <td>{row.worker_name}</td>
                   <td>
@@ -1081,7 +1088,7 @@ export function OrderRequestsPage() {
               <th>版</th>
               <th>区分</th>
               <th>状態</th>
-              <th>現場</th>
+              <th>カテゴリ</th>
               <th>日付</th>
               <th>作成者</th>
               <th>送付先</th>
@@ -1119,7 +1126,7 @@ export function OrderRequestsPage() {
                   {item.phone_first ? " / 電話先行" : ""}
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
-                <td className="order-cell-multiline">{siteLabelForList(item.site_name)}</td>
+                <td className="order-cell-multiline">{categoryLabelForList(item.categories)}</td>
                 <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
                 <td>{item.recipient_count}</td>
@@ -1303,9 +1310,9 @@ export function OrderRequestsPage() {
 
             <OrderInternalSourceEditor value={form.internal_source ?? null} disabled={!editable} onChange={(internal_source) => setForm({ ...form, internal_source })} />
             <section className="order-draft-section">
-              <h4>追加案件依頼</h4>
+              <h4>案件依頼</h4>
               <div className="order-document">
-                <p className="order-document-title">【追加案件依頼】</p>
+                <p className="order-document-title">【案件依頼】</p>
                 <div className="order-draft-grid">
                   <label className="order-field order-span-6">
                     <span className="order-field-label">案件名</span>
@@ -1317,7 +1324,30 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, projectName: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
-                  <label className="order-field order-span-6">
+                  <fieldset className="order-field order-span-6 order-category-field">
+                    <legend className="order-field-label">
+                      カテゴリ
+                      <span className="order-field-hint">1つ選びます。「研修」だけは、ほかの1つと一緒に選べます。PDFには載りません。</span>
+                    </legend>
+                    <div className="order-category-options">
+                      {ORDER_CATEGORY_OPTIONS.map((item) => {
+                        const checked = sections.categories.includes(item);
+                        const blocked = !checked && item !== TRAINING_CATEGORY && sections.categories.some((value) => value !== TRAINING_CATEGORY);
+                        return (
+                          <label key={item} className={`order-check${blocked ? " is-blocked" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={!editable || blocked}
+                              onChange={(event) => setSections({ ...sections, categories: toggleOrderCategory(sections.categories, item, event.target.checked) })}
+                            />
+                            {item}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                  <label className="order-field order-span-12">
                     <span className="order-field-label">背景</span>
                     <textarea
                       className="is-short"

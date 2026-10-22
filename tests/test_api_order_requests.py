@@ -539,7 +539,7 @@ def test_additional_request_format_replaces_condition_and_body_blob(api_client, 
     assert created.status_code == 200, created.text
     body = created.json()["body"]
     headings = [
-        "【追加案件依頼】",
+        "【案件依頼】",
         "■案件名",
         "春施策_渋谷",
         "■背景",

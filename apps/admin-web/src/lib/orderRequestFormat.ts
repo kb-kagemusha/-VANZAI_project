@@ -1,7 +1,25 @@
-/** 追加案件依頼。保存時は見出し付き本文と、欄を戻すためのJSONにする。 */
+/** 案件依頼。保存時は見出し付き本文と、欄を戻すためのJSONにする。 */
 import { scheduleFees, scheduleFromStored, scheduleHours, syncSchedule, type OrderSchedule } from "./orderSchedule";
 
-export const ORDER_DOCUMENT_TITLE = "【追加案件依頼】";
+export const ORDER_DOCUMENT_TITLE = "【案件依頼】";
+/** カテゴリ（0.48.10）。src/services/order_request_format.py の CATEGORY_OPTIONS と同じ順。本文・PDFには出さない。 */
+export const TRAINING_CATEGORY = "研修";
+export const ORDER_CATEGORY_OPTIONS = ["飲食店巡回", "パーキング/喫煙所系", "商業施設/たばこ屋", "フェス系", "調査系", "履行確認", TRAINING_CATEGORY] as const;
+
+/** チェックの付け外し。「研修」以外は1つだけ（別の項目を付けると、前の項目は外れる）。並びは決まった順。 */
+export function toggleOrderCategory(current: string[], item: string, checked: boolean): string[] {
+  let next = current.filter((value) => value !== item);
+  if (checked) {
+    if (item !== TRAINING_CATEGORY) next = next.filter((value) => value === TRAINING_CATEGORY);
+    next = [...next, item];
+  }
+  return ORDER_CATEGORY_OPTIONS.filter((value) => next.includes(value));
+}
+
+/** 一覧に出すカテゴリ（「飲食店巡回、研修」）。 */
+export function categoryLabelForList(categories: string[] | undefined): string {
+  return categories && categories.length > 0 ? categories.join("、") : "—";
+}
 export const ORDER_FORMAT_ID = "additional-request-v1";
 export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。";
 
@@ -19,6 +37,8 @@ export interface OrderDocumentSections {
   /** 会場の最寄り駅からの徒歩分（任意、0〜120）。空欄は "" */
   siteStationWalkMinutes: string;
   projectName: string;
+  /** カテゴリ（0.48.10〜。旧データは空）。 */
+  categories: string[];
   background: string;
   workDateDetail: string;
   hours: string;
@@ -34,6 +54,7 @@ export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   siteStation: "",
   siteStationWalkMinutes: "",
   projectName: "",
+  categories: [],
   background: "",
   workDateDetail: "",
   hours: "",
@@ -63,6 +84,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
   return JSON.stringify({
     format: ORDER_FORMAT_ID,
     project_name: wavy(sections.projectName.trim()),
+    categories: ORDER_CATEGORY_OPTIONS.filter((value) => sections.categories.includes(value)),
     background: wavy(sections.background.trim()),
     meeting_place: wavy(sections.meetingPlace.trim()),
     site_station: wavy(sections.siteStation.trim()),
@@ -154,6 +176,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       siteStation: textOf(data.site_station),
       siteStationWalkMinutes: typeof data.site_station_walk_minutes === "number" ? String(data.site_station_walk_minutes) : "",
       projectName: textOf(data.project_name),
+      categories: Array.isArray(data.categories) ? data.categories.filter((item): item is string => typeof item === "string") : [],
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),
       hours: textOf(data.hours) || legacyHours(data),

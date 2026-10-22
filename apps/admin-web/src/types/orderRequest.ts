@@ -165,6 +165,8 @@ export interface OrderRequestListItem {
   version_no: number;
   status: OrderRequestStatus;
   project_name: string;
+  /** カテゴリ（0.48.10〜。旧データは空） */
+  categories?: string[];
   site_name: string;
   work_date_label: string;
   created_by_name: string | null;
@@ -215,6 +217,8 @@ export interface OrderRequestReplyItem {
   change_documents: OrderRequestChangeLink[];
   kind: string;
   project_name: string;
+  /** カテゴリ（0.48.10〜。旧データは空） */
+  categories?: string[];
   site_name: string;
   work_date_label: string;
   worker_name: string;

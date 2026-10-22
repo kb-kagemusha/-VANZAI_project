@@ -18,7 +18,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from src.services.order_request_format import DOCUMENT_TITLE, parse_sections
+from src.services.order_request_format import DOCUMENT_TITLES, parse_sections
 from src.services.pdf_generator import DEFAULT_FONT
 
 # 書式の入手と受託者名欄の対応が終わるまで偽のままにする。
@@ -164,7 +164,7 @@ def render_order_request_pdf(
 
 
 def _is_template(request_conditions: str, body: str) -> bool:
-    return parse_sections(request_conditions) is not None or (body or "").startswith(DOCUMENT_TITLE)
+    return parse_sections(request_conditions) is not None or (body or "").startswith(DOCUMENT_TITLES)
 
 
 def _document_fields(
@@ -187,8 +187,10 @@ def _document_fields(
     ]
     if _is_template(request_conditions, body):
         document_body = body or ""
-        if document_body.startswith(DOCUMENT_TITLE):
-            document_body = document_body[len(DOCUMENT_TITLE):].lstrip("\n")
+        for title in DOCUMENT_TITLES:
+            if document_body.startswith(title):
+                document_body = document_body[len(title):].lstrip("\n")
+                break
         fields = _headed_fields(document_body)
         if not fields:
             fields = [("本文", document_body)]
