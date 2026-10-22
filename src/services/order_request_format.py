@@ -1,6 +1,6 @@
 """追加案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
-from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
+from src.domain.order_schedule import apply_period_holidays, normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.domain.maps_url import validate_maps_url
 
 FORMAT_ID = "additional-request-v1"
@@ -60,6 +60,11 @@ def parse_sections(request_conditions: str | None) -> dict | None:
         _, sections["hours"], sections["fee"] = schedule_text(sections["schedule"])
     if "work_period" in data:
         sections["work_period"] = normalize_work_period(data["work_period"], sections.get("schedule"))
+        holidays = sections["work_period"].get("excluded_dates")
+        if holidays is not None and sections.get("schedule"):
+            # 休業日は全体の稼働日で持ち、稼働日の詳細（期間）ごとに配る（0.48.5）
+            sections["schedule"] = normalize_schedule(apply_period_holidays(sections["schedule"], holidays))
+            _, sections["hours"], sections["fee"] = schedule_text(sections["schedule"])
     if not sections["hours"]:
         sections["hours"] = _legacy_hours(sections)
     if not sections["fee"]:
@@ -71,9 +76,13 @@ def holiday_label(sections: dict) -> str:
     """日程の休業日（期間の中で稼働しない日）を「10月25日（日）、10月28日（水）」の形で。なければ空。"""
     from datetime import date as _date
 
-    schedule = sections.get("schedule") or {}
-    groups = schedule.get("work_groups", []) if isinstance(schedule, dict) else []
-    days = sorted({d for g in groups for d in ((g.get("excluded_dates") if isinstance(g, dict) else None) or [])})
+    period = sections.get("work_period") or {}
+    if isinstance(period, dict) and period.get("excluded_dates") is not None:
+        days = sorted(period["excluded_dates"])
+    else:
+        schedule = sections.get("schedule") or {}
+        groups = schedule.get("work_groups", []) if isinstance(schedule, dict) else []
+        days = sorted({d for g in groups for d in ((g.get("excluded_dates") if isinstance(g, dict) else None) or [])})
     weekdays = "月火水木金土日"
     return "、".join(f"{_date.fromisoformat(d).month}月{_date.fromisoformat(d).day}日（{weekdays[_date.fromisoformat(d).weekday()]}）" for d in days)
 

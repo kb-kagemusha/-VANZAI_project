@@ -10,11 +10,11 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { FormDialog } from "../components/FormDialog";
-import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
+import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
 import { VersionParticipationSummary } from "./ParticipationCalendarPage";
-import { compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { applyPeriodHolidays, singleDaysOnHolidays, compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
@@ -50,6 +50,7 @@ import {
   orderRequestPdfFileName,
   ORDER_DOCUMENT_TITLE,
   parseWorkDateRange,
+  sectionHolidays,
   sectionsFromStored,
   serializeOrderSections,
   siteLabelForList,
@@ -400,15 +401,25 @@ export function OrderRequestsPage() {
   const workDateTo = sections.workPeriod?.to ?? parsedWorkDates?.to ?? storedWorkDates[storedWorkDates.length - 1] ?? "";
   const legacyWorkDate = sections.workPeriod || parsedWorkDates || !form.work_date_label.trim() ? "" : form.work_date_label;
 
+  const holidays = sectionHolidays(sections);
+  const holidaySingleConflicts = sections.schedule ? singleDaysOnHolidays(sections.schedule, holidays) : [];
+
   function setWorkDateBound(bound: "from" | "to", value: string) {
     const from = bound === "from" ? value : workDateFrom;
     const to = bound === "to" ? value : workDateTo;
-    setSections({ ...sections, workPeriod: { from, to } });
+    // 休業日は残す（期間外になった日は休業日の欄で知らせて外せるようにする）
+    setSections({ ...sections, workPeriod: { ...(sections.workPeriod ?? {}), from, to } });
     setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
   }
   function changeSchedule(schedule: OrderSchedule) {
-    const next = syncSchedule(schedule);
+    let next = syncSchedule(schedule);
+    // 全体の休業日を、稼働日の詳細（期間）に配り直す
+    if (sections.workPeriod?.excluded_dates) next = applyPeriodHolidays(next, sections.workPeriod.excluded_dates);
     setSections({ ...sections, schedule: next });
+  }
+  function changeHolidays(dates: string[]) {
+    const workPeriod = { from: workDateFrom, to: workDateTo, ...(sections.workPeriod ?? {}), excluded_dates: dates };
+    setSections({ ...sections, workPeriod, schedule: sections.schedule ? applyPeriodHolidays(sections.schedule, dates) : sections.schedule });
   }
   async function enableSchedule() {
     const accepted = await confirmApp({ title: "日付・期間ごとの入力", message: "勤務時間・単価を日付別の入力に切り替えます。既存の文面は参考として残し、依頼書は新しい日付別の入力から作成します。", confirmLabel: "切り替える" });
@@ -1391,6 +1402,21 @@ export function OrderRequestsPage() {
                       </span>
                     ) : null}
                   </div>
+                  <div className="order-field order-span-6">
+                    {sections.schedule ? (
+                      <>
+                        <HolidayPicker from={workDateFrom} to={workDateTo} dates={holidays} disabled={!editable} onChange={changeHolidays} />
+                        {holidaySingleConflicts.length > 0 ? (
+                          <span className="form-error">休業日に「1日ごと」の稼働日の詳細があります（{holidaySingleConflicts.map((d) => dateGroupLabel({ id: d, date_mode: "single", from: d, to: d })).join("、")}）。このままでは保存できません。</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <span className="order-field-label">休業日</span>
+                        <span className="order-field-hint">日付・期間ごとの入力に切り替えると設定できます。</span>
+                      </>
+                    )}
+                  </div>
                   <label className="order-field order-span-6">
                     <span className="order-field-label">稼働日の補足（全体）</span>
                     <textarea
@@ -1401,6 +1427,20 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, workDateDetail: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
+                  {sections.schedule ? (
+                    <div className="order-field order-span-6 order-partial-accept">
+                      <label className="order-check">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.allow_partial_accept)}
+                          disabled={!editable}
+                          onChange={(event) => setForm({ ...form, allow_partial_accept: event.target.checked })}
+                        />
+                        日付を選んで受諾できる（一部の日だけの参加を認める）
+                      </label>
+                      <div className="order-field-hint">オンにすると、公式LINEのボタンが「全日程で受諾します」「日付を選んで受諾する」「今回は辞退します」になり、本人がカレンダーで参加する日を選べます（稼働日が2日以上ある送付先だけ）。オフの依頼書は「全日程で受諾します」「今回は辞退します」の2つです。</div>
+                    </div>
+                  ) : null}
                   {!sections.schedule && <label className="order-field order-span-4">
                     <span className="order-field-label">稼働時間</span>
                     <textarea
@@ -1411,20 +1451,6 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? (
-                    <div className="order-span-12 order-partial-accept">
-                      <label className="order-check">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(form.allow_partial_accept)}
-                          disabled={!editable}
-                          onChange={(event) => setForm({ ...form, allow_partial_accept: event.target.checked })}
-                        />
-                        日付を選んで受諾できる（一部の日だけの参加を認める）
-                      </label>
-                      <div className="order-field-hint">オンにすると、公式LINEのボタンが「全日程で受諾します」「日付を選んで受諾する」「今回は辞退します」になり、本人がカレンダーで参加する日を選べます（稼働日が2日以上ある送付先だけ）。全日程の参加が必要な案件ではオフのままにしてください。</div>
-                    </div>
-                  ) : null}
                   {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">

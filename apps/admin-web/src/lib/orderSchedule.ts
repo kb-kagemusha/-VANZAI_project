@@ -22,6 +22,19 @@ export function newRateGroup(group?: DateGroup): RateGroup {
   return { id: crypto.randomUUID(), date_mode: group?.date_mode ?? "single", from: group?.from ?? "", to: group?.to ?? "", work_group_id: group?.id ?? null,
     amount: "", unit: "day", lunch_included: true, transport_included: true, lunch_note: "", transport_note: "", notes: "" };
 }
+/** 全体の休業日を、稼働日の詳細（期間）ごとの休業日に配る（サーバーの apply_period_holidays と同じ）。 */
+export function applyPeriodHolidays(schedule: OrderSchedule, holidays: string[]): OrderSchedule {
+  const days = new Set(holidays);
+  return { ...schedule, work_groups: schedule.work_groups.map((group) => ({
+    ...group,
+    excluded_dates: group.date_mode === "range" && group.from && group.to ? [...days].filter((d) => d >= group.from && d <= group.to).sort() : [],
+  })) };
+}
+/** 休業日に重なっている「1日ごと」の稼働日（保存できないので、その場で知らせる）。 */
+export function singleDaysOnHolidays(schedule: OrderSchedule, holidays: string[]): string[] {
+  const days = new Set(holidays);
+  return schedule.work_groups.filter((g) => g.date_mode === "single" && g.from && days.has(g.from)).map((g) => g.from);
+}
 export function syncSchedule(schedule: OrderSchedule): OrderSchedule {
   if (!schedule.rates_follow_work) return schedule;
   return { ...schedule, rate_groups: schedule.work_groups.map((group) => {

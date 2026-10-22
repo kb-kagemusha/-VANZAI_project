@@ -6,7 +6,8 @@ export const ORDER_FORMAT_ID = "additional-request-v1";
 export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。";
 
 export interface OrderDocumentSections {
-  workPeriod?: { from: string; to: string };
+  /** 全体の稼働日。excluded_dates は全体の休業日（0.48.5〜。旧データには無い）。 */
+  workPeriod?: { from: string; to: string; excluded_dates?: string[] };
   schedule?: OrderSchedule;
   previousHours?: string;
   previousFee?: string;
@@ -107,7 +108,7 @@ export function composeOrderDocument(
     "",
     "■稼働日",
     wavy(workDateLabel.trim()),
-    ...(holidayLabel(sections.schedule) ? ["", "■休業日", holidayLabel(sections.schedule)] : []),
+    ...(holidayLabel(sections) ? ["", "■休業日", holidayLabel(sections)] : []),
     "",
     "■稼働日の詳細",
     wavy(sections.workDateDetail.trim()),
@@ -139,7 +140,11 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
     const data = JSON.parse(text) as Record<string, unknown>;
     if (data.format !== ORDER_FORMAT_ID) return null;
     return {
-      workPeriod: data.work_period && typeof data.work_period === "object" ? { from: textOf((data.work_period as Record<string, unknown>).from), to: textOf((data.work_period as Record<string, unknown>).to) } : undefined,
+      workPeriod: data.work_period && typeof data.work_period === "object" ? (() => {
+        const period = data.work_period as Record<string, unknown>;
+        const excluded = Array.isArray(period.excluded_dates) ? period.excluded_dates.filter((d): d is string => typeof d === "string") : undefined;
+        return { from: textOf(period.from), to: textOf(period.to), ...(excluded ? { excluded_dates: excluded } : {}) };
+      })() : undefined,
       schedule: scheduleFromStored(data.schedule),
       previousHours: textOf(data.previous_hours),
       previousFee: textOf(data.previous_fee),
@@ -350,10 +355,16 @@ export function stationLabel(sections: Pick<OrderDocumentSections, "siteStation"
   return /^\d{1,3}$/.test(minutes) ? `${station}（徒歩${Number(minutes)}分）` : station;
 }
 
-/** 日程の休業日を「10月25日（日）、10月28日（水）」の形で（サーバーの holiday_label と同じ）。 */
-export function holidayLabel(schedule: { work_groups: { excluded_dates?: string[] }[] } | null | undefined): string {
-  if (!schedule) return "";
-  const days = [...new Set(schedule.work_groups.flatMap((g) => g.excluded_dates ?? []))].sort();
+/** 休業日の一覧（全体の稼働日の休業日。旧データは稼働日の詳細ごとの休業日の合計）。 */
+export function sectionHolidays(sections: Pick<OrderDocumentSections, "workPeriod" | "schedule">): string[] {
+  if (sections.workPeriod?.excluded_dates) return [...sections.workPeriod.excluded_dates].sort();
+  return [...new Set((sections.schedule?.work_groups ?? []).flatMap((g) => g.excluded_dates ?? []))].sort();
+}
+
+/** 休業日を「10月25日（日）、10月28日（水）」の形で（サーバーの holiday_label と同じ）。 */
+export function holidayLabel(sections: Pick<OrderDocumentSections, "workPeriod" | "schedule">): string {
+  if (!sections.schedule) return "";
+  const days = sectionHolidays(sections);
   return days.map((day) => {
     const [, m, d] = day.split("-").map(Number);
     const weekday = "日月火水木金土"[new Date(`${day}T00:00:00+09:00`).getDay()];

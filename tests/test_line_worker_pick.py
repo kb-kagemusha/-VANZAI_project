@@ -307,3 +307,33 @@ def test_confirmed_body_has_holiday_section(api_client, db_session, ops_user, pd
     version = _create_partial(api_client, ops_user, [worker.id], holidays=[2])
     body = version["body"]
     assert body.index("■稼働日") < body.index("■休業日") < body.index("■稼働日の詳細")
+
+
+def test_period_holidays_are_distributed_to_work_groups(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    import json
+    from tests.test_line_daily import _payload
+
+    worker = _worker(db_session, "稼働者A")
+    body = _payload([worker.id], schedule=_schedule(1, 5))
+    conditions = json.loads(body["request_conditions"])
+    conditions["work_period"] = {"from": _day(1), "to": _day(5), "excluded_dates": [_day(2), _day(4)]}
+    body["request_conditions"] = json.dumps(conditions)
+    created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username))
+    assert created.status_code == 200, created.text
+    confirmed = api_client.post(f"/api/order-requests/versions/{created.json()['id']}/confirm", headers=_auth(ops_user.username)).json()
+    assert confirmed["deliveries"][0]["offered_dates"] == [_day(1), _day(3), _day(5)]
+    assert "■休業日" in confirmed["body"]
+
+    # 休業日が稼働日の期間外ならエラー
+    conditions["work_period"]["excluded_dates"] = [_day(9)]
+    body["request_conditions"] = json.dumps(conditions)
+    bad = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username))
+    assert bad.status_code == 400 and "期間外の休業日" in bad.text
+
+
+def test_period_holiday_on_single_day_group_is_rejected():
+    from src.domain.order_schedule import apply_period_holidays
+
+    schedule = {"work_groups": [{"id": "g1", "date_mode": "single", "from": "2026-11-01", "to": "2026-11-01"}]}
+    with pytest.raises(ValueError, match="1日ごと"):
+        apply_period_holidays(schedule, ["2026-11-01"])

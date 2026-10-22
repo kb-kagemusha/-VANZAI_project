@@ -2,15 +2,16 @@ import { confirmApp } from "../lib/appDialog";
 import { useState } from "react";
 import { MonthCalendar, monthOf } from "./MonthCalendar";
 import "../styles/monthCalendar.css";
-import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule, type WorkGroup } from "../lib/orderSchedule";
+import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
 /**
- * 期間の中の共通の休業日（DEC-065）。
+ * 全体の稼働日の中の休業日（DEC-065、0.48.5 で全体の稼働日の横へ移動）。
  * 「休業日を設定」を押すと期間のカレンダーが出て、日付を押して選び（もう一度押すと外れる）、「OK」で確定する。
  * 期間を変えて範囲外になった日は自動で消さず、表示して見直してもらう。
  */
-function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup; disabled: boolean; prefix: string; onChange: (dates: string[]) => void }) {
-  const dates = group.excluded_dates ?? [];
+export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: string; to: string; dates: string[]; disabled: boolean; onChange: (dates: string[]) => void }) {
+  const group = { from, to };
+  const prefix = "";
   const [editing, setEditing] = useState<string[] | null>(null);
   const [month, setMonth] = useState("");
   const [notice, setNotice] = useState("");
@@ -36,7 +37,7 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
   }
 
   return <div className="order-excluded-dates" role="group" aria-label={`${prefix}休業日`}>
-    <span className="order-field-label">休業日（この期間の中で稼働しない日）</span>
+    <span className="order-field-label">休業日（稼働日の中で稼働しない日）</span>
     {dates.length > 0
       ? <div className="order-recipient-picks">{dates.map((day) => <span key={day} className={`order-pick${inRange(day) ? "" : " is-error"}`}>
           {label(day)}{inRange(day) ? "" : "（期間外）"}
@@ -44,7 +45,7 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
       : <p className="order-field-hint">休業日はありません。</p>}
     {!disabled && dates.some((day) => !inRange(day)) ? (
       <div className="order-schedule-actions">
-        <span className="form-error">期間を変えたため、期間外の休業日があります。</span>
+        <span className="form-error">稼働日を変えたため、期間外の休業日があります。</span>
         <button type="button" className="order-action-button is-remove" onClick={() => { const next = dates.filter(inRange); onChange(next); setNotice(`期間外の休業日を外しました（残り${next.length}日）`); }}>期間外の日を外す</button>
       </div>
     ) : null}
@@ -54,12 +55,12 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
         <button type="button" className="order-action-button order-excluded-open" disabled={!ready} onClick={open}>
           <span aria-hidden="true">＋</span> {dates.length ? "休業日を変更" : "休業日を設定"}
         </button>
-        {!ready ? <span className="order-field-hint">開始日と終了日を入れると設定できます</span> : null}
+        {!ready ? <span className="order-field-hint">稼働日の開始日と終了日（2日以上）を入れると設定できます</span> : null}
       </div>
     )}
     {!disabled && editing !== null && (
       <div className="order-excluded-panel">
-        <p className="order-field-hint">休業日にする日を押してください。もう一度押すと外れます。選び終わったら「OK」を押します。</p>
+        <p className="order-field-hint">押した日が休業日になります（もう一度押すと戻ります）。「OK」で確定します。</p>
         <MonthCalendar
           month={month}
           onMonthChange={setMonth}
@@ -143,7 +144,6 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
         <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} disabled={disabled} onChange={update} />
-        {group.date_mode === "range" && <ExcludedDates group={group} prefix={`稼働日の詳細${index + 1}の`} disabled={disabled} onChange={(excluded_dates) => update({ excluded_dates })} />}
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>

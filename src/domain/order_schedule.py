@@ -109,6 +109,20 @@ class WorkPeriod(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     from_: str = Field(alias="from", max_length=10)
     to: str = Field(max_length=10)
+    # 全体の稼働期間の中の休業日（0.48.5）。None は旧データ（休業日は稼働日の詳細ごとに持つ）。
+    excluded_dates: list[str] | None = Field(default=None, max_length=366)
+
+    @field_validator("excluded_dates")
+    @classmethod
+    def excluded_format(cls, value):
+        if value is None:
+            return value
+        for day in value:
+            if not isinstance(day, str) or len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("休業日の日付の形式が正しくありません")
+        if len(set(value)) != len(value):
+            raise ValueError("休業日が重複しています")
+        return sorted(value)
 
     @field_validator("from_", "to")
     @classmethod
@@ -127,12 +141,34 @@ def normalize_work_period(value, schedule=None, *, complete=False):
         raise ValueError("稼働日の終了日は開始日以降にしてください")
     if complete and (not period.from_ or not period.to):
         raise ValueError("全体の稼働日の開始日・終了日を入力してください")
+    if period.excluded_dates:
+        if not period.from_ or not period.to:
+            raise ValueError("休業日を設定する前に、稼働日の開始日と終了日を入力してください")
+        if any(day < period.from_ or day > period.to for day in period.excluded_dates):
+            raise ValueError("稼働日の期間外の休業日があります。稼働日を変更した場合は休業日も見直してください")
     if schedule:
         for group in schedule["work_groups"]:
             for day in (group["from"], group["to"]):
                 if day and ((period.from_ and day < period.from_) or (period.to and day > period.to)):
                     raise ValueError("稼働時間の詳細の日付は、全体の稼働期間内にしてください")
-    return period.model_dump(by_alias=True)
+    return period.model_dump(by_alias=True, exclude_none=True)
+
+
+def apply_period_holidays(schedule: dict, holidays: list[str]) -> dict:
+    """全体の休業日を、稼働日の詳細（期間）ごとの休業日に配る。1日ごとの稼働日が休業日に重なるときは拒否する。"""
+    days = set(holidays)
+    groups = []
+    for group in schedule.get("work_groups", []):
+        group = dict(group)
+        if group.get("date_mode") == "single":
+            if group.get("from") in days:
+                raise ValueError(f"休業日に「1日ごと」の稼働日があります（{group['from']}）。休業日か稼働時間の詳細を見直してください")
+            group["excluded_dates"] = []
+        else:
+            start, end = group.get("from"), group.get("to")
+            group["excluded_dates"] = sorted(d for d in days if start and end and start <= d <= end)
+        groups.append(group)
+    return {**schedule, "work_groups": groups}
 
 
 def work_period_label(period):
