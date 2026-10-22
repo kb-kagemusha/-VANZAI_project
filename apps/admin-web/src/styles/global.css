@@ -4168,6 +4168,7 @@ a.primary-button {
   gap: 0.9rem 1rem;
 }
 
+.order-span-2 { grid-column: span 2; }
 .order-span-4 { grid-column: span 4; }
 .order-span-6 { grid-column: span 6; }
 .order-span-8 { grid-column: span 8; }
@@ -4662,6 +4663,7 @@ html[data-theme="dark"] .order-role-option.is-on { background: #244b36; border-c
     justify-content: flex-start;
   }
 
+  .order-span-2,
   .order-span-4,
   .order-span-6,
   .order-span-8 {
