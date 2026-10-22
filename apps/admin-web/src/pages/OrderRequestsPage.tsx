@@ -209,6 +209,10 @@ export function OrderRequestsPage() {
   const repliesQuery = useQuery({
     queryKey: ["order-request-replies"],
     queryFn: listOrderRequestReplies,
+    // 公式LINEでの受諾・辞退を、画面を開き直さずに反映する
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
@@ -220,6 +224,7 @@ export function OrderRequestsPage() {
     queryKey: ["order-request", selectedId],
     queryFn: () => getOrderRequestVersion(selectedId as string),
     enabled: Boolean(selectedId) && !creating,
+    refetchOnWindowFocus: true,
   });
 
   const workers = workersQuery.data?.items ?? [];
@@ -702,7 +707,19 @@ export function OrderRequestsPage() {
     setSelectedId(nextSelectedId);
   }
 
+  /** 日付・期間ごとの入力がない依頼書は、受諾しても稼働予定（公式LINEの予定・起床報告）が作られない（DEC-063）。 */
+  async function acceptWithoutSchedule(): Promise<boolean> {
+    if (sections.schedule) return true;
+    return confirmApp({
+      title: "稼働予定が作られません",
+      message: "この依頼書は稼働時間を文章で入力しています。このまま確定すると、本人が受諾しても公式LINEの「スケジュール確認」「起床報告」に予定が出ません。予定に載せる場合は「戻る」を押し、稼働時間の「日付・期間ごとの入力に切り替える」で日付と時刻を入力してください。",
+      confirmLabel: "予定なしで進む",
+      cancelLabel: "戻る",
+    });
+  }
+
   async function openPdfReview() {
+    if (!(await acceptWithoutSchedule())) return;
     const missing = missingSendFields();
     if (missing.length > 0) {
       setActionError(`送付前に入力してください: ${missing.join("、")}`);
@@ -1205,7 +1222,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button></div>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
@@ -1665,6 +1682,7 @@ export function OrderRequestsPage() {
                     onClick={async () => {
                       setActionError("");
                       if (dueMissing()) return;
+                      if (!(await acceptWithoutSchedule())) return;
                       try {
                   const saved = await updateOrderRequestVersion(detail.id, draftPayload());
                         confirmMutation.mutate(saved.id);
