@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
+import { FormDialog } from "../components/FormDialog";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
@@ -208,6 +209,7 @@ export function OrderRequestsPage() {
   const [sendingSelected, setSendingSelected] = useState(false);
   const [basedOn, setBasedOn] = useState<{ versionId: string; documentNumber: string; versionNo: number } | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
+  const [participationFor, setParticipationFor] = useState<{ versionId: string; title: string } | null>(null);
   const draftRef = useRef<HTMLFormElement>(null);
   const formRef = useRef(form);
   const sectionsRef = useRef(sections);
@@ -927,6 +929,14 @@ export function OrderRequestsPage() {
 
   return (
     <section>
+      <FormDialog
+        open={participationFor !== null}
+        title={participationFor ? `参加人数の確認：${participationFor.title}` : ""}
+        size="compact"
+        onClose={() => setParticipationFor(null)}
+      >
+        {participationFor ? <VersionParticipationSummary versionId={participationFor.versionId} /> : null}
+      </FormDialog>
       <PageHeader
         eyebrow="発注依頼"
         title="発注依頼書"
@@ -1075,6 +1085,15 @@ export function OrderRequestsPage() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(item.version_id)}>
                     {item.document_number}
                   </button>
+                  {item.status !== "draft" ? (
+                    <button
+                      type="button"
+                      className="btn btn-line-blue btn-sm order-participation-button"
+                      onClick={() => setParticipationFor({ versionId: item.version_id, title: `${item.document_number}（${item.project_name || "案件"}）` })}
+                    >
+                      参加人数の確認
+                    </button>
+                  ) : null}
                   {basedOnNote(item.document_number, item.based_on_document_number, item.based_on_version_no) ? (
                     <span className="order-change-note">
                       {basedOnNote(item.document_number, item.based_on_document_number, item.based_on_version_no)}
@@ -1745,7 +1764,7 @@ export function OrderRequestsPage() {
                     </tbody>
                   </table>
                 </div>
-                {detail.status !== "draft" && detail.kind === "formal" ? (
+                {detail.status !== "draft" ? (
                   <>
                     <h4>日ごとの参加人数</h4>
                     <VersionParticipationSummary versionId={detail.id} />

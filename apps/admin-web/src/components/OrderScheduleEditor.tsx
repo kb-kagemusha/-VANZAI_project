@@ -7,10 +7,14 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
   const [draft, setDraft] = useState("");
   const dates = group.excluded_dates ?? [];
   const inRange = (day: string) => Boolean(group.from && group.to && day >= group.from && day <= group.to);
-  const add = () => {
-    if (!draft || dates.includes(draft) || !inRange(draft)) return;
-    onChange([...dates, draft].sort());
-    setDraft("");
+  // 日付を選んだ時点で休業日に入れる（「追加」の押し忘れで保存されない事故を防ぐ。0.48.2）
+  const pick = (day: string) => {
+    if (day && inRange(day) && !dates.includes(day)) {
+      onChange([...dates, day].sort());
+      setDraft("");
+      return;
+    }
+    setDraft(day);
   };
   return <div className="order-excluded-dates" role="group" aria-label={`${prefix}休業日`}>
     <span className="order-field-label">休業日（この期間の中で稼働しない日）</span>
@@ -21,8 +25,12 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
         </span>)}</div>
       : <p className="order-field-hint">休業日はありません。</p>}
     {!disabled && <div className="order-schedule-actions">
-      <input type="date" aria-label={`${prefix}休業日の日付`} value={draft} min={group.from || undefined} max={group.to || undefined} onChange={(e) => setDraft(e.target.value)} />
-      <button type="button" className="order-action-button is-add" disabled={!draft || !inRange(draft) || dates.includes(draft)} onClick={add}><span aria-hidden="true">＋</span> 休業日を追加</button>
+      <label className="order-excluded-add">
+        <span><span aria-hidden="true">＋</span> 休業日を追加（日付を選ぶとすぐ入ります）</span>
+        <input type="date" aria-label={`${prefix}休業日の日付`} value={draft} min={group.from || undefined} max={group.to || undefined} onChange={(e) => pick(e.target.value)} />
+      </label>
+      {draft && !inRange(draft) ? <span className="form-error">期間の中の日を選んでください</span> : null}
+      {draft && dates.includes(draft) ? <span className="order-field-hint">すでに休業日です</span> : null}
     </div>}
   </div>;
 }

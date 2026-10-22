@@ -147,7 +147,7 @@ export function PublicLineWorkerPage() {
   const editable = view?.state === "open";
 
   function toggle(day: string) {
-    if (!editable || !offered.has(day)) return;
+    if (!editable || !offered.has(day) || holidays.has(day)) return;
     setSelected((current) => (current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort()));
   }
 
@@ -187,10 +187,10 @@ export function PublicLineWorkerPage() {
 
         {phase === "done" && result ? (
           <div className="lw-card">
-            <h1>受諾しました</h1>
-            <p className="lw-lead">あなたの稼働日</p>
+            <h1>受け付けました</h1>
+            <p className="lw-lead">受諾を受け付けました。あなたの稼働日（{result.dates.length}日）</p>
             <p className="lw-dates">{compactDates(result.dates)}</p>
-            <p className="lw-note">予定は公式LINEのメニュー「スケジュール確認」でも確認できます。この画面は閉じて構いません。</p>
+            <p className="lw-note">同じ内容をLINEのトークにも送りました。予定はメニューの「スケジュール確認」でも確認できます。この画面は閉じて構いません。</p>
             {liffClient()?.closeWindow ? (
               <button type="button" className="lw-primary" onClick={() => liffClient()?.closeWindow?.()}>閉じる</button>
             ) : null}
@@ -216,7 +216,7 @@ export function PublicLineWorkerPage() {
                 minMonth={minMonth}
                 maxMonth={maxMonth}
                 renderDay={(day) => {
-                  const isOffered = offered.has(day);
+                  const isOffered = offered.has(day) && !holidays.has(day);
                   const isSelected = selected.includes(day);
                   const isHoliday = holidays.has(day);
                   const classes = ["lw-day", isOffered ? "is-offered" : "is-off", isSelected ? "is-selected" : "", isHoliday ? "is-holiday" : "", day === view.today ? "is-today" : ""].filter(Boolean).join(" ");

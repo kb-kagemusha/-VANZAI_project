@@ -37,9 +37,9 @@ def _session(api_client, line_user="U123"):
     return {"Authorization": f"Bearer {response.json()['token']}"}
 
 
-def _create_partial(api_client, ops_user, worker_ids, *, allow=True, first=1, last=4):
+def _create_partial(api_client, ops_user, worker_ids, *, allow=True, first=1, last=4, holidays=None):
     from tests.test_line_daily import _payload
-    body = _payload(worker_ids, schedule=_schedule(first, last))
+    body = _payload(worker_ids, schedule=_schedule(first, last, holidays=holidays))
     body["allow_partial_accept"] = allow
     created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username))
     assert created.status_code == 200, created.text
@@ -231,3 +231,56 @@ def test_participation_calendar_classifies_without_double_counting(api_client, d
     month = _day(1)[:7]
     monthly = api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username))
     assert monthly.status_code == 200 and any(entry["date"] == _day(1) for entry in monthly.json()["days"])
+
+
+def test_pick_holiday_not_offered_and_accept_notice_sent_once(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line, monkeypatch):
+    from src.services.line_messaging import LineCallResult
+
+    sent = []
+
+    class Recorder:
+        def push_receipt(self, to, text, retry_key):
+            sent.append((to, text, retry_key))
+            return LineCallResult(200, "", "req")
+
+    monkeypatch.setattr("src.services.line_worker.build_line_client", Recorder)
+    worker = _worker(db_session, "稼働者A")
+    _link(api_client, ops_user, worker.id, "U123")
+    version = _create_partial(api_client, ops_user, [worker.id], holidays=[2])
+    delivery_id = version["deliveries"][0]["id"]
+    _send(api_client, ops_user, delivery_id)
+    _release(db_session, actions=("pick_dates",))
+    headers = _session(api_client)
+
+    view = api_client.get(f"/api/line/worker/deliveries/{delivery_id}/pick", headers=headers).json()
+    assert _day(2) not in view["offered_dates"] and _day(2) in view["holidays"]
+    holiday = api_client.post(f"/api/line/worker/deliveries/{delivery_id}/pick", json={"dates": [_day(2)]}, headers={**headers, "Idempotency-Key": "h"})
+    assert holiday.json()["outcome"] == "partial_invalid"
+    assert sent == []
+
+    key = {"Idempotency-Key": "ok"}
+    accepted = api_client.post(f"/api/line/worker/deliveries/{delivery_id}/pick", json={"dates": [_day(1), _day(3)]}, headers={**headers, **key})
+    assert accepted.json()["outcome"] == "acked"
+    assert len(sent) == 1
+    to, text, retry_key = sent[0]
+    assert to == "U123" and "受け付けました" in text and "（2日）" in text and len(retry_key) == 36
+    # 同じキーの再送では通知しない
+    api_client.post(f"/api/line/worker/deliveries/{delivery_id}/pick", json={"dates": [_day(1), _day(3)]}, headers={**headers, **key})
+    assert len(sent) == 1
+
+
+def test_participation_shows_zero_days_and_test_documents(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    from tests.test_line_daily import _payload
+
+    worker = _worker(db_session, "稼働者A")
+    body = _payload([worker.id], kind="test", schedule=_schedule(1, 3))
+    created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username)).json()
+    confirmed = api_client.post(f"/api/order-requests/versions/{created['id']}/confirm", headers=_auth(ops_user.username)).json()
+    # 未送付（未回答にも数えない）でも、テストの依頼書でも、稼働日は0人として表示する
+    days = api_client.get(f"/api/order-requests/participation-calendar?version_id={confirmed['id']}", headers=_auth(ops_user.username)).json()["days"]
+    assert [d["date"] for d in days] == [_day(1), _day(2), _day(3)]
+    assert all(len(d["events"][0]["ok"]) == 0 and len(d["events"][0]["unanswered"]) == 0 for d in days)
+    # 月のカレンダーには、テストの依頼書は出さない
+    month = _day(1)[:7]
+    monthly = api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username)).json()["days"]
+    assert all(e["version_id"] != confirmed["id"] for d in monthly for e in d["events"])

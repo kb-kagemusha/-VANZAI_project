@@ -42,6 +42,7 @@ def fake_line_registration_receipts(monkeypatch):
             return LineCallResult(200, "", "test-receipt")
 
     monkeypatch.setattr("src.services.line_registration_receipt.build_line_client", FakeReceiptClient)
+    monkeypatch.setattr("src.services.line_worker.build_line_client", FakeReceiptClient)
     class FakeProfileClient:
         def profile_name(self, user_id):
             return "テストLINEプロフィール"

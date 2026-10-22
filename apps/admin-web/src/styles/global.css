@@ -5566,3 +5566,5 @@ html[data-theme="dark"] .order-line-banner {
 html[data-theme="dark"] .btn-line-blue { border-color: #7aa7ff; color: #9bbcff; }
 html[data-theme="dark"] .btn-line-green { border-color: #5fcf8a; color: #7fdca1; }
 html[data-theme="dark"] .btn-line-red { border-color: #f87171; color: #fca5a5; }
+.order-participation-button { display: flex; margin-top: 6px; white-space: nowrap; }
+.order-excluded-add { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9rem; }

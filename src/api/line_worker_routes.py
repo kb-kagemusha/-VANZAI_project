@@ -79,6 +79,7 @@ def pick_accept(
         row, worker = service.authenticate(_bearer(request))
         result = service.accept_dates(row, worker, delivery_id, body.dates, idempotency_key)
         db.commit()
+        service.send_pending_notice()
     except LineWorkerError as exc:
         db.rollback()
         raise _error(exc) from None

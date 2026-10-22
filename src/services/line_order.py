@@ -598,8 +598,10 @@ class LineOrderService:
         chosen = sorted(set(d for d in dates if isinstance(d, str)))
         if not chosen:
             return "partial_invalid", "参加する日を1日以上選んでください。"
-        if not set(chosen) <= set(delivery.offered_dates):
-            return "partial_invalid", "選べない日が含まれています。画面を開き直してください。"
+        # 提示日のうち、今の日程で実際に勤務がある日（休業日を除く）だけを選べる
+        allowed = set(delivery.offered_dates) & {d["work_date"] for d in ws.version_work_days(version)}
+        if not set(chosen) <= allowed:
+            return "partial_invalid", "選べない日（休業日など）が含まれています。画面を開き直してください。"
         return self.accept_delivery(delivery, chosen, actor="line-liff")
 
     def accept_delivery(self, delivery: OrderRequestDelivery, dates: list[str] | None, *, actor: str) -> tuple[str, str | None]:

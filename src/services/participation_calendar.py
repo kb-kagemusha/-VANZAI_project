@@ -5,6 +5,7 @@
 - 参加OK・変更確認待ち：適用送付行が旧い版（回答受付版は未回答）で、その日が旧い版の参加日に入る
 - 未回答：今有効な受諾がなく、回答受付版の送付行が送付済み・未回答で、その日が提示日に入る
 同じ人は同じ日・同じ系列でどれか1つにだけ入る（系列×日付×稼働者で重複を除く）。正式の依頼書だけ。
+参加者が0人の日も、回答受付版の稼働日なら0人として返す。
 """
 from __future__ import annotations
 
@@ -43,7 +44,8 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
     for series in query.all():
         answerable = session.get(OrderRequestVersion, series.answerable_version_id)
         document = session.get(OrderRequestDocument, answerable.document_id)
-        if document.kind != KIND_FORMAL or document.deleted_at is not None:
+        # 月のカレンダーは正式だけ。依頼書ごとの確認（series_id 指定）はテストも表示する
+        if (document.kind != KIND_FORMAL and not series_id) or document.deleted_at is not None:
             continue
         display = ws.version_display(answerable)
         # 稼働者ごとの分類と日付
@@ -67,24 +69,30 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
             if delivery.offered_dates is None:
                 continue
             buckets[delivery.worker_id] = (UNANSWERED, list(delivery.offered_dates), delivery.worker_name_snapshot)
+        def event_of(day: str) -> dict:
+            return days[day].setdefault(
+                series.id,
+                {
+                    "series_id": series.id,
+                    "version_id": answerable.id,
+                    "document_id": document.id,
+                    "document_number": document.document_number,
+                    "project_name": display["project_name"],
+                    OK: [],
+                    CHANGING: [],
+                    UNANSWERED: [],
+                },
+            )
+
+        # 参加者が0人の日も日程として表示する（回答受付版の実勤務日）
+        for day in {d["work_date"] for d in ws.version_work_days(answerable)}:
+            if _in_range(day, start, end):
+                event_of(day)
         for worker_id, (kind, dates, name) in buckets.items():
             for day in set(dates):
                 if not _in_range(day, start, end):
                     continue
-                event = days[day].setdefault(
-                    series.id,
-                    {
-                        "series_id": series.id,
-                        "version_id": answerable.id,
-                        "document_id": document.id,
-                        "document_number": document.document_number,
-                        "project_name": display["project_name"],
-                        OK: [],
-                        CHANGING: [],
-                        UNANSWERED: [],
-                    },
-                )
-                event[kind].append({"worker_id": worker_id, "name": name})
+                event_of(day)[kind].append({"worker_id": worker_id, "name": name})
     result = []
     for day in sorted(days):
         events = sorted(days[day].values(), key=lambda e: (e["project_name"], e["document_number"]))

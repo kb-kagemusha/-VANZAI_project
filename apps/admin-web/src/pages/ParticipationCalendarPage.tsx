@@ -104,7 +104,8 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
   if (query.isLoading) return null;
   if (query.isError) return <p className="form-error">参加人数を読み込めませんでした。</p>;
   const days = query.data?.days ?? [];
-  if (days.length === 0) return <p className="order-field-hint">参加・未回答の人はまだいません（送付後に表示されます）。</p>;
+  if (days.length === 0) return <p className="order-field-hint">日付の決まった稼働日がありません（日程を入力して確定した依頼書で表示されます）。</p>;
+  const names = (list: { name: string }[]) => (list.length ? `：${list.map((p) => p.name).join("、")}` : "");
   return (
     <div className="order-draft-table">
       <table className="data-table">
@@ -117,9 +118,9 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
             return (
               <tr key={day.date}>
                 <td>{dayLabel(day.date)}</td>
-                <td title={event.ok.map((p) => p.name).join("、")}>{event.ok.length}人</td>
-                <td title={event.changing.map((p) => p.name).join("、")}>{event.changing.length}人</td>
-                <td title={event.unanswered.map((p) => p.name).join("、")}>{event.unanswered.length}人</td>
+                <td><strong>{event.ok.length}人</strong>{names(event.ok)}</td>
+                <td>{event.changing.length}人{names(event.changing)}</td>
+                <td>{event.unanswered.length}人{names(event.unanswered)}</td>
               </tr>
             );
           })}

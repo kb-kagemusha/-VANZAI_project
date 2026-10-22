@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import logging
 import secrets
+import uuid
 from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
@@ -37,7 +39,10 @@ from src.models.order_request import (
     OrderRequestVersion,
 )
 from src.services import line_id_token
+from src.services.line_messaging import LineNotConfigured, build_line_client
 from src.services import worker_schedule as ws
+
+logger = logging.getLogger(__name__)
 from src.services.audit import AuditService
 from src.services.line_daily import enabled_actions
 
@@ -151,7 +156,7 @@ class LineWorkerService:
             "meeting_place": display["meeting_place"],
             "state": state,
             "allow_partial_accept": bool(version.allow_partial_accept),
-            "offered_dates": list(delivery.offered_dates or []),
+            "offered_dates": [d for d in (delivery.offered_dates or []) if d in set(all_dates) and d not in set(holidays)],
             "period": {"from": all_dates[0], "to": all_dates[-1]} if all_dates else None,
             "work_days": [
                 {"date": d["work_date"], "start_time": d["start_time"], "end_time": d["end_time"], "end_next_day": d["end_next_day"]}
@@ -197,6 +202,13 @@ class LineWorkerService:
             state = ws.current_state(self.session, delivery)
             accepted = list(state.dates) if state is not None else []
         result = {"outcome": outcome, "message": message or "", "accepted_dates": accepted}
+        if outcome == "acked" and delivery is not None:
+            # 確定（commit）後にトークへ受付の通知を送る。再送（同じキー）では送らない
+            self.pending_notice = {
+                "to": session_row.line_user_id,
+                "text": self._accept_notice_text(delivery, accepted),
+                "retry_key": str(uuid.uuid5(uuid.NAMESPACE_URL, f"vanzai-pick:{worker.id}:{key}")),
+            }
         try:
             with self.session.begin_nested():
                 self.session.add(
@@ -219,6 +231,35 @@ class LineWorkerService:
                 return self._replay(existing, content)
             raise
         return result
+
+    def _accept_notice_text(self, delivery: OrderRequestDelivery, dates: list[str]) -> str:
+        from src.services.line_order import format_date_set
+
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        document = self.session.get(OrderRequestDocument, version.document_id)
+        display = ws.version_display(version)
+        lines = ["【受付】日付を選んでの受諾を受け付けました。"]
+        if document.kind == KIND_TEST:
+            lines.append("（テストの依頼書です）")
+        lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
+        lines.append(f"あなたの稼働日：{format_date_set(dates)}（{len(dates)}日）")
+        lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
+        return "\n".join(lines)
+
+    def send_pending_notice(self) -> None:
+        """受諾の確定後に呼ぶ。送信に失敗しても受諾は取り消さない（画面には結果を表示済み）。"""
+        notice = getattr(self, "pending_notice", None)
+        self.pending_notice = None
+        if not notice:
+            return
+        try:
+            result = build_line_client().push_receipt(notice["to"], notice["text"], notice["retry_key"])
+            if result.status not in (200, 409):
+                logger.warning("pick accept notice failed: status=%s message=%s", result.status, result.message)
+        except LineNotConfigured:
+            logger.warning("pick accept notice skipped: LINE not configured")
+        except Exception:  # noqa: BLE001 - 通知の失敗で画面の応答を壊さない
+            logger.exception("pick accept notice failed")
 
     def _submit_key(self, worker_id: str, key: str) -> LineWorkerSubmitKey | None:
         return (
