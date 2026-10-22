@@ -15,7 +15,7 @@ function dayLabel(day: string): string {
 }
 
 /** 参加カレンダー（統合計画 ①、D-07）：イベントごとに、日ごとの参加OK／変更確認待ち／未回答の人数。 */
-export function ParticipationCalendarPage() {
+export function ParticipationCalendarPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") || todayInTokyo().slice(0, 7);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -31,11 +31,11 @@ export function ParticipationCalendarPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader
+      {embedded ? null : <PageHeader
         title="参加カレンダー"
         description="正式の発注依頼書について、イベントごと・日ごとの参加OKの人数を表示します。参加OK＝今の依頼書で受諾済み、確認待ち＝前の版で受諾済みで新しい版は未回答、未回答＝送付済みでまだ返事がない人です。同じ人は1日に1つにだけ数えます。テストの依頼書と取消した依頼書は出しません。"
         eyebrow="運用"
-      />
+      />}
       {query.isError ? (
         <ErrorState title="参加カレンダーを読み込めませんでした" description={query.error instanceof ApiError ? query.error.message : "時間をおいて再度お試しください。"} />
       ) : (
@@ -43,7 +43,7 @@ export function ParticipationCalendarPage() {
           <section className="card participation-calendar">
             <MonthCalendar
               month={month}
-              onMonthChange={(next) => { setSelectedDay(null); setSearchParams({ month: next }); }}
+              onMonthChange={(next) => { setSelectedDay(null); setSearchParams((current) => { const params = new URLSearchParams(current); params.set("month", next); return params; }); }}
               renderDay={(day) => <DayCell day={day} data={byDay.get(day)} selected={selectedDay === day} onSelect={setSelectedDay} />}
             />
             <p className="participation-legend"><span className="pc-ok">OK</span>参加OK　<span className="pc-changing">確認</span>変更確認待ち　<span className="pc-unanswered">未</span>未回答</p>
@@ -69,15 +69,14 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
   return (
     <button type="button" className={`pc-day${selected ? " is-selected" : ""}${today ? " is-today" : ""}`} onClick={() => onSelect(day)}>
       <span className="pc-day-num">{Number(day.slice(8))}</span>
-      {(data?.events ?? []).slice(0, 3).map((event) => (
+      {(data?.events ?? []).map((event) => (
         <span key={event.series_id} className="pc-event" title={event.project_name}>
-          <span className="pc-event-name">{event.project_name || event.document_number}</span>
+          <span className="pc-event-name">{(event.project_name || "").split("\n")[0] || event.document_number}</span>
           <span className="pc-ok">{event.ok.length}</span>
           {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
           {event.unanswered.length > 0 ? <span className="pc-unanswered">{event.unanswered.length}</span> : null}
         </span>
       ))}
-      {(data?.events.length ?? 0) > 3 ? <span className="pc-more">ほか{(data?.events.length ?? 0) - 3}件</span> : null}
     </button>
   );
 }

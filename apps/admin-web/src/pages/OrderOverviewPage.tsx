@@ -1,5 +1,5 @@
 /**
- * 依頼の俯瞰カレンダー（0.48.6）。月の1日〜末日を横に並べ、依頼済みのイベントと稼働者を一覧する。
+ * 参加カレンダーの横長の表示（0.48.6、0.48.8 で参加カレンダーに統合）。月の1日〜末日を横に並べ、依頼済みのイベントと稼働者を一覧する。
  * 表示は「イベントごと」（行＝イベント、マス＝その日の稼働者）と「稼働者ごと」（行＝稼働者、マス＝その日のイベント）を切り替える。
  * データは参加カレンダーと同じ（参加OK／変更確認待ち／未回答。同じ人は1日に1つだけ）。
  */
@@ -9,7 +9,6 @@ import { useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { shiftMonth, todayInTokyo } from "../components/MonthCalendar";
-import { PageHeader } from "../components/PageHeader";
 import { ApiError, getParticipationCalendar, type ParticipationEvent } from "../lib/api/client";
 import "../styles/orderOverview.css";
 
@@ -44,7 +43,8 @@ function firstLine(text: string): string {
   return (text || "").split("\n")[0].trim() || "案件";
 }
 
-export function OrderOverviewPage() {
+/** 参加カレンダーの横長の表示（イベントごと・稼働者ごと）。表示の切り替えは参加カレンダーの画面が持つ。 */
+export function OrderOverviewBody() {
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") || todayInTokyo().slice(0, 7);
   const mode = searchParams.get("view") === "worker" ? "worker" : "event";
@@ -117,11 +117,6 @@ export function OrderOverviewPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader
-        title="依頼の俯瞰カレンダー"
-        eyebrow="運用"
-        description="依頼済みのイベント（確定した発注依頼書）を、月の1日から末日まで横に並べて表示します。「イベントごと」は各イベントの日ごとの稼働者、「稼働者ごと」は各稼働者の日ごとのイベントです。取消した依頼書は出しません。"
-      />
       <section className="card overview-toolbar">
         <div className="overview-month">
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => update({ month: shiftMonth(month, -1) })} aria-label="前の月">‹ 前の月</button>
@@ -130,10 +125,6 @@ export function OrderOverviewPage() {
           {month !== today.slice(0, 7) ? (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => update({ month: null })}>今月</button>
           ) : null}
-        </div>
-        <div className="overview-modes" role="group" aria-label="表示の切り替え">
-          <button type="button" aria-pressed={mode === "event"} className={mode === "event" ? "is-active" : ""} onClick={() => update({ view: null })}>イベントごと</button>
-          <button type="button" aria-pressed={mode === "worker"} className={mode === "worker" ? "is-active" : ""} onClick={() => update({ view: "worker" })}>稼働者ごと</button>
         </div>
         <label className="order-check overview-test">
           <input type="checkbox" checked={includeTest} onChange={(e) => update({ test: e.target.checked ? "1" : null })} />

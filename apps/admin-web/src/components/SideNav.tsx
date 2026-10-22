@@ -59,6 +59,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/wake-status": AlarmClock,
   "/operations/participation-calendar": CalendarCheck,
   "/operations/order-overview": CalendarRange,
+  "/operations/calendar": CalendarDays,
   "/operations/registration-requests": ClipboardList,
 };
 

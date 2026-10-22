@@ -69,3 +69,11 @@ html[data-theme="dark"] .overview-modes button { color: #9bbcff; }
 html[data-theme="dark"] .overview-modes button.is-active { background: #2563eb; color: #fff; }
 /* 連続する日の枠の高さをそろえる（2日目以降もイベント名の行を確保して見えなくする） */
 .ov-event-name.is-repeat { visibility: hidden; }
+
+/* カレンダーの表示切り替え（0.48.8） */
+.calendar-hub-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.calendar-hub-tabs button { border: 1.5px solid #2563eb; background: var(--panel, #fff); color: #2563eb; border-radius: 999px; padding: 8px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+.calendar-hub-tabs button:hover { background: rgba(37, 99, 235, 0.08); }
+.calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }
+html[data-theme="dark"] .calendar-hub-tabs button { color: #9bbcff; border-color: #7aa7ff; }
+html[data-theme="dark"] .calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }

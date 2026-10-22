@@ -24,27 +24,15 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: DASHBOARD_ROLES,
   },
   {
-    to: "/operations/availability-calendar",
-    label: "出勤可能日カレンダー",
-    description: "スタッフの出勤可能日とシフト担当を確認",
+    to: "/operations/calendar",
+    label: "カレンダー",
+    description: "出勤可能日・イベントごと・稼働者ごと・参加カレンダーを切り替えて表示",
     allowedRoles: ["admin", "ops", "accounting", "site_manager"],
   },
   {
     to: "/operations/order-requests",
     label: "発注依頼書",
     description: "依頼書の確定、送付先、受領の共有",
-    allowedRoles: ["admin", "ops"],
-  },
-  {
-    to: "/operations/order-overview",
-    label: "依頼の俯瞰カレンダー",
-    description: "依頼済みのイベントと稼働者を月の横長カレンダーで一覧",
-    allowedRoles: ["admin", "ops"],
-  },
-  {
-    to: "/operations/participation-calendar",
-    label: "参加カレンダー",
-    description: "イベントごと・日ごとの参加OKの人数",
     allowedRoles: ["admin", "ops"],
   },
   {
@@ -177,6 +165,7 @@ export const PATH_PERMISSIONS: Record<string, string[]> = {
   "/operations/wake-status": ["wake_status_read"],
   "/operations/participation-calendar": ["order_read"],
   "/operations/order-overview": ["order_read"],
+  "/operations/calendar": ["availability_read", "order_read"],
   "/operations/notices": ["notice_read"], "/operations/registration-requests": ["registration_read"],
   "/billing/invoices": ["invoice_read"], "/billing/payouts": ["payout_read"], "/billing/expenses": ["expense_read"],
   "/masters/workers": ["master_read"], "/masters/data": ["master_read"],

@@ -4,7 +4,8 @@
  */
 import type { ReactNode } from "react";
 
-const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+// 月曜始まり（0.48.8）
+const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"];
 
 export function monthOf(day: string): string {
   return day.slice(0, 7);
@@ -20,12 +21,12 @@ export function todayInTokyo(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
 }
 
-/** 月のマス（前後の空白を含む7列）。null は空白。 */
+/** 月のマス（月曜始まり、前後の空白を含む7列）。null は空白。 */
 export function monthCells(month: string): Array<string | null> {
   const [year, mon] = month.split("-").map(Number);
   const first = new Date(Date.UTC(year, mon - 1, 1));
   const days = new Date(Date.UTC(year, mon, 0)).getUTCDate();
-  const cells: Array<string | null> = Array.from({ length: first.getUTCDay() }, () => null);
+  const cells: Array<string | null> = Array.from({ length: (first.getUTCDay() + 6) % 7 }, () => null);
   for (let d = 1; d <= days; d += 1) cells.push(`${month}-${String(d).padStart(2, "0")}`);
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
@@ -57,7 +58,7 @@ export function MonthCalendar({
         <button type="button" className="month-calendar-nav" disabled={!canNext} onClick={() => onMonthChange(shiftMonth(month, 1))} aria-label="次の月">›</button>
       </div>
       <div className="month-calendar-grid" role="grid">
-        {WEEKDAYS.map((w, i) => <div key={w} className={`month-calendar-weekday${i === 0 ? " is-sun" : i === 6 ? " is-sat" : ""}`}>{w}</div>)}
+        {WEEKDAYS.map((w, i) => <div key={w} className={`month-calendar-weekday${i === 6 ? " is-sun" : i === 5 ? " is-sat" : ""}`}>{w}</div>)}
         {monthCells(month).map((day, index) => (
           <div key={day ?? `blank-${index}`} className="month-calendar-cell" role="gridcell">
             {day ? renderDay(day) : null}

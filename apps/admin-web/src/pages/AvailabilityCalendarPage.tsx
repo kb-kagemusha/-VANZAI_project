@@ -131,7 +131,7 @@ function WorkerQualBadge({ qKey, value }: { qKey: string; value: unknown }) {
 }
 
 // ─── メインコンポーネント ─────────────────────────────────────
-export function AvailabilityCalendarPage() {
+export function AvailabilityCalendarPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const today = useMemo(() => {
     const d = new Date();
@@ -253,7 +253,7 @@ export function AvailabilityCalendarPage() {
   // ─── レンダリング ─────────────────────────────────────────
   return (
     <div className="page-container">
-      <PageHeader title="出勤可能日カレンダー" description="スタッフのシフト可能日と担当を確認" />
+      {embedded ? null : <PageHeader title="出勤可能日カレンダー" description="スタッフのシフト可能日と担当を確認" />}
 
       {/* ツールバー */}
       <div style={{ marginBottom: 12, padding: "8px 0" }}>

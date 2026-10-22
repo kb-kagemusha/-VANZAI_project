@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
+import { CalendarHubPage } from "../pages/CalendarHubPage";
 import { AppShell } from "../components/AppShell";
 import { AccessManagementPage } from "../pages/AccessManagementPage";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -10,7 +11,6 @@ import { ActualsPage } from "../pages/ActualsPage";
 import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
-import { AvailabilityCalendarPage } from "../pages/AvailabilityCalendarPage";
 import { RoleDashboardPage } from "../pages/RoleDashboardPage";
 import { DashboardPreviewPage } from "../pages/DashboardPreviewPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
@@ -30,8 +30,6 @@ import { NoticesPage } from "../pages/NoticesPage";
 import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
 import { WakeStatusPage } from "../pages/WakeStatusPage";
-import { ParticipationCalendarPage } from "../pages/ParticipationCalendarPage";
-import { OrderOverviewPage } from "../pages/OrderOverviewPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
 import { PublicLineWorkerPage } from "../pages/PublicLineWorkerPage";
@@ -121,13 +119,14 @@ export function App() {
           />
           <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />} />
           <Route
-            path="/operations/availability-calendar"
+            path="/operations/calendar"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
-                <AvailabilityCalendarPage />
+                <CalendarHubPage />
               </PermissionRoute>
             }
           />
+          <Route path="/operations/availability-calendar" element={<Navigate to="/operations/calendar?view=availability" replace />} />
           <Route
             path="/operations/actuals"
             element={
@@ -235,22 +234,8 @@ export function App() {
               </PermissionRoute>
             }
           />
-          <Route
-            path="/operations/order-overview"
-            element={
-              <PermissionRoute allowedRoles={["admin", "ops"]}>
-                <OrderOverviewPage />
-              </PermissionRoute>
-            }
-          />
-          <Route
-            path="/operations/participation-calendar"
-            element={
-              <PermissionRoute allowedRoles={["admin", "ops"]}>
-                <ParticipationCalendarPage />
-              </PermissionRoute>
-            }
-          />
+          <Route path="/operations/order-overview" element={<Navigate to="/operations/calendar?view=event" replace />} />
+          <Route path="/operations/participation-calendar" element={<Navigate to="/operations/calendar?view=participation" replace />} />
           <Route
             path="/operations/wake-status"
             element={
