@@ -30,8 +30,10 @@ import { NoticesPage } from "../pages/NoticesPage";
 import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
 import { WakeStatusPage } from "../pages/WakeStatusPage";
+import { ParticipationCalendarPage } from "../pages/ParticipationCalendarPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
+import { PublicLineWorkerPage } from "../pages/PublicLineWorkerPage";
 import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
 import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
 import { OcrPage } from "../pages/ReceiptOcrPage";
@@ -57,6 +59,7 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
         <Route path="/public/line-registration" element={<PublicLineRegistrationPage />} />
+        <Route path="/public/line-worker" element={<PublicLineWorkerPage />} />
         <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
       </Route>
 
@@ -228,6 +231,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops"]}>
                 <OrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/participation-calendar"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <ParticipationCalendarPage />
               </PermissionRoute>
             }
           />

@@ -79,6 +79,8 @@ LINK_INSTRUCTION = (
 )
 ACCEPT_LABEL = "依頼の案件、受諾します"
 DECLINE_LABEL = "今回は辞退します"
+ACCEPT_ALL_LABEL = "全日程で受諾します"
+PICK_DATES_LABEL = "日付を選んで受諾する"
 ACCEPT_REPLY = "受諾ありがとうございます。よろしくお願い致します"
 SUPERSEDED_REPLY = "新しい依頼書が届いています。そちらで回答してください。"
 DECLINE_PROMPT = "辞退理由を簡単にお聞かせください"
@@ -293,6 +295,7 @@ class LineOrderService:
             delivery_id=delivery.id,
             is_test=document.kind == KIND_TEST,
             offered_dates=delivery.offered_dates,
+            pick_dates_url=self._pick_dates_url(version, delivery),
         )
         try:
             result = self.client.push_messages(link.line_user_id, messages)
@@ -559,10 +562,48 @@ class LineOrderService:
             return None, "closed", "この依頼の返事は停止されています。"
         return delivery, None, None
 
+    def _pick_dates_url(self, version: OrderRequestVersion, delivery: OrderRequestDelivery) -> str | None:
+        """日付を選んで受諾する画面（LIFF）のURL。許可がない・提示日が2日未満・機能が停止中なら None（A1+ §3）。"""
+        from src.models.line_daily import FEATURE_PICK_DATES
+        from src.services.line_daily import enabled_actions
+        from src.services.line_worker import worker_liff_id
+
+        liff_id = worker_liff_id()
+        if (
+            not liff_id
+            or not getattr(version, "allow_partial_accept", False)
+            or delivery.offered_dates is None
+            or len(delivery.offered_dates) < 2
+            or FEATURE_PICK_DATES not in enabled_actions(self.session)
+        ):
+            return None
+        return f"https://liff.line.me/{liff_id}?m=pick&d={delivery.id}"
+
     def _accept(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
+        return self.accept_delivery(delivery, None, actor="line-webhook")
+
+    def accept_with_dates(self, delivery_id: str, line_user_id: str, dates: list[str]) -> tuple[str, str | None]:
+        """日付を選んで受諾する（LIFF画面から。A1+ §3.3）。系列のロックの中で、回答受付版・本人・未回答を確かめる。"""
+        delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+        if delivery is None:
+            return outcome or "rejected", reply
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        if not getattr(version, "allow_partial_accept", False):
+            return "partial_not_allowed", "この依頼書は日付を選んで受諾できません。全日程で受諾するか、辞退してください。"
+        if delivery.offered_dates is None:
+            return "partial_not_allowed", "この依頼書は日付を選んで受諾できません。"
+        chosen = sorted(set(d for d in dates if isinstance(d, str)))
+        if not chosen:
+            return "partial_invalid", "参加する日を1日以上選んでください。"
+        if not set(chosen) <= set(delivery.offered_dates):
+            return "partial_invalid", "選べない日が含まれています。画面を開き直してください。"
+        return self.accept_delivery(delivery, chosen, actor="line-liff")
+
+    def accept_delivery(self, delivery: OrderRequestDelivery, dates: list[str] | None, *, actor: str) -> tuple[str, str | None]:
+        """受諾を記録する。dates=None は提示日の全部（全日程）、それ以外は選んだ日（partial_accept）。"""
         if delivery.ack_status == ACK_ACKED:
             return "already", "受諾は記録済みです。"
         if delivery.ack_status == ACK_DECLINED:
@@ -574,8 +615,12 @@ class LineOrderService:
             AuditAction.ORDER_REQUEST_ACKED,
             target_type="order_request_delivery",
             target_id=delivery.id,
-            actor="line-webhook",
-            after_value={"worker_id": delivery.worker_id, "ack_status": ACK_ACKED},
+            actor=actor,
+            after_value={
+                "worker_id": delivery.worker_id,
+                "ack_status": ACK_ACKED,
+                **({"partial_dates": len(dates), "offered_dates": len(delivery.offered_dates or [])} if dates is not None else {}),
+            },
         )
         self.session.flush()
         reply = ACCEPT_REPLY
@@ -583,11 +628,15 @@ class LineOrderService:
             # 提示日がNULLの旧送付行は、受諾を記録するだけにする（R3-02）
             version = self.session.get(OrderRequestVersion, delivery.version_id)
             series_id = ws.ensure_series(self.session, version)
+            participating = list(delivery.offered_dates) if dates is None else list(dates)
             if delivery.current_participation_state_id is None:
-                ws.append_state(self.session, delivery, dates=list(delivery.offered_dates), source="full_accept", actor="line-webhook")
-            ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor="line-webhook")
-            ws.rebuild(self.session, series_id, delivery.worker_id, actor="line-webhook")
-            label = format_date_set(delivery.offered_dates)
+                ws.append_state(
+                    self.session, delivery, dates=participating,
+                    source="full_accept" if dates is None else ws.SOURCE_PARTIAL_ACCEPT, actor=actor,
+                )
+            ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor)
+            ws.rebuild(self.session, series_id, delivery.worker_id, actor=actor)
+            label = format_date_set(participating)
             if label:
                 reply = f"{ACCEPT_REPLY}\nあなたの稼働日：{label}"
         return "acked", reply
@@ -788,6 +837,7 @@ def _push_messages(
     delivery_id: str,
     is_test: bool,
     offered_dates: list[str] | None = None,
+    pick_dates_url: str | None = None,
 ) -> list[dict]:
     lines = [
         f"発注依頼書 {document_number}（版{version_no}）",
@@ -823,11 +873,17 @@ def _push_messages(
                             "height": "sm",
                             "action": {
                                 "type": "postback",
-                                "label": ACCEPT_LABEL,
+                                "label": ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
                                 "data": f"or_accept:{delivery_id}",
-                                "displayText": ACCEPT_LABEL,
+                                "displayText": ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
                             },
                         },
+                        *([{
+                            "type": "button",
+                            "style": "secondary",
+                            "height": "sm",
+                            "action": {"type": "uri", "label": PICK_DATES_LABEL, "uri": pick_dates_url},
+                        }] if pick_dates_url else []),
                         {
                             "type": "button",
                             "style": "primary",

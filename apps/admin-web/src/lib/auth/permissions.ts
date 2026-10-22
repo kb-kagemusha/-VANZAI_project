@@ -36,6 +36,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops"],
   },
   {
+    to: "/operations/participation-calendar",
+    label: "参加カレンダー",
+    description: "イベントごと・日ごとの参加OKの人数",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
     to: "/operations/wake-status",
     label: "起床状況",
     description: "当日の稼働予定と公式LINEの起床報告",
@@ -163,6 +169,7 @@ export const PATH_PERMISSIONS: Record<string, string[]> = {
   "/operations/csv-import": ["csv_import", "csv_submit"],
   "/operations/ocr": ["ocr_read"], "/operations/order-requests": ["order_read"],
   "/operations/wake-status": ["wake_status_read"],
+  "/operations/participation-calendar": ["order_read"],
   "/operations/notices": ["notice_read"], "/operations/registration-requests": ["registration_read"],
   "/billing/invoices": ["invoice_read"], "/billing/payouts": ["payout_read"], "/billing/expenses": ["expense_read"],
   "/masters/workers": ["master_read"], "/masters/data": ["master_read"],

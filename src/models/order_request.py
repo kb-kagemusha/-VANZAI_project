@@ -113,6 +113,8 @@ class OrderRequestVersion(Base, TimestampMixin):
     draft_worker_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 送付先ごとの個人不参加日 {worker_id: ["YYYY-MM-DD", ...]}。共通本文には含めない（DEC-065）。
     draft_recipient_absences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 日付を選んで受諾できる（一部の日だけの参加を認める）。確定後は変えない（修正版で変える）。A1+ §3.1
+    allow_partial_accept: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     phone_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     phone_contacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

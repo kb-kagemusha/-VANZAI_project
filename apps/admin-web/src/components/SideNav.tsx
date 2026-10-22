@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlarmClock,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/order-requests": ScrollText,
   "/operations/notices": MessageSquare,
   "/operations/wake-status": AlarmClock,
+  "/operations/participation-calendar": CalendarCheck,
   "/operations/registration-requests": ClipboardList,
 };
 

@@ -12,6 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
+import { VersionParticipationSummary } from "./ParticipationCalendarPage";
 import { compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
@@ -153,6 +154,7 @@ const EMPTY_FORM: OrderRequestWrite = {
   counterparty_note: "",
   worker_ids: [],
   recipient_absences: {},
+  allow_partial_accept: false,
   phone_first: false,
   phone_note: "",
   tracker_user_id: null,
@@ -270,6 +272,7 @@ export function OrderRequestsPage() {
       counterparty_note: version.counterparty_note ?? "",
       worker_ids: version.draft_worker_ids,
       recipient_absences: version.draft_recipient_absences ?? {},
+      allow_partial_accept: Boolean(version.allow_partial_accept),
       phone_first: version.phone_first,
       phone_note: version.phone_note ?? "",
       tracker_user_id: version.tracker_user_id,
@@ -1389,6 +1392,20 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
+                  {sections.schedule ? (
+                    <div className="order-span-12 order-partial-accept">
+                      <label className="order-check">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.allow_partial_accept)}
+                          disabled={!editable}
+                          onChange={(event) => setForm({ ...form, allow_partial_accept: event.target.checked })}
+                        />
+                        日付を選んで受諾できる（一部の日だけの参加を認める）
+                      </label>
+                      <div className="order-field-hint">オンにすると、公式LINEのボタンが「全日程で受諾します」「日付を選んで受諾する」「今回は辞退します」になり、本人がカレンダーで参加する日を選べます（稼働日が2日以上ある送付先だけ）。全日程の参加が必要な案件ではオフのままにしてください。</div>
+                    </div>
+                  ) : null}
                   {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
@@ -1728,6 +1745,12 @@ export function OrderRequestsPage() {
                     </tbody>
                   </table>
                 </div>
+                {detail.status !== "draft" && detail.kind === "formal" ? (
+                  <>
+                    <h4>日ごとの参加人数</h4>
+                    <VersionParticipationSummary versionId={detail.id} />
+                  </>
+                ) : null}
               </section>
             ) : null}
 

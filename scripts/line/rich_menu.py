@@ -30,7 +30,10 @@ if ROOT not in sys.path:
 API = "https://api.line.me/v2/bot"
 DATA_API = "https://api-data.line.me/v2/bot"
 MAX_IMAGE_BYTES = 1024 * 1024
-KNOWN_ACTIONS = {"wk_wake", "wk_checkin", "wk_checkout", "wk_sales", "wk_orders", "wk_schedule"}
+MENU_ACTIONS = {"wk_wake", "wk_checkin", "wk_checkout", "wk_sales", "wk_orders", "wk_schedule"}
+# 押せる範囲を持たない業務機能（統合計画 §3、R-02）。Web側のAPIも公開記録のこのキーで判定する。
+FEATURE_ACTIONS = {"pick_dates", "web_home", "web_orders", "change_request"}
+KNOWN_ACTIONS = MENU_ACTIONS | FEATURE_ACTIONS
 
 
 def _token() -> str:
@@ -83,9 +86,20 @@ def load_stage(stage: str) -> dict:
     unknown = actions - KNOWN_ACTIONS
     if unknown:
         sys.exit(f"未知の機能: {sorted(unknown)}")
-    area_actions = {area["action"]["data"] for area in spec["rich_menu"]["areas"]}
-    if area_actions != actions:
-        sys.exit(f"押せる範囲 {sorted(area_actions)} と enabled_actions {sorted(actions)} が一致しません。")
+    area_actions = set()
+    for area in spec["rich_menu"]["areas"]:
+        action = area["action"]
+        if action.get("type") == "postback":
+            area_actions.add(action["data"])
+        elif action.get("type") == "uri":
+            # Web画面を直接開く範囲。対応する業務機能（web_home 等）を enabled_actions に入れて公開を管理する
+            if not str(action.get("uri", "")).startswith("https://liff.line.me/"):
+                sys.exit(f"URIの範囲は LIFF のURLだけにしてください: {action.get('uri')}")
+        else:
+            sys.exit(f"未対応の押せる範囲: {action.get('type')}")
+    menu_actions = actions & MENU_ACTIONS
+    if area_actions != menu_actions:
+        sys.exit(f"押せる範囲 {sorted(area_actions)} と enabled_actions のメニュー機能 {sorted(menu_actions)} が一致しません。")
     return spec
 
 
@@ -154,6 +168,40 @@ def cmd_apply(args) -> None:
     print(f"公開記録を残しました（有効な機能: {', '.join(sorted(spec['enabled_actions']))}）")
 
 
+def cmd_features(args) -> None:
+    """メニューの画像・押せる範囲を変えずに、業務機能だけを公開・停止する（統合計画 R-02）。新しい公開記録を追記する。"""
+    from src.api.deps import SessionLocal
+    from src.models.base import generate_ulid
+    from src.models.line_daily import LineRichMenuRelease
+
+    enable = set(args.enable or [])
+    disable = set(args.disable or [])
+    unknown = (enable | disable) - FEATURE_ACTIONS
+    if unknown:
+        sys.exit(f"業務機能のキーだけ切り替えられます。未知: {sorted(unknown)}（使えるキー: {sorted(FEATURE_ACTIONS)}）")
+    db = SessionLocal()
+    try:
+        latest = db.query(LineRichMenuRelease).order_by(LineRichMenuRelease.applied_at.desc()).first()
+        if latest is None:
+            sys.exit("公開記録がありません。先に apply でメニューを公開してください。")
+        actions = (set(latest.enabled_actions) | enable) - disable
+        db.add(
+            LineRichMenuRelease(
+                id=generate_ulid(),
+                stage=latest.stage,
+                rich_menu_id=latest.rich_menu_id,
+                enabled_actions=sorted(actions),
+                image_sha256=latest.image_sha256,
+                applied_at=datetime.now(timezone.utc),
+                applied_by=(args.by or "cli")[:64],
+            )
+        )
+        db.commit()
+        print(f"有効な機能: {', '.join(sorted(actions))}")
+    finally:
+        db.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -163,11 +211,17 @@ def main() -> None:
     apply.add_argument("--image", required=True)
     apply.add_argument("--by", default="")
     sub.add_parser("check").add_argument("--stage", required=True)
+    features = sub.add_parser("features")
+    features.add_argument("--enable", nargs="*")
+    features.add_argument("--disable", nargs="*")
+    features.add_argument("--by", default="")
     args = parser.parse_args()
     if args.command == "status":
         cmd_status(args)
     elif args.command == "apply":
         cmd_apply(args)
+    elif args.command == "features":
+        cmd_features(args)
     else:
         spec = load_stage(args.stage)
         print(f"OK: {args.stage} {sorted(spec['enabled_actions'])}")

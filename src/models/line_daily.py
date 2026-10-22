@@ -255,3 +255,54 @@ class LineRichMenuRelease(Base):
     image_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     applied_by: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class LineWorkerSession(Base):
+    """稼働者向けLIFF画面の短いセッション（統合計画 ①）。IDトークン検証の後に発行する。平文は保存しない。
+
+    登録用のセッション（line_registration_sessions）とは用途を分ける。各API呼び出しで連携と稼働者の状態を確認し直す。
+    """
+
+    __tablename__ = "line_worker_sessions"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    line_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(26), ForeignKey("workers.id"), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("length(token_hash) = 64", name="ck_line_worker_sessions_token_hash"),
+        Index("ix_line_worker_sessions_worker", "worker_id"),
+    )
+
+
+class LineWorkerSubmitKey(Base):
+    """LIFF画面からの送信の冪等キー（統合計画 R-06）。同じ本人・同じキーの再送には最初の結果を返す。"""
+
+    __tablename__ = "line_worker_submit_keys"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    worker_id: Mapped[str] = mapped_column(String(26), ForeignKey("workers.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("worker_id", "idempotency_key", name="uq_line_worker_submit_key"),
+        CheckConstraint("length(content_hash) = 64", name="ck_line_worker_submit_keys_hash"),
+        CheckConstraint("action IN ('pick_dates')", name="ck_line_worker_submit_keys_action"),
+    )
+
+
+# 公開記録（line_rich_menu_releases.enabled_actions）に入れる業務機能のキー（統合計画 §3、R-02）。
+# メニューのボタン（wk_*）と違い、押せる範囲を持たない。Web側のAPIはこの記録で判定する。
+FEATURE_PICK_DATES = "pick_dates"
+FEATURE_WEB_HOME = "web_home"
+FEATURE_WEB_ORDERS = "web_orders"
+FEATURE_CHANGE_REQUEST = "change_request"
+FEATURE_KEYS = (FEATURE_PICK_DATES, FEATURE_WEB_HOME, FEATURE_WEB_ORDERS, FEATURE_CHANGE_REQUEST)

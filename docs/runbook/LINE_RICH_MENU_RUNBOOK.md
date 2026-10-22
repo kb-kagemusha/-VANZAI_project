@@ -54,3 +54,24 @@ set -a; . ./.env; set +a
 ## 次の段階
 
 ②③④を公開するときは、`scripts/line/rich_menu/<段階>.json` を作り、`enabled_actions` と押せる範囲を一致させて `apply` する。
+
+## 業務機能だけを公開・停止する（0.48.0〜）
+
+メニューの画像・押せる範囲を変えずに、業務機能だけを切り替える。公開記録が1行追記される。
+
+```bash
+cd /var/www/vanzai
+set -a; . ./.env; set +a
+.venv/bin/python scripts/line/rich_menu.py features --enable pick_dates --by <自分の名前>    # 日付を選んでの受諾を公開
+.venv/bin/python scripts/line/rich_menu.py features --disable pick_dates --by <自分の名前>   # 停止
+.venv/bin/python scripts/line/rich_menu.py status
+```
+
+| キー | 機能 |
+|---|---|
+| pick_dates | 日付を選んでの受諾（送付メッセージの「日付を選んで受諾する」ボタンと、LINEの中のカレンダー画面） |
+| web_home・web_orders | Web確認画面（統合計画 ②。未実装） |
+| change_request | 参加日の変更依頼（統合計画 ③。未実装） |
+
+停止すると、送付メッセージに「日付を選んで受諾する」ボタンが出なくなり、すでに送ったボタンから開いても「この機能はまだご利用いただけません」と表示される。
+

@@ -131,6 +131,7 @@ export interface OrderRequestVersion {
   draft_worker_ids: string[];
   /** 送付先ごとの個人不参加日（DEC-065）。 */
   draft_recipient_absences?: Record<string, string[]>;
+  allow_partial_accept: boolean;
   phone_first: boolean;
   phone_contacted_at: string | null;
   phone_note: string | null;
@@ -251,4 +252,6 @@ export interface OrderRequestWrite {
   based_on_version_id?: string | null;
   /** 送付先ごとの個人不参加日（DEC-065）。 */
   recipient_absences?: Record<string, string[]>;
+  /** 日付を選んで受諾できる（A1+ §3.1） */
+  allow_partial_accept?: boolean;
 }

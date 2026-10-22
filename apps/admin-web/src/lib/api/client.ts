@@ -1191,6 +1191,52 @@ export type LineRegistrationSubmitResponse = {
   message: string;
 };
 
+export type LineWorkerPickView = {
+  delivery_id: string;
+  document_number: string;
+  version_no: number;
+  is_test: boolean;
+  project_name: string;
+  site_name: string;
+  meeting_place: string | null;
+  state: "open" | "accepted" | "declined" | "superseded" | "not_allowed" | "closed";
+  allow_partial_accept: boolean;
+  offered_dates: string[];
+  period: { from: string; to: string } | null;
+  work_days: Array<{ date: string; start_time: string; end_time: string; end_next_day: boolean }>;
+  holidays: string[];
+  accepted_dates: string[];
+  today: string;
+};
+
+export function getLineWorkerEntry() {
+  return publicApiFetch<{ liff_id: string | null; features: string[] }>("/api/line/worker/entry");
+}
+
+export function createLineWorkerSession(idToken: string) {
+  return publicApiFetch<{ token: string; expires_at: string; worker_name: string }>("/api/line/worker/sessions", {
+    method: "POST",
+    body: JSON.stringify({ id_token: idToken }),
+  });
+}
+
+export function getLineWorkerPick(token: string, deliveryId: string) {
+  return publicApiFetch<LineWorkerPickView>(`/api/line/worker/deliveries/${encodeURIComponent(deliveryId)}/pick`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function submitLineWorkerPick(token: string, deliveryId: string, dates: string[], idempotencyKey: string) {
+  return publicApiFetch<{ outcome: string; message: string; accepted_dates: string[] }>(
+    `/api/line/worker/deliveries/${encodeURIComponent(deliveryId)}/pick`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ dates }),
+    },
+  );
+}
+
 export function getLineRegistrationEntry() {
   return publicApiFetch<LineRegistrationEntry>("/api/line/registration/entry");
 }
@@ -1756,6 +1802,26 @@ export function revokeLineLink(workerId: string, reason: string) {
     `/api/order-requests/line-links/${workerId}/revoke`,
     { method: "POST", body: JSON.stringify({ reason }) },
   );
+}
+
+export type ParticipationPerson = { worker_id: string; name: string };
+export type ParticipationEvent = {
+  series_id: string;
+  version_id: string;
+  document_id: string;
+  document_number: string;
+  project_name: string;
+  ok: ParticipationPerson[];
+  changing: ParticipationPerson[];
+  unanswered: ParticipationPerson[];
+};
+export type ParticipationDay = { date: string; events: ParticipationEvent[] };
+
+export function getParticipationCalendar(params: { month?: string; versionId?: string }) {
+  return apiFetch<{ month?: string; days: ParticipationDay[] }>("/api/order-requests/participation-calendar", undefined, {
+    month: params.month,
+    version_id: params.versionId,
+  });
 }
 
 export function withdrawOrderRequestAcceptance(documentId: string, workerId: string, reason: string) {

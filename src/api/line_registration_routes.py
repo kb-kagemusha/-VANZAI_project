@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.api.deps import get_db
+from src.services import line_id_token as _token
 from src.domain.line_registration_entry import registration_entry_ready, registration_liff_id, registration_login_channel_id
 from src.domain.line_registration_input import LineRegistrationInputError
 from src.services.audit import AuditService
@@ -25,27 +26,16 @@ from src.services.line_registration import (
 )
 
 router = APIRouter(prefix="/api/line/registration", tags=["LINE registration"])
-VERIFY_URL = "https://api.line.me/oauth2/v2.1/verify"
-LINE_ID_TOKEN_EXPIRED = "LINEのログイン期限が切れました。LINEでもう一度開き直してください。この画面の入力は、開き直すと残りません。"
-
-
-def line_verify_error_message(body: str) -> str:
-    lowered = body.lower()
-    if "expir" in lowered:
-        return LINE_ID_TOKEN_EXPIRED
-    return "本人確認に失敗しました。"
+VERIFY_URL = _token.VERIFY_URL
+LINE_ID_TOKEN_EXPIRED = _token.LINE_ID_TOKEN_EXPIRED
+line_verify_error_message = _token.line_verify_error_message
 
 
 def assert_line_id_token_usable(payload: dict, channel_id: str, now: datetime) -> str:
-    if not isinstance(payload, dict) or payload.get("aud") != channel_id:
-        raise LineRegistrationAuthError()
-    subject = payload.get("sub")
-    if not isinstance(subject, str) or not subject.strip():
-        raise LineRegistrationAuthError()
-    exp = payload.get("exp")
-    if isinstance(exp, bool) or not isinstance(exp, (int, float)) or int(exp) <= int(now.timestamp()):
-        raise LineRegistrationAuthError(LINE_ID_TOKEN_EXPIRED)
-    return subject.strip()
+    try:
+        return _token.assert_line_id_token_usable(payload, channel_id, now)
+    except _token.LineIdTokenError as exc:
+        raise LineRegistrationAuthError(exc.message) from None
 
 
 class LineRegistrationSessionRequest(BaseModel):
@@ -73,23 +63,13 @@ class LineRegistrationSubmitRequest(BaseModel):
 
 
 def verify_line_id_token(id_token: str) -> str:
+    """登録の入口用。登録の受付が閉じていれば先に断る。検証そのものは共通（src/services/line_id_token.py）。"""
     if not registration_entry_ready():
         raise LineRegistrationClosed()
-    channel_id = registration_login_channel_id()
-    body = urllib.parse.urlencode({"id_token": id_token, "client_id": channel_id}).encode("utf-8")
-    request = urllib.request.Request(VERIFY_URL, data=body, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8") or "{}")
-    except urllib.error.HTTPError as exc:
-        try:
-            detail = exc.read().decode("utf-8", errors="replace")
-        except Exception:
-            detail = ""
-        raise LineRegistrationAuthError(line_verify_error_message(detail)) from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeError) as exc:
-        raise LineRegistrationAuthError() from exc
-    return assert_line_id_token_usable(payload, channel_id, datetime.now(timezone.utc))
+        return _token.verify_id_token(id_token, registration_login_channel_id())
+    except _token.LineIdTokenError as exc:
+        raise LineRegistrationAuthError(exc.message) from None
 
 
 def _bearer(request: Request) -> str:

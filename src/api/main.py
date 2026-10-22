@@ -9864,6 +9864,8 @@ app.include_router(line_registration_router)
 app.include_router(line_registration_review_router)
 from src.api.line_daily_routes import router as line_daily_router
 app.include_router(line_daily_router)
+from src.api.line_worker_routes import router as line_worker_router
+app.include_router(line_worker_router)
 
 
 from src.api.access_routes import router as access_router

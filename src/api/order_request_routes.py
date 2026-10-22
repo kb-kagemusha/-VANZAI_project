@@ -81,6 +81,7 @@ class OrderRequestWrite(BaseModel):
     based_on_version_id: str | None = None
     internal_source: InternalOrderSource | None = None
     recipient_absences: dict[str, list[str]] | None = None
+    allow_partial_accept: bool = False
 
 
 class OrderRequestUpdate(BaseModel):
@@ -106,6 +107,7 @@ class OrderRequestUpdate(BaseModel):
     assign_tracker_self: bool | None = None
     internal_source: InternalOrderSource | None = None
     recipient_absences: dict[str, list[str]] | None = None
+    allow_partial_accept: bool | None = None
 
 
 class ReasonBody(BaseModel):
@@ -284,6 +286,7 @@ def _version_out(
         "counterparty_note": version.counterparty_note,
         "draft_worker_ids": list(version.draft_worker_ids or []),
         "draft_recipient_absences": dict(version.draft_recipient_absences or {}),
+        "allow_partial_accept": bool(version.allow_partial_accept),
         "phone_first": version.phone_first,
         "phone_contacted_at": version.phone_contacted_at,
         "phone_note": version.phone_note,
@@ -564,6 +567,7 @@ def update_order_request_version(
             internal_source_set="internal_source" in fields,
             recipient_absences=fields.get("recipient_absences"),
             recipient_absences_set="recipient_absences" in fields,
+            allow_partial_accept=fields.get("allow_partial_accept"),
             actor=current_user,
         )
 
@@ -662,6 +666,35 @@ def add_order_request_note(
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)
     return _version_out(db, document, version)
+
+
+@router.get("/participation-calendar")
+def participation_calendar(
+    month: str | None = Query(default=None, pattern=r"^[0-9]{4}-[0-9]{2}$"),
+    version_id: str | None = Query(default=None, max_length=26),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """運営の参加カレンダー（統合計画 ①、D-07）。month で月全体、version_id でその依頼書の系列の全期間。"""
+    _ensure(current_user)
+    from calendar import monthrange
+
+    from src.services import participation_calendar as pc
+
+    if version_id:
+        version = db.get(OrderRequestVersion, version_id)
+        if version is None:
+            raise HTTPException(status_code=404, detail="発注依頼書が見つかりません")
+        series_id = ws.ensure_series(db, version)
+        return {"days": pc.build(db, series_id=series_id)}
+    if not month:
+        raise HTTPException(status_code=400, detail="month か version_id を指定してください")
+    year, mon = (int(x) for x in month.split("-"))
+    if not 1 <= mon <= 12:
+        raise HTTPException(status_code=400, detail="month が不正です")
+    start = f"{month}-01"
+    end = f"{month}-{monthrange(year, mon)[1]:02d}"
+    return {"month": month, "days": pc.build(db, start=start, end=end)}
 
 
 @router.get("/replies")
