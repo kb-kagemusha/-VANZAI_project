@@ -111,7 +111,8 @@ export function PublicLineWorkerPage() {
         const loaded = await getLineWorkerPick(session.token, delivery);
         if (!active) return;
         setView(loaded);
-        setSelected(loaded.state === "accepted" ? loaded.accepted_dates : []);
+        setSelected(loaded.state === "accepted" ? loaded.accepted_dates : loaded.state === "open"
+          ? [...new Set(loaded.offered_dates)].filter((day) => !loaded.holidays.includes(day)).sort() : []);
         setMonth(monthOf(loaded.offered_dates[0] ?? loaded.period?.from ?? loaded.today));
         setPhase("ready");
       } catch (error) {
@@ -228,8 +229,7 @@ export function PublicLineWorkerPage() {
             </div>
 
             <div className="lw-card">
-              <h2>{editable ? "参加する日をタップして選んでください" : "稼働日"}</h2>
-              {editable ? <button type="button" className="lw-select-all" onClick={() => setSelected([...offered].filter((day) => !holidays.has(day)).sort())}>すべて選択する</button> : null}
+              <h2>{editable ? "参加できない日をタップして外してください" : "稼働日"}</h2>
               <MonthCalendar
                 month={month}
                 onMonthChange={setMonth}
@@ -288,7 +288,7 @@ function PeriodSummary({ view }: { view: LineWorkerPickView }) {
 function StateNotice({ view }: { view: LineWorkerPickView }) {
   switch (view.state) {
     case "open":
-      return <p className="lw-note">全日程に参加できる場合は「すべて選択する」を押して確認へ進んでください。</p>;
+      return <p className="lw-note">初めは依頼された日をすべて選んでいます。参加できない日だけタップして外し、確認へ進んでください。</p>;
     case "accepted":
       return <p className="lw-ok">受諾済みです。参加する日：{"\n"}{participationDateLines(view.accepted_dates)}</p>;
     case "declined":

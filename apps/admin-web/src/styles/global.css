@@ -4131,6 +4131,7 @@ a.primary-button {
 .order-created-table .order-cell-category { white-space: nowrap; }
 .order-created-table .order-row-actions { width: max-content; }
 .order-detail-body { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; margin: 0; }
+.order-template-pagination, .order-template-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
 
 .order-document {
   display: grid;

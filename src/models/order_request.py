@@ -17,6 +17,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,6 +47,29 @@ ACK_DECLINED = "declined"
 ACK_STATUSES = (ACK_UNACKED, ACK_ACKED, ACK_DECLINE_PENDING, ACK_DECLINED)
 
 MAX_RECIPIENTS = 40
+
+
+class OrderRequestTemplate(Base, TimestampMixin):
+    """名前付きの独立した内容スナップショット。依頼書を変更しても連動しない。"""
+
+    __tablename__ = "order_request_templates"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_version_id: Mapped[str] = mapped_column(String(26), ForeignKey("order_request_versions.id"), nullable=False)
+    source_document_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(26), ForeignKey("users.id"), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by_user_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="ck_order_request_templates_name"),
+        Index("uq_order_request_templates_active_name", "name_key", unique=True,
+              postgresql_where=text("archived_at IS NULL"), sqlite_where=text("archived_at IS NULL")),
+        Index("ix_order_request_templates_archived", "archived_at"),
+    )
 
 
 class OrderRequestDocument(Base, TimestampMixin):

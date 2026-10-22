@@ -129,6 +129,8 @@ import type {
   OrderRequestReplyList,
   OrderRequestVersion,
   OrderRequestWrite,
+  OrderRequestTemplateItem,
+  OrderRequestTemplateDetail,
   WakeStatusList,
 } from "../../types/orderRequest";
 import type { OperatorStaffItem, OperatorStaffWrite } from "../../types/operatorStaff";
@@ -1712,6 +1714,22 @@ export function getOrderRequestVersion(versionId: string) {
   return apiFetch<OrderRequestVersion>(
     `/api/order-requests/versions/${versionId}`,
   );
+}
+
+export function listOrderRequestTemplates(params: { q?: string; limit?: number; offset?: number }) {
+  return apiFetch<{ items: OrderRequestTemplateItem[]; total: number; limit: number; offset: number }>("/api/order-requests/templates", undefined, params);
+}
+
+export function saveOrderRequestTemplate(body: { name: string; source_version_id: string }) {
+  return apiFetch<OrderRequestTemplateItem>("/api/order-requests/templates", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function getOrderRequestTemplate(id: string) {
+  return apiFetch<OrderRequestTemplateDetail>(`/api/order-requests/templates/${encodeURIComponent(id)}`);
+}
+
+export function archiveOrderRequestTemplate(id: string) {
+  return apiFetch<{ id: string; archived: boolean }>(`/api/order-requests/templates/${encodeURIComponent(id)}/archive`, { method: "POST" });
 }
 
 export function updateOrderRequestVersion(

@@ -2,6 +2,18 @@ export type OrderRequestKind = "formal" | "test";
 export type OrderRequestStatus = "draft" | "confirmed" | "cancelled";
 export type OrderRequestQueue = "all" | "unsent" | "unknown" | "unacked" | "overdue";
 
+export interface OrderRequestTemplateItem {
+  id: string;
+  name: string;
+  project_name: string;
+  source_document_number: string;
+  created_at: string;
+}
+
+export interface OrderRequestTemplateDetail extends OrderRequestTemplateItem {
+  payload: OrderRequestWrite;
+}
+
 export interface InternalOrderSource {
   client_id: string;
   client_staff_id: string | null;

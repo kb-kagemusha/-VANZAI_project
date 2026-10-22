@@ -11,6 +11,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { FormDialog } from "../components/FormDialog";
 import { OrderDatePicker } from "../components/OrderDatePicker";
+import { OrderRequestTemplatesDialog } from "../components/OrderRequestTemplatesDialog";
 import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
@@ -26,6 +27,8 @@ import {
   downloadOrderRequestPdf,
   fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
+  getOrderRequestTemplate,
+  saveOrderRequestTemplate,
   getWorkers,
   getWorkerTags,
   hideOrderRequest,
@@ -64,6 +67,7 @@ import {
 } from "../lib/orderRequestFormat";
 import { confirmApp, promptApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import type {
   OrderRequestChangeLink,
   OrderRequestDelivery,
@@ -185,6 +189,12 @@ export function OrderRequestsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canWrite = hasPermission(user, "order_write");
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [saveTemplateFor, setSaveTemplateFor] = useState<{ id: string; label: string } | null>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateError, setTemplateError] = useState("");
   const [kind, setKind] = useState<OrderRequestKind | "all">("formal");
   const [queue, setQueue] = useState<OrderRequestQueue>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -361,7 +371,7 @@ export function OrderRequestsPage() {
       draftRef.current?.focus();
     });
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
+      if (event.defaultPrevented || event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
       setCreating(false);
       setBasedOn(null);
       setSelectedId(null);
@@ -476,6 +486,41 @@ export function OrderRequestsPage() {
     setReason("");
     setNote("");
     setSavedDraftId(null);
+  }
+
+  function openTemplateSave(id: string, label: string) {
+    setSaveTemplateFor({ id, label });
+    setTemplateName(label.split("\n")[0].trim().slice(0, 100));
+    setTemplateError("");
+  }
+
+  async function saveTemplate() {
+    if (!saveTemplateFor || !templateName.trim() || templateSaving) return;
+    setTemplateSaving(true); setTemplateError("");
+    try {
+      const saved = await saveOrderRequestTemplate({ name: templateName.trim(), source_version_id: saveTemplateFor.id });
+      setSaveTemplateFor(null);
+      setActionMessage(`「${saved.name}」をテンプレートに保存しました。新規作成時に「テンプレートから呼び出す」で利用できます。`);
+      await queryClient.invalidateQueries({ queryKey: ["order-request-templates"] });
+    } catch (error) { setTemplateError(messageOf(error)); }
+    finally { setTemplateSaving(false); }
+  }
+
+  async function useTemplate(id: string): Promise<boolean> {
+    if (createModal && (sections.projectName.trim() || form.site_name.trim())) {
+      if (!(await confirmApp({ title: "テンプレートを呼び出す", message: "入力中の内容をテンプレートの内容に置き換えます。保存済みの依頼書はそのまま残ります。", confirmLabel: "呼び出す" }))) return false;
+    }
+    const template = await getOrderRequestTemplate(id);
+    const nextForm = { ...EMPTY_FORM, ...template.payload };
+    const stored = sectionsFromStored(nextForm.request_conditions, nextForm.body);
+    const nextSections = { ...stored, schedule: stored.schedule ? syncSchedule(stored.schedule) : syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
+    loadedForRef.current = null;
+    setCreating(true); setSelectedId(null); setSavedDraftId(null); setBasedOn(null);
+    formRef.current = nextForm; sectionsRef.current = nextSections;
+    setForm(nextForm); setSections(nextSections);
+    setWorkerSearch(""); setWorkerRoleFilters([]); setReason(""); setNote(""); setActionError("");
+    setActionMessage(`「${template.name}」から新規作成しています。稼働日・休業日・期限・送付先を設定し、時刻・単価も今回の内容で確認してください。`);
+    return true;
   }
 
   /** 送信が済んだあと、依頼書の画面を閉じるかを確かめる。 */
@@ -931,6 +976,15 @@ export function OrderRequestsPage() {
 
   return (
     <section>
+      {templatesOpen ? <OrderRequestTemplatesDialog onClose={() => setTemplatesOpen(false)} onUse={useTemplate} canWrite={canWrite} /> : null}
+      <FormDialog open={saveTemplateFor !== null} title="テンプレートとして保存" size="compact" busy={templateSaving} onClose={() => setSaveTemplateFor(null)}>
+        <p>保存済みの依頼書「{saveTemplateFor?.label}」の内容を再利用できるようにします。日付・休業日・期限・送付先・送付状況は引き継ぎません。</p>
+        <label className="order-field"><span className="order-field-label">テンプレート名</span>
+          <input autoFocus value={templateName} maxLength={100} disabled={templateSaving} onChange={(event) => setTemplateName(event.target.value)} />
+        </label>
+        {templateError ? <p className="form-error" role="alert">{templateError}</p> : null}
+        <button type="button" className="btn btn-primary create-button" disabled={templateSaving || !templateName.trim()} onClick={() => void saveTemplate()}>{templateSaving ? "保存しています…" : "テンプレートを保存"}</button>
+      </FormDialog>
       <FormDialog
         open={participationFor !== null}
         title={participationFor ? `参加人数の確認：${participationFor.title}` : ""}
@@ -944,9 +998,12 @@ export function OrderRequestsPage() {
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
         titleAction={(
+          <div className="order-template-actions">
           <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>
             新規の依頼書を作成
           </button>
+          <button type="button" className="btn btn-ghost" onClick={() => setTemplatesOpen(true)}>保存済みテンプレート</button>
+          </div>
         )}
       />
       <p className="card" style={{ padding: "0.9rem 1rem" }}>
@@ -1127,6 +1184,7 @@ export function OrderRequestsPage() {
                         変更を作成
                       </button>
                     )}
+                    {canWrite ? <button type="button" className="btn create-button btn-sm" onClick={() => openTemplateSave(item.version_id, item.project_name || item.document_number)}>テンプレートとして保存</button> : null}
                     <button
                       type="button"
                       className="btn btn-line-green btn-sm"
@@ -1214,6 +1272,7 @@ export function OrderRequestsPage() {
               ) : null}
             </div>
             <div className="order-draft-head-side">
+              {creating && !basedOn && !savedDraftId && canWrite ? <button type="button" className="btn btn-ghost" onClick={() => setTemplatesOpen(true)}>テンプレートから呼び出す</button> : null}
               {createModal ? (
                 <button type="button" className="btn btn-ghost" onClick={closeCreateModal}>
                   閉じる

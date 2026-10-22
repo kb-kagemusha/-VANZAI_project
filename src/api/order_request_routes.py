@@ -21,6 +21,7 @@ from src.models.order_request import (
     OrderRequestDocument,
     OrderRequestNote,
     OrderRequestVersion,
+    OrderRequestTemplate,
 )
 from src.models.line_daily import OrderRequestWorkerApplication
 from src.services import worker_schedule as ws
@@ -34,6 +35,7 @@ from src.services.line_order import (
     latest_send_errors,
 )
 from src.services.order_request_format import parse_sections
+from src.services.order_request_template import OrderRequestTemplateService
 from src.services.order_request_pdf import (
     TEMPLATE_LAYOUT_APPLIED,
     attachment_content_disposition,
@@ -118,6 +120,63 @@ class ReasonBody(BaseModel):
 class NoteBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str
+
+
+class TemplateSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=100)
+    source_version_id: str = Field(min_length=1, max_length=26)
+
+
+def _template_out(row: OrderRequestTemplate, *, detail: bool = False) -> dict:
+    sections = parse_sections(row.payload.get("request_conditions", "")) or {}
+    result = {"id": row.id, "name": row.name, "project_name": sections.get("project_name", ""),
+              "source_document_number": row.source_document_number, "created_at": row.created_at}
+    if detail:
+        result["payload"] = row.payload
+    return result
+
+
+@router.get("/templates")
+def list_order_request_templates(
+    q: str = Query(default="", max_length=100), limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    query = db.query(OrderRequestTemplate).filter(OrderRequestTemplate.archived_at.is_(None))
+    if q.strip():
+        import unicodedata
+        query = query.filter(OrderRequestTemplate.name_key.contains(unicodedata.normalize("NFKC", q.strip()).casefold(), autoescape=True))
+    total = query.count()
+    rows = query.order_by(OrderRequestTemplate.name_key, OrderRequestTemplate.id).offset(offset).limit(limit).all()
+    return {"items": [_template_out(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+
+
+@router.post("/templates")
+def save_order_request_template(body: TemplateSaveBody, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    if not has_permission(current_user, Permission.ORDER_WRITE):
+        raise HTTPException(status_code=403, detail="テンプレートの保存には発注依頼書の操作権限が必要です")
+    row = _call(db, lambda: OrderRequestTemplateService(db).save(name=body.name, source_version_id=body.source_version_id, actor=current_user))
+    return _template_out(row)
+
+
+@router.get("/templates/{template_id}")
+def get_order_request_template(template_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    try:
+        return _template_out(OrderRequestTemplateService(db).get(template_id), detail=True)
+    except OrderRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@router.post("/templates/{template_id}/archive")
+def archive_order_request_template(template_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    if not has_permission(current_user, Permission.ORDER_WRITE):
+        raise HTTPException(status_code=403, detail="テンプレートの整理には発注依頼書の操作権限が必要です")
+    row = _call(db, lambda: OrderRequestTemplateService(db).archive(template_id, actor=current_user))
+    return {"id": row.id, "archived": True}
 
 
 class LineLinkCodeBody(BaseModel):

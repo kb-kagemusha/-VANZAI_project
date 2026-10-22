@@ -1494,3 +1494,15 @@
 - Version: 既存画面・返信の修正としてZ（0.48.11）。
 - Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/16、DEC-063/065/069。
 
+### DEC-072: 発注依頼書の名前付きテンプレートと参加日選択の初期値（2026-10-23）
+- Status: Confirmed（テンプレート保存・新規作成時の呼び出し、LINEの初期全選択はユーザー依頼）
+- Purpose: 月例・季節・年次・不定期のイベントで過去の依頼書を探す作業を省き、LINEでは行けない日だけ外して返答できるようにする。
+- Decision: 作成済み依頼書から名前付きテンプレートを保存し、新規作成時に保存済み一覧を検索して呼び出す。テンプレートは保存元の版を参照するだけでなく内容を独立して保持する。元の依頼書の変更・非表示や、呼び出し後の編集に連動して変更しない。呼び出しだけでは依頼書の保存・確定・送付を行わない。
+- Implementation defaults: 担当者間で共用する保存済み一覧とし、内容・場所・発注元・連絡担当・カテゴリ・時刻・単価などを保持する。誤送付・古い日付の再利用を防ぐため、日付・休業日・稼働日の補足・期限・送付先・個人不参加日・電話済み情報・追跡担当・送付/受諾状態は引き継がない。自由文中の日付は推測して消さず、利用時に確認する。旧形式の依頼書も文章を参照として保持し、呼び出し時は日付・期間ごとの入力に切り替える。
+- Data: `order_request_templates`（id、name、name_key、payload JSON、source_version_id、source_document_number、created_by_user_id、created_at/updated_at、archived_at/archived_by_user_id）。有効なname_keyはNFKC・大文字小文字の正規化後の部分一意インデックスで重複を拒否する。既存依頼書の移行・上書きは不要。migration `20261023b001`（追加のみ）。
+- Lifecycle / Permission / Audit: 保存・一覧除外はorder_write、一覧・内容閲覧はorder_read。不要なものは一覧から外し、物理削除しない。内容を変えるときは別名で保存、同名を使うときは旧テンプレートを一覧除外してから保存する。`order_request_template_saved` / `order_request_template_archived`に実行者・役割・対象・保存元版または除外操作を記録する。
+- Decision（ユーザーの追加訂正）: DEC-071の「すべて選択する」ボタンは撤去し、LINE画面を開いた時点で本人が選択可能な全日を選択済みにする。本人は参加できない日だけ外す。休業日・個人に設定した不参加日は選ばない。受諾済みの場合は既存参加日だけを表示し、再受諾・予定変更はしない。確認画面で送信した時だけ記録し、0日なら送信できない。
+- Version: 既存の依頼書作成で内容を再利用する方法の追加と、既存の参加日入力方法の変更としてZ（0.48.12）。DB追加自体をYの理由にしない。
+- Validation: `tests/test_order_request_templates.py`（内容の独立・安全な初期値・権限・重複・非破壊除外・検索・DDL）、関連依頼書/LINEテスト、`apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（保存・検索・呼出し・除外・初期全選択と月をまたぐ解除）。運用手順: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/14.4/16、DEC-063/065/069/071。
+

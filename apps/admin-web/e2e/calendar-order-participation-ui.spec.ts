@@ -18,6 +18,7 @@ const version = {
 async function adminMocks(page: Page) {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
   const writes: Array<{ path: string; body: any }> = [];
+  let template: any = null;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
@@ -30,6 +31,23 @@ async function adminMocks(page: Page) {
       days: [{ date: "2026-10-29", events: [{ series_id: "series-1", version_id: version.id, document_number: version.document_number, project_name: "確認用イベント", site_name: "表示不要な集合場所", ok: [{ worker_id: "worker-1", name: "稼働者1" }], changing: [], unanswered: [] }] }],
     });
     if (path.endsWith("/pdf-preview")) return route.fulfill({ contentType: "application/pdf", body: "%PDF-1.4\n%%EOF" });
+    if (path === "/api/order-requests/templates") {
+      if (method === "POST") {
+        const body = route.request().postDataJSON();
+        const copied = JSON.parse(version.request_conditions);
+        copied.work_period = { from: "", to: "", excluded_dates: [] };
+        copied.schedule.work_groups.forEach((group: any) => Object.assign(group, { from: "", to: "", excluded_dates: [] }));
+        copied.schedule.rate_groups.forEach((group: any) => Object.assign(group, { from: "", to: "" }));
+        template = { id: "template-1", name: body.name, project_name: "確認用イベント", source_document_number: version.document_number,
+          payload: { kind: "formal", work_date_label: "", site_name: "会場", request_conditions: JSON.stringify(copied), body: "", contact_name: "なし", worker_ids: [], recipient_absences: {}, follow_up_due_on: null } };
+        return respond(template);
+      }
+      const search = new URL(route.request().url()).searchParams.get("q") || "";
+      const items = template && template.name.includes(search) ? [template] : [];
+      return respond({ items, total: items.length });
+    }
+    if (path === "/api/order-requests/templates/template-1/archive") { template = null; return respond({ id: "template-1", archived: true }); }
+    if (path === "/api/order-requests/templates/template-1") return respond(template);
     if (path === "/api/order-requests/versions/version-1") {
       if (method === "PATCH") {
         const body = route.request().postDataJSON(); writes.push({ path, body });
@@ -68,6 +86,39 @@ test("worker calendar retains dates while scrolling; event document opens detail
   await expect(link).toBeFocused();
 });
 
+test("saved template can be found and loaded into an independent blank-date draft", async ({ page }, testInfo) => {
+  const writes = await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "テンプレートとして保存", exact: true }).click();
+  const save = page.getByRole("dialog", { name: "テンプレートとして保存", exact: true });
+  await save.getByRole("textbox", { name: "テンプレート名", exact: true }).fill("季節のイベント");
+  await save.getByRole("button", { name: "テンプレートを保存", exact: true }).click();
+  await expect(save).toHaveCount(0);
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  await page.getByRole("button", { name: "テンプレートから呼び出す", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "保存済みテンプレート", exact: true });
+  await picker.getByRole("textbox", { name: "テンプレート名で検索", exact: true }).fill("季節");
+  await expect(picker.getByText("季節のイベント", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("template-picker.png") });
+  await picker.getByRole("button", { name: "このテンプレートで新規作成", exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("textbox", { name: "案件名", exact: true })).toHaveValue("確認用イベント");
+  await expect(draft.getByRole("button", { name: "稼働日の開始", exact: true })).toContainText("日付を選択");
+  await expect(draft.getByRole("button", { name: "稼働日の終了", exact: true })).toContainText("日付を選択");
+  await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("10000");
+  await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
+  await draft.getByRole("textbox", { name: "案件名", exact: true }).fill("今回だけ変更");
+  await draft.getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  await expect(picker.getByText("確認用イベント", { exact: true })).toBeVisible();
+  await picker.getByRole("button", { name: "一覧から外す", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "テンプレートを一覧から外す", exact: true });
+  await confirm.getByRole("button", { name: "一覧から外す", exact: true }).click();
+  await expect(picker.getByText("季節のイベント", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
 test("Monday date picker and PDF correction preserve draft and reuse its id", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   await page.goto("/operations/order-requests");
@@ -96,7 +147,7 @@ test("Monday date picker and PDF correction preserve draft and reuse its id", as
   expect(writes.every((write) => write.path.endsWith("/version-1"))).toBe(true);
 });
 
-test("select all spans months and confirmation separates holidays and nonparticipating days", async ({ page }, testInfo) => {
+test("all offered days start selected; unavailable days can be removed across months before sending", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     (window as any).liff = { init: async () => {}, isLoggedIn: () => true, getIDToken: () => "id-test", isInClient: () => false };
@@ -113,15 +164,22 @@ test("select all spans months and confirmation separates holidays and nonpartici
     return respond({ delivery_id: "delivery-1", document_number: version.document_number, version_no: 1, project_name: "確認用イベント", state: "open", offered_dates: offered, holidays: ["2026-10-30"], period: { from: "2026-10-29", to: "2026-11-04" }, work_days: working.map((date) => ({ date, start_time: "09:00", end_time: "17:00" })), accepted_dates: [], today: "2026-10-23" });
   });
   await page.goto("/public/line-worker?m=pick&d=delivery-1");
-  await page.getByRole("button", { name: "すべて選択する", exact: true }).click();
   await expect(page.locator(".lw-footer-dates")).toHaveText("5日を選択しています");
+  await expect(page.getByRole("button", { name: "すべて選択する", exact: true })).toHaveCount(0);
+  expect(submissions).toEqual([]);
+  const october29 = page.locator(".lw-day").filter({ has: page.getByText("29", { exact: true }) });
+  await october29.click();
+  await expect(page.locator(".lw-footer-dates")).toHaveText("4日を選択しています");
+  await october29.click();
+  await page.getByRole("button", { name: "次の月", exact: true }).click();
+  await page.locator(".lw-day").filter({ has: page.getByText("4", { exact: true }) }).click();
   await page.getByRole("button", { name: "確認する", exact: true }).click();
-  await expect(page.locator(".lw-dates")).toHaveText("10月29日（木）\n10月31日（土）〜11月2日（月）\n11月4日（水）");
+  await expect(page.locator(".lw-dates")).toHaveText("10月29日（木）\n10月31日（土）〜11月2日（月）");
   const off = page.getByRole("heading", { name: "参加しない日", exact: true }).locator("+ p");
-  await expect(off).toHaveText("11月3日（火）");
+  await expect(off).toHaveText("11月3日（火）〜11月4日（水）");
   await expect(page.getByRole("heading", { name: "期間中の休業日", exact: true }).locator("+ p")).toHaveText("10月30日（金）");
   await page.screenshot({ path: testInfo.outputPath("participation-confirm.png"), fullPage: true });
   await page.getByRole("button", { name: "送信", exact: true }).click();
   await expect(page.getByRole("heading", { name: "送信しました", exact: true })).toBeVisible();
-  expect(submissions[0].dates).toEqual(offered);
+  expect(submissions[0].dates).toEqual(offered.filter((day) => day !== "2026-11-04"));
 });
