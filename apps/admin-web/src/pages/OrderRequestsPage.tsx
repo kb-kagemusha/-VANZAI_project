@@ -168,6 +168,8 @@ function withScheduleDateLabel(form: OrderRequestWrite, sections: OrderDocumentS
   return { ...form, work_date_label: formatWorkDateRange(days[0], days[days.length - 1]) };
 }
 
+const CONTACT_NONE = "なし";
+
 function messageOf(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
@@ -285,6 +287,8 @@ export function OrderRequestsPage() {
       internal_source: current.internal_source ? { client_id: current.internal_source.client_id, client_staff_id: current.internal_source.client_staff_id } : null,
       request_conditions: serializeOrderSections(currentSections),
       body: composeOrderDocument(currentSections, current.work_date_label, current.site_name, current.site_address ?? ""),
+      // 担当者がいない依頼もあるため、空欄は「なし」として送る
+      contact_name: current.contact_name.trim() || CONTACT_NONE,
       contact_desk: "",
       counterparty_note: current.counterparty_note || null,
       phone_first: Boolean(current.phone_first),
@@ -699,7 +703,6 @@ export function OrderRequestsPage() {
     if (!sections.projectName.trim()) missing.push("案件名");
     if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
     if (!form.site_name.trim()) missing.push("稼働場所");
-    if (!form.contact_name.trim()) missing.push("担当者");
     if (!form.follow_up_due_on) missing.push("期限の案内");
     if (form.worker_ids.length === 0) missing.push("送付先");
     if (form.worker_ids.length > MAX_ORDER_RECIPIENTS) missing.push(`送付先は${MAX_ORDER_RECIPIENTS}人まで`);
@@ -1301,6 +1304,7 @@ export function OrderRequestsPage() {
                   <span className="order-field-label">運営側の連絡担当者</span>
                   <input
                     value={form.contact_name}
+                    placeholder="いない場合は空欄（「なし」と表示）"
                     disabled={!editable}
                     onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />

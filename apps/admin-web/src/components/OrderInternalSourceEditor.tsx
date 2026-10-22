@@ -42,7 +42,7 @@ export function OrderInternalSourceEditor({ value, disabled, onChange }: { value
           const row = staffRows.find((item) => item.id === event.target.value);
           onChange(value ? { ...value, client_staff_id: row?.id ?? null, staff_name: row?.name ?? null, staff_phone: row?.phone ?? null } : null);
         }}>
-          <option value="">未設定</option>
+          <option value="">なし</option>
           {value?.client_staff_id && !selectedStaff && <option value={value.client_staff_id}>{value.staff_name ?? "保存済みの担当者"}（保存済み）</option>}
           {staffRows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
         </select>
