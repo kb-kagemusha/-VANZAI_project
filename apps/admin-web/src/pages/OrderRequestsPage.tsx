@@ -534,6 +534,63 @@ export function OrderRequestsPage() {
     }
   }
 
+  /**
+   * 同じイベントを別日に行うときの複製。元の依頼書とは別の新しい依頼書（別の系列）として作る。
+   * 「変更を作成」と違い、元の依頼書の受諾・稼働予定には影響しない。日付と日付に関わる入力は空にする。
+   */
+  async function startCopy(versionId: string) {
+    setChangeLoading(true);
+    setActionError("");
+    setActionMessage("");
+    try {
+      const version = await getOrderRequestVersion(versionId);
+      const workerIds = version.deliveries.length > 0
+        ? version.deliveries.map((row) => row.worker_id)
+        : version.draft_worker_ids;
+      const stored = sectionsFromStored(version.request_conditions, version.body);
+      const schedule = stored.schedule
+        ? syncSchedule({
+          ...stored.schedule,
+          // 時刻・単価は残し、日付だけ空にする（単価は勤務グループのIDで対応を保つ）
+          work_groups: stored.schedule.work_groups.map((group) => ({ ...group, from: "", to: "", excluded_dates: [] })),
+          rate_groups: stored.schedule.rate_groups.map((rate) => ({ ...rate, from: "", to: "" })),
+        })
+        : syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] });
+      const nextSections: OrderDocumentSections = {
+        ...stored,
+        workPeriod: { from: "", to: "" },
+        workDateDetail: "",
+        schedule,
+        ...(stored.schedule ? {} : { previousHours: stored.hours, previousFee: stored.fee }),
+      };
+      const nextForm: OrderRequestWrite = {
+        ...formFromVersion(version),
+        work_date_label: "",
+        worker_ids: workerIds,
+        recipient_absences: {},
+        phone_first: false,
+        phone_note: "",
+        follow_up_due_on: null,
+      };
+      loadedForRef.current = null;
+      setCreating(true);
+      setSelectedId(null);
+      setSavedDraftId(null);
+      setBasedOn(null);
+      formRef.current = nextForm;
+      sectionsRef.current = nextSections;
+      setForm(nextForm);
+      setSections(nextSections);
+      setReason("");
+      setNote("");
+      setActionMessage(`${version.document_number} の内容を写した新しい依頼書です。稼働日・稼働時間の詳細の日付・期限の案内を入れてください。元の依頼書と受諾・予定は別々に扱います。`);
+    } catch (error) {
+      setActionError(messageOf(error));
+    } finally {
+      setChangeLoading(false);
+    }
+  }
+
   function loadFormFromDetail() {
     if (!detail) return;
     setForm(formFromVersion(detail));
@@ -858,7 +915,7 @@ export function OrderRequestsPage() {
 
       <section className="order-list-frame is-sent">
         <h3>送信した依頼</h3>
-        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。内容を変えるときは「変更を作成」で、この依頼を基にした新しい依頼書を作れます。</p>
+        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。内容を変えるときは「変更を作成」（元の依頼書の受諾・予定を置き換えます）、同じイベントを別の日に行うときは「別日で新規作成」（元の依頼書には影響しません）を使います。</p>
         <div className="order-list-table">
           <table className="data-table">
             <thead>
@@ -903,6 +960,14 @@ export function OrderRequestsPage() {
                           変更を作成
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn btn-change btn-sm create-button"
+                        disabled={changeLoading}
+                        onClick={() => void startCopy(row.version_id)}
+                      >
+                        別日で新規作成
+                      </button>
                       {(row.change_documents ?? []).map((change) => (
                         <button
                           key={change.version_id}
@@ -927,7 +992,7 @@ export function OrderRequestsPage() {
 
       <section className="order-list-frame is-created">
         <h3>作成した依頼書</h3>
-        <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から「変更を作成」で、内容を写した新しい依頼書を作れます。</p>
+        <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から、「変更を作成」（元の依頼書を置き換える）か「別日で新規作成」（元の依頼書とは別に扱う）で、内容を写した新しい依頼書を作れます。</p>
         <div className="order-list-filters">
           <label>
             区分
@@ -1003,6 +1068,14 @@ export function OrderRequestsPage() {
                         変更を作成
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="btn btn-change btn-sm create-button"
+                      disabled={changeLoading}
+                      onClick={() => void startCopy(item.version_id)}
+                    >
+                      別日で新規作成
+                    </button>
                     {(item.change_documents ?? []).map((change) => (
                       <button
                         key={change.version_id}
@@ -1110,6 +1183,17 @@ export function OrderRequestsPage() {
                   onClick={() => startChange(detail.id)}
                 >
                   変更を作成
+                </button>
+              ) : null}
+              {!creating && detail ? (
+                <button
+                  type="button"
+                  className="btn btn-change btn-sm create-button"
+                  disabled={changeLoading}
+                  title="同じイベントを別の日に行うときに使います。元の依頼書には影響しません"
+                  onClick={() => void startCopy(detail.id)}
+                >
+                  別日で新規作成
                 </button>
               ) : null}
               {!creating && detail && detail.status !== "draft" ? (

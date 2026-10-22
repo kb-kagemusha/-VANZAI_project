@@ -537,3 +537,17 @@ def test_composite_foreign_keys_reject_mismatched_rows():
         session.add(bad)
         with pytest.raises(IntegrityError, match="FOREIGN KEY"):
             session.commit()
+
+
+def test_copy_for_another_day_is_an_independent_series(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
+    """「別日で新規作成」（based_on なしの新規作成）は別の系列。元の依頼書の予定は変わらない。"""
+    worker = _worker(db_session, "稼働者A")
+    first = _create_confirm(api_client, ops_user, [worker.id], schedule=_schedule(1, 1))
+    _link(api_client, ops_user, worker.id, "U123")
+    _send_and_accept(api_client, ops_user, first["deliveries"][0]["id"])
+    second = _create_confirm(api_client, ops_user, [worker.id], schedule=_schedule(3, 3))
+    db_session.expire_all()
+    assert db_session.get(OrderRequestVersion, first["id"]).series_id != db_session.get(OrderRequestVersion, second["id"]).series_id
+    _send_and_accept(api_client, ops_user, second["deliveries"][0]["id"])
+    rows = _entries(db_session, worker.id)
+    assert [(r.work_date.isoformat(), r.status) for r in rows] == [(_day(1), "active"), (_day(3), "active")]
