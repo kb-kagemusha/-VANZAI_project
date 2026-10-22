@@ -27,7 +27,7 @@ type EventRow = {
   days: Map<string, ParticipationEvent>;
 };
 type WorkerCell = { seriesId: string; status: Status };
-type WorkerRow = { workerId: string; name: string; days: Map<string, WorkerCell[]> };
+type WorkerRow = { workerId: string; name: string; lineLinked: boolean | null; days: Map<string, WorkerCell[]> };
 
 function monthDays(month: string): string[] {
   const [year, mon] = month.split("-").map(Number);
@@ -63,7 +63,7 @@ export function OrderOverviewBody() {
 
   const query = useQuery({
     queryKey: ["order-overview", month, includeTest],
-    queryFn: () => getParticipationCalendar({ month, includeTest }),
+    queryFn: () => getParticipationCalendar({ month, includeTest, includeWorkers: true }),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
@@ -72,6 +72,11 @@ export function OrderOverviewBody() {
   const { events, workers } = useMemo(() => {
     const eventMap = new Map<string, EventRow>();
     const workerMap = new Map<string, WorkerRow>();
+    // 登録のある稼働者は、依頼がなくても全員出す（登録の順＝ふりがな順）
+    for (const worker of query.data?.workers ?? []) {
+      workerMap.set(worker.worker_id, { workerId: worker.worker_id, name: worker.name, lineLinked: worker.line_linked, days: new Map() });
+    }
+    const registeredCount = workerMap.size;
     for (const day of query.data?.days ?? []) {
       for (const event of day.events) {
         let row = eventMap.get(event.series_id);
@@ -92,7 +97,7 @@ export function OrderOverviewBody() {
           for (const person of event[status]) {
             let worker = workerMap.get(person.worker_id);
             if (!worker) {
-              worker = { workerId: person.worker_id, name: person.name, days: new Map() };
+              worker = { workerId: person.worker_id, name: person.name, lineLinked: null, days: new Map() };
               workerMap.set(person.worker_id, worker);
             }
             const cells = worker.days.get(day.date) ?? [];
@@ -108,7 +113,9 @@ export function OrderOverviewBody() {
       return first(a).localeCompare(first(b)) || a.name.localeCompare(b.name, "ja");
     });
     eventRows.forEach((row, index) => { row.color = index % PALETTE_SIZE; });
-    const workerRows = [...workerMap.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    // 登録の順のまま。登録一覧にない人（無効にした人など）は後ろに名前の順で付ける
+    const allWorkers = [...workerMap.values()];
+    const workerRows = [...allWorkers.slice(0, registeredCount), ...allWorkers.slice(registeredCount).sort((a, b) => a.name.localeCompare(b.name, "ja"))];
     return { events: eventRows, workers: workerRows };
   }, [query.data]);
   const eventById = useMemo(() => new Map(events.map((e) => [e.seriesId, e])), [events]);
@@ -142,7 +149,7 @@ export function OrderOverviewBody() {
       ) : query.isLoading ? (
         <p className="order-field-hint">読み込んでいます…</p>
       ) : (mode === "event" ? events.length : workers.length) === 0 ? (
-        <section className="card"><p className="order-field-hint">{mode === "event" ? "この月に依頼済みのイベントはありません。" : "この月に依頼している稼働者はいません。"}</p></section>
+        <section className="card"><p className="order-field-hint">{mode === "event" ? "この月に依頼済みのイベントはありません。" : "登録のある稼働者がいません。"}</p></section>
       ) : (
         <section className="card overview-scroll" aria-label={`${year}年${mon}月の${mode === "event" ? "イベントごと" : "稼働者ごと"}の表示`}>
           <table className={`overview-grid is-${mode}`}>
@@ -192,7 +199,11 @@ export function OrderOverviewBody() {
                   ))
                 : workers.map((row) => (
                     <tr key={row.workerId}>
-                      <th className="overview-row-name" scope="row"><span className="ov-row-title">{row.name}</span></th>
+                      <th className="overview-row-name" scope="row">
+                        <span className="ov-row-title">{row.name}</span>
+                        {row.lineLinked === false ? <span className="ov-line-badge">LINE未連携</span> : null}
+                        {row.lineLinked === null ? <span className="ov-row-sub">登録の一覧にない人</span> : null}
+                      </th>
                       {days.map((day) => {
                         const cells = row.days.get(day) ?? [];
                         return (

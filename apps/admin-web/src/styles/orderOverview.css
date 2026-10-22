@@ -77,3 +77,6 @@ html[data-theme="dark"] .overview-modes button.is-active { background: #2563eb; 
 .calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }
 html[data-theme="dark"] .calendar-hub-tabs button { color: #9bbcff; border-color: #7aa7ff; }
 html[data-theme="dark"] .calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }
+/* 稼働者ごと：LINE未連携の印（0.48.9） */
+.ov-line-badge { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: #fde8e8; color: #b91c1c; border: 1px solid #f5b5b5; }
+html[data-theme="dark"] .ov-line-badge { background: #4a2020; color: #fecaca; border-color: #7f1d1d; }

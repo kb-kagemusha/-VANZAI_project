@@ -35,6 +35,17 @@ def _in_range(day: str, start: str | None, end: str | None) -> bool:
     return (start is None or day >= start) and (end is None or day <= end)
 
 
+def registered_workers(session: Session) -> list[dict]:
+    """登録のある（有効な）稼働者全員と、LINEの連携の有無（俯瞰カレンダーの稼働者ごとの表示で使う）。ふりがな・名前の順。"""
+    from src.models.line_order import LINK_ACTIVE, LineWorkerLink
+    from src.models.master import Worker
+
+    linked = {wid for (wid,) in session.query(LineWorkerLink.worker_id).filter(LineWorkerLink.status == LINK_ACTIVE).all()}
+    workers = session.query(Worker).filter(Worker.is_active.is_(True)).all()
+    workers.sort(key=lambda w: ((w.furigana or w.name or ""), w.name or ""))
+    return [{"worker_id": w.id, "name": w.name, "line_linked": w.id in linked} for w in workers]
+
+
 def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False) -> list[dict]:
     """日付ごとに、イベントの人数と名前を返す。[{date, events: [{series_id, version_id, document_number, project_name, ok, changing, unanswered}]}]"""
     query = session.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None))

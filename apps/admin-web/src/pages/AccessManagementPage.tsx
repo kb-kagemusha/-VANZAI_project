@@ -22,14 +22,12 @@ export function AccessManagementPage() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [editRole, setEditRole] = useState("site_manager");
   const [active, setActive] = useState(true);
-  const [reason, setReason] = useState("");
   const [roleCreateOpen, setRoleCreateOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RolePolicy | null>(null);
   const [renamingRole, setRenamingRole] = useState<RolePolicy | null>(null);
   const [renameName, setRenameName] = useState("");
   const [roleName, setRoleName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [policyReason, setPolicyReason] = useState("");
   const users = useQuery({ queryKey: ["access-users", search, page], queryFn: () => apiFetch<{items: Account[]; total: number}>("/api/access/users?search=" + encodeURIComponent(search) + "&offset=" + page * 50 + "&limit=50") });
   const policies = useQuery({ queryKey: ["access-roles"], queryFn: () => apiFetch<{available_permissions: string[]; roles: RolePolicy[]}>("/api/access/roles") });
   const roles = policies.data?.roles ?? [];
@@ -64,17 +62,17 @@ export function AccessManagementPage() {
         {key: "email", header: "メール", render: row => row.email},
         {key: "role", header: "役割", render: row => row.role_name || formatRole(row.role)},
         {key: "status", header: "状態", render: row => row.is_active ? "有効" : "無効"},
-        {key: "edit", header: "操作", render: row => <button onClick={() => {setError(""); setEditing(row); setEditRole(row.role); setActive(row.is_active); setReason("");}}>権限・状態を変更</button>},
+        {key: "edit", header: "操作", render: row => <button onClick={() => {setError(""); setEditing(row); setEditRole(row.role); setActive(row.is_active);}}>権限・状態を変更</button>},
       ]} rows={users.data?.items ?? []} getRowKey={row => row.id} emptyTitle="IDがありません" emptyDescription="新しいIDを作成するか、検索条件を変更してください。" />}
       <div className="record-list-actions"><button disabled={page === 0} onClick={() => setPage(page - 1)}>前へ</button><span>{page + 1}ページ / 全{users.data?.total ?? 0}件</span><button disabled={(page + 1) * 50 >= (users.data?.total ?? 0)} onClick={() => setPage(page + 1)}>次へ</button></div>
     </> : <>
-      <div className="record-list-actions"><button className="primary-button create-button" onClick={() => { setError(""); setRoleName(""); setSelected([]); setPolicyReason(""); setRoleCreateOpen(true); }}>新しい役割を作成</button></div>
+      <div className="record-list-actions"><button className="primary-button create-button" onClick={() => { setError(""); setRoleName(""); setSelected([]); setRoleCreateOpen(true); }}>新しい役割を作成</button></div>
       <p>権限の変更は同じ役割の全IDに適用されます。全体管理者の権限は固定です。</p>
       <DataTable<RolePolicy> columns={[
         {key: "name", header: "役割", render: row => roleLabel(row)},
         {key: "type", header: "種類", render: row => row.builtin === false ? "独自の役割" : "標準の役割"},
         {key: "permissions", header: "許可する権限", render: row => row.permissions.length + "項目"},
-        {key: "edit", header: "操作", render: row => <div className="record-list-actions"><button onClick={() => { setError(""); setRenamingRole(row); setRenameName(roleLabel(row)); }}>名称を変更</button><button onClick={() => { setError(""); setEditingPolicy(row); setSelected([...row.permissions]); setPolicyReason(""); }}>{row.editable ? "権限を編集" : "権限を確認"}</button></div>},
+        {key: "edit", header: "操作", render: row => <div className="record-list-actions"><button onClick={() => { setError(""); setRenamingRole(row); setRenameName(roleLabel(row)); }}>名称を変更</button><button onClick={() => { setError(""); setEditingPolicy(row); setSelected([...row.permissions]); }}>{row.editable ? "権限を編集" : "権限を確認"}</button></div>},
       ]} rows={roles} getRowKey={row => row.role} emptyTitle="役割を読み込み中です" emptyDescription="しばらくお待ちください。" />
     </>}
 
@@ -102,24 +100,23 @@ export function AccessManagementPage() {
       </form>
     </FormDialog>
 
-    <FormDialog open={!!editing} title={(editing?.username ?? "") + " の権限・状態"} busy={busy} onClose={() => setEditing(null)}>
-      {editing && <form className="card access-form" onSubmit={e => { e.preventDefault(); void save("/api/access/users/" + editing.id, "PUT", {role: editRole, is_active: active, reason}, () => setEditing(null)); }}>
+    <FormDialog open={!!editing} title={(editing?.username ?? "") + " の権限・状態"} size="compact" busy={busy} onClose={() => setEditing(null)}>
+      {editing && <form className="card access-form" onSubmit={e => { e.preventDefault(); void save("/api/access/users/" + editing.id, "PUT", {role: editRole, is_active: active}, () => setEditing(null)); }}>
         <label>役割<select aria-label="役割" value={editRole} onChange={e => setEditRole(e.target.value)}>{roles.map(item => <option key={item.role} value={item.role}>{roleLabel(item)}</option>)}{editing.role === "worker" && <option value="worker">稼働者</option>}</select></label>
         <div className="record-list-actions" role="group" aria-label="IDの状態"><button type="button" className={active ? "primary-button" : "ghost-button"} onClick={() => setActive(true)}>有効</button><button type="button" className={!active ? "primary-button" : "ghost-button"} onClick={() => setActive(false)}>無効</button></div>
-        <label>変更理由<input required maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></label>
         {error && <p role="alert">{error}</p>}
-        <div><button className="primary-button" disabled={busy || !reason.trim()}>変更を保存</button></div>
+        <div className="access-apply-row"><button className="access-apply-button" disabled={busy || (editRole === editing.role && active === editing.is_active)}>変更を適用して閉じる</button></div>
       </form>}
     </FormDialog>
 
     <FormDialog open={roleCreateOpen || !!editingPolicy} title={roleCreateOpen ? "新しい役割を作成" : (editingPolicy ? roleLabel(editingPolicy) : "") + " の権限"} busy={busy} onClose={() => { setRoleCreateOpen(false); setEditingPolicy(null); }}>
-      <form className="card access-form" onSubmit={e => { e.preventDefault(); void save(roleCreateOpen ? "/api/access/roles" : "/api/access/roles/" + editingPolicy?.role, roleCreateOpen ? "POST" : "PUT", {permissions: selected, reason: policyReason, ...(roleCreateOpen ? {display_name: roleName} : {})}, () => { setRoleCreateOpen(false); setEditingPolicy(null); }); }}>
+      <form className="card access-form" onSubmit={e => { e.preventDefault(); void save(roleCreateOpen ? "/api/access/roles" : "/api/access/roles/" + editingPolicy?.role, roleCreateOpen ? "POST" : "PUT", {permissions: selected, ...(roleCreateOpen ? {display_name: roleName} : {})}, () => { setRoleCreateOpen(false); setEditingPolicy(null); }); }}>
         {roleCreateOpen && <label>役割名<input required maxLength={100} value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="例：案件閲覧担当" /></label>}
         <p>新しい役割は権限なしから設定します。編集・承認を選ぶと閲覧も許可し、閲覧を外すと関連操作も外します。ID・役割管理は全体管理者だけが行えます。</p>
         <RolePermissionPicker available={policies.data?.available_permissions ?? []} selected={selected} setSelected={setSelected} disabled={busy || (!roleCreateOpen && !editingPolicy?.editable)} />
-        {(roleCreateOpen || editingPolicy?.editable) && <><label>変更理由<input required maxLength={500} value={policyReason} onChange={e => setPolicyReason(e.target.value)} /></label>
+        {(roleCreateOpen || editingPolicy?.editable) && <>
           {error && <p role="alert">{error}</p>}
-          <div className="record-list-actions"><button className={roleCreateOpen ? "primary-button create-button" : "primary-button"} disabled={busy || !policyReason.trim()}>{roleCreateOpen ? "役割を作成" : "この役割の権限を保存"}</button>{editingPolicy && <button type="button" disabled={busy} onClick={() => setSelected(editingPolicy.default_permissions)}>初期設定を選び直す</button>}</div></>}
+          <div className="record-list-actions"><button className={roleCreateOpen ? "primary-button create-button" : "primary-button"} disabled={busy || (roleCreateOpen && !roleName.trim())}>{roleCreateOpen ? "役割を作成" : "この役割の権限を保存"}</button>{editingPolicy && <button type="button" disabled={busy} onClick={() => setSelected(editingPolicy.default_permissions)}>初期設定を選び直す</button>}</div></>}
       </form>
     </FormDialog>
   </div>;

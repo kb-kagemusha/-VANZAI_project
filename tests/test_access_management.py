@@ -167,8 +167,10 @@ def test_custom_roles_reject_duplicate_reserved_and_unknown_names(api_client, db
     body = {"display_name": "閲覧担当", "permissions": [], "reason": "test"}
     assert api_client.post("/api/access/roles", headers=headers, json=body).status_code == 201
     assert api_client.post("/api/access/roles", headers=headers, json=body).status_code == 409
-    for name in ["admin", "全体管理者", "worker", "   "]:
+    for name in ["admin", "worker", "稼働者", "   "]:
         assert api_client.post("/api/access/roles", headers=headers, json={**body, "display_name": name}).status_code == 422
+    # ほかの役割の今の名前（標準役割の名前を含む）は、同じ名前が2つになるので使えない
+    assert api_client.post("/api/access/roles", headers=headers, json={**body, "display_name": "全体管理者"}).status_code == 409
     assert api_client.post("/api/access/users", headers=headers, json={"username": "invalid", "display_name": "Invalid", "email": "invalid@example.com", "password": "password123", "role": "unknown"}).status_code == 422
 
 
@@ -213,8 +215,10 @@ def test_rename_role_preserves_override_and_rejects_bad_names(api_client, db_ses
     body = {"display_name": "会計補助", "reason": "test"}
     assert api_client.patch(url, headers=admin, json=body).status_code == 200
     assert api_client.patch(url, headers=admin, json=body).status_code == 200
-    for name in ["", "  ", "admin", "全体管理者", "現場管理者", "x" * 101]:
+    for name in ["", "  ", "admin", "稼働者", "x" * 101]:
         assert api_client.patch(url, headers=admin, json={**body, "display_name": name}).status_code == 422
+    for name in ["全体管理者", "現場管理者"]:
+        assert api_client.patch(url, headers=admin, json={**body, "display_name": name}).status_code == 409
     assert api_client.patch(url, headers=admin, json={**body, "reason": "  "}).status_code == 200
     assert api_client.patch(url, headers=admin, json={**body, "permissions": []}).status_code == 422
     assert api_client.patch("/api/access/roles/accounting/name", headers=admin, json=body).status_code == 409
@@ -230,3 +234,24 @@ def test_rename_role_requires_admin(api_client, db_session, role):
     _, headers = login(api_client, db_session, "member", role)
     assert api_client.patch("/api/access/roles/ops/name", headers=headers,
                             json={"display_name": "無許可", "reason": "test"}).status_code == 403
+
+
+def test_account_and_policy_change_without_reason_is_audited(api_client, db_session):
+    from src.models.transaction import AuditLog
+
+    _admin, headers = login(api_client, db_session, "admin", "admin")
+    target, _ = login(api_client, db_session, "operator", "ops")
+    # 変更理由なしでも変更でき、監査ログには残る（理由は空）
+    assert api_client.put("/api/access/users/" + target.id, headers=headers, json={"role": "site_manager", "is_active": True}).status_code == 200
+    assert api_client.put("/api/access/roles/site_manager", headers=headers, json={"permissions": ["project_read"]}).status_code == 200
+    logs = db_session.query(AuditLog).filter(AuditLog.target_id.in_([target.id, "site_manager"])).all()
+    assert len(logs) >= 2 and all(log.reason is None for log in logs)
+
+
+def test_standard_role_name_becomes_available_after_that_role_is_renamed(api_client, db_session):
+    _, admin = login(api_client, db_session, "admin", "admin")
+    # 現場管理者の役割を別の名前に変えると、「現場管理者」はほかの役割で使える（0.48.9）
+    assert api_client.patch("/api/access/roles/site_manager/name", headers=admin, json={"display_name": "現場リーダー"}).status_code == 200
+    assert api_client.patch("/api/access/roles/ops/name", headers=admin, json={"display_name": "現場管理者"}).status_code == 200
+    # 自分の今の名前のままの保存はできる
+    assert api_client.patch("/api/access/roles/ops/name", headers=admin, json={"display_name": "現場管理者"}).status_code == 200

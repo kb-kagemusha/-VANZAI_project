@@ -17,7 +17,7 @@ type View = "availability" | "event" | "worker" | "participation";
 const VIEWS: { key: View; label: string; permission: string; description: string }[] = [
   { key: "availability", label: "出勤可能日", permission: "availability_read", description: "スタッフが出勤できる日（◯・△・✗）と担当を、月または週で表示します。" },
   { key: "event", label: "イベントごと", permission: "order_read", description: "依頼済みのイベントを行に、月の1日から末日までを横に並べ、日ごとの稼働者の名前を表示します。" },
-  { key: "worker", label: "稼働者ごと", permission: "order_read", description: "稼働者を行に、月の1日から末日までを横に並べ、日ごとに参加するイベントを表示します。" },
+  { key: "worker", label: "稼働者ごと", permission: "order_read", description: "登録のある稼働者全員を行に（依頼がない人も含む）、月の1日から末日までを横に並べ、日ごとに参加するイベントを表示します。LINEの連携がまだの人には「LINE未連携」と表示します。" },
   { key: "participation", label: "参加カレンダー", permission: "order_read", description: "月のカレンダー（月曜始まり）で、日ごとにイベントと参加OK・変更確認待ち・未回答の人数を表示します。日付を押すと名前を表示します。" },
 ];
 

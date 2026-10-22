@@ -341,3 +341,15 @@ def test_period_holiday_on_single_day_group_is_rejected():
     schedule = {"work_groups": [{"id": "g1", "date_mode": "single", "from": "2026-11-01", "to": "2026-11-01"}]}
     with pytest.raises(ValueError, match="1日ごと"):
         apply_period_holidays(schedule, ["2026-11-01"])
+
+
+def test_overview_lists_all_registered_workers_with_line_status(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    linked = _worker(db_session, "連携あり")
+    unlinked = _worker(db_session, "連携なし")
+    _link(api_client, ops_user, linked.id, "U123")
+    month = _day(1)[:7]
+    body = api_client.get(f"/api/order-requests/participation-calendar?month={month}&include_workers=true", headers=_auth(ops_user.username)).json()
+    rows = {w["worker_id"]: w for w in body["workers"]}
+    # 依頼を送っていない人も、登録のある人は全員出す
+    assert rows[linked.id]["line_linked"] is True and rows[unlinked.id]["line_linked"] is False
+    assert "workers" not in api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username)).json()

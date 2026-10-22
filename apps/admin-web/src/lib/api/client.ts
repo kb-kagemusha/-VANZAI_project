@@ -1818,12 +1818,14 @@ export type ParticipationEvent = {
   unanswered: ParticipationPerson[];
 };
 export type ParticipationDay = { date: string; events: ParticipationEvent[] };
+export type ParticipationWorker = { worker_id: string; name: string; line_linked: boolean };
 
-export function getParticipationCalendar(params: { month?: string; versionId?: string; includeTest?: boolean }) {
-  return apiFetch<{ month?: string; days: ParticipationDay[] }>("/api/order-requests/participation-calendar", undefined, {
+export function getParticipationCalendar(params: { month?: string; versionId?: string; includeTest?: boolean; includeWorkers?: boolean }) {
+  return apiFetch<{ month?: string; days: ParticipationDay[]; workers?: ParticipationWorker[] }>("/api/order-requests/participation-calendar", undefined, {
     month: params.month,
     version_id: params.versionId,
     include_test: params.includeTest ? true : undefined,
+    include_workers: params.includeWorkers ? true : undefined,
   });
 }
 

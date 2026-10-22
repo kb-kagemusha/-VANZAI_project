@@ -56,27 +56,15 @@ class AccountUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     role: str = Field(min_length=1, max_length=20)
     is_active: bool
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def nonempty_reason(cls, value):
-        if not value.strip():
-            raise ValueError("変更理由を入力してください")
-        return value.strip()
+    # 変更理由は任意（0.48.9）。変更そのものは監査ログに残す
+    reason: str = Field(default="", max_length=500)
 
 
 class PolicyUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     permissions: list[Permission]
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def nonempty_reason(cls, value):
-        if not value.strip():
-            raise ValueError("変更理由を入力してください")
-        return value.strip()
+    # 変更理由は任意（0.48.9）。変更そのものは監査ログに残す
+    reason: str = Field(default="", max_length=500)
 
 
 class RoleCreate(PolicyUpdate):
@@ -86,8 +74,8 @@ class RoleCreate(PolicyUpdate):
     @classmethod
     def name_valid(cls, value):
         name = value.strip()
-        if not name or name in ROLE_NAMES or name in ROLE_NAMES.values():
-            raise ValueError("既存の役割と異なる名前を入力してください")
+        if not name:
+            raise ValueError("役割名を入力してください")
         return name
 
 
@@ -102,6 +90,24 @@ class RoleRename(BaseModel):
         if not value.strip():
             raise ValueError("役割名を入力してください")
         return value.strip()
+
+
+BUILTIN_MANAGEMENT_ROLES = ("admin", "ops", "accounting", "site_manager")
+
+
+def ensure_role_name_available(db: Session, name: str, role: str | None) -> None:
+    """役割名が、ほかの役割の「今の名前」と重ならないかを確かめる（0.48.9）。
+    標準役割の初期の名前でも、その役割を別の名前に変えていれば使える。稼働者と内部の識別子だけは使えない。"""
+    if name in ROLE_NAMES or name == ROLE_NAMES["worker"]:
+        raise HTTPException(422, f"「{name}」は稼働者・内部の識別子に使っている名前のため使えません")
+    current = {key: get_role_name(User(role=key), db) for key in BUILTIN_MANAGEMENT_ROLES}
+    for row in db.scalars(select(RoleAccessPolicy)):
+        if row.role not in current and row.display_name:
+            current[row.role] = row.display_name
+    for key, existing in current.items():
+        if key != role and existing == name:
+            owner = "標準の役割" if key in BUILTIN_MANAGEMENT_ROLES else "作成した役割"
+            raise HTTPException(409, f"「{name}」は、ほかの{owner}が今使っている名前です。同じ名前の役割が2つあるとIDの役割を選ぶときに見分けられないため、使えません")
 
 
 def validate_permissions(permissions):
@@ -165,7 +171,7 @@ def update_account(user_id: str, body: AccountUpdate, actor: User = Depends(admi
     user.is_active = body.is_active
     AuditService(db).log("USER_ACCESS_CHANGED", target_type="user", target_id=user.id,
                          actor=actor.id, actor_role="admin", before_value=before,
-                         after_value=account_item(user), reason=body.reason)
+                         after_value=account_item(user), reason=body.reason.strip() or None)
     db.commit()
     return account_item(user)
 
@@ -185,13 +191,14 @@ def policies(actor: User = Depends(administrator), db: Session = Depends(get_db)
 @router.post("/roles", status_code=201)
 def create_role(body: RoleCreate, actor: User = Depends(administrator), db: Session = Depends(get_db)):
     values = validate_permissions(body.permissions)
+    ensure_role_name_available(db, body.display_name, None)
     row = RoleAccessPolicy(role="r_" + secrets.token_hex(8), display_name=body.display_name, permissions=values)
     try:
         db.add(row)
         db.flush()
         AuditService(db).log("ROLE_CREATED", target_type="role_access_policy", target_id=row.role,
                              actor=actor.id, actor_role=actor.role,
-                             after_value={"display_name": row.display_name, "permissions": values}, reason=body.reason)
+                             after_value={"display_name": row.display_name, "permissions": values}, reason=body.reason.strip() or None)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -203,10 +210,7 @@ def create_role(body: RoleCreate, actor: User = Depends(administrator), db: Sess
 def rename_role(role: str, body: RoleRename, actor: User = Depends(administrator), db: Session = Depends(get_db)):
     if not is_management_role(role, db):
         raise HTTPException(404, "役割が見つかりません")
-    if body.display_name in ROLE_NAMES or any(
-        body.display_name == name and key != role for key, name in ROLE_NAMES.items()
-    ):
-        raise HTTPException(422, "他の標準役割名・予約名は使用できません")
+    ensure_role_name_available(db, body.display_name, role)
     row = db.scalar(select(RoleAccessPolicy).where(RoleAccessPolicy.role == role).with_for_update())
     if row is not None:
         db.refresh(row)
@@ -245,6 +249,6 @@ def update_policy(role: str, body: PolicyUpdate, actor: User = Depends(administr
         row.permissions = values
     AuditService(db).log("ROLE_PERMISSIONS_CHANGED", target_type="role_access_policy", target_id=role,
                          actor=actor.id, actor_role=actor.role, before_value={"permissions": before},
-                         after_value={"permissions": values}, reason=body.reason)
+                         after_value={"permissions": values}, reason=body.reason.strip() or None)
     db.commit()
     return {"role": role, "permissions": values}
