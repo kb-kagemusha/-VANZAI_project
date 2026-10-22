@@ -31,6 +31,10 @@ export interface OrderRequestDelivery {
   /** 系列で、この人に参加日が残っているか（受諾後の辞退を記録できるか）。 */
   participating: boolean;
   participation_dates: string[];
+  /** 「今後の参加を終了」で取り消す日があるか（勤務が始まっていない参加日がある） */
+  can_end_participation: boolean;
+  /** 「今後の参加を終了」で残る日・取り消される日。受諾がなければ null */
+  end_preview: { kept_dates: string[]; removed_dates: string[]; today_removed_start: string | null } | null;
 }
 
 export interface WakeStatusEntry {

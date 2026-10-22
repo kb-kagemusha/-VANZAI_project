@@ -551,3 +551,48 @@ def test_copy_for_another_day_is_an_independent_series(api_client, db_session, o
     _send_and_accept(api_client, ops_user, second["deliveries"][0]["id"])
     rows = _entries(db_session, worker.id)
     assert [(r.work_date.isoformat(), r.status) for r in rows] == [(_day(1), "active"), (_day(3), "active")]
+
+
+def test_end_participation_keeps_days_already_started(api_client, db_session, ops_user, pdf_root, line_env, fake_line, monkeypatch):
+    """今後の参加を終了：記録した時点で勤務が始まっている日は残す（統合計画 D-05、0.47.8）。"""
+    worker = _worker(db_session, "稼働者A")
+    v1 = _create_confirm(api_client, ops_user, [worker.id], schedule=_schedule(1, 3))  # 09:00〜18:00
+    _link(api_client, ops_user, worker.id, "U123")
+    _send_and_accept(api_client, ops_user, v1["deliveries"][0]["id"])
+    second_day = date.fromisoformat(_day(2))
+    # 2日目の 10:00（勤務開始後）に記録したことにする
+    moment = datetime(second_day.year, second_day.month, second_day.day, 10, 0, tzinfo=ws.JST)
+    monkeypatch.setattr(ws, "now_utc", lambda: moment.astimezone(timezone.utc))
+
+    detail = api_client.get(f"/api/order-requests/versions/{v1['id']}", headers=_auth(ops_user.username)).json()
+    preview = detail["deliveries"][0]["end_preview"]
+    assert preview["kept_dates"] == [_day(1), _day(2)] and preview["removed_dates"] == [_day(3)]
+    assert detail["deliveries"][0]["can_end_participation"] is True
+
+    url = f"/api/order-requests/documents/{v1['document_id']}/workers/{worker.id}/withdraw-acceptance"
+    ended = api_client.post(url, json={"reason": "体調不良"}, headers=_auth(ops_user.username))
+    assert ended.status_code == 200, ended.text
+    assert ended.json()["kept_dates"] == [_day(1), _day(2)]
+    rows = {r.work_date.isoformat(): r for r in _entries(db_session, worker.id)}
+    assert rows[_day(1)].status == "active" and rows[_day(2)].status == "active"
+    assert rows[_day(3)].status == "cancelled" and rows[_day(3)].status_reason == "ops_recorded_decline"
+    again = api_client.post(url, json={"reason": "体調不良"}, headers=_auth(ops_user.username))
+    assert again.json()["recorded"] is False
+
+
+def test_end_participation_before_start_cancels_today(api_client, db_session, ops_user, pdf_root, line_env, fake_line, monkeypatch):
+    """当日の開始前（朝の欠勤連絡）は当日も取り消す。画面の確認に当日の開始時刻を出す。"""
+    worker = _worker(db_session, "稼働者A")
+    v1 = _create_confirm(api_client, ops_user, [worker.id], schedule=_schedule(1, 2))
+    _link(api_client, ops_user, worker.id, "U123")
+    _send_and_accept(api_client, ops_user, v1["deliveries"][0]["id"])
+    first_day = date.fromisoformat(_day(1))
+    moment = datetime(first_day.year, first_day.month, first_day.day, 7, 0, tzinfo=ws.JST)
+    monkeypatch.setattr(ws, "now_utc", lambda: moment.astimezone(timezone.utc))
+    monkeypatch.setattr(ws, "today_jst", lambda: first_day)
+    detail = api_client.get(f"/api/order-requests/versions/{v1['id']}", headers=_auth(ops_user.username)).json()
+    preview = detail["deliveries"][0]["end_preview"]
+    assert preview["kept_dates"] == [] and preview["today_removed_start"] == "09:00"
+    url = f"/api/order-requests/documents/{v1['document_id']}/workers/{worker.id}/withdraw-acceptance"
+    assert api_client.post(url, json={"reason": "寝坊"}, headers=_auth(ops_user.username)).status_code == 200
+    assert {r.status for r in _entries(db_session, worker.id)} == {"cancelled"}

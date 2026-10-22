@@ -178,7 +178,9 @@ def _delivery_out(
         "offered_dates": list(row.offered_dates) if row.offered_dates is not None else None,
         "applied": info.get("delivery_id") == row.id,
         "participating": bool(info.get("dates")),
+        "can_end_participation": bool((info.get("end_preview") or {}).get("removed_dates")),
         "participation_dates": list(info.get("dates") or []),
+        "end_preview": info.get("end_preview"),
     }
 
 
@@ -199,7 +201,20 @@ def _participation(db: Session, version: OrderRequestVersion, worker_ids: set[st
     for row in rows:
         delivery = db.get(OrderRequestDelivery, row.applied_delivery_id)
         state = ws.current_state(db, delivery) if delivery is not None else None
-        result[row.worker_id] = {"delivery_id": row.applied_delivery_id, "dates": list(state.dates) if state else []}
+        dates = list(state.dates) if state else []
+        applied_version = db.get(OrderRequestVersion, delivery.version_id) if delivery is not None else None
+        kept, removed = ws.split_started(applied_version, dates) if applied_version is not None else (dates, [])
+        today = ws.today_jst().isoformat()
+        result[row.worker_id] = {
+            "delivery_id": row.applied_delivery_id,
+            "dates": dates,
+            # 「今後の参加を終了」で残る日・取り消される日（統合計画 D-05）。今日の開始前の勤務が取り消される場合は開始時刻
+            "end_preview": {
+                "kept_dates": kept,
+                "removed_dates": removed,
+                "today_removed_start": ws.day_start_time(applied_version, today) if today in removed and applied_version is not None else None,
+            },
+        }
     return result
 
 

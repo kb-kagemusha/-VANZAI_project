@@ -612,7 +612,10 @@ class OrderRequestService:
         return version
 
     def withdraw_acceptance(self, document: OrderRequestDocument, worker_id: str, *, actor: User, reason: str) -> dict:
-        """受諾後の辞退を運営が記録する（DEC-065）。参加日0日の状態を追記し、稼働予定を取り消す。"""
+        """今後の参加を終了する（受諾後の辞退の記録。DEC-065、統合計画 D-05）。
+
+        記録した時点で勤務が始まっている日（日本時間）は参加日として残し、まだ始まっていない日だけ外した状態を追記する。
+        """
         reason = _clean(reason)
         if not reason:
             raise OrderRequestError(400, "辞退の理由を入力してください")
@@ -630,10 +633,12 @@ class OrderRequestService:
             raise OrderRequestError(409, "この稼働者には受諾済みの参加がありません")
         applied = self.session.get(OrderRequestDelivery, application.applied_delivery_id)
         state = ws.current_state(self.session, applied)
+        applied_version = self.session.get(OrderRequestVersion, applied.version_id)
+        kept, removed = ws.split_started(applied_version, list(state.dates) if state is not None else [])
         recorded = False
-        if state is None or state.dates:
+        if state is None or removed:
             ws.append_state(
-                self.session, applied, dates=[], source=ws.SOURCE_OPS_RECORDED_DECLINE,
+                self.session, applied, dates=kept, source=ws.SOURCE_OPS_RECORDED_DECLINE,
                 actor=actor.id, reason=reason[:500],
             )
             recorded = True
@@ -649,11 +654,11 @@ class OrderRequestService:
             actor=_user_label(actor),
             actor_role=actor.role,
             reason=reason,
-            after_value={"document_number": document.document_number, "worker_id": worker_id, "recorded": recorded},
+            after_value={"document_number": document.document_number, "worker_id": worker_id, "recorded": recorded, "kept_dates": kept, "removed_dates": removed},
         )
         self.session.flush()
         ws.rebuild(self.session, series.id, worker_id, actor=actor.id)
-        return {"delivery_id": applied.id, "recorded": recorded}
+        return {"delivery_id": applied.id, "recorded": recorded, "kept_dates": kept, "removed_dates": removed}
 
     def add_note(self, version: OrderRequestVersion, *, actor: User, body: str) -> OrderRequestNote:
         text = _clean(body)

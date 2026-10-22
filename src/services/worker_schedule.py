@@ -314,6 +314,31 @@ def _time(value: str) -> time | None:
     return time(int(hour), int(minute))
 
 
+def split_started(version: OrderRequestVersion, dates: list[str], now: datetime | None = None) -> tuple[list[str], list[str]]:
+    """参加日を「勤務がすでに始まった日」と「まだ始まっていない日」に分ける（日本時間。統合計画 D-05）。
+
+    勤務の開始日時は、その日の勤務グループの開始時刻（無ければその日の 0:00）。前日開始の夜勤はその開始日の扱い。
+    """
+    current = (now or now_utc()).astimezone(JST)
+    starts: dict[str, datetime] = {}
+    for day in version_work_days(version):
+        start = _time(day["start_time"]) or time(0, 0)
+        moment = datetime.combine(date.fromisoformat(day["work_date"]), start, tzinfo=JST)
+        if day["work_date"] not in starts or moment < starts[day["work_date"]]:
+            starts[day["work_date"]] = moment
+    started, upcoming = [], []
+    for day in sorted(set(dates)):
+        moment = starts.get(day) or datetime.combine(date.fromisoformat(day), time(0, 0), tzinfo=JST)
+        (started if moment <= current else upcoming).append(day)
+    return started, upcoming
+
+
+def day_start_time(version: OrderRequestVersion, day: str) -> str | None:
+    """その日の勤務の開始時刻（"09:00"）。無ければ None。"""
+    times = sorted(d["start_time"] for d in version_work_days(version) if d["work_date"] == day and d["start_time"])
+    return times[0] if times else None
+
+
 # ---- 再構築 ------------------------------------------------------------------
 
 def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> list[dict]:
@@ -405,7 +430,7 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
         elif applied is None:
             status, reason = ENTRY_CANCELLED, (application.ended_reason if application and application.ended_reason else END_DOCUMENT_ENDED)
         elif row.delivery_id == applied.id:
-            status, reason = ENTRY_CANCELLED, ("ops_recorded_decline" if applied_state is not None and not applied_state.dates else "not_in_participation")
+            status, reason = ENTRY_CANCELLED, ("ops_recorded_decline" if applied_state is not None and applied_state.source == SOURCE_OPS_RECORDED_DECLINE else "not_in_participation")
         else:
             status, reason = ENTRY_CANCELLED, "not_in_participation"
         values = {"status": status, "status_reason": reason}
@@ -489,6 +514,8 @@ __all__ = [
     "END_DECLINED_NEW_VERSION",
     "SOURCE_FULL_ACCEPT",
     "SOURCE_OPS_RECORDED_DECLINE",
+    "split_started",
+    "day_start_time",
     "END_DOCUMENT_ENDED",
     "END_REMOVED",
     "JST",

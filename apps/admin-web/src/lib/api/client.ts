@@ -1759,7 +1759,7 @@ export function revokeLineLink(workerId: string, reason: string) {
 }
 
 export function withdrawOrderRequestAcceptance(documentId: string, workerId: string, reason: string) {
-  return apiFetch<{ delivery_id: string; recorded: boolean }>(
+  return apiFetch<{ delivery_id: string; recorded: boolean; kept_dates: string[]; removed_dates: string[] }>(
     `/api/order-requests/documents/${documentId}/workers/${workerId}/withdraw-acceptance`,
     { method: "POST", body: JSON.stringify({ reason }) },
   );

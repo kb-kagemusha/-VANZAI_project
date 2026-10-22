@@ -58,6 +58,7 @@ import { confirmApp, promptApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import type {
   OrderRequestChangeLink,
+  OrderRequestDelivery,
   OrderRequestKind,
   OrderRequestQueue,
   OrderRequestStatus,
@@ -702,20 +703,34 @@ export function OrderRequestsPage() {
   const withdrawAcceptance = useMutation({
     mutationFn: (input: { documentId: string; workerId: string; reason: string }) =>
       withdrawOrderRequestAcceptance(input.documentId, input.workerId, input.reason),
-    onSuccess: async () => {
-      setActionMessage("受諾後の辞退を記録しました。この人の稼働予定は取り消され、公式LINEの予定にも出なくなります。");
+    onSuccess: async (result) => {
+      setActionMessage(
+        result.removed_dates.length > 0
+          ? `今後の参加を終了しました。取り消した日：${compactDateList(result.removed_dates)}${result.kept_dates.length > 0 ? `／残した日（勤務が始まっていた日）：${compactDateList(result.kept_dates)}` : ""}。公式LINEの予定にも反映されます。`
+          : "取り消す日がないため、記録しませんでした（参加日はすべて勤務が始まっています）。",
+      );
       await refresh();
       if (detail) await queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
     },
     onError: (error) => setActionError(messageOf(error)),
   });
 
-  async function recordWithdrawal(row: { worker_id: string; worker_name_snapshot: string }) {
+  async function recordWithdrawal(row: OrderRequestDelivery) {
     if (!detail) return;
+    const preview = row.end_preview;
+    const removed = preview?.removed_dates ?? [];
+    const kept = preview?.kept_dates ?? [];
+    const lines = [
+      `${row.worker_name_snapshot}さんの、この依頼書での今後の参加を終了します（受諾後の辞退の記録。ほかの送付先は変わりません）。`,
+      removed.length > 0 ? `取り消す日：${compactDateList(removed)}` : "",
+      preview?.today_removed_start ? `※本日 ${preview.today_removed_start} 開始の勤務も取り消されます。` : "",
+      kept.length > 0 ? `残す日（記録の時点で勤務が始まっている日）：${compactDateList(kept)}` : "",
+      "理由を入力してください。",
+    ].filter(Boolean);
     const reason = await promptApp({
-      title: "受諾後の辞退を記録",
-      message: `${row.worker_name_snapshot}さんが受諾後に辞退した記録を残します。この依頼書でのこの人の稼働予定はすべて取り消されます（ほかの送付先は変わりません）。理由を入力してください。`,
-      confirmLabel: "辞退を記録",
+      title: "今後の参加を終了",
+      message: lines.join("\n"),
+      confirmLabel: "参加を終了",
     });
     const trimmed = (reason ?? "").trim();
     if (!trimmed) return;
@@ -1697,14 +1712,14 @@ export function OrderRequestsPage() {
                                 稼働日：{compactDateList(row.participation_dates)}
                               </div>
                             ) : null}
-                            {row.participating && (row.applied || row.ack_status !== "acked") ? (
+                            {row.can_end_participation && (row.applied || row.ack_status !== "acked") ? (
                               <button
                                 type="button"
                                 className="btn btn-ghost btn-sm"
                                 disabled={withdrawAcceptance.isPending}
                                 onClick={() => void recordWithdrawal(row)}
                               >
-                                受諾後の辞退を記録
+                                今後の参加を終了
                               </button>
                             ) : null}
                           </td>
