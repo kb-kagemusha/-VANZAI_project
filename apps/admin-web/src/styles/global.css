@@ -5567,4 +5567,15 @@ html[data-theme="dark"] .btn-line-blue { border-color: #7aa7ff; color: #9bbcff; 
 html[data-theme="dark"] .btn-line-green { border-color: #5fcf8a; color: #7fdca1; }
 html[data-theme="dark"] .btn-line-red { border-color: #f87171; color: #fca5a5; }
 .order-participation-button { display: flex; margin-top: 6px; white-space: nowrap; }
-.order-excluded-add { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9rem; }
+/* 休業日の設定（カレンダーで選んで OK。0.48.3） */
+.order-excluded-panel { margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); max-width: 420px; }
+.order-excluded-calendar .month-calendar-cell { min-height: 44px; }
+.order-excluded-day { width: 100%; min-height: 44px; border-radius: 8px; border: 1px solid #c9d9fb; background: #f1f6ff; color: #1b3f8f; display: grid; place-items: center; gap: 0; padding: 2px 0; cursor: pointer; font: inherit; }
+.order-excluded-day small { font-size: 10px; line-height: 1.1; }
+.order-excluded-day.is-off { background: #fde8e8; border-color: #dc2626; color: #b91c1c; font-weight: 700; }
+.order-excluded-day.is-out { background: transparent; border-color: transparent; color: #c3c4ca; cursor: default; }
+.order-excluded-summary { margin: 8px 0; font-size: 0.9rem; }
+.order-excluded-notice { margin: 4px 0; color: #15803d; font-weight: 600; font-size: 0.9rem; }
+html[data-theme="dark"] .order-excluded-day { background: #22304a; border-color: #4a6aa8; color: #cfe0ff; }
+html[data-theme="dark"] .order-excluded-day.is-off { background: #4a2020; border-color: #f87171; color: #fecaca; }
+html[data-theme="dark"] .order-excluded-day.is-out { background: transparent; border-color: transparent; color: #5b6170; }

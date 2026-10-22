@@ -1,37 +1,88 @@
 import { confirmApp } from "../lib/appDialog";
 import { useState } from "react";
+import { MonthCalendar, monthOf } from "./MonthCalendar";
+import "../styles/monthCalendar.css";
 import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule, type WorkGroup } from "../lib/orderSchedule";
 
-/** 期間の中の共通の休業日（DEC-065）。期間を変えて範囲外になった日は自動で消さず、表示して見直してもらう。 */
+/**
+ * 期間の中の共通の休業日（DEC-065）。
+ * 「休業日を設定」を押すと期間のカレンダーが出て、日付を押して選び（もう一度押すと外れる）、「OK」で確定する。
+ * 期間を変えて範囲外になった日は自動で消さず、表示して見直してもらう。
+ */
 function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup; disabled: boolean; prefix: string; onChange: (dates: string[]) => void }) {
-  const [draft, setDraft] = useState("");
   const dates = group.excluded_dates ?? [];
+  const [editing, setEditing] = useState<string[] | null>(null);
+  const [month, setMonth] = useState("");
+  const [notice, setNotice] = useState("");
+  const ready = Boolean(group.from && group.to && group.from < group.to);
   const inRange = (day: string) => Boolean(group.from && group.to && day >= group.from && day <= group.to);
-  // 日付を選んだ時点で休業日に入れる（「追加」の押し忘れで保存されない事故を防ぐ。0.48.2）
-  const pick = (day: string) => {
-    if (day && inRange(day) && !dates.includes(day)) {
-      onChange([...dates, day].sort());
-      setDraft("");
-      return;
-    }
-    setDraft(day);
-  };
+  const label = (day: string) => dateGroupLabel({ id: day, date_mode: "single", from: day, to: day });
+
+  function open() {
+    setEditing([...dates]);
+    setMonth(monthOf(group.from));
+    setNotice("");
+  }
+  function toggle(day: string) {
+    setEditing((current) => (current ? (current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort()) : current));
+  }
+  function confirm() {
+    if (!editing) return;
+    // 期間外になっていた日は、カレンダーでは選べないのでここで外す
+    const next = editing.filter(inRange).sort();
+    onChange(next);
+    setEditing(null);
+    setNotice(next.length ? `休業日を設定しました（${next.length}日）` : "休業日はなしにしました");
+  }
+
   return <div className="order-excluded-dates" role="group" aria-label={`${prefix}休業日`}>
     <span className="order-field-label">休業日（この期間の中で稼働しない日）</span>
     {dates.length > 0
       ? <div className="order-recipient-picks">{dates.map((day) => <span key={day} className={`order-pick${inRange(day) ? "" : " is-error"}`}>
-          {dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })}{inRange(day) ? "" : "（期間外）"}
-          {!disabled && <button type="button" className="order-action-button is-remove" aria-label={`${day}の休業日を削除`} onClick={() => onChange(dates.filter((d) => d !== day))}>削除</button>}
+          {label(day)}{inRange(day) ? "" : "（期間外）"}
         </span>)}</div>
       : <p className="order-field-hint">休業日はありません。</p>}
-    {!disabled && <div className="order-schedule-actions">
-      <label className="order-excluded-add">
-        <span><span aria-hidden="true">＋</span> 休業日を追加（日付を選ぶとすぐ入ります）</span>
-        <input type="date" aria-label={`${prefix}休業日の日付`} value={draft} min={group.from || undefined} max={group.to || undefined} onChange={(e) => pick(e.target.value)} />
-      </label>
-      {draft && !inRange(draft) ? <span className="form-error">期間の中の日を選んでください</span> : null}
-      {draft && dates.includes(draft) ? <span className="order-field-hint">すでに休業日です</span> : null}
-    </div>}
+    {!disabled && dates.some((day) => !inRange(day)) ? (
+      <div className="order-schedule-actions">
+        <span className="form-error">期間を変えたため、期間外の休業日があります。</span>
+        <button type="button" className="order-action-button is-remove" onClick={() => { const next = dates.filter(inRange); onChange(next); setNotice(`期間外の休業日を外しました（残り${next.length}日）`); }}>期間外の日を外す</button>
+      </div>
+    ) : null}
+    {notice ? <p className="order-excluded-notice" role="status">{notice}</p> : null}
+    {!disabled && editing === null && (
+      <div className="order-schedule-actions">
+        <button type="button" className="order-action-button is-add" disabled={!ready} onClick={open}>
+          <span aria-hidden="true">＋</span> {dates.length ? "休業日を変更" : "休業日を設定"}
+        </button>
+        {!ready ? <span className="order-field-hint">開始日と終了日を入れると設定できます</span> : null}
+      </div>
+    )}
+    {!disabled && editing !== null && (
+      <div className="order-excluded-panel">
+        <p className="order-field-hint">休業日にする日を押してください。もう一度押すと外れます。選び終わったら「OK」を押します。</p>
+        <MonthCalendar
+          month={month}
+          onMonthChange={setMonth}
+          minMonth={monthOf(group.from)}
+          maxMonth={monthOf(group.to)}
+          className="order-excluded-calendar"
+          renderDay={(day) => {
+            const usable = inRange(day);
+            const off = editing.includes(day);
+            return <button type="button" className={`order-excluded-day${usable ? "" : " is-out"}${off ? " is-off" : ""}`}
+              disabled={!usable} aria-pressed={off} onClick={() => toggle(day)}>
+              <span>{Number(day.slice(8))}</span>
+              {usable ? <small>{off ? "休業" : "稼働"}</small> : null}
+            </button>;
+          }}
+        />
+        <p className="order-excluded-summary">{editing.filter(inRange).length ? `休業日：${editing.filter(inRange).map(label).join("、")}` : "休業日：なし"}</p>
+        <div className="order-schedule-actions">
+          <button type="button" className="btn btn-primary btn-sm" onClick={confirm}>OK</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>キャンセル</button>
+        </div>
+      </div>
+    )}
   </div>;
 }
 
