@@ -15,6 +15,12 @@ from tests.test_api_order_requests import ops_user, pdf_root, worker_user, _auth
 from tests.test_api_line_order_requests import line_env, fake_line, _link
 
 
+@pytest.fixture(autouse=True)
+def _allow_legacy_free_text_confirm(monkeypatch):
+    """このファイルの試験は旧形式（文章の稼働時間）の確定を前提にする。必須化の試験は test_line_daily.py。"""
+    monkeypatch.setattr("src.services.order_request_service.REQUIRE_SCHEDULE_ON_CONFIRM", False)
+
+
 @pytest.fixture
 def master_admin(db_session):
     user = create_user_with_hashed_password(db=db_session, username="client_admin", email="client_admin@example.test", password="test-password", role="admin")

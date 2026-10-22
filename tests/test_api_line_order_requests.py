@@ -19,6 +19,12 @@ from src.services.line_order import ACCEPT_REPLY, DECLINE_PROMPT, DECLINE_RECORD
 from src.services.line_messaging import LineCallResult
 
 
+
+@pytest.fixture(autouse=True)
+def _allow_legacy_free_text_confirm(monkeypatch):
+    """このファイルの試験は旧形式（文章の稼働時間）の確定を前提にする。必須化の試験は test_line_daily.py。"""
+    monkeypatch.setattr("src.services.order_request_service.REQUIRE_SCHEDULE_ON_CONFIRM", False)
+
 def _token(username: str) -> str:
     return create_access_token({"sub": username})
 

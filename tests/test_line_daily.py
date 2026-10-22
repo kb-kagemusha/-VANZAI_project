@@ -162,7 +162,8 @@ def test_accept_creates_entries_for_offered_days_only(api_client, db_session, op
     assert row["applied"] is True and row["participation_dates"] == [_day(1), _day(4), _day(5)]
 
 
-def test_free_text_document_creates_no_entries(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
+def test_free_text_document_cannot_be_confirmed_but_can_be_copied(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
+    """文章の稼働時間の依頼書は確定できない（DEC-069）。下書きの保存と、それを基にした作成はできる。"""
     worker = _worker(db_session, "稼働者A")
     body = _payload([worker.id])
     body["request_conditions"] = "自由文の条件"
@@ -171,13 +172,12 @@ def test_free_text_document_creates_no_entries(api_client, db_session, ops_user,
     created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username))
     assert created.status_code == 200, created.text
     response = api_client.post(f"/api/order-requests/versions/{created.json()['id']}/confirm", headers=_auth(ops_user.username))
-    assert response.status_code == 200, response.text
-    confirmed = response.json()
-    assert confirmed["deliveries"][0]["offered_dates"] is None
-    _link(api_client, ops_user, worker.id, "U123")
-    _send_and_accept(api_client, ops_user, confirmed["deliveries"][0]["id"])
-    assert _entries(db_session, worker.id) == []
-
+    assert response.status_code == 400
+    assert "日付・期間ごとの入力" in response.json()["detail"]
+    copied = api_client.post("/api/order-requests", json=_payload([worker.id], based_on=created.json()["id"]), headers=_auth(ops_user.username))
+    assert copied.status_code == 200, copied.text
+    confirmed = api_client.post(f"/api/order-requests/versions/{copied.json()['id']}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
 
 def test_test_document_creates_isolated_test_entries(api_client, db_session, ops_user, pdf_root, line_env, fake_line):
     worker = _worker(db_session, "稼働者A")

@@ -71,6 +71,11 @@ def follow_up_time_label(moment: datetime | None) -> str:
     return moment.astimezone(JST).strftime("%H:%M")
 
 
+# 確定に「日付・期間ごとの入力」を必須にする。試験で旧形式の確定を検証するときだけ False にする。
+REQUIRE_SCHEDULE_ON_CONFIRM = True
+SCHEDULE_REQUIRED = "稼働時間を「日付・期間ごとの入力」に切り替えてから確定してください。文章の入力のままでは、受諾しても稼働予定（公式LINEの予定・起床報告）が作られません"
+
+
 class OrderRequestError(Exception):
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
@@ -384,6 +389,10 @@ class OrderRequestService:
                 normalize_work_period(sections["work_period"], sections.get("schedule"), complete=True)
         except ValueError as exc:
             raise OrderRequestError(400, str(exc)) from None
+        if REQUIRE_SCHEDULE_ON_CONFIRM and (not sections or "schedule" not in sections):
+            # 文章だけの稼働時間では稼働予定・起床の監視に載らない（DEC-063・DEC-069。2026-10-22 ユーザー判断で確定を止める）。
+            # 古い依頼書を基にした新規作成・変更の作成・下書きの保存は止めない。
+            raise OrderRequestError(400, SCHEDULE_REQUIRED)
         required = (
             (
                 ("案件名", sections.get("project_name") if sections else ""),

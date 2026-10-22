@@ -12,6 +12,12 @@ from src.models.order_request import OrderRequestDelivery, OrderRequestDocument,
 from src.services.document_storage import DocumentStorage
 
 
+
+@pytest.fixture(autouse=True)
+def _allow_legacy_free_text_confirm(monkeypatch):
+    """このファイルの試験は旧形式（文章の稼働時間）の確定を前提にする。必須化の試験は test_line_daily.py。"""
+    monkeypatch.setattr("src.services.order_request_service.REQUIRE_SCHEDULE_ON_CONFIRM", False)
+
 def _token(username: str) -> str:
     return create_access_token({"sub": username})
 

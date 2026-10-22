@@ -407,6 +407,9 @@ export function OrderRequestsPage() {
   async function enableSchedule() {
     const accepted = await confirmApp({ title: "日付・期間ごとの入力", message: "勤務時間・単価を日付別の入力に切り替えます。既存の文面は参考として残し、依頼書は新しい日付別の入力から作成します。", confirmLabel: "切り替える" });
     if (!accepted) return;
+    switchToSchedule();
+  }
+  function switchToSchedule() {
     const first = newWorkGroup();
     if (parsedWorkDates?.from) {
       first.from = parsedWorkDates.from;
@@ -520,13 +523,27 @@ export function OrderRequestsPage() {
         phone_first: false,
         phone_note: "",
       };
-      const nextSections = sectionsFromStored(version.request_conditions, version.body);
+      const stored = sectionsFromStored(version.request_conditions, version.body);
+      // 古い形式（文章の稼働時間）の依頼書を基にするときは、確定できるよう日付・期間ごとの入力に切り替えて作る
+      const legacyDates = stored.schedule ? null : parseWorkDateRange(version.work_date_label);
+      const firstGroup = newWorkGroup();
+      if (legacyDates?.from) {
+        firstGroup.from = legacyDates.from;
+        firstGroup.to = legacyDates.to || legacyDates.from;
+        firstGroup.date_mode = legacyDates.to && legacyDates.to !== legacyDates.from ? "range" : "single";
+      }
+      const nextSections: OrderDocumentSections = stored.schedule
+        ? stored
+        : { ...stored, previousHours: stored.hours, previousFee: stored.fee, schedule: syncSchedule({ ...emptySchedule(), work_groups: [firstGroup] }) };
       formRef.current = nextForm;
       sectionsRef.current = nextSections;
       setForm(nextForm);
       setSections(nextSections);
       setReason("");
       setNote("");
+      if (!stored.schedule) {
+        setActionMessage("基にした依頼書は稼働時間が文章の入力でした。日付・期間ごとの入力に切り替えて作成しています。日付・時刻・単価を確認してください（元の文面は「切替前の勤務時間・単価（参考）」にあります）。");
+      }
     } catch (error) {
       setActionError(messageOf(error));
     } finally {
@@ -790,12 +807,15 @@ export function OrderRequestsPage() {
   /** 日付・期間ごとの入力がない依頼書は、受諾しても稼働予定（公式LINEの予定・起床報告）が作られない（DEC-063）。 */
   async function acceptWithoutSchedule(): Promise<boolean> {
     if (sections.schedule) return true;
-    return confirmApp({
-      title: "稼働予定が作られません",
-      message: "この依頼書は稼働時間を文章で入力しています。このまま確定すると、本人が受諾しても公式LINEの「スケジュール確認」「起床報告」に予定が出ません。予定に載せる場合は「戻る」を押し、稼働時間の「日付・期間ごとの入力に切り替える」で日付と時刻を入力してください。",
-      confirmLabel: "予定なしで進む",
-      cancelLabel: "戻る",
+    // 文章の稼働時間では確定できない（DEC-069）。切り替えてもらう。
+    const switchNow = await confirmApp({
+      title: "日付・期間ごとの入力が必要です",
+      message: "この依頼書は稼働時間を文章で入力しています。文章のままでは受諾しても公式LINEの予定・起床報告に載らないため、確定できません。「切り替える」を押すと日付・期間ごとの入力に切り替わります（今の文面は参考として残ります）。日付と時刻を確認してから、もう一度送付してください。",
+      confirmLabel: "切り替える",
+      cancelLabel: "閉じる",
     });
+    if (switchNow) switchToSchedule();
+    return false;
   }
 
   async function openPdfReview() {
