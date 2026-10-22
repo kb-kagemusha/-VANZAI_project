@@ -10,6 +10,7 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { FormDialog } from "../components/FormDialog";
+import { OrderDatePicker } from "../components/OrderDatePicker";
 import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
@@ -123,11 +124,6 @@ function basedOnNote(
   if (!sourceNumber || sourceVersion == null) return null;
   if (sourceNumber === documentNumber) return `第${sourceVersion}版の変更`;
   return `${sourceNumber} の変更`;
-}
-
-function kindLabel(kind: string, changes: OrderRequestChangeLink[] | undefined): string {
-  if ((changes ?? []).length > 0) return "変更";
-  return kind === "test" ? "テスト" : "正式";
 }
 
 function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink): string {
@@ -879,21 +875,11 @@ export function OrderRequestsPage() {
     }
   }
 
-  async function saveDraftAndCloseReview() {
-    if (!pdfReview?.versionId) return;
-    setPdfSending(true);
+  function returnToEditing() {
+    if (pdfReview?.url) URL.revokeObjectURL(pdfReview.url);
+    setPdfReview(null);
     setPdfReviewError("");
-    try {
-      const saved = await persistCurrentDraft();
-      rememberSavedVersion(saved);
-      dismissPdfReview(null);
-      setActionMessage("下書きを保存しました。確定するまで送付は始まりません。");
-      await refresh();
-    } catch (error) {
-      setPdfReviewError(messageOf(error));
-    } finally {
-      setPdfSending(false);
-    }
+    window.requestAnimationFrame(() => draftRef.current?.focus());
   }
 
   async function sendReviewedOrder() {
@@ -1080,13 +1066,12 @@ export function OrderRequestsPage() {
           </label>
         </div>
         <div className="order-list-table">
-        <table className="data-table">
+        <table className="data-table order-created-table">
           <thead>
             <tr>
               <th>文書番号</th>
               <th>案件名</th>
               <th>版</th>
-              <th>区分</th>
               <th>状態</th>
               <th>カテゴリ</th>
               <th>日付</th>
@@ -1120,13 +1105,12 @@ export function OrderRequestsPage() {
                 </td>
                 <td className="order-cell-multiline">{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
-                <td>{kindLabel(item.kind, item.change_documents)}</td>
                 <td>
                   {STATUS_LABEL[item.status]}
                   {item.phone_first ? " / 電話先行" : ""}
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
-                <td className="order-cell-multiline">{categoryLabelForList(item.categories)}</td>
+                <td className="order-cell-category">{categoryLabelForList(item.categories)}</td>
                 <td className="order-cell-multiline">{item.work_date_label}</td>
                 <td>{item.created_by_name}</td>
                 <td>{item.recipient_count}</td>
@@ -1404,21 +1388,19 @@ export function OrderRequestsPage() {
                   <div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
-                      <input
-                        type="date"
-                        aria-label="稼働日の開始"
+                      <OrderDatePicker
+                        label="稼働日の開始"
                         value={workDateFrom}
                         disabled={!editable}
-                        onChange={(event) => setWorkDateBound("from", event.target.value)}
+                        onChange={(day) => setWorkDateBound("from", day)}
                       />
                       <span className="order-date-range-sep" aria-hidden="true">～</span>
-                      <input
-                        type="date"
-                        aria-label="稼働日の終了"
+                      <OrderDatePicker
+                        label="稼働日の終了"
                         min={workDateFrom || undefined}
                         value={workDateTo}
                         disabled={!editable}
-                        onChange={(event) => setWorkDateBound("to", event.target.value)}
+                        onChange={(day) => setWorkDateBound("to", day)}
                       />
                     </div>
                     {parsedWorkDates && form.work_date_label ? (
@@ -2004,10 +1986,10 @@ export function OrderRequestsPage() {
                     className="btn btn-ghost"
                     disabled={pdfSending}
                     onClick={() => {
-                      void saveDraftAndCloseReview();
+                      returnToEditing();
                     }}
                   >
-                    下書きを保存して閉じる
+                    修正する
                   </button>
                   <button
                     type="button"

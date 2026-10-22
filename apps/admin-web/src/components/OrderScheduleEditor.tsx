@@ -1,6 +1,7 @@
 import { confirmApp } from "../lib/appDialog";
 import { useState } from "react";
 import { MonthCalendar, monthOf } from "./MonthCalendar";
+import { OrderDatePicker } from "./OrderDatePicker";
 import "../styles/monthCalendar.css";
 import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
@@ -98,12 +99,12 @@ function DateInputs({ group, disabled, prefix, onChange }: { group: DateGroup; d
       </div>
     </div>
     <label>{group.date_mode === "range" ? "開始日" : "稼働日"}
-      <input type="date" aria-label={`${prefix}開始日`} value={group.from} disabled={disabled}
-        onChange={(e) => onChange({ ...group, from: e.target.value, to: group.date_mode === "single" ? e.target.value : group.to })} />
+      <OrderDatePicker label={`${prefix}開始日`} value={group.from} disabled={disabled}
+        onChange={(day) => onChange({ ...group, from: day, to: group.date_mode === "single" ? day : group.to })} />
     </label>
     {group.date_mode === "range" && <label>終了日
-      <input type="date" aria-label={`${prefix}終了日`} value={group.to} min={group.from || undefined} disabled={disabled}
-        onChange={(e) => onChange({ ...group, to: e.target.value })} />
+      <OrderDatePicker label={`${prefix}終了日`} value={group.to} min={group.from || undefined} disabled={disabled}
+        onChange={(day) => onChange({ ...group, to: day })} />
     </label>}
   </div>;
 }

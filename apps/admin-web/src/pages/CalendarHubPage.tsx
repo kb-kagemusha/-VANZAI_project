@@ -40,7 +40,7 @@ export function CalendarHubPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader title="カレンダー" eyebrow="運用" description={current?.description ?? "表示できるカレンダーがありません。"} />
+      <PageHeader title="カレンダー" eyebrow="運用" description={current?.key === "event" || current?.key === "worker" ? "" : current?.description ?? "表示できるカレンダーがありません。"} />
       {allowed.length > 1 ? (
         <div className="calendar-hub-tabs" role="tablist" aria-label="カレンダーの表示">
           {allowed.map((view) => (

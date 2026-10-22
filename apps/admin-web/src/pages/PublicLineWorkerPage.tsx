@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import registrationLogo from "../assets/registration-logo.png";
 import { MonthCalendar, monthOf } from "../components/MonthCalendar";
+import { participationDateLines, participationPeriodLabel } from "../lib/participationDateFormat";
 import {
   ApiError,
   createLineWorkerSession,
@@ -71,16 +72,6 @@ function readParams(): { mode: string; delivery: string } {
     params = new URLSearchParams(inner);
   }
   return { mode: params.get("m") ?? "", delivery: params.get("d") ?? "" };
-}
-
-function dayLabel(day: string): string {
-  const [, m, d] = day.split("-").map(Number);
-  const weekday = "日月火水木金土"[new Date(`${day}T00:00:00+09:00`).getDay()];
-  return `${m}月${d}日（${weekday}）`;
-}
-
-function compactDates(days: string[]): string {
-  return [...days].sort().map(dayLabel).join("、");
 }
 
 function newKey(): string {
@@ -200,16 +191,17 @@ export function PublicLineWorkerPage() {
             <h1>確認</h1>
             <p className="lw-confirm-lead">以下の参加日で返信します。</p>
             <p className="lw-eyebrow">発注依頼書 {view.document_number}（版{view.version_no}）{view.project_name ? `　${view.project_name.split("\n")[0]}` : ""}</p>
+            <PeriodSummary view={view} />
             <h2 className="lw-confirm-head">参加する日（{selected.length}日）</h2>
-            <p className="lw-dates">{compactDates(selected)}</p>
+            <p className="lw-dates">{participationDateLines(selected)}</p>
             {(() => {
-              const off = [...new Set([...(view?.offered_dates ?? []), ...(view?.holidays ?? [])])].filter((d) => !selected.includes(d));
-              return off.length ? (
+              const off = [...new Set(view.work_days.map((day) => day.date))].filter((d) => !selected.includes(d) && !holidays.has(d));
+              return (
                 <>
                   <h2 className="lw-confirm-head">参加しない日</h2>
-                  <p className="lw-off-dates">{compactDates(off)}</p>
+                  <p className="lw-off-dates">{participationDateLines(off) || "なし"}</p>
                 </>
-              ) : null;
+              );
             })()}
             {message ? <p className="lw-footer-error">{message}</p> : null}
             <div className="lw-confirm-actions">
@@ -231,11 +223,13 @@ export function PublicLineWorkerPage() {
               <h1>{view.project_name || "案件"}</h1>
               {view.site_name ? <p className="lw-meta">稼働場所：{view.site_name}</p> : null}
               {view.meeting_place ? <p className="lw-meta">集合場所：{view.meeting_place}</p> : null}
+              <PeriodSummary view={view} />
               <StateNotice view={view} />
             </div>
 
             <div className="lw-card">
               <h2>{editable ? "参加する日をタップして選んでください" : "稼働日"}</h2>
+              {editable ? <button type="button" className="lw-select-all" onClick={() => setSelected([...offered].filter((day) => !holidays.has(day)).sort())}>すべて選択する</button> : null}
               <MonthCalendar
                 month={month}
                 onMonthChange={setMonth}
@@ -261,8 +255,14 @@ export function PublicLineWorkerPage() {
             </div>
 
             {editable ? (
+              <div className="lw-card">
+                <h2>選んだ日（{selected.length}日）</h2>
+                <p className="lw-dates">{participationDateLines(selected) || "まだ選んでいません"}</p>
+              </div>
+            ) : null}
+            {editable ? (
               <div className="lw-footer">
-                <p className="lw-footer-dates">{selected.length > 0 ? `選んだ日：${compactDates(selected)}（${selected.length}日）` : "まだ選んでいません"}</p>
+                <p className="lw-footer-dates">{selected.length > 0 ? `${selected.length}日を選択しています` : "まだ選んでいません"}</p>
                 {message ? <p className="lw-footer-error">{message}</p> : null}
                 <button type="button" className="lw-primary" disabled={selected.length === 0} onClick={() => { setMessage(""); setPhase("confirm"); window.scrollTo(0, 0); }}>
                   確認する
@@ -276,12 +276,21 @@ export function PublicLineWorkerPage() {
   );
 }
 
+function PeriodSummary({ view }: { view: LineWorkerPickView }) {
+  return <>
+    <h2 className="lw-confirm-head">期間</h2>
+    <p className="lw-off-dates">{participationPeriodLabel(view.period)}</p>
+    <h2 className="lw-confirm-head">期間中の休業日</h2>
+    <p className="lw-off-dates">{participationDateLines(view.holidays) || "なし"}</p>
+  </>;
+}
+
 function StateNotice({ view }: { view: LineWorkerPickView }) {
   switch (view.state) {
     case "open":
-      return <p className="lw-note">全日程に参加できる場合は、LINEのメッセージの「全日程で受諾します」を押してください。</p>;
+      return <p className="lw-note">全日程に参加できる場合は「すべて選択する」を押して確認へ進んでください。</p>;
     case "accepted":
-      return <p className="lw-ok">受諾済みです。参加する日：{compactDates(view.accepted_dates)}</p>;
+      return <p className="lw-ok">受諾済みです。参加する日：{"\n"}{participationDateLines(view.accepted_dates)}</p>;
     case "declined":
       return <p className="lw-warn">この依頼は辞退済みです。</p>;
     case "superseded":

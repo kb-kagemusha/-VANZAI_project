@@ -265,9 +265,11 @@ def test_pick_holiday_not_offered_and_accept_notice_sent_once(api_client, db_ses
     to, text, retry_key = sent[0]
     assert to == "U123" and "受け付けました" in text and "（2日）" in text and len(retry_key) == 36
     from src.services.line_order import format_date_set
-    # 休業日（2日目）と選ばなかった日（4日目）は「参加しない日」として別の行に出す
-    assert f"参加する日：{format_date_set([_day(1), _day(3)])}（2日）" in text
-    assert f"参加しない日：{format_date_set([_day(2), _day(4)])}" in text
+    # 休業日と参加しない日を分離し、離れた参加日は1日につき1行。
+    assert "期間：" in text
+    assert f"期間中の休業日：\n{format_date_set([_day(2)])}" in text
+    assert f"参加する日（2日）：\n{format_date_set([_day(1)])}\n{format_date_set([_day(3)])}" in text
+    assert f"参加しない日：\n{format_date_set([_day(4)])}" in text
     sent_text = fake_line.pushes[0][1][0]["text"]
     assert f"期間中の休業日: {format_date_set([_day(2)])}" in sent_text and "あなたの稼働日" not in sent_text
     # 同じキーの再送では通知しない
@@ -353,3 +355,40 @@ def test_overview_lists_all_registered_workers_with_line_status(api_client, db_s
     # 依頼を送っていない人も、登録のある人は全員出す
     assert rows[linked.id]["line_linked"] is True and rows[unlinked.id]["line_linked"] is False
     assert "workers" not in api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username)).json()
+
+
+def test_pick_retains_period_edge_holidays_and_groups_only_consecutive_dates(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    from src.services.line_order import format_date_set, participation_summary
+    from src.models.order_request import OrderRequestVersion
+
+    worker = _worker(db_session, "期間確認")
+    _link(api_client, ops_user, worker.id, "U123")
+    version = _create_partial(api_client, ops_user, [worker.id], last=6, holidays=[1, 6])
+    delivery_id = version["deliveries"][0]["id"]
+    _release(db_session, actions=("pick_dates",))
+    view = api_client.get(f"/api/line/worker/deliveries/{delivery_id}/pick", headers=_session(api_client)).json()
+    assert view["period"] == {"from": _day(1), "to": _day(6)}
+    assert view["holidays"] == [_day(1), _day(6)]
+    assert view["offered_dates"] == [_day(2), _day(3), _day(4), _day(5)]
+    text = participation_summary(db_session.get(OrderRequestVersion, version["id"]), [_day(2), _day(3)])
+    assert f"参加する日（2日）：\n{format_date_set([_day(2), _day(3)])}\n" in text
+    assert text.split("参加しない日：\n")[1] == format_date_set([_day(4), _day(5)])
+
+
+def test_pick_personal_absence_is_not_a_common_holiday(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    from tests.test_line_daily import _payload
+    from src.services.line_order import format_date_set, participation_summary
+    from src.models.order_request import OrderRequestVersion
+
+    worker = _worker(db_session, "個人不参加")
+    _link(api_client, ops_user, worker.id, "U123")
+    body = _payload([worker.id], schedule=_schedule(1, 5, holidays=[2]), absences={worker.id: [_day(4)]})
+    body["allow_partial_accept"] = True
+    created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username)).json()
+    version = api_client.post(f"/api/order-requests/versions/{created['id']}/confirm", headers=_auth(ops_user.username)).json()
+    _release(db_session, actions=("pick_dates",))
+    view = api_client.get(f"/api/line/worker/deliveries/{version['deliveries'][0]['id']}/pick", headers=_session(api_client)).json()
+    assert view["holidays"] == [_day(2)]
+    assert _day(4) not in view["offered_dates"]
+    text = participation_summary(db_session.get(OrderRequestVersion, version["id"]), view["offered_dates"])
+    assert text.split("参加しない日：\n")[1] == format_date_set([_day(4)])

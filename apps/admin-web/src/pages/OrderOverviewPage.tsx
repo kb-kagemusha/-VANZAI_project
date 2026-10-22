@@ -4,10 +4,11 @@
  * データは参加カレンダーと同じ（参加OK／変更確認待ち／未回答。同じ人は1日に1つだけ）。
  */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
+import { OrderRequestDetailDialog } from "../components/OrderRequestDetailDialog";
 import { shiftMonth, todayInTokyo } from "../components/MonthCalendar";
 import { ApiError, getParticipationCalendar, type ParticipationEvent } from "../lib/api/client";
 import "../styles/orderOverview.css";
@@ -19,9 +20,9 @@ const PALETTE_SIZE = 8;
 
 type EventRow = {
   seriesId: string;
+  versionId: string;
   name: string;
   documentNumber: string;
-  siteName: string;
   isTest: boolean;
   color: number;
   days: Map<string, ParticipationEvent>;
@@ -45,6 +46,7 @@ function firstLine(text: string): string {
 
 /** 参加カレンダーの横長の表示（イベントごと・稼働者ごと）。表示の切り替えは参加カレンダーの画面が持つ。 */
 export function OrderOverviewBody() {
+  const [detailVersionId, setDetailVersionId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") || todayInTokyo().slice(0, 7);
   const mode = searchParams.get("view") === "worker" ? "worker" : "event";
@@ -83,9 +85,9 @@ export function OrderOverviewBody() {
         if (!row) {
           row = {
             seriesId: event.series_id,
+            versionId: event.version_id,
             name: firstLine(event.project_name),
             documentNumber: event.document_number,
-            siteName: firstLine(event.site_name ?? ""),
             isTest: Boolean(event.is_test),
             color: 0,
             days: new Map(),
@@ -174,7 +176,7 @@ export function OrderOverviewBody() {
                       <th className="overview-row-name" scope="row">
                         <span className={`ov-swatch ov-c${row.color}`} aria-hidden="true" />
                         <span className="ov-row-title">{row.isTest ? <span className="ov-test">テスト</span> : null}{row.name}</span>
-                        <span className="ov-row-sub">{row.documentNumber}{row.siteName ? `・${row.siteName}` : ""}</span>
+                        <span className="ov-row-sub"><button type="button" className="ov-document-link" onClick={() => setDetailVersionId(row.versionId)}>{row.documentNumber}</button></span>
                       </th>
                       {days.map((day, index) => {
                         const event = row.days.get(day);
@@ -227,6 +229,7 @@ export function OrderOverviewBody() {
           </table>
         </section>
       )}
+      {detailVersionId ? <OrderRequestDetailDialog versionId={detailVersionId} onClose={() => setDetailVersionId(null)} /> : null}
     </div>
   );
 }

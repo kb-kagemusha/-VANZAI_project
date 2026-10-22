@@ -639,12 +639,7 @@ class LineOrderService:
                 )
             ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor)
             ws.rebuild(self.session, series_id, delivery.worker_id, actor=actor)
-            off = format_date_set(off_dates_in_period(version, participating))
-            if dates is None:
-                # 全日程：期間中の休業日（休業日・個人のお休み）を示す
-                reply = f"{ACCEPT_REPLY}\n期間中の休業日：{off or 'なし'}"
-            else:
-                reply = f"{ACCEPT_REPLY}\n参加する日：{format_date_set(participating)}（{len(participating)}日）\n参加しない日：{off or 'なし'}"
+            reply = f"{ACCEPT_REPLY}\n{participation_summary(version, participating)}"
         return "acked", reply
 
     def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
@@ -947,4 +942,49 @@ def format_date_set(dates: list[str] | None) -> str:
         # 依頼書の本文・PDF（■休業日）と同じ「10月25日（日）」の表記にそろえる
         return f"{d.month}月{d.day}日（{'月火水木金土日'[d.weekday()]}）"
     return "、".join(label(a) if a == b else f"{label(a)}〜{label(b)}" for a, b in runs)
+
+
+def version_date_context(version: OrderRequestVersion) -> dict:
+    """全体の期間・実勤務日・全員共通の休業日。個人の不参加日と分離する。"""
+    sections = ws._version_sections(version) or {}
+    schedule = sections.get("schedule") or {}
+    work_dates = sorted({day["work_date"] for day in ws.version_work_days(version)})
+    bounds = [g.get(k) for g in schedule.get("work_groups", []) for k in ("from", "to") if g.get(k)]
+    period = sections.get("work_period") or {}
+    bounds += [period[k] for k in ("from", "to") if period.get(k)]
+    bounds += work_dates
+    if not bounds:
+        return {"period": None, "work_dates": [], "holidays": []}
+    from datetime import date, timedelta
+
+    first, last = min(bounds), max(bounds)
+    working = set(work_dates)
+    holidays = []
+    day = date.fromisoformat(first)
+    while day.isoformat() <= last:
+        if day.isoformat() not in working:
+            holidays.append(day.isoformat())
+        day += timedelta(days=1)
+    return {"period": {"from": first, "to": last}, "work_dates": work_dates, "holidays": holidays}
+
+
+def participation_summary(version: OrderRequestVersion, dates: list[str]) -> str:
+    """LINEの返信・受付通知を同じ内容にする。連続日のまとまりごとに1行。"""
+    context = version_date_context(version)
+    period = context["period"]
+    def lines(days: list[str]) -> str:
+        return format_date_set(days).replace("、", "\n") or "なし"
+
+    period_label = version.work_date_label
+    if period:
+        period_label = format_date_set([period["from"]])
+        if period["from"] != period["to"]:
+            period_label += "〜" + format_date_set([period["to"]])
+    absent = sorted(set(context["work_dates"]) - set(dates))
+    return "\n".join([
+        f"期間：{period_label}",
+        f"期間中の休業日：\n{lines(context['holidays'])}",
+        f"参加する日（{len(set(dates))}日）：\n{lines(dates)}",
+        f"参加しない日：\n{lines(absent)}",
+    ])
 

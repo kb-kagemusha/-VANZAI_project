@@ -8,6 +8,12 @@
 .month-calendar-weekday.is-sun { color: #c0392b; }
 .month-calendar-weekday.is-sat { color: #2563eb; }
 .month-calendar-cell { min-height: 48px; }
+.order-date-picker { display: block; min-width: 0; flex: 1; }
+.order-date-trigger { width: 100%; min-height: 42px; border: 1px solid var(--line, #dcdde3); border-radius: 8px; background: var(--panel, #fff); color: inherit; padding: 8px 10px; text-align: left; font: inherit; cursor: pointer; }
+.order-date-trigger:disabled { opacity: .65; cursor: default; }
+.order-calendar-day { width: 100%; min-height: 44px; border: 1px solid var(--line, #dcdde3); border-radius: 8px; background: var(--panel, #fff); color: inherit; cursor: pointer; font: inherit; }
+.order-calendar-day.is-selected { background: #2563eb; color: #fff; }
+.order-calendar-day:disabled { opacity: .3; cursor: default; }
 
 /* 運営の参加カレンダー */
 .participation-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 1rem; align-items: start; }

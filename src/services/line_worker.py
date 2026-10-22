@@ -144,8 +144,10 @@ class LineWorkerService:
         all_dates = sorted({d["work_date"] for d in work_days})
         state = self._pick_state(delivery, version, series)
         current = ws.current_state(self.session, delivery) if delivery.ack_status == ACK_ACKED else None
-        schedule = (ws._version_sections(version) or {}).get("schedule") or {}
-        holidays = sorted({day for group in schedule.get("work_groups", []) for day in (group.get("excluded_dates") or [])})
+        from src.services.line_order import version_date_context
+
+        context = version_date_context(version)
+        holidays = context["holidays"]
         return {
             "delivery_id": delivery.id,
             "document_number": document.document_number,
@@ -157,7 +159,7 @@ class LineWorkerService:
             "state": state,
             "allow_partial_accept": bool(version.allow_partial_accept),
             "offered_dates": [d for d in (delivery.offered_dates or []) if d in set(all_dates) and d not in set(holidays)],
-            "period": {"from": all_dates[0], "to": all_dates[-1]} if all_dates else None,
+            "period": context["period"],
             "work_days": [
                 {"date": d["work_date"], "start_time": d["start_time"], "end_time": d["end_time"], "end_next_day": d["end_next_day"]}
                 for d in work_days
@@ -233,7 +235,7 @@ class LineWorkerService:
         return result
 
     def _accept_notice_text(self, delivery: OrderRequestDelivery, dates: list[str]) -> str:
-        from src.services.line_order import format_date_set, off_dates_in_period
+        from src.services.line_order import participation_summary
 
         version = self.session.get(OrderRequestVersion, delivery.version_id)
         document = self.session.get(OrderRequestDocument, version.document_id)
@@ -242,8 +244,7 @@ class LineWorkerService:
         if document.kind == KIND_TEST:
             lines.append("（テストの依頼書です）")
         lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
-        lines.append(f"参加する日：{format_date_set(dates)}（{len(dates)}日）")
-        lines.append(f"参加しない日：{format_date_set(off_dates_in_period(version, dates)) or 'なし'}")
+        lines.append(participation_summary(version, dates))
         lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
         return "\n".join(lines)
 

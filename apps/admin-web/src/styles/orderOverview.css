@@ -8,7 +8,7 @@
 .overview-modes button.is-active { background: #2563eb; color: #fff; }
 .overview-legend { display: flex; gap: 6px; margin: 0; align-items: center; }
 
-.overview-scroll { overflow-x: auto; padding: 0; }
+.overview-scroll { overflow: auto; max-height: calc(100dvh - 240px); min-height: 160px; padding: 0; }
 .overview-grid { border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
 .overview-grid th, .overview-grid td { border-bottom: 1px solid var(--line, #e3e5ea); border-right: 1px solid var(--line, #e3e5ea); vertical-align: top; }
 .overview-head-name, .overview-row-name { position: sticky; left: 0; z-index: 2; background: var(--panel, #fff); width: 200px; min-width: 200px; max-width: 200px; text-align: left; padding: 8px 10px; }
@@ -23,6 +23,7 @@
 .ov-day-wd { display: block; font-size: 0.75rem; }
 .ov-row-title { display: block; font-weight: 700; line-height: 1.3; word-break: break-all; }
 .ov-row-sub { display: block; font-size: 0.75rem; color: var(--muted, #6b7280); margin-top: 2px; word-break: break-all; }
+.ov-document-link { border: 0; padding: 0; background: transparent; color: var(--brand, #2563eb); text-decoration: underline; font: inherit; text-align: left; cursor: pointer; }
 .ov-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; float: left; margin-top: 4px; }
 .ov-test { display: inline-block; font-size: 0.7rem; padding: 0 4px; margin-right: 4px; border-radius: 4px; background: #fef3c7; color: #92400e; font-weight: 700; }
 
