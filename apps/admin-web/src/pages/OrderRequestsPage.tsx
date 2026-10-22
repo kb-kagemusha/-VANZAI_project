@@ -991,7 +991,7 @@ export function OrderRequestsPage() {
                       {(row.change_documents ?? []).length > 0 ? null : (
                         <button
                           type="button"
-                          className="btn btn-change btn-sm create-button"
+                          className="btn btn-line-blue btn-sm"
                           disabled={changeLoading}
                           onClick={() => startChange(row.version_id)}
                         >
@@ -1000,7 +1000,7 @@ export function OrderRequestsPage() {
                       )}
                       <button
                         type="button"
-                        className="btn btn-change btn-sm create-button"
+                        className="btn btn-line-green btn-sm"
                         disabled={changeLoading}
                         onClick={() => void startCopy(row.version_id)}
                       >
@@ -1099,7 +1099,7 @@ export function OrderRequestsPage() {
                     {(item.change_documents ?? []).length > 0 ? null : (
                       <button
                         type="button"
-                        className="btn btn-change btn-sm create-button"
+                        className="btn btn-line-blue btn-sm"
                         disabled={changeLoading}
                         onClick={() => startChange(item.version_id)}
                       >
@@ -1108,7 +1108,7 @@ export function OrderRequestsPage() {
                     )}
                     <button
                       type="button"
-                      className="btn btn-change btn-sm create-button"
+                      className="btn btn-line-green btn-sm"
                       disabled={changeLoading}
                       onClick={() => void startCopy(item.version_id)}
                     >
@@ -1127,7 +1127,7 @@ export function OrderRequestsPage() {
                     {isAdmin ? (
                       <button
                         type="button"
-                        className="btn btn-danger btn-sm"
+                        className="btn btn-line-red btn-sm"
                         onClick={() => {
                           void hideDocument(item.document_id);
                         }}
@@ -1216,7 +1216,7 @@ export function OrderRequestsPage() {
               {!creating && detail ? (
                 <button
                   type="button"
-                  className="btn btn-change btn-sm create-button"
+                  className="btn btn-line-blue btn-sm"
                   disabled={changeLoading}
                   onClick={() => startChange(detail.id)}
                 >
@@ -1226,7 +1226,7 @@ export function OrderRequestsPage() {
               {!creating && detail ? (
                 <button
                   type="button"
-                  className="btn btn-change btn-sm create-button"
+                  className="btn btn-line-green btn-sm"
                   disabled={changeLoading}
                   title="同じイベントを別の日に行うときに使います。元の依頼書には影響しません"
                   onClick={() => void startCopy(detail.id)}

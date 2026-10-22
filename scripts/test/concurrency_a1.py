@@ -240,12 +240,15 @@ def cleanup(admin_id: str) -> None:
         link.status = LINK_REVOKED
         link.revoked_at = ws.now_utc()
         link.revoke_reason = "同時操作の試験の後片付け"
+    # JSON の列を含む行は PostgreSQL で DISTINCT できないので、版のIDだけを重複なしで取る
+    version_ids = {
+        vid
+        for (vid,) in db.query(OrderRequestDelivery.version_id).filter(OrderRequestDelivery.worker_id.in_(ids)).distinct().all()
+    }
     versions = (
-        db.query(OrderRequestVersion)
-        .join(OrderRequestDelivery, OrderRequestDelivery.version_id == OrderRequestVersion.id)
-        .filter(OrderRequestDelivery.worker_id.in_(ids))
-        .distinct()
-        .all()
+        db.query(OrderRequestVersion).filter(OrderRequestVersion.id.in_(version_ids)).order_by(OrderRequestVersion.created_at).all()
+        if version_ids
+        else []
     )
     for version in versions:
         if version.status != "cancelled":
@@ -270,12 +273,16 @@ def cleanup(admin_id: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rounds", type=int, default=10)
+    parser.add_argument("--cleanup-only", action="store_true", help="試験はせず、前回の試験が残したものだけを片付ける")
     args = parser.parse_args()
     db = _session()
     if db.get_bind().dialect.name != "postgresql" and os.getenv("CONCURRENCY_SMOKE_SQLITE") != "1":
         sys.exit("PostgreSQL のデータベースで実行してください。")
     admin_id = _admin(db).id
     db.close()
+    if args.cleanup_only:
+        cleanup(admin_id)
+        return
     failures = []
     for round_no in range(1, args.rounds + 1):
         for name, scenario in (("S1", scenario_accept_vs_revise), ("S2", scenario_partial_vs_full), ("S3", scenario_accept_vs_cancel)):

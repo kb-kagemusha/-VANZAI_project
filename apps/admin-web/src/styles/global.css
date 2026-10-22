@@ -5548,3 +5548,21 @@ html[data-theme="dark"] .order-line-banner {
 .order-pick.is-error { border-color: var(--color-danger, #c8553d); color: var(--color-danger, #c8553d); }
 .order-absence-panel { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--color-border, #d0d7de); border-radius: 8px; }
 
+
+/* 依頼書の行・詳細の操作ボタン：塗りを使わず、縁と文字の色で区別する（0.48.1） */
+.btn-line-blue,
+.btn-line-green,
+.btn-line-red {
+  background: var(--panel, #fff);
+  border-width: 1.5px;
+  font-weight: 600;
+}
+.btn-line-blue { border-color: #2563eb; color: #2563eb; }
+.btn-line-blue:hover:not(:disabled) { background: rgba(37, 99, 235, 0.08); }
+.btn-line-green { border-color: #16a34a; color: #15803d; }
+.btn-line-green:hover:not(:disabled) { background: rgba(22, 163, 74, 0.08); }
+.btn-line-red { border-color: #dc2626; color: #dc2626; }
+.btn-line-red:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
+html[data-theme="dark"] .btn-line-blue { border-color: #7aa7ff; color: #9bbcff; }
+html[data-theme="dark"] .btn-line-green { border-color: #5fcf8a; color: #7fdca1; }
+html[data-theme="dark"] .btn-line-red { border-color: #f87171; color: #fca5a5; }
