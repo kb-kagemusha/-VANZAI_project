@@ -1272,7 +1272,7 @@ export function OrderRequestsPage() {
               ) : null}
             </div>
             <div className="order-draft-head-side">
-              {creating && !basedOn && !savedDraftId && canWrite ? <button type="button" className="btn btn-ghost" onClick={() => setTemplatesOpen(true)}>テンプレートから呼び出す</button> : null}
+              {creating && !basedOn && !savedDraftId && canWrite ? <button type="button" className="btn btn-line-blue" onClick={() => setTemplatesOpen(true)}>テンプレートから呼び出す</button> : null}
               {createModal ? (
                 <button type="button" className="btn btn-ghost" onClick={closeCreateModal}>
                   閉じる
@@ -1390,15 +1390,6 @@ export function OrderRequestsPage() {
                       })}
                     </div>
                   </fieldset>
-                  <label className="order-field order-span-12">
-                    <span className="order-field-label">背景</span>
-                    <textarea
-                      className="is-short"
-                      value={sections.background}
-                      disabled={!editable}
-                      onChange={(event) => setSections({ ...sections, background: withFullwidthTilde(event.target.value) })}
-                    />
-                  </label>
                   <label className="order-field order-span-6">
                     <span className="order-field-label">稼働場所</span>
                     <textarea
@@ -1407,6 +1398,15 @@ export function OrderRequestsPage() {
                       disabled={!editable}
                       placeholder={"会場名\n（住所）"}
                       onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
+                    />
+                  </label>
+                  <label className="order-field order-span-6">
+                    <span className="order-field-label">背景</span>
+                    <textarea
+                      className="is-short"
+                      value={sections.background}
+                      disabled={!editable}
+                      onChange={(event) => setSections({ ...sections, background: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
                   <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
@@ -1522,7 +1522,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
@@ -1585,10 +1585,10 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, contact_name: withFullwidthTilde(event.target.value) })}
                   />
                 </label>
-                <label className="order-field order-span-4">
-                  <span className="order-field-label">
+                <label className="order-field order-span-8">
+                  <span className="order-field-label order-inline-label">
                     取引相手メモ
-                    <span className="order-field-hint">下請の正式宛先です。共通PDFの宛名には差し込みません。</span>
+                    <span className="order-field-hint">PDFには記載しません</span>
                   </span>
                   <textarea
                     className="is-short"
@@ -1605,8 +1605,8 @@ export function OrderRequestsPage() {
               <div className="order-draft-grid">
                 <label className="order-field order-span-4">
                   <span className="order-field-label">
-                    期限の案内
-                    <span className="order-field-hint">必須です。この日時を過ぎて返事が無い相手へ、案内を1回送ります。</span>
+                    <span className="order-inline-label">期限の案内<span className="order-field-hint">（必須）</span></span>
+                    <span className="order-field-hint">期限内に返事がない相手へ案内を送ります</span>
                   </span>
                   <input
                     type="date"
@@ -1626,24 +1626,8 @@ export function OrderRequestsPage() {
                     onChange={(event) => setForm({ ...form, follow_up_due_time: event.target.value || "21:00" })}
                   />
                 </label>
-                <label className="order-field order-span-4">
-                  <span className="order-field-label">電話メモ</span>
-                  <input
-                    value={form.phone_note ?? ""}
-                    disabled={!editable}
-                    placeholder="電話した内容があれば"
-                    onChange={(event) => {
-                      const phoneNote = withFullwidthTilde(event.target.value);
-                      setForm((current) => {
-                        const next = { ...current, phone_note: phoneNote };
-                        formRef.current = next;
-                        return next;
-                      });
-                    }}
-                  />
-                </label>
               </div>
-              <div className="order-choice-row">
+              <div className="order-choice-row order-phone-row">
                 <label className={`order-choice${form.phone_first ? " is-on" : ""}`}>
                   <input
                     type="checkbox"
@@ -1663,6 +1647,22 @@ export function OrderRequestsPage() {
                     <span className="order-choice-hint">電話しただけでは、送付済み・受領済みにはしません。</span>
                   </span>
                 </label>
+                {form.phone_first ? <label className="order-field">
+                  <span className="order-field-label">電話メモ</span>
+                  <input
+                    value={form.phone_note ?? ""}
+                    disabled={!editable}
+                    placeholder="電話した内容があれば"
+                    onChange={(event) => {
+                      const phoneNote = withFullwidthTilde(event.target.value);
+                      setForm((current) => {
+                        const next = { ...current, phone_note: phoneNote };
+                        formRef.current = next;
+                        return next;
+                      });
+                    }}
+                  />
+                </label> : null}
               </div>
               <p className="order-field-hint">依頼書の作成者と管理ロールを持つ担当者が、送付・回答状況を確認します。</p>
             </section>

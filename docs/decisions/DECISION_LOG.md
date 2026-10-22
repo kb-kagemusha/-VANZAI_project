@@ -1506,3 +1506,13 @@
 - Validation: `tests/test_order_request_templates.py`（内容の独立・安全な初期値・権限・重複・非破壊除外・検索・DDL）、関連依頼書/LINEテスト、`apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（保存・検索・呼出し・除外・初期全選択と月をまたぐ解除）。運用手順: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
 - Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/14.4/16、DEC-063/065/069/071。
 
+### DEC-073: 依頼書の稼働日選択範囲とフォーム配置（2026-10-23）
+- Status: Confirmed（ユーザーの6点の依頼と背景位置の追加指定）
+- Purpose: 全体の稼働期間から外れた日付の入力を防ぎ、入力欄・注釈・必要時だけのメモを見分けやすくする。
+- Decision: 詳細の開始日・終了日を全体の稼働期間内に制限し、月送りも同じ範囲にする。単価を別日付で設定する場合も同じ基準にする。全体の期間が空・不正なら日付選択を無効にする。期間を後から変更して範囲外になった詳細は勝手に消さず選び直しを案内する。APIの既存の範囲検証を維持する。
+- Decision: テンプレート呼出しの縁を青にする。背景は半幅にし稼働場所の右へ置く。取引相手メモは連絡担当者の右から行末まで広げ、見出し右の注釈を「PDFには記載しません」だけにする。期限の案内の右に「（必須）」を置き、注釈を「期限内に返事がない相手へ案内を送ります」にする。電話メモは電話先行チェック時だけその右に表示する。チェック解除はメモ削除の指示ではないため入力値を保持する。
+- Data / Audit: DB・モデル・DDLの変更なし。既存の保存・確定・送付・監査処理を維持し、入力表示の切替で業務状態を変更しない。
+- Validation: `apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（期間上下限・月移動・全体期間変更時の再選択・配置・電話メモ切替）、`tests/test_api_order_requests.py`（既存APIの期間検証と保存）。
+- Version: 既存フォームの修正としてZ（0.48.13）。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.2/14.5、DEC-069/071/072。
+

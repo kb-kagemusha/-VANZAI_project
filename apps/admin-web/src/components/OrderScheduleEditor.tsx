@@ -88,7 +88,9 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
   </div>;
 }
 
-function DateInputs({ group, disabled, prefix, onChange }: { group: DateGroup; disabled: boolean; prefix: string; onChange: (group: DateGroup) => void }) {
+function DateInputs({ group, disabled, prefix, periodFrom, periodTo, onChange }: { group: DateGroup; disabled: boolean; prefix: string; periodFrom: string; periodTo: string; onChange: (group: DateGroup) => void }) {
+  const ready = Boolean(periodFrom && periodTo && periodFrom <= periodTo);
+  const endMin = group.from && group.from > periodFrom ? group.from : periodFrom;
   return <div className="order-schedule-dates">
     <div className="order-date-mode">
       <span>日付の設定</span>
@@ -99,17 +101,19 @@ function DateInputs({ group, disabled, prefix, onChange }: { group: DateGroup; d
       </div>
     </div>
     <label>{group.date_mode === "range" ? "開始日" : "稼働日"}
-      <OrderDatePicker label={`${prefix}開始日`} value={group.from} disabled={disabled}
+      <OrderDatePicker label={`${prefix}開始日`} value={group.from} min={periodFrom || undefined} max={periodTo || undefined} disabled={disabled || !ready}
         onChange={(day) => onChange({ ...group, from: day, to: group.date_mode === "single" ? day : group.to })} />
     </label>
     {group.date_mode === "range" && <label>終了日
-      <OrderDatePicker label={`${prefix}終了日`} value={group.to} min={group.from || undefined} disabled={disabled}
+      <OrderDatePicker label={`${prefix}終了日`} value={group.to} min={endMin || undefined} max={periodTo || undefined} disabled={disabled || !ready || endMin > periodTo}
         onChange={(day) => onChange({ ...group, to: day })} />
     </label>}
+    {!ready ? <p className="order-field-hint">上の「稼働日」で開始日と終了日を設定してください。</p> : null}
+    {ready && [group.from, group.to].some((day) => day && (day < periodFrom || day > periodTo)) ? <p className="form-error">全体の稼働期間外の日付があります。日付を選び直してください。</p> : null}
   </div>;
 }
 
-export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule: OrderSchedule; disabled: boolean; onChange: (schedule: OrderSchedule) => void }) {
+export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; onChange: (schedule: OrderSchedule) => void }) {
   const value = syncSchedule(schedule);
   const change = (next: OrderSchedule) => onChange(syncSchedule(next));
 
@@ -144,7 +148,7 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
-        <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} disabled={disabled} onChange={update} />
+        <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>
@@ -166,7 +170,7 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
       const update = (patch: Partial<typeof group>) => change({ ...value, rate_groups: value.rate_groups.map((g) => g.id === group.id ? { ...g, ...patch } : g) });
       return <fieldset key={group.id} className="order-schedule-row order-rate-row" disabled={disabled}>
         <legend>単価 {index + 1}：{dateGroupLabel(group) || "日付未設定"}</legend>
-        {!value.rates_follow_work && <DateInputs group={group} prefix={`単価${index + 1}の`} disabled={disabled} onChange={update} />}
+        {!value.rates_follow_work && <DateInputs group={group} prefix={`単価${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
           <label>単価（円・税抜）<input type="number" min="0" step="0.01" readOnly={group.unit === "hour"} value={group.amount} onChange={(e) => update({ amount: e.target.value })} /></label>
           <div className="order-date-mode"><span>単位：{group.unit === "hour" ? "保存済みの旧時給" : "日給"}</span>

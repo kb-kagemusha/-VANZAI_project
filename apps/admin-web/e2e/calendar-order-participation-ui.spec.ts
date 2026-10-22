@@ -119,6 +119,66 @@ test("saved template can be found and loaded into an independent blank-date draf
   expect(writes).toEqual([]);
 });
 
+test("form layout and detail dates stay within the overall work period", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("button", { name: "稼働日の詳細1の開始日", exact: true })).toBeDisabled();
+  const templateButton = draft.getByRole("button", { name: "テンプレートから呼び出す", exact: true });
+  await expect(templateButton).toHaveClass(/btn-line-blue/);
+  const site = await draft.getByRole("textbox", { name: "稼働場所", exact: true }).boundingBox();
+  const background = await draft.getByRole("textbox", { name: "背景", exact: true }).boundingBox();
+  expect(background!.x).toBeGreaterThan(site!.x);
+  expect(Math.abs(background!.y - site!.y)).toBeLessThan(2);
+  expect(Math.abs(background!.width - site!.width)).toBeLessThan(2);
+  const memo = draft.getByRole("textbox", { name: /取引相手メモ/ });
+  const memoBox = await memo.boundingBox();
+  const grid = await memo.locator("..").locator("..").boundingBox();
+  expect(Math.abs(memoBox!.x + memoBox!.width - grid!.x - grid!.width)).toBeLessThan(2);
+  await expect(memo.locator("..").locator(".order-field-hint")).toHaveText("PDFには記載しません");
+  await expect(draft.getByText("（必須）", { exact: true })).toBeVisible();
+  await expect(draft.getByText("期限内に返事がない相手へ案内を送ります", { exact: true })).toBeVisible();
+  const phone = draft.getByRole("checkbox", { name: /電話先行/ });
+  const phoneMemo = draft.getByRole("textbox", { name: "電話メモ", exact: true });
+  await expect(phoneMemo).toHaveCount(0);
+  await phone.check();
+  await phoneMemo.fill("折り返し待ち");
+  const phoneBox = await phone.locator("..").boundingBox();
+  const phoneMemoBox = await phoneMemo.boundingBox();
+  expect(phoneMemoBox!.x).toBeGreaterThan(phoneBox!.x + phoneBox!.width);
+  await phone.uncheck();
+  await expect(phoneMemo).toHaveCount(0);
+  await phone.check();
+  await expect(phoneMemo).toHaveValue("折り返し待ち");
+  await page.screenshot({ path: testInfo.outputPath("order-contact-layout.png") });
+  await draft.getByRole("button", { name: "閉じる", exact: true }).click();
+
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日の詳細1の開始日", exact: true }).click();
+  const start = page.getByRole("dialog", { name: "稼働日の詳細1の開始日", exact: true });
+  await expect(start.getByRole("button", { name: "2026-10-28", exact: true })).toBeDisabled();
+  await expect(start.getByRole("button", { name: "2026-10-29", exact: true })).toBeEnabled();
+  await expect(start.getByRole("button", { name: "前の月", exact: true })).toBeDisabled();
+  await start.getByRole("button", { name: "次の月", exact: true }).click();
+  await expect(start.getByRole("button", { name: "2026-11-04", exact: true })).toBeEnabled();
+  await expect(start.getByRole("button", { name: "2026-11-05", exact: true })).toBeDisabled();
+  await expect(start.getByRole("button", { name: "次の月", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "稼働日の終了", exact: true }).click();
+  const overall = page.getByRole("dialog", { name: "稼働日の終了", exact: true });
+  await overall.getByRole("button", { name: "前の月", exact: true }).click();
+  await overall.getByRole("button", { name: "2026-10-30", exact: true }).click();
+  await page.getByRole("button", { name: "稼働日の詳細1の終了日", exact: true }).click();
+  const end = page.getByRole("dialog", { name: "稼働日の詳細1の終了日", exact: true });
+  await expect(end.getByRole("button", { name: "2026-10-28", exact: true })).toBeDisabled();
+  await expect(end.getByRole("button", { name: "2026-10-30", exact: true })).toBeEnabled();
+  await expect(end.getByRole("button", { name: "2026-10-31", exact: true })).toBeDisabled();
+  await expect(end.getByRole("button", { name: "次の月", exact: true })).toBeDisabled();
+  await end.getByRole("button", { name: "2026-10-30", exact: true }).click();
+  await expect(page.getByRole("button", { name: "稼働日の詳細1の終了日", exact: true })).toContainText("2026/10/30");
+});
+
 test("Monday date picker and PDF correction preserve draft and reuse its id", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   await page.goto("/operations/order-requests");

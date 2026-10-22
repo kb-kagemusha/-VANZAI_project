@@ -4289,6 +4289,9 @@ html[data-theme="dark"] .order-location > a { background: #244735; color: #c5efc
   font-weight: 700;
 }
 
+.order-inline-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4rem; }
+@media (max-width: 700px) { .order-phone-row { grid-template-columns: 1fr; } }
+
 .order-field-hint {
   color: var(--muted);
   font-size: 0.78rem;
