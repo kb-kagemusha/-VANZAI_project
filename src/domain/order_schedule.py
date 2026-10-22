@@ -271,10 +271,7 @@ def date_label(group):
     if group["date_mode"] == "single":
         return start
     if start and end:
-        excluded = group.get("excluded_dates") or []
-        if excluded:
-            days = "、".join(f"{date.fromisoformat(d).month}月{date.fromisoformat(d).day}日" for d in excluded)
-            return f"{start}～{end}（休業日：{days}）"
+        # 休業日は本文の「■休業日」に1回だけ出す（0.48.7。ここに括弧書きで重ねない）
         return f"{start}～{end}"
     return start or (f"～{end}" if end else "")
 

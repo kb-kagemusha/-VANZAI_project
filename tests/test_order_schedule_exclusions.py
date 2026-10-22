@@ -70,10 +70,13 @@ def test_shrinking_period_does_not_silently_drop_holidays():
         normalize_schedule(value)
 
 
-def test_holiday_label_is_shown_in_document_text():
+def test_holiday_is_not_repeated_in_date_and_hours_text():
+    # 休業日は本文の「■休業日」に1回だけ出す（0.48.7）。日付・稼働時間の行には括弧書きで重ねない
     label, hours, _fee = schedule_text(normalize_schedule(_with_holidays("2027-03-03")))
-    assert "2027年3月2日～2027年3月10日（休業日：3月3日）" in label
-    assert "（休業日：3月3日）" in hours
+    assert "2027年3月2日～2027年3月10日" in label and "休業日" not in label
+    assert "休業日" not in hours
+    from src.services.order_request_format import holiday_label
+    assert holiday_label({"schedule": normalize_schedule(_with_holidays("2027-03-03"))}) == "3月3日（水）"
 
 
 def test_rate_coverage_checks_only_actual_work_days():

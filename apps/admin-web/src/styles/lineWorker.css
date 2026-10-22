@@ -32,3 +32,10 @@
 .lw-primary:disabled { background: #b8dcc6; cursor: default; }
 .lw-lead { margin: 8px 0 2px; color: var(--lr-muted); font-size: 12px; }
 .lw-dates { font-size: 17px; font-weight: 700; margin: 0 0 8px; }
+/* 送信前の確認（0.48.7） */
+.lw-confirm-lead { font-size: 16px; font-weight: 700; margin: 6px 0 10px; }
+.lw-confirm-head { font-size: 13px; color: var(--lr-muted); margin: 12px 0 4px; font-weight: 600; }
+.lw-off-dates { font-size: 15px; margin: 0 0 8px; color: #6b7280; }
+.lw-confirm-actions { display: grid; gap: 10px; margin-top: 16px; }
+.lw-secondary { display: block; width: 100%; max-width: 560px; margin: 0 auto; height: 46px; border: 1px solid #c9ccd3; border-radius: 14px; background: #fff; color: #333; font-size: 15px; font-weight: 600; cursor: pointer; }
+.lw-secondary:disabled { opacity: .5; cursor: default; }

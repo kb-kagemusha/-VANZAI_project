@@ -48,9 +48,8 @@ function shortDate(iso: string): string {
   return `${month}月${day}日`;
 }
 export function dateGroupLabel(group: DateGroup & { excluded_dates?: string[] }): string {
-  const label = formatWorkDateRange(group.from, group.date_mode === "range" ? group.to : "");
-  const excluded = group.date_mode === "range" && group.from && group.to ? (group.excluded_dates ?? []) : [];
-  return excluded.length > 0 ? `${label}（休業日：${excluded.map(shortDate).join("、")}）` : label;
+  // 休業日は本文の「■休業日」に1回だけ出す（0.48.7。ここに括弧書きで重ねない）
+  return formatWorkDateRange(group.from, group.date_mode === "range" ? group.to : "");
 }
 /** 勤務グループの実勤務日（共通の休業日を除く。サーバーの expand_work_days と同じ規則）。 */
 export function groupWorkDates(group: WorkGroup): string[] {

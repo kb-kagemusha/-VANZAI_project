@@ -5582,3 +5582,8 @@ html[data-theme="dark"] .order-excluded-day.is-out { background: transparent; bo
 .order-action-button.order-excluded-open { background: #2563eb; border-color: #2563eb; color: #fff; }
 .order-action-button.order-excluded-open:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
 .order-action-button.order-excluded-open:disabled { background: #9db8f0; border-color: #9db8f0; color: #fff; }
+/* 「日付を選んで受諾できる」：チェックを大きく、文字を左に詰める（0.48.7） */
+.order-field.order-partial-accept { align-content: start; }
+.order-partial-accept .order-check { display: flex; justify-content: flex-start; align-items: center; gap: 10px; text-align: left; font-weight: 600; cursor: pointer; }
+.order-partial-accept .order-check input[type="checkbox"] { flex: none; width: 22px; height: 22px; min-height: 0; margin: 0; padding: 0; accent-color: #2563eb; cursor: pointer; }
+.order-partial-accept .order-field-hint { text-align: left; }

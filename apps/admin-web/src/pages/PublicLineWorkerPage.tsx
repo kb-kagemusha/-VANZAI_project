@@ -76,7 +76,7 @@ function readParams(): { mode: string; delivery: string } {
 function dayLabel(day: string): string {
   const [, m, d] = day.split("-").map(Number);
   const weekday = "日月火水木金土"[new Date(`${day}T00:00:00+09:00`).getDay()];
-  return `${m}/${d}（${weekday}）`;
+  return `${m}月${d}日（${weekday}）`;
 }
 
 function compactDates(days: string[]): string {
@@ -88,7 +88,7 @@ function newKey(): string {
 }
 
 export function PublicLineWorkerPage() {
-  const [phase, setPhase] = useState<"checking" | "error" | "ready" | "done">("checking");
+  const [phase, setPhase] = useState<"checking" | "error" | "ready" | "confirm" | "done">("checking");
   const [message, setMessage] = useState("");
   const [token, setToken] = useState("");
   const [view, setView] = useState<LineWorkerPickView | null>(null);
@@ -96,7 +96,6 @@ export function PublicLineWorkerPage() {
   const [month, setMonth] = useState("");
   const [sending, setSending] = useState(false);
   const [submitKey, setSubmitKey] = useState(newKey);
-  const [result, setResult] = useState<{ message: string; dates: string[] } | null>(null);
   const { mode, delivery } = useMemo(readParams, []);
 
   useEffect(() => {
@@ -158,7 +157,11 @@ export function PublicLineWorkerPage() {
     try {
       const response = await submitLineWorkerPick(token, view.delivery_id, selected, submitKey);
       if (response.outcome === "acked") {
-        setResult({ message: response.message, dates: response.accepted_dates });
+        // 受付の通知はLINEのトークに届くので、画面は閉じる（LINEの外で開いたときだけ完了を表示）
+        const liff = liffClient();
+        if (liff?.closeWindow && (liff.isInClient?.() ?? true)) {
+          liff.closeWindow();
+        }
         setPhase("done");
       } else {
         setMessage(response.message || "受諾できませんでした。");
@@ -185,19 +188,38 @@ export function PublicLineWorkerPage() {
         {phase === "checking" ? <p className="lw-status">読み込んでいます…</p> : null}
         {phase === "error" ? <div className="lw-card lw-error"><p>{message}</p></div> : null}
 
-        {phase === "done" && result ? (
+        {phase === "done" ? (
           <div className="lw-card">
-            <h1>受け付けました</h1>
-            <p className="lw-lead">受諾を受け付けました。参加する日（{result.dates.length}日）</p>
-            <p className="lw-dates">{compactDates(result.dates)}</p>
+            <h1>送信しました</h1>
+            <p className="lw-note">LINEのトークに受付の通知を送りました。</p>
+          </div>
+        ) : null}
+
+        {phase === "confirm" && view ? (
+          <div className="lw-card">
+            <h1>確認</h1>
+            <p className="lw-confirm-lead">以下の参加日で返信します。</p>
+            <p className="lw-eyebrow">発注依頼書 {view.document_number}（版{view.version_no}）{view.project_name ? `　${view.project_name.split("\n")[0]}` : ""}</p>
+            <h2 className="lw-confirm-head">参加する日（{selected.length}日）</h2>
+            <p className="lw-dates">{compactDates(selected)}</p>
             {(() => {
-              const off = [...new Set([...(view?.offered_dates ?? []), ...(view?.holidays ?? [])])].filter((d) => !result.dates.includes(d));
-              return off.length ? <p className="lw-note">参加しない日：{compactDates(off)}</p> : null;
+              const off = [...new Set([...(view?.offered_dates ?? []), ...(view?.holidays ?? [])])].filter((d) => !selected.includes(d));
+              return off.length ? (
+                <>
+                  <h2 className="lw-confirm-head">参加しない日</h2>
+                  <p className="lw-off-dates">{compactDates(off)}</p>
+                </>
+              ) : null;
             })()}
-            <p className="lw-note">同じ内容をLINEのトークにも送りました。予定はメニューの「スケジュール確認」でも確認できます。この画面は閉じて構いません。</p>
-            {liffClient()?.closeWindow ? (
-              <button type="button" className="lw-primary" onClick={() => liffClient()?.closeWindow?.()}>閉じる</button>
-            ) : null}
+            {message ? <p className="lw-footer-error">{message}</p> : null}
+            <div className="lw-confirm-actions">
+              <button type="button" className="lw-primary" disabled={sending} onClick={() => void submit()}>
+                {sending ? "送信しています…" : "送信"}
+              </button>
+              <button type="button" className="lw-secondary" disabled={sending} onClick={() => { setMessage(""); setPhase("ready"); }}>
+                日付を選び直す
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -242,8 +264,8 @@ export function PublicLineWorkerPage() {
               <div className="lw-footer">
                 <p className="lw-footer-dates">{selected.length > 0 ? `選んだ日：${compactDates(selected)}（${selected.length}日）` : "まだ選んでいません"}</p>
                 {message ? <p className="lw-footer-error">{message}</p> : null}
-                <button type="button" className="lw-primary" disabled={selected.length === 0 || sending} onClick={() => void submit()}>
-                  {sending ? "送信しています…" : "この日で受諾する"}
+                <button type="button" className="lw-primary" disabled={selected.length === 0} onClick={() => { setMessage(""); setPhase("confirm"); window.scrollTo(0, 0); }}>
+                  確認する
                 </button>
               </div>
             ) : null}

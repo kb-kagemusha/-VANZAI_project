@@ -931,7 +931,7 @@ def off_dates_in_period(version: OrderRequestVersion, dates: list[str] | None) -
 
 
 def format_date_set(dates: list[str] | None) -> str:
-    """日付の集合を「11/1〜11/3、11/5」のようにまとめる。None・空なら空文字。"""
+    """日付の集合を「11月1日（土）〜11月3日（月）、11月5日（水）」のようにまとめる。None・空なら空文字。"""
     if not dates:
         return ""
     from datetime import date as _date
@@ -944,6 +944,7 @@ def format_date_set(dates: list[str] | None) -> str:
         else:
             runs.append((day, day))
     def label(d: _date) -> str:
-        return f"{d.month}/{d.day}"
+        # 依頼書の本文・PDF（■休業日）と同じ「10月25日（日）」の表記にそろえる
+        return f"{d.month}月{d.day}日（{'月火水木金土日'[d.weekday()]}）"
     return "、".join(label(a) if a == b else f"{label(a)}〜{label(b)}" for a, b in runs)
 
