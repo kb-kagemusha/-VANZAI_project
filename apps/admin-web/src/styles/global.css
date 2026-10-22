@@ -5579,3 +5579,6 @@ html[data-theme="dark"] .btn-line-red { border-color: #f87171; color: #fca5a5; }
 html[data-theme="dark"] .order-excluded-day { background: #22304a; border-color: #4a6aa8; color: #cfe0ff; }
 html[data-theme="dark"] .order-excluded-day.is-off { background: #4a2020; border-color: #f87171; color: #fecaca; }
 html[data-theme="dark"] .order-excluded-day.is-out { background: transparent; border-color: transparent; color: #5b6170; }
+.order-action-button.order-excluded-open { background: #2563eb; border-color: #2563eb; color: #fff; }
+.order-action-button.order-excluded-open:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+.order-action-button.order-excluded-open:disabled { background: #9db8f0; border-color: #9db8f0; color: #fff; }

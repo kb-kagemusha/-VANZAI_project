@@ -233,7 +233,7 @@ class LineWorkerService:
         return result
 
     def _accept_notice_text(self, delivery: OrderRequestDelivery, dates: list[str]) -> str:
-        from src.services.line_order import format_date_set
+        from src.services.line_order import format_date_set, off_dates_in_period
 
         version = self.session.get(OrderRequestVersion, delivery.version_id)
         document = self.session.get(OrderRequestDocument, version.document_id)
@@ -242,7 +242,8 @@ class LineWorkerService:
         if document.kind == KIND_TEST:
             lines.append("（テストの依頼書です）")
         lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
-        lines.append(f"あなたの稼働日：{format_date_set(dates)}（{len(dates)}日）")
+        lines.append(f"参加する日：{format_date_set(dates)}（{len(dates)}日）")
+        lines.append(f"参加しない日：{format_date_set(off_dates_in_period(version, dates)) or 'なし'}")
         lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
         return "\n".join(lines)
 

@@ -107,6 +107,7 @@ export function composeOrderDocument(
     "",
     "■稼働日",
     wavy(workDateLabel.trim()),
+    ...(holidayLabel(sections.schedule) ? ["", "■休業日", holidayLabel(sections.schedule)] : []),
     "",
     "■稼働日の詳細",
     wavy(sections.workDateDetail.trim()),
@@ -347,4 +348,15 @@ export function stationLabel(sections: Pick<OrderDocumentSections, "siteStation"
   if (!station) return "";
   const minutes = sections.siteStationWalkMinutes.trim();
   return /^\d{1,3}$/.test(minutes) ? `${station}（徒歩${Number(minutes)}分）` : station;
+}
+
+/** 日程の休業日を「10月25日（日）、10月28日（水）」の形で（サーバーの holiday_label と同じ）。 */
+export function holidayLabel(schedule: { work_groups: { excluded_dates?: string[] }[] } | null | undefined): string {
+  if (!schedule) return "";
+  const days = [...new Set(schedule.work_groups.flatMap((g) => g.excluded_dates ?? []))].sort();
+  return days.map((day) => {
+    const [, m, d] = day.split("-").map(Number);
+    const weekday = "日月火水木金土"[new Date(`${day}T00:00:00+09:00`).getDay()];
+    return `${m}月${d}日（${weekday}）`;
+  }).join("、");
 }

@@ -67,6 +67,17 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     return sections
 
 
+def holiday_label(sections: dict) -> str:
+    """日程の休業日（期間の中で稼働しない日）を「10月25日（日）、10月28日（水）」の形で。なければ空。"""
+    from datetime import date as _date
+
+    schedule = sections.get("schedule") or {}
+    groups = schedule.get("work_groups", []) if isinstance(schedule, dict) else []
+    days = sorted({d for g in groups for d in ((g.get("excluded_dates") if isinstance(g, dict) else None) or [])})
+    weekdays = "月火水木金土日"
+    return "、".join(f"{_date.fromisoformat(d).month}月{_date.fromisoformat(d).day}日（{weekdays[_date.fromisoformat(d).weekday()]}）" for d in days)
+
+
 def compose_document(sections: dict, *, work_date_label: str, site_name: str, site_address: str | None = None) -> str:
     if "work_period" in sections:
         work_date_label = work_period_label(sections["work_period"])
@@ -95,6 +106,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
             "",
             "■稼働日",
             _text(work_date_label),
+            *(["", "■休業日", holiday_label(sections)] if holiday_label(sections) else []),
             "",
             "■稼働日の詳細",
             _text(sections.get("work_date_detail")),

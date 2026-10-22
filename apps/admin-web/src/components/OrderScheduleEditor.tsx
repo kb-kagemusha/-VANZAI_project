@@ -51,7 +51,7 @@ function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup
     {notice ? <p className="order-excluded-notice" role="status">{notice}</p> : null}
     {!disabled && editing === null && (
       <div className="order-schedule-actions">
-        <button type="button" className="order-action-button is-add" disabled={!ready} onClick={open}>
+        <button type="button" className="order-action-button order-excluded-open" disabled={!ready} onClick={open}>
           <span aria-hidden="true">＋</span> {dates.length ? "休業日を変更" : "休業日を設定"}
         </button>
         {!ready ? <span className="order-field-hint">開始日と終了日を入れると設定できます</span> : null}

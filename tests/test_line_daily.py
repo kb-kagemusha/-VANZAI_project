@@ -154,7 +154,7 @@ def test_accept_creates_entries_for_offered_days_only(api_client, db_session, op
     assert {r.status for r in rows} == {"active"}
     assert rows[0].project_name == "駅前イベント" and rows[0].meeting_place == "北口改札"
     assert rows[0].is_test is False
-    assert "あなたの稼働日" in fake_line.replies[-1][1]
+    assert "期間中の休業日：" in fake_line.replies[-1][1]
     assert _entries(db_session, other.id) == []  # 未受諾の人には作らない
 
     detail = api_client.get(f"/api/order-requests/versions/{version['id']}", headers=_auth(ops_user.username)).json()

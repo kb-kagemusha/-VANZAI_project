@@ -188,8 +188,12 @@ export function PublicLineWorkerPage() {
         {phase === "done" && result ? (
           <div className="lw-card">
             <h1>受け付けました</h1>
-            <p className="lw-lead">受諾を受け付けました。あなたの稼働日（{result.dates.length}日）</p>
+            <p className="lw-lead">受諾を受け付けました。参加する日（{result.dates.length}日）</p>
             <p className="lw-dates">{compactDates(result.dates)}</p>
+            {(() => {
+              const off = [...new Set([...(view?.offered_dates ?? []), ...(view?.holidays ?? [])])].filter((d) => !result.dates.includes(d));
+              return off.length ? <p className="lw-note">参加しない日：{compactDates(off)}</p> : null;
+            })()}
             <p className="lw-note">同じ内容をLINEのトークにも送りました。予定はメニューの「スケジュール確認」でも確認できます。この画面は閉じて構いません。</p>
             {liffClient()?.closeWindow ? (
               <button type="button" className="lw-primary" onClick={() => liffClient()?.closeWindow?.()}>閉じる</button>
@@ -255,7 +259,7 @@ function StateNotice({ view }: { view: LineWorkerPickView }) {
     case "open":
       return <p className="lw-note">全日程に参加できる場合は、LINEのメッセージの「全日程で受諾します」を押してください。</p>;
     case "accepted":
-      return <p className="lw-ok">受諾済みです。あなたの稼働日：{compactDates(view.accepted_dates)}</p>;
+      return <p className="lw-ok">受諾済みです。参加する日：{compactDates(view.accepted_dates)}</p>;
     case "declined":
       return <p className="lw-warn">この依頼は辞退済みです。</p>;
     case "superseded":

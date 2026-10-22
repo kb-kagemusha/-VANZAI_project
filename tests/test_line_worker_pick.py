@@ -264,6 +264,12 @@ def test_pick_holiday_not_offered_and_accept_notice_sent_once(api_client, db_ses
     assert len(sent) == 1
     to, text, retry_key = sent[0]
     assert to == "U123" and "受け付けました" in text and "（2日）" in text and len(retry_key) == 36
+    from src.services.line_order import format_date_set
+    # 休業日（2日目）と選ばなかった日（4日目）は「参加しない日」として別の行に出す
+    assert f"参加する日：{format_date_set([_day(1), _day(3)])}（2日）" in text
+    assert f"参加しない日：{format_date_set([_day(2), _day(4)])}" in text
+    sent_text = fake_line.pushes[0][1][0]["text"]
+    assert f"期間中の休業日: {format_date_set([_day(2)])}" in sent_text and "あなたの稼働日" not in sent_text
     # 同じキーの再送では通知しない
     api_client.post(f"/api/line/worker/deliveries/{delivery_id}/pick", json={"dates": [_day(1), _day(3)]}, headers={**headers, **key})
     assert len(sent) == 1
@@ -284,3 +290,20 @@ def test_participation_shows_zero_days_and_test_documents(api_client, db_session
     month = _day(1)[:7]
     monthly = api_client.get(f"/api/order-requests/participation-calendar?month={month}", headers=_auth(ops_user.username)).json()["days"]
     assert all(e["version_id"] != confirmed["id"] for d in monthly for e in d["events"])
+
+
+def test_document_body_lists_holidays_under_work_date():
+    from src.services.order_request_format import holiday_label
+    from datetime import date
+
+    schedule = {"work_groups": [{"excluded_dates": ["2026-10-25", "2026-10-28"]}]}
+    assert holiday_label({"schedule": schedule}) == "10月25日（日）、10月28日（水）"
+    assert holiday_label({}) == ""
+    assert date(2026, 10, 25).weekday() == 6
+
+
+def test_confirmed_body_has_holiday_section(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    worker = _worker(db_session, "稼働者A")
+    version = _create_partial(api_client, ops_user, [worker.id], holidays=[2])
+    body = version["body"]
+    assert body.index("■稼働日") < body.index("■休業日") < body.index("■稼働日の詳細")

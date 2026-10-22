@@ -295,6 +295,7 @@ class LineOrderService:
             delivery_id=delivery.id,
             is_test=document.kind == KIND_TEST,
             offered_dates=delivery.offered_dates,
+            off_dates=off_dates_in_period(version, delivery.offered_dates),
             pick_dates_url=self._pick_dates_url(version, delivery),
         )
         try:
@@ -638,9 +639,12 @@ class LineOrderService:
                 )
             ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor)
             ws.rebuild(self.session, series_id, delivery.worker_id, actor=actor)
-            label = format_date_set(participating)
-            if label:
-                reply = f"{ACCEPT_REPLY}\nあなたの稼働日：{label}"
+            off = format_date_set(off_dates_in_period(version, participating))
+            if dates is None:
+                # 全日程：期間中の休業日（休業日・個人のお休み）を示す
+                reply = f"{ACCEPT_REPLY}\n期間中の休業日：{off or 'なし'}"
+            else:
+                reply = f"{ACCEPT_REPLY}\n参加する日：{format_date_set(participating)}（{len(participating)}日）\n参加しない日：{off or 'なし'}"
         return "acked", reply
 
     def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
@@ -840,6 +844,7 @@ def _push_messages(
     is_test: bool,
     offered_dates: list[str] | None = None,
     pick_dates_url: str | None = None,
+    off_dates: list[str] | None = None,
 ) -> list[dict]:
     lines = [
         f"発注依頼書 {document_number}（版{version_no}）",
@@ -848,10 +853,10 @@ def _push_messages(
         f"現場: {site_name}"[:80],
         f"PDF: {pdf_url}",
     ]
-    personal = format_date_set(offered_dates)
-    if personal:
-        # 個人の稼働日（休業日・個人不参加日を除く）。PDFは全員共通なので、ここで本人に示す（DEC-065）
-        lines.insert(3, f"あなたの稼働日: {personal}"[:300])
+    if offered_dates:
+        # 日程のある依頼書は、全体の範囲を「期間」、その中で稼働しない日（休業日・個人のお休み）を「期間中の休業日」で示す
+        lines[2] = f"期間: {work_date_label}"[:80]
+        lines.insert(3, f"期間中の休業日: {format_date_set(off_dates) or 'なし'}"[:300])
     if is_test:
         lines = [TEST_BANNER, *lines[:-1], "このメッセージはテスト送信です。", lines[-1]]
     detail = "\n".join(lines)
@@ -904,6 +909,25 @@ def _push_messages(
             },
         },
     ]
+
+
+def off_dates_in_period(version: OrderRequestVersion, dates: list[str] | None) -> list[str]:
+    """日程の期間（最初の日〜最後の日）の中で、dates に入っていない日（休業日・個人のお休み・参加しない日）。"""
+    from datetime import date as _date, timedelta as _td
+
+    if not dates:
+        return []
+    schedule = ws._version_sections(version).get("schedule") or {}
+    bounds = [g.get(k) for g in schedule.get("work_groups", []) for k in ("from", "to") if g.get(k)]
+    bounds += list(dates)
+    first, last = _date.fromisoformat(min(bounds)), _date.fromisoformat(max(bounds))
+    chosen = set(dates)
+    result, day = [], first
+    while day <= last:
+        if day.isoformat() not in chosen:
+            result.append(day.isoformat())
+        day += _td(days=1)
+    return result
 
 
 def format_date_set(dates: list[str] | None) -> str:
