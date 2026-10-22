@@ -13,6 +13,10 @@ export interface OrderDocumentSections {
   placeId?: string;
   mapsUrl?: string;
   meetingPlace: string;
+  /** 会場の最寄り駅（任意）。起床の締切の計算に使う（DEC-066）。 */
+  siteStation: string;
+  /** 会場の最寄り駅からの徒歩分（任意、0〜120）。空欄は "" */
+  siteStationWalkMinutes: string;
   projectName: string;
   background: string;
   workDateDetail: string;
@@ -26,6 +30,8 @@ export interface OrderDocumentSections {
 
 export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   meetingPlace: "",
+  siteStation: "",
+  siteStationWalkMinutes: "",
   projectName: "",
   background: "",
   workDateDetail: "",
@@ -58,6 +64,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     project_name: wavy(sections.projectName.trim()),
     background: wavy(sections.background.trim()),
     meeting_place: wavy(sections.meetingPlace.trim()),
+    site_station: wavy(sections.siteStation.trim()),
     work_date_detail: wavy(sections.workDateDetail.trim()),
     hours: wavy(sections.schedule ? scheduleHours(sections.schedule) : sections.hours.trim()),
     content: wavy(sections.content.trim()),
@@ -66,6 +73,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     incentive: wavy(sections.incentive.trim()),
     notes: wavy(sections.notes.trim()),
     ...(sections.schedule ? { schedule: syncSchedule(sections.schedule) } : {}),
+    ...(sections.siteStationWalkMinutes.trim() ? { site_station_walk_minutes: Number(sections.siteStationWalkMinutes.trim()) } : {}),
     ...(sections.workPeriod ? { work_period: sections.workPeriod } : {}),
     ...(sections.previousHours ? { previous_hours: sections.previousHours } : {}),
     ...(sections.previousFee ? { previous_fee: sections.previousFee } : {}),
@@ -94,6 +102,7 @@ export function composeOrderDocument(
     wavy(siteName.trim()),
     ...(siteAddress.trim() ? [wavy(siteAddress.trim())] : []),
     ...(sections.mapsUrl?.trim() ? [sections.mapsUrl.trim()] : []),
+    ...(stationLabel(sections) ? ["", "■最寄り駅", stationLabel(sections)] : []),
     ...(sections.meetingPlace.trim() ? ["", "■集合場所", wavy(sections.meetingPlace.trim())] : []),
     "",
     "■稼働日",
@@ -136,6 +145,8 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       placeId: textOf(data.place_id),
       mapsUrl: textOf(data.maps_url),
       meetingPlace: textOf(data.meeting_place),
+      siteStation: textOf(data.site_station),
+      siteStationWalkMinutes: typeof data.site_station_walk_minutes === "number" ? String(data.site_station_walk_minutes) : "",
       projectName: textOf(data.project_name),
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),
@@ -328,4 +339,12 @@ function wavy(value: string): string {
 function withBullet(notes: string): string {
   if (!notes || notes.startsWith("・")) return notes;
   return `・${notes}`;
+}
+
+/** 本文の「■最寄り駅」。駅名がなければ空。サーバーの station_label と同じ形にする。 */
+export function stationLabel(sections: Pick<OrderDocumentSections, "siteStation" | "siteStationWalkMinutes">): string {
+  const station = wavy(sections.siteStation.trim());
+  if (!station) return "";
+  const minutes = sections.siteStationWalkMinutes.trim();
+  return /^\d{1,3}$/.test(minutes) ? `${station}（徒歩${Number(minutes)}分）` : station;
 }

@@ -1195,6 +1195,30 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, meetingPlace: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
+                  <label className="order-field order-span-4">
+                    <span className="order-field-label">会場の最寄り駅（任意）</span>
+                    <input
+                      value={sections.siteStation}
+                      disabled={!editable}
+                      maxLength={100}
+                      placeholder="例：新宿駅（南口）"
+                      onChange={(event) => setSections({ ...sections, siteStation: withFullwidthTilde(event.target.value) })}
+                    />
+                  </label>
+                  <label className="order-field order-span-2">
+                    <span className="order-field-label">駅から徒歩（分）</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={120}
+                      step={1}
+                      value={sections.siteStationWalkMinutes}
+                      disabled={!editable}
+                      placeholder="例：5"
+                      onChange={(event) => setSections({ ...sections, siteStationWalkMinutes: event.target.value.replace(/[^0-9]/g, "").slice(0, 3) })}
+                    />
+                  </label>
                   <div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">

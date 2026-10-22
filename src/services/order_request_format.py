@@ -11,6 +11,7 @@ _SECTION_KEYS = (
     "project_name",
     "background",
     "meeting_place",
+    "site_station",
     "work_date_detail",
     "hours",
     "content",
@@ -50,6 +51,10 @@ def parse_sections(request_conditions: str | None) -> dict | None:
         import re
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", sections["place_id"]):
             raise ValueError("Google Mapsの地点を選択し直してください")
+    if len(sections["site_station"]) > 100:
+        raise ValueError("会場の最寄り駅は100文字以内で入力してください")
+    if "site_station_walk_minutes" in data:
+        sections["site_station_walk_minutes"] = _walk_minutes(data["site_station_walk_minutes"])
     if "schedule" in data:
         sections["schedule"] = normalize_schedule(data["schedule"])
         _, sections["hours"], sections["fee"] = schedule_text(sections["schedule"])
@@ -85,6 +90,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
             _text(site_name),
             *([_text(site_address)] if _text(site_address) else []),
             *([sections["maps_url"]] if sections.get("maps_url") else []),
+            *(["", "■最寄り駅", station_label(sections)] if station_label(sections) else []),
             *(["", "■集合場所", _text(sections.get("meeting_place"))] if _text(sections.get("meeting_place")) else []),
             "",
             "■稼働日",
@@ -117,7 +123,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
-    for key in ("schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url"):
+    for key in ("schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url", "site_station_walk_minutes"):
         if key in sections:
             payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)
@@ -155,6 +161,30 @@ def _legacy_fee(sections: dict) -> str:
     if not base.startswith(("¥", "￥")):
         base = f"¥{base}"
     return f"ベース：{base}"
+
+
+def _walk_minutes(value) -> int | None:
+    """会場の最寄り駅からの徒歩分。空欄は None。0〜120分の整数だけ受け付ける。"""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("最寄り駅からの徒歩分は0〜120の整数で入力してください")
+    try:
+        minutes = int(str(value).strip())
+    except ValueError:
+        raise ValueError("最寄り駅からの徒歩分は0〜120の整数で入力してください") from None
+    if str(minutes) != str(value).strip() or not 0 <= minutes <= 120:
+        raise ValueError("最寄り駅からの徒歩分は0〜120の整数で入力してください")
+    return minutes
+
+
+def station_label(sections: dict) -> str:
+    """「○○駅（徒歩5分）」。駅名がなければ空。"""
+    station = _text(sections.get("site_station"))
+    if not station:
+        return ""
+    minutes = sections.get("site_station_walk_minutes")
+    return f"{station}（徒歩{minutes}分）" if isinstance(minutes, int) else station
 
 
 def _text(value) -> str:

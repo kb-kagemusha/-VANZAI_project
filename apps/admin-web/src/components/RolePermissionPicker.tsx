@@ -9,7 +9,9 @@ const SUBJECTS: Record<string, string> = {
 };
 const ACTIONS: Record<string, string> = { read: "閲覧", write: "編集", generate: "生成", issue: "発行", correct: "訂正",
   approve: "承認", submit: "提出", import: "取込", calculate: "計算", release: "解除", response: "回答", remind: "催促・要対応通知" };
+const FULL_LABELS: Record<string, string> = { wake_alert_receive: "起床報告が無い場合の連絡受け取り" };
 export function permissionLabel(value: string) {
+  if (FULL_LABELS[value]) return FULL_LABELS[value];
   if (value === "soft_close" || value === "hard_close") return SUBJECTS[value];
   const index = value.lastIndexOf("_");
   return (SUBJECTS[value.slice(0, index)] ?? value.slice(0, index)) + "：" + (ACTIONS[value.slice(index + 1)] ?? value.slice(index + 1));

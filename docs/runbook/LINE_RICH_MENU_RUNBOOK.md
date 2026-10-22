@@ -20,6 +20,10 @@
 
 画像の配置が上の表と違う場合は、`scripts/line/rich_menu/a1.json` の `bounds` を直してから公開する。
 
+## 画像
+
+- A1 の画像は `scripts/line/rich_menu/a1.png`（2026-10-22 に公開したもの）。作り直すときは `scripts/line/rich_menu/make_a1.py` の文言・色を直して実行する。
+
 ## 画像の条件
 
 - 2500×1686 ピクセル、PNG または JPEG、1MB 以下。
@@ -27,14 +31,14 @@
 
 ## 公開の手順
 
-1. 画像をVPSへ置く（例：`/var/www/vanzai/tmp/richmenu_a1.png`）。
+1. 画像をVPSへ置く（デプロイ後は `scripts/line/rich_menu/a1.png` がVPSにもある）。
 2. VPSで次を実行する（`.env` の値は表示しない）。
 
 ```bash
 cd /var/www/vanzai
 set -a; . ./.env; set +a
 .venv/bin/python scripts/line/rich_menu.py check --stage a1
-.venv/bin/python scripts/line/rich_menu.py apply --stage a1 --image tmp/richmenu_a1.png --by <自分の名前>
+.venv/bin/python scripts/line/rich_menu.py apply --stage a1 --image scripts/line/rich_menu/a1.png --by <自分の名前>
 .venv/bin/python scripts/line/rich_menu.py status
 ```
 
