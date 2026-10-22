@@ -5533,3 +5533,11 @@ html[data-theme="dark"] .order-line-banner {
 .record-dialog--compact .order-draft-body { padding: 1rem; }
 .record-dialog--compact .access-form { padding: 0; }
 .record-dialog--compact .access-form p { margin: 0; }
+
+/* 期間の休業日・送付先ごとの不参加日（DEC-065） */
+.order-excluded-dates { display: grid; gap: 8px; margin-top: 8px; }
+.order-excluded-dates .order-pick,
+.order-recipient-picks .order-pick { display: inline-flex; align-items: center; gap: 6px; }
+.order-pick.is-error { border-color: var(--color-danger, #c8553d); color: var(--color-danger, #c8553d); }
+.order-absence-panel { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--color-border, #d0d7de); border-radius: 8px; }
+

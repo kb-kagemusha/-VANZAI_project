@@ -3,6 +3,8 @@ import { formatWorkDateRange } from "./orderRequestFormat";
 export interface DateGroup { id: string; date_mode: "single" | "range"; from: string; to: string }
 export interface WorkGroup extends DateGroup {
   start_time: string; end_time: string; end_next_day: boolean; gathering_time: string; notes: string;
+  /** 期間の中の共通の休業日（DEC-065）。旧データには無い。 */
+  excluded_dates?: string[];
 }
 export interface RateGroup extends DateGroup {
   work_group_id: string | null; amount: string; unit: "day" | "hour";
@@ -14,7 +16,7 @@ export function emptySchedule(): OrderSchedule {
   return { version: 1, work_groups: [], rates_follow_work: true, rate_groups: [] };
 }
 export function newWorkGroup(): WorkGroup {
-  return { id: crypto.randomUUID(), date_mode: "single", from: "", to: "", start_time: "", end_time: "", end_next_day: false, gathering_time: "", notes: "" };
+  return { id: crypto.randomUUID(), date_mode: "single", from: "", to: "", start_time: "", end_time: "", end_next_day: false, gathering_time: "", notes: "", excluded_dates: [] };
 }
 export function newRateGroup(group?: DateGroup): RateGroup {
   return { id: crypto.randomUUID(), date_mode: group?.date_mode ?? "single", from: group?.from ?? "", to: group?.to ?? "", work_group_id: group?.id ?? null,
@@ -28,8 +30,35 @@ export function syncSchedule(schedule: OrderSchedule): OrderSchedule {
     return { ...(existing ?? newRateGroup(group)), work_group_id: group.id, date_mode: group.date_mode, from: group.from, to: group.to };
   }) };
 }
-export function dateGroupLabel(group: DateGroup): string {
-  return formatWorkDateRange(group.from, group.date_mode === "range" ? group.to : "");
+function shortDate(iso: string): string {
+  const [, month, day] = iso.split("-").map(Number);
+  return `${month}月${day}日`;
+}
+export function dateGroupLabel(group: DateGroup & { excluded_dates?: string[] }): string {
+  const label = formatWorkDateRange(group.from, group.date_mode === "range" ? group.to : "");
+  const excluded = group.date_mode === "range" && group.from && group.to ? (group.excluded_dates ?? []) : [];
+  return excluded.length > 0 ? `${label}（休業日：${excluded.map(shortDate).join("、")}）` : label;
+}
+/** 勤務グループの実勤務日（共通の休業日を除く。サーバーの expand_work_days と同じ規則）。 */
+export function groupWorkDates(group: WorkGroup): string[] {
+  if (!group.from) return [];
+  const to = group.date_mode === "range" ? group.to : group.from;
+  if (!to || to < group.from) return [];
+  const excluded = new Set(group.date_mode === "range" ? group.excluded_dates ?? [] : []);
+  const days: string[] = [];
+  const cursor = new Date(`${group.from}T00:00:00Z`);
+  const last = new Date(`${to}T00:00:00Z`);
+  while (cursor <= last && days.length < 400) {
+    const iso = cursor.toISOString().slice(0, 10);
+    if (!excluded.has(iso)) days.push(iso);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
+}
+/** 依頼書全体の実勤務日（重複なし・昇順）。 */
+export function scheduleWorkDates(schedule: OrderSchedule | undefined): string[] {
+  if (!schedule) return [];
+  return [...new Set(schedule.work_groups.flatMap(groupWorkDates))].sort();
 }
 export function scheduleDateLabel(schedule: OrderSchedule): string {
   return [...schedule.work_groups].sort((a, b) => a.from.localeCompare(b.from)).map(dateGroupLabel).filter(Boolean).join("\n");

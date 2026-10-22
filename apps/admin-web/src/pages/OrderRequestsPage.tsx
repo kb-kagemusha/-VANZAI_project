@@ -12,7 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
-import { emptySchedule, newWorkGroup, scheduleDateLabel, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
@@ -29,7 +29,6 @@ import {
   listLineLinks,
   listOrderRequestReplies,
   listOrderRequests,
-  revokeOrderRequestView,
   reviseOrderRequest,
   sendOrderRequestLine,
   updateOrderRequestVersion,
@@ -127,6 +126,17 @@ function changeLinkLabel(documentNumber: string, change: OrderRequestChangeLink)
   return `変更 ${change.document_number}`;
 }
 
+/** 送付先ごとの個人不参加日を、今の送付先と実勤務日（休業日を除く）に合わせて整える（DEC-065）。 */
+function currentAbsences(form: OrderRequestWrite, sections: OrderDocumentSections): Record<string, string[]> {
+  const days = new Set(scheduleWorkDates(sections.schedule));
+  const result: Record<string, string[]> = {};
+  for (const workerId of form.worker_ids) {
+    const dates = (form.recipient_absences?.[workerId] ?? []).filter((day) => days.has(day));
+    if (dates.length > 0) result[workerId] = [...new Set(dates)].sort();
+  }
+  return result;
+}
+
 const EMPTY_FORM: OrderRequestWrite = {
   internal_source: null,
   kind: "formal",
@@ -140,6 +150,7 @@ const EMPTY_FORM: OrderRequestWrite = {
   contact_desk: "",
   counterparty_note: "",
   worker_ids: [],
+  recipient_absences: {},
   phone_first: false,
   phone_note: "",
   tracker_user_id: null,
@@ -165,6 +176,7 @@ export function OrderRequestsPage() {
   const [form, setForm] = useState<OrderRequestWrite>(EMPTY_FORM);
   const [sections, setSections] = useState<OrderDocumentSections>(EMPTY_ORDER_SECTIONS);
   const [workerSearch, setWorkerSearch] = useState("");
+  const [absenceWorkerId, setAbsenceWorkerId] = useState<string | null>(null);
   const [workerRoleFilters, setWorkerRoleFilters] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -220,6 +232,8 @@ export function OrderRequestsPage() {
     });
   }, [workerSearch, workerRoleFilters, workerRoles, workers]);
   const selectedWorkers = workers.filter((worker) => form.worker_ids.includes(worker.id));
+  const workDates = useMemo(() => scheduleWorkDates(sections.schedule), [sections.schedule]);
+  const absenceWorker = selectedWorkers.find((worker) => worker.id === absenceWorkerId) ?? null;
 
   const detail = creating ? null : detailQuery.data;
   const editable = creating || detail?.status === "draft";
@@ -238,6 +252,7 @@ export function OrderRequestsPage() {
       contact_desk: "",
       counterparty_note: version.counterparty_note ?? "",
       worker_ids: version.draft_worker_ids,
+      recipient_absences: version.draft_recipient_absences ?? {},
       phone_first: version.phone_first,
       phone_note: version.phone_note ?? "",
       tracker_user_id: version.tracker_user_id,
@@ -265,6 +280,7 @@ export function OrderRequestsPage() {
       site_address: current.site_address || null,
       follow_up_due_on: current.follow_up_due_on || null,
       follow_up_due_time: current.follow_up_due_time || "21:00",
+      recipient_absences: currentAbsences(current, currentSections),
     };
   }
 
@@ -1344,12 +1360,56 @@ export function OrderRequestsPage() {
                 {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
                 {selectedWorkers.length > 0 ? (
                   <div className="order-recipient-picks">
-                    {selectedWorkers.map((worker) => (
-                      <span key={worker.id} className="order-pick">{worker.name}</span>
-                    ))}
+                    {selectedWorkers.map((worker) => {
+                      const absentCount = (form.recipient_absences?.[worker.id] ?? []).filter((day) => workDates.includes(day)).length;
+                      return (
+                        <span key={worker.id} className="order-pick">
+                          {worker.name}
+                          {workDates.length > 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-expanded={absenceWorkerId === worker.id}
+                              onClick={() => setAbsenceWorkerId(absenceWorkerId === worker.id ? null : worker.id)}
+                            >
+                              不参加日{absentCount > 0 ? `（${absentCount}日）` : ""}
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="order-recipient-empty">まだ送付先は選ばれていません。</p>
+                )}
+                {absenceWorker && workDates.length > 0 && (
+                  <fieldset className="order-absence-panel" disabled={!editable}>
+                    <legend>{absenceWorker.name}さんの不参加日</legend>
+                    <p className="order-field-hint">この人だけが休む日を選びます。依頼書のPDFには載らず、本人へのLINEの案内にだけ使います。休業日は「稼働時間の詳細」で設定します。</p>
+                    <div className="order-role-options">
+                      {workDates.map((day) => {
+                        const checked = (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day);
+                        return (
+                          <label key={day} className={`order-role-option${checked ? " is-on" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => {
+                                const current = form.recipient_absences?.[absenceWorker.id] ?? [];
+                                const nextDates = event.target.checked ? [...current, day].sort() : current.filter((d) => d !== day);
+                                setForm({ ...form, recipient_absences: { ...(form.recipient_absences ?? {}), [absenceWorker.id]: nextDates } });
+                              }}
+                            />
+                            {dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {workDates.every((day) => (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day)) && (
+                      <p className="form-error">稼働日が0日になります。この人を送付先から外してください。</p>
+                    )}
+                    <button type="button" className="btn btn-ghost" onClick={() => setAbsenceWorkerId(null)}>閉じる</button>
+                  </fieldset>
                 )}
                 <div className="order-recipient-list">
                   {visibleWorkers.map((worker) => (
@@ -1400,13 +1460,19 @@ export function OrderRequestsPage() {
                         <th>送付先</th>
                         <th>送信</th>
                         <th>返事</th>
-                        <th>閲覧</th>
                       </tr>
                     </thead>
                     <tbody>
                       {detail.deliveries.map((row) => (
                         <tr key={row.id}>
-                          <td>{row.worker_name_snapshot}</td>
+                          <td>
+                            {row.worker_name_snapshot}
+                            {(detail.draft_recipient_absences?.[row.worker_id] ?? []).length > 0 && (
+                              <div className="order-field-hint">
+                                不参加日：{(detail.draft_recipient_absences?.[row.worker_id] ?? []).map((day) => dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })).join("、")}
+                              </div>
+                            )}
+                          </td>
                           <td>
                             {SEND_LABEL[row.send_status] ?? row.send_status}
                             {row.last_send_error ? `（${row.last_send_error}）` : ""}
@@ -1431,21 +1497,6 @@ export function OrderRequestsPage() {
                           <td>
                             {REPLY_LABEL[row.ack_status] ?? row.ack_status}
                             {row.decline_reason ? `（${row.decline_reason}）` : ""}
-                          </td>
-                          <td>
-                            {row.view_revoked ? (
-                              "停止"
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => revokeOrderRequestView(row.id).then(() => {
-                                  queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
-                                })}
-                              >
-                                閲覧を停止
-                              </button>
-                            )}
                           </td>
                         </tr>
                       ))}

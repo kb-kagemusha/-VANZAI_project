@@ -35,6 +35,30 @@ class WorkGroup(DateGroup):
     end_next_day: bool = False
     gathering_time: str = ""
     notes: str = Field(default="", max_length=4000)
+    # 期間の中の共通の休業日（DEC-065）。旧データは欠落＝空。
+    excluded_dates: list[str] = Field(default_factory=list, max_length=366)
+
+    @field_validator("excluded_dates")
+    @classmethod
+    def excluded_format(cls, value):
+        for day in value:
+            if not isinstance(day, str) or len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+                raise ValueError("休業日の日付の形式が正しくありません")
+        if len(set(value)) != len(value):
+            raise ValueError("休業日が重複しています")
+        return sorted(value)
+
+    @model_validator(mode="after")
+    def excluded_range(self):
+        if not self.excluded_dates:
+            return self
+        if self.date_mode == "single":
+            raise ValueError("1日ごとの稼働日には休業日を設定できません")
+        if not self.from_ or not self.to:
+            raise ValueError("休業日を設定する前に、期間の開始日と終了日を入力してください")
+        if any(day < self.from_ or day > self.to for day in self.excluded_dates):
+            raise ValueError("期間外の休業日があります。期間を変更した場合は休業日も見直してください")
+        return self
 
     @field_validator("start_time", "end_time", "gathering_time")
     @classmethod
@@ -129,6 +153,37 @@ def _ordered(groups):
     return result
 
 
+def _days_of(group) -> list[str]:
+    """勤務グループの実勤務日（共通の休業日を除く）。dict と model の両方を受け付ける。"""
+    get = group.get if isinstance(group, dict) else lambda key, default=None: getattr(group, "from_" if key == "from" else key, default)
+    start, end = get("from"), get("to")
+    if not start or not end:
+        return []
+    excluded = set(get("excluded_dates", None) or [])
+    first, last = date.fromisoformat(start).toordinal(), date.fromisoformat(end).toordinal()
+    return [d for d in (date.fromordinal(o).isoformat() for o in range(first, last + 1)) if d not in excluded]
+
+
+def expand_work_days(schedule) -> list[dict]:
+    """日程を日ごとの実勤務日に展開する（DEC-065）。本文・単価の確認・提示日・稼働予定で共通に使う。"""
+    days = []
+    for group in schedule.get("work_groups", []) if schedule else []:
+        for day in _days_of(group):
+            days.append({
+                "work_group_id": group["id"],
+                "work_date": day,
+                "start_time": group.get("start_time", ""),
+                "end_time": group.get("end_time", ""),
+                "end_next_day": bool(group.get("end_next_day", False)),
+            })
+    return sorted(days, key=lambda d: (d["work_date"], d["start_time"]))
+
+
+def work_dates(schedule) -> list[str]:
+    """実勤務日の一覧（重複なし・昇順）。"""
+    return sorted({d["work_date"] for d in expand_work_days(schedule)})
+
+
 def normalize_schedule(value, *, complete=False):
     try:
         schedule = Schedule.model_validate(value)
@@ -160,16 +215,13 @@ def normalize_schedule(value, *, complete=False):
             if not group.transport_included and not group.transport_note.strip():
                 raise ValueError("交通費を別途支給する場合は備考を入力してください")
         for work in schedule.work_groups:
-            cursor = date.fromisoformat(work.from_).toordinal()
-            last = date.fromisoformat(work.to).toordinal()
-            for rate in schedule.rate_groups:
-                start, end = date.fromisoformat(rate.from_).toordinal(), date.fromisoformat(rate.to).toordinal()
-                if start <= cursor <= end:
-                    cursor = end + 1
-                if cursor > last:
-                    break
-            if cursor <= last:
-                raise ValueError("単価が設定されていない稼働日があります")
+            if not _days_of(work):
+                raise ValueError("休業日を除くと稼働日がない期間があります")
+        # 単価のカバー確認は、休業日を除いた実勤務日について行う（DEC-065）。
+        for work in schedule.work_groups:
+            for day in _days_of(work):
+                if not any(rate.from_ <= day <= rate.to for rate in schedule.rate_groups):
+                    raise ValueError("単価が設定されていない稼働日があります")
     return schedule.model_dump(by_alias=True)
 
 
@@ -183,6 +235,10 @@ def date_label(group):
     if group["date_mode"] == "single":
         return start
     if start and end:
+        excluded = group.get("excluded_dates") or []
+        if excluded:
+            days = "、".join(f"{date.fromisoformat(d).month}月{date.fromisoformat(d).day}日" for d in excluded)
+            return f"{start}～{end}（休業日：{days}）"
         return f"{start}～{end}"
     return start or (f"～{end}" if end else "")
 

@@ -37,7 +37,7 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
-from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_period_label
+from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_dates, work_period_label
 from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -145,6 +145,7 @@ class OrderRequestService:
         based_on_version_id: str | None = None,
         internal_source: dict | None = None,
         internal_source_set: bool = False,
+        recipient_absences: dict | None = None,
     ) -> OrderRequestVersion:
         self._validate_kind(kind)
         worker_ids = self._normalize_worker_ids(worker_ids)
@@ -176,6 +177,9 @@ class OrderRequestService:
             tracker_user_id=tracker_user_id,
             follow_up_due_on=follow_up_due_on,
             follow_up_due_time=follow_up_due_time,
+        )
+        version.draft_recipient_absences = self._normalize_absences(
+            recipient_absences, version.draft_worker_ids or [], version.request_conditions
         )
         if source is not None:
             self._copy_internal_source(source, version)
@@ -231,6 +235,8 @@ class OrderRequestService:
         follow_up_due_on: date | None = None,
         follow_up_due_time: str | None = None,
         clear_follow_up: bool = False,
+        recipient_absences: dict | None = None,
+        recipient_absences_set: bool = False,
     ) -> OrderRequestVersion:
         if version.status == STATUS_CANCELLED:
             raise OrderRequestError(409, "取消済みの版は編集できません")
@@ -247,7 +253,7 @@ class OrderRequestService:
             worker_ids,
             site_address,
         ]
-        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set or internal_source_set
+        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set or internal_source_set or recipient_absences_set
         if content_change and version.status != STATUS_DRAFT:
             raise OrderRequestError(409, "確定済みの本文と送付先は変更できません。改訂で新しい版を作ってください")
 
@@ -307,6 +313,10 @@ class OrderRequestService:
         )
         if internal_source_set:
             self._set_internal_source(version, internal_source, actor=actor)
+        absences = recipient_absences if recipient_absences_set else version.draft_recipient_absences
+        version.draft_recipient_absences = self._normalize_absences(
+            absences, version.draft_worker_ids or [], version.request_conditions
+        )
         self.session.flush()
         return version
 
@@ -384,6 +394,7 @@ class OrderRequestService:
             )
         )
         missing = [name for name, value in required if not _clean(value)]
+        self._check_offered_days(version, worker_ids)
         if version.follow_up_due_on is None:
             missing.append("期限の案内")
         if missing:
@@ -514,6 +525,7 @@ class OrderRequestService:
             contact_desk=version.contact_desk,
             counterparty_note=version.counterparty_note,
             draft_worker_ids=source_ids,
+            draft_recipient_absences=dict(version.draft_recipient_absences or {}) or None,
             phone_first=False,
             tracker_user_id=version.tracker_user_id,
             follow_up_due_on=version.follow_up_due_on,
@@ -581,21 +593,6 @@ class OrderRequestService:
         self.session.add(note)
         self.session.flush()
         return note
-
-    def revoke_view(self, delivery: OrderRequestDelivery, *, actor: User) -> OrderRequestDelivery:
-        if delivery.view_revoked:
-            return delivery
-        delivery.view_revoked = True
-        self.audit.log(
-            AuditAction.ORDER_REQUEST_VIEW_REVOKED,
-            target_type="order_request_delivery",
-            target_id=delivery.id,
-            actor=_user_label(actor),
-            actor_role=actor.role,
-            after_value={"version_id": delivery.version_id, "worker_id": delivery.worker_id},
-        )
-        self.session.flush()
-        return delivery
 
     def render_draft_preview(self, version: OrderRequestVersion) -> bytes:
         if version.status != STATUS_DRAFT:
@@ -831,6 +828,57 @@ class OrderRequestService:
             .filter(OrderRequestDelivery.version_id == version_id)
             .all()
         )
+
+    def _normalize_absences(self, value: dict | None, worker_ids: list[str], request_conditions: str | None) -> dict | None:
+        """送付先ごとの個人不参加日を正規化する（DEC-065）。送付先でない人の分は取り除く。
+
+        日程がある依頼書では、不参加日は実勤務日（共通の休業日を除く）から選ぶ。"""
+        if not value:
+            return None
+        if not isinstance(value, dict):
+            raise OrderRequestError(400, "個人の不参加日の形式が正しくありません")
+        allowed = set(worker_ids)
+        try:
+            sections = parse_sections(request_conditions or "")
+        except ValueError:
+            sections = None
+        schedule = sections.get("schedule") if sections else None
+        days = set(work_dates(schedule)) if schedule else None
+        result: dict[str, list[str]] = {}
+        for worker_id, dates in value.items():
+            if worker_id not in allowed:
+                continue
+            if not isinstance(dates, list):
+                raise OrderRequestError(400, "個人の不参加日の形式が正しくありません")
+            cleaned: set[str] = set()
+            for day in dates:
+                try:
+                    valid = isinstance(day, str) and date.fromisoformat(day).isoformat() == day
+                except ValueError:
+                    valid = False
+                if not valid:
+                    raise OrderRequestError(400, "個人の不参加日の日付の形式が正しくありません")
+                if days is None:
+                    raise OrderRequestError(400, "個人の不参加日は、稼働日の詳細を入力した依頼書で設定してください")
+                if day not in days:
+                    raise OrderRequestError(400, "個人の不参加日は、休業日を除いた稼働日から選んでください")
+                cleaned.add(day)
+            if cleaned:
+                result[worker_id] = sorted(cleaned)
+        return result or None
+
+    def _check_offered_days(self, version: OrderRequestVersion, worker_ids: list[str]) -> None:
+        """確定前に、送付先ごとの提示日（実勤務日−個人不参加日）が1日以上あることを確かめる。"""
+        absences = self._normalize_absences(version.draft_recipient_absences, worker_ids, version.request_conditions) or {}
+        if not absences:
+            return
+        sections = parse_sections(version.request_conditions or "")
+        days = set(work_dates(sections.get("schedule"))) if sections and sections.get("schedule") else set()
+        empty = [worker_id for worker_id in worker_ids if days and not (days - set(absences.get(worker_id, [])))]
+        if empty:
+            names = self._load_workers(empty)
+            label = "、".join(names[worker_id].name for worker_id in empty)
+            raise OrderRequestError(400, f"{label}さんの稼働日が0日です。送付先から外すか、不参加日を見直してください")
 
     def _apply_draft_fields(self, version: OrderRequestVersion, **fields) -> None:
         worker_ids = fields.pop("worker_ids")

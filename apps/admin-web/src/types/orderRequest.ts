@@ -88,6 +88,8 @@ export interface OrderRequestVersion {
   contact_desk: string;
   counterparty_note: string | null;
   draft_worker_ids: string[];
+  /** 送付先ごとの個人不参加日（DEC-065）。 */
+  draft_recipient_absences?: Record<string, string[]>;
   phone_first: boolean;
   phone_contacted_at: string | null;
   phone_note: string | null;
@@ -206,4 +208,6 @@ export interface OrderRequestWrite {
   follow_up_due_time: string;
   assign_tracker_self?: boolean;
   based_on_version_id?: string | null;
+  /** 送付先ごとの個人不参加日（DEC-065）。 */
+  recipient_absences?: Record<string, string[]>;
 }

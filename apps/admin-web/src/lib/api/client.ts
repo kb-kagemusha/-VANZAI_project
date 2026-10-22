@@ -1705,13 +1705,6 @@ export function addOrderRequestNote(versionId: string, body: string) {
   );
 }
 
-export function revokeOrderRequestView(deliveryId: string) {
-  return apiFetch<OrderRequestVersion>(
-    `/api/order-requests/deliveries/${deliveryId}/revoke-view`,
-    { method: "POST" },
-  );
-}
-
 export function downloadOrderRequestPdf(versionId: string, fallbackFileName: string) {
   return downloadBinaryFile(
     `/api/order-requests/versions/${versionId}/pdf`,

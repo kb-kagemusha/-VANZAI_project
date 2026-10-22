@@ -1,5 +1,31 @@
 import { confirmApp } from "../lib/appDialog";
-import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
+import { useState } from "react";
+import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule, type WorkGroup } from "../lib/orderSchedule";
+
+/** 期間の中の共通の休業日（DEC-065）。期間を変えて範囲外になった日は自動で消さず、表示して見直してもらう。 */
+function ExcludedDates({ group, disabled, prefix, onChange }: { group: WorkGroup; disabled: boolean; prefix: string; onChange: (dates: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const dates = group.excluded_dates ?? [];
+  const inRange = (day: string) => Boolean(group.from && group.to && day >= group.from && day <= group.to);
+  const add = () => {
+    if (!draft || dates.includes(draft) || !inRange(draft)) return;
+    onChange([...dates, draft].sort());
+    setDraft("");
+  };
+  return <div className="order-excluded-dates" role="group" aria-label={`${prefix}休業日`}>
+    <span className="order-field-label">休業日（この期間の中で稼働しない日）</span>
+    {dates.length > 0
+      ? <div className="order-recipient-picks">{dates.map((day) => <span key={day} className={`order-pick${inRange(day) ? "" : " is-error"}`}>
+          {dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })}{inRange(day) ? "" : "（期間外）"}
+          {!disabled && <button type="button" className="order-action-button is-remove" aria-label={`${day}の休業日を削除`} onClick={() => onChange(dates.filter((d) => d !== day))}>削除</button>}
+        </span>)}</div>
+      : <p className="order-field-hint">休業日はありません。</p>}
+    {!disabled && <div className="order-schedule-actions">
+      <input type="date" aria-label={`${prefix}休業日の日付`} value={draft} min={group.from || undefined} max={group.to || undefined} onChange={(e) => setDraft(e.target.value)} />
+      <button type="button" className="order-action-button is-add" disabled={!draft || !inRange(draft) || dates.includes(draft)} onClick={add}><span aria-hidden="true">＋</span> 休業日を追加</button>
+    </div>}
+  </div>;
+}
 
 function DateInputs({ group, disabled, prefix, onChange }: { group: DateGroup; disabled: boolean; prefix: string; onChange: (group: DateGroup) => void }) {
   return <div className="order-schedule-dates">
@@ -48,11 +74,17 @@ export function OrderScheduleEditor({ schedule, disabled, onChange }: { schedule
     <h5>稼働時間の詳細</h5>
     <p className="order-field-hint">上で設定した全体の稼働期間内で、日ごと・期間ごとの開始時間と終了時間を入力してください。同じ時間・条件の日は期間でまとめられます。</p>
     {value.work_groups.map((group, index) => {
-      const update = (patch: Partial<typeof group>) => change({ ...value, work_groups: value.work_groups.map((g) => g.id === group.id ? { ...g, ...patch } : g) });
+      const update = (patch: Partial<typeof group>) => change({ ...value, work_groups: value.work_groups.map((g) => {
+        if (g.id !== group.id) return g;
+        const next = { ...g, ...patch };
+        // 1日ごとの稼働日には休業日を持たせない（サーバーも拒否する）。
+        return next.date_mode === "single" ? { ...next, excluded_dates: [] } : next;
+      }) });
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
         <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} disabled={disabled} onChange={update} />
+        {group.date_mode === "range" && <ExcludedDates group={group} prefix={`稼働日の詳細${index + 1}の`} disabled={disabled} onChange={(excluded_dates) => update({ excluded_dates })} />}
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>

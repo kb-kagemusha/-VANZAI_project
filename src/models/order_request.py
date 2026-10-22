@@ -106,6 +106,8 @@ class OrderRequestVersion(Base, TimestampMixin):
     snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pdf_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     draft_worker_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # 送付先ごとの個人不参加日 {worker_id: ["YYYY-MM-DD", ...]}。共通本文には含めない（DEC-065）。
+    draft_recipient_absences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     phone_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     phone_contacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

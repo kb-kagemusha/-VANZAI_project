@@ -78,6 +78,7 @@ class OrderRequestWrite(BaseModel):
     assign_tracker_self: bool = False
     based_on_version_id: str | None = None
     internal_source: InternalOrderSource | None = None
+    recipient_absences: dict[str, list[str]] | None = None
 
 
 class OrderRequestUpdate(BaseModel):
@@ -102,6 +103,7 @@ class OrderRequestUpdate(BaseModel):
     follow_up_due_time: str | None = None
     assign_tracker_self: bool | None = None
     internal_source: InternalOrderSource | None = None
+    recipient_absences: dict[str, list[str]] | None = None
 
 
 class ReasonBody(BaseModel):
@@ -236,6 +238,7 @@ def _version_out(
         "contact_desk": version.contact_desk,
         "counterparty_note": version.counterparty_note,
         "draft_worker_ids": list(version.draft_worker_ids or []),
+        "draft_recipient_absences": dict(version.draft_recipient_absences or {}),
         "phone_first": version.phone_first,
         "phone_contacted_at": version.phone_contacted_at,
         "phone_note": version.phone_note,
@@ -514,6 +517,8 @@ def update_order_request_version(
             clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
             internal_source=fields.get("internal_source"),
             internal_source_set="internal_source" in fields,
+            recipient_absences=fields.get("recipient_absences"),
+            recipient_absences_set="recipient_absences" in fields,
             actor=current_user,
         )
 
@@ -715,24 +720,6 @@ def send_order_request_line(
             actor=current_user,
             delivery=service.get_delivery(delivery_id),
         )
-        return service.get_version(delivery.version_id)
-
-    version = _call(db, action)
-    document = db.get(OrderRequestDocument, version.document_id)
-    return _version_out(db, document, version)
-
-
-@router.post("/deliveries/{delivery_id}/revoke-view")
-def revoke_order_request_view(
-    delivery_id: str,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
-):
-    _ensure(current_user)
-
-    def action():
-        service = _service(db)
-        delivery = service.revoke_view(service.get_delivery(delivery_id), actor=current_user)
         return service.get_version(delivery.version_id)
 
     version = _call(db, action)
