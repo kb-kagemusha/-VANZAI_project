@@ -160,6 +160,14 @@ const EMPTY_FORM: OrderRequestWrite = {
   assign_tracker_self: false,
 };
 
+/** 全体の稼働日が空のときは、日付・期間ごとの入力の最初と最後の日から補う（送付前の入力漏れで止まらないように）。 */
+function withScheduleDateLabel(form: OrderRequestWrite, sections: OrderDocumentSections): OrderRequestWrite {
+  if (form.work_date_label.trim() || !sections.schedule) return form;
+  const days = sections.schedule.work_groups.flatMap((group) => [group.from, group.to]).filter(Boolean).sort();
+  if (days.length === 0) return form;
+  return { ...form, work_date_label: formatWorkDateRange(days[0], days[days.length - 1]) };
+}
+
 function messageOf(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
@@ -269,7 +277,7 @@ export function OrderRequestsPage() {
   }
 
   function draftPayload(): OrderRequestWrite {
-    const current = formRef.current;
+    const current = withScheduleDateLabel(formRef.current, sectionsRef.current);
     const currentSections = sectionsRef.current;
     const phoneNote = current.phone_note?.trim() ? current.phone_note : null;
     return {
@@ -444,6 +452,17 @@ export function OrderRequestsPage() {
     setReason("");
     setNote("");
     setSavedDraftId(null);
+  }
+
+  /** 送信が済んだあと、依頼書の画面を閉じるかを確かめる。 */
+  async function offerCloseAfterSend(sentCount: number) {
+    const close = await confirmApp({
+      title: "送信しました",
+      message: `${sentCount}人へ送信しました。返事は本人が公式LINEで受諾するか、辞退理由を送ったときに一覧へ反映されます。画面を閉じますか？`,
+      confirmLabel: "閉じる",
+      cancelLabel: "このまま表示",
+    });
+    if (close) closeCreateModal();
   }
 
   function closeCreateModal() {
@@ -671,13 +690,14 @@ export function OrderRequestsPage() {
       setActionMessage(`${targets.length - failed.length}人へ送信しました。`);
     } else {
       setActionMessage(`${targets.length}人へ送信しました。返事は本人が受諾するか、辞退理由を送ったときだけです。`);
+      await offerCloseAfterSend(targets.length);
     }
   }
 
   function missingSendFields(): string[] {
     const missing: string[] = [];
     if (!sections.projectName.trim()) missing.push("案件名");
-    if (!form.work_date_label.trim()) missing.push("稼働日");
+    if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
     if (!form.site_name.trim()) missing.push("稼働場所");
     if (!form.contact_name.trim()) missing.push("担当者");
     if (!form.follow_up_due_on) missing.push("期限の案内");
@@ -799,6 +819,7 @@ export function OrderRequestsPage() {
       }
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ["order-request", confirmed.id] });
+      if (targets.length > 0 && failed.length === 0) await offerCloseAfterSend(sentCount);
     } catch (error) {
       setPdfReviewError(messageOf(error));
     } finally {
@@ -1620,6 +1641,10 @@ export function OrderRequestsPage() {
           </div>
 
           {editable || detail?.status === "draft" || detail?.has_pdf || canSend ? (
+            <>
+            {createModal && actionError ? (
+              <p className="form-error order-draft-foot-error" role="alert">{actionError}</p>
+            ) : null}
             <footer className="order-draft-foot">
               <div className="order-draft-foot-start">
                 {createModal ? (
@@ -1696,6 +1721,7 @@ export function OrderRequestsPage() {
                 ) : null}
               </div>
             </footer>
+            </>
           ) : null}
         </form>
         ) : (

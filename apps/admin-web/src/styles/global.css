@@ -4622,6 +4622,11 @@ html[data-theme="dark"] .order-role-option.is-on { background: #244b36; border-c
   font-weight: 700;
 }
 
+.order-draft-foot-error {
+  margin: 0;
+  padding: 0.6rem 1.5rem;
+}
+
 .order-draft-foot {
   display: flex;
   justify-content: space-between;

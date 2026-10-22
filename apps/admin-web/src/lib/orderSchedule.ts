@@ -16,7 +16,7 @@ export function emptySchedule(): OrderSchedule {
   return { version: 1, work_groups: [], rates_follow_work: true, rate_groups: [] };
 }
 export function newWorkGroup(): WorkGroup {
-  return { id: crypto.randomUUID(), date_mode: "single", from: "", to: "", start_time: "", end_time: "", end_next_day: false, gathering_time: "", notes: "", excluded_dates: [] };
+  return { id: crypto.randomUUID(), date_mode: "single", from: "", to: "", start_time: "09:00", end_time: "17:00", end_next_day: false, gathering_time: "", notes: "", excluded_dates: [] };
 }
 export function newRateGroup(group?: DateGroup): RateGroup {
   return { id: crypto.randomUUID(), date_mode: group?.date_mode ?? "single", from: group?.from ?? "", to: group?.to ?? "", work_group_id: group?.id ?? null,
