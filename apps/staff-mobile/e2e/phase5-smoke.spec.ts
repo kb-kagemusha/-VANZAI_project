@@ -23,7 +23,7 @@ async function login(page: Page) {
   await page.getByLabel("ユーザー名").fill(username);
   await page.getByLabel("パスワード").fill(password);
   await page.getByRole("button", { name: "ログイン" }).click();
-  await expect(page).toHaveURL(/\/today$/);
+  await expect(page).toHaveURL(/\/availability$/);
 }
 
 function assignmentCard(page: Page, shiftLabel: string): Locator {
@@ -52,7 +52,7 @@ test.beforeAll(() => {
   runSetupScript(ensureLocalWorkerScript);
 });
 
-test("phase5 worker can execute today, schedule, availability, expense, and actual flows", async ({ page }) => {
+test("phase5 worker can execute availability, expense, and actual flows", async ({ page }) => {
   test.slow();
   const expenseAmount = "1234";
   const availabilityDate = currentAvailabilityDate();
@@ -60,26 +60,9 @@ test("phase5 worker can execute today, schedule, availability, expense, and actu
 
   await login(page);
 
-  await expect(page.getByText("今日の動き")).toBeVisible();
-  const todayCard = assignmentCard(page, "本日確認イベント");
-  await expect(todayCard).toBeVisible();
-  await todayCard.getByRole("button", { name: "出勤する" }).click();
-  await expect(page.getByText("出勤を記録しました。")).toBeVisible();
-  await expect(todayCard.getByRole("button", { name: "退勤する" })).toBeVisible();
-  await todayCard.getByRole("button", { name: "退勤する" }).click();
-  await expect(page.getByText("退勤を記録しました。")).toBeVisible();
-  await expect(todayCard).toContainText("このアサインは退勤まで記録済みです。");
-
-  await expect(page.locator(".mobile-nav-badge")).toContainText("1");
-  await page.getByRole("link", { name: /^予定(\s+\d+)?$/ }).click();
-  await expect(page).toHaveURL(/\/schedule$/);
-  const pendingCard = assignmentCard(page, "確認待ちイベント");
-  await expect(pendingCard).toBeVisible();
-  await pendingCard.getByLabel("連絡メモ").fill("確認用連絡メモ");
-  await pendingCard.getByRole("button", { name: "参加可で返信" }).click();
-  await expect(page.getByText("予定確認を更新しました。")).toBeVisible();
-  await expect(pendingCard).toContainText("参加可");
-  await expect(page.locator(".mobile-nav-badge")).toHaveCount(0);
+  // 今日・予定は公式LINEへ移した（DEC-064）。旧URLは案内を出す
+  await page.goto("/today");
+  await expect(page.getByText("予定は公式LINEで確認してください")).toBeVisible();
 
   await page.getByRole("link", { name: "事前予定" }).click();
   await expect(page).toHaveURL(/\/availability$/);

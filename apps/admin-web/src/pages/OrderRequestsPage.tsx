@@ -12,7 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
-import { dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
@@ -32,6 +32,7 @@ import {
   reviseOrderRequest,
   sendOrderRequestLine,
   updateOrderRequestVersion,
+  withdrawOrderRequestAcceptance,
 } from "../lib/api/client";
 import {
   composeOrderDocument,
@@ -53,7 +54,7 @@ import {
   withFullwidthTilde,
   type OrderDocumentSections,
 } from "../lib/orderRequestFormat";
-import { confirmApp } from "../lib/appDialog";
+import { confirmApp, promptApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import type {
   OrderRequestChangeLink,
@@ -595,6 +596,30 @@ export function OrderRequestsPage() {
     },
     onError: (error) => setActionError(messageOf(error)),
   });
+
+  const withdrawAcceptance = useMutation({
+    mutationFn: (input: { documentId: string; workerId: string; reason: string }) =>
+      withdrawOrderRequestAcceptance(input.documentId, input.workerId, input.reason),
+    onSuccess: async () => {
+      setActionMessage("受諾後の辞退を記録しました。この人の稼働予定は取り消され、公式LINEの予定にも出なくなります。");
+      await refresh();
+      if (detail) await queryClient.invalidateQueries({ queryKey: ["order-request", detail.id] });
+    },
+    onError: (error) => setActionError(messageOf(error)),
+  });
+
+  async function recordWithdrawal(row: { worker_id: string; worker_name_snapshot: string }) {
+    if (!detail) return;
+    const reason = await promptApp({
+      title: "受諾後の辞退を記録",
+      message: `${row.worker_name_snapshot}さんが受諾後に辞退した記録を残します。この依頼書でのこの人の稼働予定はすべて取り消されます（ほかの送付先は変わりません）。理由を入力してください。`,
+      confirmLabel: "辞退を記録",
+    });
+    const trimmed = (reason ?? "").trim();
+    if (!trimmed) return;
+    setActionError("");
+    withdrawAcceptance.mutate({ documentId: detail.document_id, workerId: row.worker_id, reason: trimmed });
+  }
 
   const detailSourceNote = detail
     ? basedOnNote(detail.document_number, detail.based_on_document_number, detail.based_on_version_no)
@@ -1497,6 +1522,21 @@ export function OrderRequestsPage() {
                           <td>
                             {REPLY_LABEL[row.ack_status] ?? row.ack_status}
                             {row.decline_reason ? `（${row.decline_reason}）` : ""}
+                            {row.applied && row.participation_dates.length > 0 ? (
+                              <div className="order-field-hint">
+                                稼働日：{compactDateList(row.participation_dates)}
+                              </div>
+                            ) : null}
+                            {row.participating && (row.applied || row.ack_status !== "acked") ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={withdrawAcceptance.isPending}
+                                onClick={() => void recordWithdrawal(row)}
+                              >
+                                受諾後の辞退を記録
+                              </button>
+                            ) : null}
                           </td>
                         </tr>
                       ))}

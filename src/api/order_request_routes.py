@@ -22,6 +22,8 @@ from src.models.order_request import (
     OrderRequestNote,
     OrderRequestVersion,
 )
+from src.models.line_daily import OrderRequestWorkerApplication
+from src.services import worker_schedule as ws
 from src.services.line_messaging import line_settings
 from src.services.line_order import (
     LINK_INSTRUCTION,
@@ -157,7 +159,9 @@ def _delivery_out(
     row: OrderRequestDelivery,
     links: dict[str, str | None],
     errors: dict[str, str | None],
+    participation: dict[str, dict] | None = None,
 ) -> dict:
+    info = (participation or {}).get(row.worker_id) or {}
     return {
         "id": row.id,
         "worker_id": row.worker_id,
@@ -171,7 +175,32 @@ def _delivery_out(
         "line_linked": row.worker_id in links,
         "line_display_name": links.get(row.worker_id),
         "last_send_error": errors.get(row.id),
+        "offered_dates": list(row.offered_dates) if row.offered_dates is not None else None,
+        "applied": info.get("delivery_id") == row.id,
+        "participating": bool(info.get("dates")),
+        "participation_dates": list(info.get("dates") or []),
     }
+
+
+def _participation(db: Session, version: OrderRequestVersion, worker_ids: set[str]) -> dict[str, dict]:
+    """系列内で、稼働者ごとの適用送付行と現在の参加日（稼働予定の元）。"""
+    if not version.series_id or not worker_ids:
+        return {}
+    rows = (
+        db.query(OrderRequestWorkerApplication)
+        .filter(
+            OrderRequestWorkerApplication.series_id == version.series_id,
+            OrderRequestWorkerApplication.worker_id.in_(worker_ids),
+            OrderRequestWorkerApplication.applied_delivery_id.is_not(None),
+        )
+        .all()
+    )
+    result: dict[str, dict] = {}
+    for row in rows:
+        delivery = db.get(OrderRequestDelivery, row.applied_delivery_id)
+        state = ws.current_state(db, delivery) if delivery is not None else None
+        result[row.worker_id] = {"delivery_id": row.applied_delivery_id, "dates": list(state.dates) if state else []}
+    return result
 
 
 def _note_out(row: OrderRequestNote, names: dict[str, str]) -> dict:
@@ -215,6 +244,7 @@ def _version_out(
     )
     links = active_line_labels(db, {row.worker_id for row in deliveries})
     errors = latest_send_errors(db, {row.id for row in deliveries})
+    participation = _participation(db, version, {row.worker_id for row in deliveries})
     sources = _source_labels(db, {version.revision_of_version_id})
     changes = _changes_by_source(db, {version.id})
     return {
@@ -255,7 +285,7 @@ def _version_out(
         "has_pdf": bool(version.pdf_object_key),
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
         "line_send_available": line_settings().configured,
-        "deliveries": [_delivery_out(row, links, errors) for row in deliveries],
+        "deliveries": [_delivery_out(row, links, errors, participation) for row in deliveries],
         "notes": [_note_out(row, names) for row in notes],
         "created_at": version.created_at,
         "updated_at": version.updated_at,
@@ -578,6 +608,26 @@ def cancel_order_request(
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)
     return _version_out(db, document, version)
+
+
+@router.post("/documents/{document_id}/workers/{worker_id}/withdraw-acceptance")
+def withdraw_order_request_acceptance(
+    document_id: str,
+    worker_id: str,
+    body: ReasonBody,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """受諾後の辞退を運営が記録する。稼働予定はこの稼働者の分だけ取り消す。"""
+    _ensure(current_user)
+    if not has_permission(current_user, Permission.ORDER_WRITE):
+        raise HTTPException(status_code=403, detail="発注依頼書の編集権限がありません")
+
+    def action():
+        service = _service(db)
+        return service.withdraw_acceptance(service.get_document(document_id), worker_id, actor=current_user, reason=body.reason)
+
+    return _call(db, action)
 
 
 @router.post("/versions/{version_id}/notes")

@@ -129,6 +129,7 @@ import type {
   OrderRequestReplyList,
   OrderRequestVersion,
   OrderRequestWrite,
+  WakeStatusList,
 } from "../../types/orderRequest";
 import type { OperatorStaffItem, OperatorStaffWrite } from "../../types/operatorStaff";
 
@@ -1755,6 +1756,17 @@ export function revokeLineLink(workerId: string, reason: string) {
     `/api/order-requests/line-links/${workerId}/revoke`,
     { method: "POST", body: JSON.stringify({ reason }) },
   );
+}
+
+export function withdrawOrderRequestAcceptance(documentId: string, workerId: string, reason: string) {
+  return apiFetch<{ delivery_id: string; recorded: boolean }>(
+    `/api/order-requests/documents/${documentId}/workers/${workerId}/withdraw-acceptance`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+export function getWakeStatus(date?: string) {
+  return apiFetch<WakeStatusList>("/api/line-daily/wake-status", undefined, date ? { date } : undefined);
 }
 
 export function sendOrderRequestLine(deliveryId: string) {

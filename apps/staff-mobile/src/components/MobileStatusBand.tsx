@@ -83,7 +83,7 @@ export function MobileStatusBand({
         <article className="mobile-status-card">
           <span className="mobile-status-kicker">回答待ち</span>
           <strong className="mobile-status-emphasis">{pendingCount > 0 ? `${pendingCount}件` : "なし"}</strong>
-          <span className="mobile-status-meta">{pendingCount > 0 ? "予定画面で返信できます" : "未回答はありません"}</span>
+          <span className="mobile-status-meta">{pendingCount > 0 ? "運営へご確認ください" : "未回答はありません"}</span>
         </article>
 
         <article className="mobile-status-card">

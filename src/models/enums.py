@@ -228,6 +228,7 @@ class Permission(str, Enum):
     OCR_WRITE = "ocr_write"
     ORDER_READ = "order_read"
     ORDER_WRITE = "order_write"
+    WAKE_STATUS_READ = "wake_status_read"
     REGISTRATION_READ = "registration_read"
     REGISTRATION_WRITE = "registration_write"
 

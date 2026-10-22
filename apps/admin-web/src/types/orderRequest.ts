@@ -24,6 +24,43 @@ export interface OrderRequestDelivery {
   line_linked: boolean;
   line_display_name: string | null;
   last_send_error: string | null;
+  /** 確定時に決まったこの人の提示日。NULL は日程のない依頼書（稼働予定の対象外）。 */
+  offered_dates: string[] | null;
+  /** この送付行が、系列で今の稼働予定の元になっている受諾か。 */
+  applied: boolean;
+  /** 系列で、この人に参加日が残っているか（受諾後の辞退を記録できるか）。 */
+  participating: boolean;
+  participation_dates: string[];
+}
+
+export interface WakeStatusEntry {
+  id: string;
+  document_id: string;
+  start_time: string | null;
+  end_time: string | null;
+  end_next_day: boolean;
+  project_name: string;
+  site_name: string;
+  meeting_place: string | null;
+  status: "active" | "changing";
+}
+
+export interface WakeStatusItem {
+  worker_id: string;
+  worker_name: string;
+  line_linked: boolean;
+  first_start: string | null;
+  overlap_warning: boolean;
+  entries: WakeStatusEntry[];
+  wake_reported_at: string | null;
+  wake_late_received: boolean;
+}
+
+export interface WakeStatusList {
+  date: string;
+  total: number;
+  reported: number;
+  items: WakeStatusItem[];
 }
 
 export interface LineWorkerLinkItem {

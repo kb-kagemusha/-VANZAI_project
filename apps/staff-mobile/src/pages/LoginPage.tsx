@@ -19,7 +19,7 @@ export function LoginPage() {
   useEffect(() => {
     if (status === "authenticated") {
       startTransition(() => {
-        navigate("/today", { replace: true });
+        navigate("/availability", { replace: true });
       });
     }
   }, [navigate, status]);
@@ -31,7 +31,7 @@ export function LoginPage() {
 
     try {
       await login(username, password);
-      const from = (location.state as { from?: string } | null)?.from || "/today";
+      const from = (location.state as { from?: string } | null)?.from || "/availability";
       startTransition(() => {
         navigate(from, { replace: true });
       });

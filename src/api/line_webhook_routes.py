@@ -32,11 +32,13 @@ async def line_webhook(request: Request, db: Session = Depends(get_db)):
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Webhookの本文を読めません")
     try:
-        LineOrderService(db).handle_webhook(payload)
-        db.commit()
+        failed = LineOrderService(db).handle_webhook(payload)
     except Exception:
         db.rollback()
         raise
+    if failed:
+        # 予期しない例外で処理できなかったイベントがある。処理済みのイベントは再送されても飛ばす（詳細設計§6.2）
+        raise HTTPException(status_code=500, detail="一部のイベントを処理できませんでした")
     return {"ok": True}
 
 

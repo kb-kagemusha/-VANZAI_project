@@ -12,8 +12,6 @@ import { usePushNotification } from "../lib/hooks/usePushNotification";
 import { useAppVersion } from "../lib/hooks/useAppVersion";
 
 const navItems = [
-  { to: "/today", label: "今日" },
-  { to: "/schedule", label: "予定" },
   { to: "/availability", label: "事前予定" },
   { to: "/actuals", label: "実績" },
   { to: "/expenses", label: "経費" },

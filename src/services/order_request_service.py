@@ -19,6 +19,8 @@ from src.models.enums import AuditAction
 from src.models.master import Client, ClientStaff, Site, User, Worker
 from src.models.order_request import (
     ACK_ACKED,
+    ACK_DECLINE_PENDING,
+    ACK_DECLINED,
     ACK_UNACKED,
     KIND_FORMAL,
     KIND_TEST,
@@ -37,7 +39,8 @@ from src.models.order_request import (
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
 from src.services.order_request_format import apply_template_fields, parse_sections
-from src.domain.order_schedule import normalize_schedule, normalize_work_period, schedule_text, work_dates, work_period_label
+from src.domain.order_schedule import expand_work_days, normalize_schedule, normalize_work_period, schedule_text, work_dates, work_period_label
+from src.services import worker_schedule as ws
 from src.services.order_request_pdf import PDF_LAYOUT_ID, TEMPLATE_LAYOUT_APPLIED, render_order_request_pdf
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -359,6 +362,9 @@ class OrderRequestService:
         target.internal_source_snapshot = dict(source.internal_source_snapshot) if source.internal_source_snapshot else None
 
     def confirm(self, version: OrderRequestVersion, *, actor: User) -> OrderRequestVersion:
+        series_id = ws.ensure_series(self.session, version)
+        series = ws.lock_series(self.session, series_id)
+        version = self.session.get(OrderRequestVersion, version.id)
         if version.status != STATUS_DRAFT:
             raise OrderRequestError(409, "下書きだけを確定できます")
         if version.dispatch_stopped:
@@ -456,6 +462,9 @@ class OrderRequestService:
         version.contact_name = snapshot["contact_name"]
         version.contact_desk = snapshot["contact_desk"]
 
+        schedule = sections.get("schedule") if sections else None
+        work_days = expand_work_days(schedule) if schedule else []
+        absences = self._normalize_absences(version.draft_recipient_absences, worker_ids, version.request_conditions) or {}
         for worker_id in worker_ids:
             self.session.add(
                 OrderRequestDelivery(
@@ -466,9 +475,11 @@ class OrderRequestService:
                     send_status=SEND_UNSENT,
                     ack_status=ACK_UNACKED,
                     view_revoked=False,
+                    offered_dates=ws.offered_dates_for(work_days, absences.get(worker_id)),
                 )
             )
         self.session.flush()
+        self._apply_confirmation_to_series(series, version, set(worker_ids), actor)
         try:
             self.storage.save_bytes(object_key, pdf_bytes)
         except Exception:
@@ -508,9 +519,11 @@ class OrderRequestService:
         source_ids = [row.worker_id for row in self._deliveries(version.id)]
         if not source_ids:
             source_ids = list(version.draft_worker_ids or [])
+        series_id = ws.ensure_series(self.session, version)
         draft = OrderRequestVersion(
             id=generate_ulid(),
             document_id=document.id,
+            series_id=series_id,
             version_no=next_no,
             status=STATUS_DRAFT,
             revision_of_version_id=version.id,
@@ -555,8 +568,12 @@ class OrderRequestService:
         reason = _clean(reason)
         if not reason:
             raise OrderRequestError(400, "取消理由を入力してください")
+        series_id = ws.ensure_series(self.session, version)
+        series = ws.lock_series(self.session, series_id)
+        version = self.session.get(OrderRequestVersion, version.id)
         if version.status == STATUS_CANCELLED:
             raise OrderRequestError(409, "すでに取消済みです")
+        ends_series = series.answerable_version_id == version.id
         version.status = STATUS_CANCELLED
         version.cancel_reason = reason
         version.cancelled_at = _now()
@@ -577,7 +594,57 @@ class OrderRequestService:
             },
         )
         self.session.flush()
+        if ends_series:
+            # 回答受付版の取消は発注の中止（L-34）。旧版へは戻さない。
+            self._set_answerable(series, None, actor)
+            for worker_id in ws.series_workers(self.session, series.id):
+                ws.set_application(self.session, series_id=series.id, worker_id=worker_id, delivery=None, ended_reason=ws.END_DOCUMENT_ENDED, actor=actor.id)
+            ws.rebuild_series(self.session, series.id, actor=actor.id)
         return version
+
+    def withdraw_acceptance(self, document: OrderRequestDocument, worker_id: str, *, actor: User, reason: str) -> dict:
+        """受諾後の辞退を運営が記録する（DEC-065）。参加日0日の状態を追記し、稼働予定を取り消す。"""
+        reason = _clean(reason)
+        if not reason:
+            raise OrderRequestError(400, "辞退の理由を入力してください")
+        first = (
+            self.session.query(OrderRequestVersion)
+            .filter(OrderRequestVersion.document_id == document.id)
+            .order_by(OrderRequestVersion.version_no)
+            .first()
+        )
+        if first is None:
+            raise OrderRequestError(404, "発注依頼書が見つかりません")
+        series = ws.lock_series(self.session, ws.ensure_series(self.session, first))
+        application = ws.get_application(self.session, series.id, worker_id)
+        if application is None or not application.applied_delivery_id:
+            raise OrderRequestError(409, "この稼働者には受諾済みの参加がありません")
+        applied = self.session.get(OrderRequestDelivery, application.applied_delivery_id)
+        state = ws.current_state(self.session, applied)
+        recorded = False
+        if state is None or state.dates:
+            ws.append_state(
+                self.session, applied, dates=[], source=ws.SOURCE_OPS_RECORDED_DECLINE,
+                actor=actor.id, reason=reason[:500],
+            )
+            recorded = True
+        pending = ws.delivery_in_version(self.session, series.answerable_version_id, worker_id)
+        if pending is not None and pending.id != applied.id and pending.ack_status in (ACK_UNACKED, ACK_DECLINE_PENDING):
+            pending.ack_status = ACK_DECLINED
+            pending.decline_reason = ("運営記録：" + reason)[:500]
+            pending.acked_at = _now()
+        self.audit.log(
+            "order_request_acceptance_withdrawn",
+            target_type="order_request_delivery",
+            target_id=applied.id,
+            actor=_user_label(actor),
+            actor_role=actor.role,
+            reason=reason,
+            after_value={"document_number": document.document_number, "worker_id": worker_id, "recorded": recorded},
+        )
+        self.session.flush()
+        ws.rebuild(self.session, series.id, worker_id, actor=actor.id)
+        return {"delivery_id": applied.id, "recorded": recorded}
 
     def add_note(self, version: OrderRequestVersion, *, actor: User, body: str) -> OrderRequestNote:
         text = _clean(body)
@@ -755,6 +822,11 @@ class OrderRequestService:
     def hide_document(self, document: OrderRequestDocument, *, actor: User) -> OrderRequestDocument:
         if document.deleted_at is not None:
             return document
+        first = self.session.query(OrderRequestVersion).filter(OrderRequestVersion.document_id == document.id).first()
+        if first is not None:
+            ws.lock_series(self.session, ws.ensure_series(self.session, first))
+        if ws.active_entries_on_or_after(self.session, document.id, ws.today_jst()):
+            raise OrderRequestError(409, "今後の稼働予定がある依頼書は一覧から外せません。依頼をやめる場合は取消してください")
         document.deleted_at = _now()
         document.deleted_by_user_id = actor.id
         self.audit.log(
@@ -828,6 +900,34 @@ class OrderRequestService:
             .filter(OrderRequestDelivery.version_id == version_id)
             .all()
         )
+
+    def _set_answerable(self, series, version_id: str | None, actor: User) -> None:
+        before = series.answerable_version_id
+        if before == version_id:
+            return
+        series.answerable_version_id = version_id
+        self.session.flush()
+        self.audit.log(
+            "order_request_answerable_changed",
+            target_type="order_request_series",
+            target_id=series.id,
+            actor=_user_label(actor),
+            actor_role=actor.role,
+            before_value={"answerable_version_id": before},
+            after_value={"answerable_version_id": version_id},
+        )
+
+    def _apply_confirmation_to_series(self, series, version: OrderRequestVersion, recipients: set[str], actor: User) -> None:
+        """確定した版を回答受付版にし、送付先から外れた人の適用送付行と旧いPDFリンクを止め、予定を作り直す。"""
+        self._set_answerable(series, version.id, actor)
+        for worker_id in ws.series_workers(self.session, series.id):
+            if worker_id in recipients:
+                continue
+            application = ws.get_application(self.session, series.id, worker_id)
+            if application is not None and application.applied_delivery_id:
+                ws.set_application(self.session, series_id=series.id, worker_id=worker_id, delivery=None, ended_reason=ws.END_REMOVED, actor=actor.id)
+            ws.revoke_tokens_for_removed(self.session, series.id, worker_id)
+        ws.rebuild_series(self.session, series.id, actor=actor.id)
 
     def _normalize_absences(self, value: dict | None, worker_ids: list[str], request_conditions: str | None) -> dict | None:
         """送付先ごとの個人不参加日を正規化する（DEC-065）。送付先でない人の分は取り除く。
@@ -1066,6 +1166,9 @@ class OrderRequestService:
             try:
                 with self.session.begin_nested():
                     self.session.add(document)
+                    self.session.flush()
+                    # 系列：「変更を作成」なら元の版の系列、新規なら最初の依頼書を系列の起点にする（詳細設計§4.4）
+                    version.series_id = ws.ensure_series(self.session, source) if source is not None else ws.new_series(self.session, document.id)
                     self.session.add(version)
                     self.session.flush()
                 return document, version

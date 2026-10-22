@@ -100,7 +100,7 @@ for _role in (UserRole.OPS, UserRole.ACCOUNTING, UserRole.SITE_MANAGER):
 for _role in (UserRole.OPS, UserRole.ACCOUNTING):
     ROLE_PERMISSIONS[_role].update({Permission.OCR_READ, Permission.OCR_WRITE,
                                    Permission.REGISTRATION_READ, Permission.ASSIGNMENT_REMIND})
-ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ORDER_READ, Permission.ORDER_WRITE})
+ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ORDER_READ, Permission.ORDER_WRITE, Permission.WAKE_STATUS_READ})
 ROLE_PERMISSIONS[UserRole.SITE_MANAGER].add(Permission.AVAILABILITY_READ)
 
 

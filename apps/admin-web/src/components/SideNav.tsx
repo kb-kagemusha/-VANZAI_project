@@ -22,6 +22,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  AlarmClock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,6 +54,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/settings/access": ShieldUser,
   "/operations/order-requests": ScrollText,
   "/operations/notices": MessageSquare,
+  "/operations/wake-status": AlarmClock,
   "/operations/registration-requests": ClipboardList,
 };
 

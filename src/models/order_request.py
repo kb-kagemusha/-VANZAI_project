@@ -7,6 +7,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    ForeignKeyConstraint,
     CheckConstraint,
     Date,
     DateTime,
@@ -85,6 +86,10 @@ class OrderRequestVersion(Base, TimestampMixin):
         String(26), ForeignKey("order_request_documents.id"), nullable=False
     )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 依頼書の系列（「変更を作成」で作った依頼書も同じ系列）。作成時に決め、以後は変えない。
+    series_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("order_request_series.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=STATUS_DRAFT)
     revision_of_version_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("order_request_versions.id"), nullable=True
@@ -140,6 +145,8 @@ class OrderRequestVersion(Base, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("document_id", "version_no", name="uq_order_request_versions_doc_no"),
+        UniqueConstraint("id", "document_id", name="uq_order_request_versions_id_document"),
+        UniqueConstraint("id", "series_id", name="uq_order_request_versions_id_series"),
         CheckConstraint("internal_client_staff_id IS NULL OR internal_client_id IS NOT NULL", name="ck_order_internal_staff_client"),
         CheckConstraint(
             "status IN ('draft', 'confirmed', 'cancelled')",
@@ -167,11 +174,22 @@ class OrderRequestDelivery(Base, TimestampMixin):
     decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     ack_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     view_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 提示日（実勤務日−個人不参加日）。確定時に固定。NULL は A1 導入前の送付行で、稼働予定の対象外。
+    offered_dates: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    current_participation_state_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
 
     version: Mapped[OrderRequestVersion] = relationship(back_populates="deliveries")
 
     __table_args__ = (
         UniqueConstraint("version_id", "worker_id", name="uq_order_request_deliveries_version_worker"),
+        UniqueConstraint("id", "worker_id", name="uq_order_request_deliveries_id_worker"),
+        UniqueConstraint("id", "version_id", name="uq_order_request_deliveries_id_version"),
+        ForeignKeyConstraint(
+            ["current_participation_state_id", "id"],
+            ["delivery_participation_states.id", "delivery_participation_states.delivery_id"],
+            name="fk_order_request_deliveries_current_state",
+            use_alter=True,
+        ),
         CheckConstraint(
             "send_status IN ('unsent', 'processing', 'accepted', 'failed', 'unknown')",
             name="ck_order_request_deliveries_send",
@@ -201,3 +219,6 @@ class OrderRequestNote(Base):
     version: Mapped[OrderRequestVersion] = relationship(back_populates="notes")
 
     __table_args__ = (Index("ix_order_request_notes_version", "version_id"),)
+
+
+from src.models import line_daily  # noqa: E402,F401 — 系列・稼働予定のテーブルを登録する

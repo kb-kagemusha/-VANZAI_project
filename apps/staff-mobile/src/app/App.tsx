@@ -9,8 +9,7 @@ import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { LoginPage } from "../pages/LoginPage";
 import { NoticesPage } from "../pages/NoticesPage";
 import { PersonalSettingsPage } from "../pages/PersonalSettingsPage";
-import { SchedulePage } from "../pages/SchedulePage";
-import { TodayAssignmentsPage } from "../pages/TodayAssignmentsPage";
+import { LineScheduleNoticePage } from "../pages/LineScheduleNoticePage";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { WorkerOnlyRoute } from "../routes/WorkerOnlyRoute";
 
@@ -25,9 +24,10 @@ export function App() {
         <Route path="/403" element={<ForbiddenPage />} />
         <Route element={<WorkerOnlyRoute />}>
           <Route element={<MobileShell />}>
-            <Route index element={<Navigate to="/today" replace />} />
-            <Route path="/today" element={<TodayAssignmentsPage />} />
-            <Route path="/schedule" element={<SchedulePage />} />
+            <Route index element={<Navigate to="/availability" replace />} />
+            {/* 稼働予定は公式LINEで確認する（DEC-064）。旧URLには案内を出す */}
+            <Route path="/today" element={<LineScheduleNoticePage />} />
+            <Route path="/schedule" element={<LineScheduleNoticePage />} />
             <Route path="/availability" element={<AvailabilityPage />} />
             <Route path="/settings" element={<PersonalSettingsPage />} />
             <Route path="/actuals" element={<ActualsPage />} />
@@ -37,7 +37,7 @@ export function App() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/today" replace />} />
+      <Route path="*" element={<Navigate to="/availability" replace />} />
     </Routes>
     </>
   );

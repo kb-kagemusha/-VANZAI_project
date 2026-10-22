@@ -7,7 +7,7 @@ export function ForbiddenPage() {
         <p className="panel-label">ACCESS DENIED</p>
         <h1>worker ロール専用です</h1>
         <p>この画面は staff-mobile の対象ロールに限定しています。</p>
-        <Link to="/today" className="text-link">戻る</Link>
+        <Link to="/availability" className="text-link">戻る</Link>
       </div>
     </div>
   );

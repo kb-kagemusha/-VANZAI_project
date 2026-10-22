@@ -10,6 +10,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.domain.line_registration_entry import is_registration_keyword, registration_button_messages
@@ -61,6 +62,7 @@ from src.services.order_request_pdf import (
     project_name_from_document,
 )
 from src.services.order_request_service import OrderRequestError
+from src.services import worker_schedule as ws
 
 LINK_CODE_MINUTES = 30
 FILE_TOKEN_DAYS = 7
@@ -78,6 +80,7 @@ LINK_INSTRUCTION = (
 ACCEPT_LABEL = "依頼の案件、受諾します"
 DECLINE_LABEL = "今回は辞退します"
 ACCEPT_REPLY = "受諾ありがとうございます。よろしくお願い致します"
+SUPERSEDED_REPLY = "新しい依頼書が届いています。そちらで回答してください。"
 DECLINE_PROMPT = "辞退理由を簡単にお聞かせください"
 DECLINE_RECORDED = "辞退を受け付けました。"
 REMINDER_TEXT = "内容を確認して、受領ボタンを押してください"
@@ -140,6 +143,7 @@ class LineOrderService:
         self.audit = AuditService(session)
         self.storage = DocumentStorage()
         self.client = client or build_line_client()
+        self._outbox: list[tuple[str, str, object]] = []
 
     def issue_code(self, *, actor: User, worker_id: str) -> tuple[Worker, str, datetime]:
         worker = self._active_worker(worker_id)
@@ -249,6 +253,11 @@ class LineOrderService:
         document = self.session.get(OrderRequestDocument, version.document_id) if version else None
         if version is None or document is None:
             raise OrderRequestError(404, "送付行が見つかりません")
+        series = ws.lock_series(self.session, ws.ensure_series(self.session, version))
+        delivery = self.session.get(OrderRequestDelivery, delivery.id)
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        if series.answerable_version_id != version.id:
+            raise OrderRequestError(409, "新しい版が確定しているため、この版は送れません")
         if delivery.ack_status != ACK_UNACKED:
             raise OrderRequestError(409, "返事がある送付先には再送しません")
         if version.status != STATUS_CONFIRMED or version.dispatch_stopped:
@@ -283,6 +292,7 @@ class LineOrderService:
             pdf_url=pdf_url,
             delivery_id=delivery.id,
             is_test=document.kind == KIND_TEST,
+            offered_dates=delivery.offered_dates,
         )
         try:
             result = self.client.push_messages(link.line_user_id, messages)
@@ -345,6 +355,7 @@ class LineOrderService:
             or version.status == STATUS_CANCELLED
             or version.dispatch_stopped
             or not version.pdf_object_key
+            or not ws.pdf_viewable(self.session, delivery)
         ):
             raise OrderRequestError(404, "PDFのリンクは無効です")
         from src.services.order_request_service import OrderRequestService
@@ -366,21 +377,66 @@ class LineOrderService:
             project_name=project_name_from_document(version.request_conditions, version.body),
         )
 
-    def handle_webhook(self, payload: dict) -> None:
+    def handle_webhook(self, payload: dict) -> bool:
+        """イベントごとに「処理済み記録 → 業務処理 → commit → 返信」の順で処理する（詳細設計§6.2）。
+
+        予期しない例外で処理できなかったイベントがあれば True を返す（呼び出し側は500で応答し、LINEの再送を受ける）。
+        処理済みのイベントは、イベントIDの記録で必ず飛ばす。
+        """
         events = payload.get("events") if isinstance(payload, dict) else None
         if not isinstance(events, list):
-            return
+            return False
+        failed = False
         for index, event in enumerate(events):
-            if isinstance(event, dict):
-                self._handle_event(event, index)
+            if not isinstance(event, dict):
+                continue
+            self._outbox = []
+            try:
+                processed = self._handle_event(event, index)
+                self.session.commit()
+            except IntegrityError as exc:
+                self.session.rollback()
+                if "line_webhook_events" in str(exc.orig).lower() or "event_id" in str(exc.orig).lower():
+                    continue  # 同じイベントの同時再送。処理済みとして扱う
+                failed = True
+                continue
+            except Exception:
+                self.session.rollback()
+                failed = True
+                continue
+            if processed:
+                self._send_outbox()
+        return failed
 
-    def _handle_event(self, event: dict, index: int) -> None:
+    def _send_outbox(self) -> None:
+        for kind, token, payload in self._outbox:
+            if not token or not payload:
+                continue
+            try:
+                if kind == "text":
+                    self.client.reply_text(token, payload)
+                else:
+                    self.client.reply_messages(token, payload)
+            except Exception:
+                continue  # 返信の失敗は業務を巻き戻さない。押し直せば保存済みの結果が返る
+        self._outbox = []
+
+    def _handle_event(self, event: dict, index: int) -> bool:
         event_id = event.get("webhookEventId")
         if not isinstance(event_id, str) or not event_id:
             event_id = f"missing-{index}-{hashlib.sha256(repr(sorted(event.items())).encode()).hexdigest()[:16]}"
-        if self.session.query(LineWebhookEvent).filter(LineWebhookEvent.event_id == event_id).one_or_none():
-            return
+        if self.session.query(LineWebhookEvent).filter(LineWebhookEvent.event_id == event_id[:64]).one_or_none():
+            return False
         event_type = str(event.get("type") or "unknown")[:40]
+        record = LineWebhookEvent(
+            id=generate_ulid(),
+            event_id=event_id[:64],
+            event_type=event_type,
+            outcome="processing",
+            created_at=_now(),
+        )
+        self.session.add(record)
+        self.session.flush()  # 一意制約で同時再送を止める
         outcome = "ignored"
         reply_token = event.get("replyToken") if isinstance(event.get("replyToken"), str) else ""
         source = event.get("source") if isinstance(event.get("source"), dict) else {}
@@ -395,23 +451,24 @@ class LineOrderService:
                 outcome, reply = self._handle_message(event, line_user_id)
                 self._reply(reply_token, reply)
         elif event_type == "postback":
-            outcome, reply = self._handle_postback(event, line_user_id)
-            self._reply(reply_token, reply)
+            postback = event.get("postback") if isinstance(event.get("postback"), dict) else {}
+            data = postback.get("data") if isinstance(postback.get("data"), str) else ""
+            if data.startswith("wk_"):
+                from src.services.line_daily import LineDailyService
+
+                outcome, messages = LineDailyService(self.session).handle(event, data)
+                self._reply_messages(reply_token, messages)
+            else:
+                outcome, reply = self._handle_postback(event, line_user_id)
+                self._reply(reply_token, reply)
         elif event_type == "unfollow":
             from src.services.operator_staff import OperatorStaffService
             OperatorStaffService(self.session).unfollow(line_user_id)
             outcome = "staff_unfollow"
 
-        self.session.add(
-            LineWebhookEvent(
-                id=generate_ulid(),
-                event_id=event_id[:64],
-                event_type=event_type,
-                outcome=outcome[:40],
-                created_at=_now(),
-            )
-        )
+        record.outcome = outcome[:40]
         self.session.flush()
+        return True
 
     def _handle_message(self, event: dict, line_user_id: str) -> tuple[str, str | None]:
         message = event.get("message") if isinstance(event.get("message"), dict) else {}
@@ -483,6 +540,12 @@ class LineOrderService:
         delivery = self.session.get(OrderRequestDelivery, delivery_id)
         if delivery is None or not line_user_id:
             return None, "rejected", "この返事は記録できません。"
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        if version is not None:
+            series = ws.lock_series(self.session, ws.ensure_series(self.session, version))
+            delivery = self.session.get(OrderRequestDelivery, delivery_id)
+            if series.answerable_version_id is not None and series.answerable_version_id != delivery.version_id:
+                return None, "superseded_version", SUPERSEDED_REPLY
         link = self._active_link_for_worker(delivery.worker_id)
         if link is None or link.line_user_id != line_user_id:
             return None, "rejected", "この依頼の相手として紐付いていないため、返事は記録しません。"
@@ -515,7 +578,19 @@ class LineOrderService:
             after_value={"worker_id": delivery.worker_id, "ack_status": ACK_ACKED},
         )
         self.session.flush()
-        return "acked", ACCEPT_REPLY
+        reply = ACCEPT_REPLY
+        if delivery.offered_dates is not None:
+            # 提示日がNULLの旧送付行は、受諾を記録するだけにする（R3-02）
+            version = self.session.get(OrderRequestVersion, delivery.version_id)
+            series_id = ws.ensure_series(self.session, version)
+            if delivery.current_participation_state_id is None:
+                ws.append_state(self.session, delivery, dates=list(delivery.offered_dates), source="full_accept", actor="line-webhook")
+            ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor="line-webhook")
+            ws.rebuild(self.session, series_id, delivery.worker_id, actor="line-webhook")
+            label = format_date_set(delivery.offered_dates)
+            if label:
+                reply = f"{ACCEPT_REPLY}\nあなたの稼働日：{label}"
+        return "acked", reply
 
     def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
@@ -548,9 +623,24 @@ class LineOrderService:
         )
         if delivery is None:
             return "ignored", None
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        series_id = ws.ensure_series(self.session, version) if version is not None else None
+        if series_id is not None:
+            series = ws.lock_series(self.session, series_id)
+            delivery = self.session.get(OrderRequestDelivery, delivery.id)
+            if delivery.ack_status != ACK_DECLINE_PENDING:
+                return "ignored", None
+            if series.answerable_version_id is not None and series.answerable_version_id != delivery.version_id:
+                delivery.ack_status = ACK_UNACKED
+                return "superseded_version", SUPERSEDED_REPLY
         delivery.ack_status = ACK_DECLINED
         delivery.decline_reason = reason[:500]
         delivery.acked_at = _now()
+        if series_id is not None:
+            application = ws.get_application(self.session, series_id, delivery.worker_id)
+            if application is not None and application.applied_delivery_id:
+                ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=None, ended_reason="declined_new_version", actor="line-webhook")
+            ws.rebuild(self.session, series_id, delivery.worker_id, actor="line-webhook")
         self.audit.log(
             AuditAction.ORDER_REQUEST_DECLINED,
             target_type="order_request_delivery",
@@ -630,21 +720,14 @@ class LineOrderService:
         self._reply_messages(reply_token, messages)
         return "registration_button"
 
-    def _reply_messages(self, reply_token: str, messages: list[dict]) -> None:
-        if not reply_token or not messages:
-            return
-        try:
-            self.client.reply_messages(reply_token, messages)
-        except Exception:
-            return
+    def _reply_messages(self, reply_token: str, messages: list[dict] | None) -> None:
+        """返信はcommitの後に送る（詳細設計§6.2）。"""
+        if reply_token and messages:
+            self._outbox.append(("messages", reply_token, messages))
 
     def _reply(self, reply_token: str, text: str | None) -> None:
-        if not text:
-            return
-        try:
-            self.client.reply_text(reply_token, text)
-        except Exception:
-            return
+        if reply_token and text:
+            self._outbox.append(("text", reply_token, text))
 
     def _active_worker(self, worker_id: str) -> Worker:
         worker = self.session.get(Worker, worker_id)
@@ -704,6 +787,7 @@ def _push_messages(
     pdf_url: str,
     delivery_id: str,
     is_test: bool,
+    offered_dates: list[str] | None = None,
 ) -> list[dict]:
     lines = [
         f"発注依頼書 {document_number}（版{version_no}）",
@@ -712,6 +796,10 @@ def _push_messages(
         f"現場: {site_name}"[:80],
         f"PDF: {pdf_url}",
     ]
+    personal = format_date_set(offered_dates)
+    if personal:
+        # 個人の稼働日（休業日・個人不参加日を除く）。PDFは全員共通なので、ここで本人に示す（DEC-065）
+        lines.insert(3, f"あなたの稼働日: {personal}"[:300])
     if is_test:
         lines = [TEST_BANNER, *lines[:-1], "このメッセージはテスト送信です。", lines[-1]]
     detail = "\n".join(lines)
@@ -758,3 +846,22 @@ def _push_messages(
             },
         },
     ]
+
+
+def format_date_set(dates: list[str] | None) -> str:
+    """日付の集合を「11/1〜11/3、11/5」のようにまとめる。None・空なら空文字。"""
+    if not dates:
+        return ""
+    from datetime import date as _date
+
+    days = sorted({_date.fromisoformat(d) for d in dates})
+    runs: list[tuple[_date, _date]] = []
+    for day in days:
+        if runs and (day - runs[-1][1]).days == 1:
+            runs[-1] = (runs[-1][0], day)
+        else:
+            runs.append((day, day))
+    def label(d: _date) -> str:
+        return f"{d.month}/{d.day}"
+    return "、".join(label(a) if a == b else f"{label(a)}〜{label(b)}" for a, b in runs)
+

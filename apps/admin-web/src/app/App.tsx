@@ -29,6 +29,7 @@ import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { NoticesPage } from "../pages/NoticesPage";
 import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
+import { WakeStatusPage } from "../pages/WakeStatusPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
 import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
@@ -227,6 +228,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops"]}>
                 <OrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/wake-status"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <WakeStatusPage />
               </PermissionRoute>
             }
           />

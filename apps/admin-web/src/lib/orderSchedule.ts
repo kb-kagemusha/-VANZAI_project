@@ -88,3 +88,31 @@ export function scheduleFromStored(value: unknown): OrderSchedule | undefined {
   if (schedule.version !== 1 || !Array.isArray(schedule.work_groups) || !Array.isArray(schedule.rate_groups) || typeof schedule.rates_follow_work !== "boolean") return undefined;
   return schedule;
 }
+
+/** 日付の集合を「11/1〜11/3、11/5」の形にする（連続する日はまとめる）。 */
+export function compactDateList(days: string[]): string {
+  const sorted = Array.from(new Set(days)).sort();
+  const label = (day: string) => {
+    const [, month, date] = day.split("-");
+    return `${Number(month)}/${Number(date)}`;
+  };
+  const next = (day: string) => {
+    const value = new Date(`${day}T00:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + 1);
+    return value.toISOString().slice(0, 10);
+  };
+  const parts: string[] = [];
+  let start = "";
+  let prev = "";
+  for (const day of sorted) {
+    if (start && next(prev) === day) {
+      prev = day;
+      continue;
+    }
+    if (start) parts.push(start === prev ? label(start) : `${label(start)}〜${label(prev)}`);
+    start = day;
+    prev = day;
+  }
+  if (start) parts.push(start === prev ? label(start) : `${label(start)}〜${label(prev)}`);
+  return parts.join("、");
+}
