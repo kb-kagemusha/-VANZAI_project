@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--calendar-demo-preview|--calendar-demo-apply) ;;
+    ""|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
@@ -32,6 +32,8 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
     set +a
     if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-tune" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/tune_calendar_demo.py"
     else
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py" --apply
     fi

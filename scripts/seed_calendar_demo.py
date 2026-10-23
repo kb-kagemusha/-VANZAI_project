@@ -29,7 +29,8 @@ from src.services import worker_schedule as ws
 DATASET = "calendar-demo-202610-v1"
 BALANCED_DATASET = "calendar-demo-202610-v2"
 MARKERS = ("サンプル", "テスト", "sample", "dummy", "デモ")
-REQUESTED_WORKERS = ("テストアカウント", "坂井貴博")
+REQUESTED_WORKERS = ("テストアカウント", "高橋直樹", "坂井貴博")
+DEMO_EXTRA_NAMES = (("渡邊 健太郎", "わたなべ けんたろう"), ("長谷川 亜香里", "はせがわ あかり"), ("岡田 直人", "おかだ なおと"), ("松本 彩乃", "まつもと あやの"))
 
 
 def sample_documents(db):
@@ -259,9 +260,10 @@ def rebalance_demo(db):
     audit = AuditService(db)
     added_workers = 0
     for index in range(1, 5):
-        name = f"【テスト】追加スタッフ{index:02d}"
-        if not db.query(Worker.id).filter_by(name=name).first():
-            worker = Worker(name=name, furigana=f"てすとついかすたっふ{index:02d}", is_active=True, tags=["newcomer"] if index < 3 else ["event_small_d"],
+        name, furigana = DEMO_EXTRA_NAMES[index - 1]
+        legacy_name = f"【テスト】追加スタッフ{index:02d}"
+        if not db.query(Worker.id).filter(Worker.name.in_((name, legacy_name))).first():
+            worker = Worker(name=name, furigana=furigana, is_active=True, tags=["newcomer"] if index < 3 else ["event_small_d"],
                 newcomer_until=date(2027, 1, 23) if index < 3 else None)
             db.add(worker)
             db.flush()

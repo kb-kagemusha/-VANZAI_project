@@ -117,3 +117,31 @@ test("event outlines stay rectangular and worker runs span consecutive dates wit
   await w1.locator('.ov-worker-run[data-series-id="b"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("worker-continuous.png"), fullPage: true });
 });
+
+test("NG name fits the wider day column and undecided is Japanese", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
+  const people = Array.from({ length: 8 }, (_, i) => ({ worker_id: `w${i}`, name: i === 0 ? "長谷川 亜香里" : i === 1 ? "渡邊 健太郎" : `稼働者${i}` }));
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
+    if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
+    if (path.endsWith("/participation-calendar")) return reply({ workers: people.map((p) => ({ ...p, line_linked: false })), days: [
+      { date: "2026-10-01", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people, changing: [], unanswered: [], unavailable: [] }] },
+      { date: "2026-10-02", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people.slice(1), changing: [], unanswered: [], unavailable: [people[0]] }] },
+    ] });
+    if (path.endsWith("/availability-calendar")) return reply({ workers: [{ id: "w0", name: "長谷川 亜香里", is_active: true, tags: [], days: { "2026-10-01": { availability_status: "undecided", assignments: [], order_events: [] } } }] });
+    return reply({ items: [], total: 0, missing_count: 0 });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/operations/calendar?view=event&month=2026-10&test=1");
+  const refused = page.locator(".ov-event-box .ov-person.is-unavailable");
+  await expect(refused).toHaveText("× 長谷川 亜香里");
+  expect(await refused.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await page.locator(".overview-head-day").first().evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(116);
+  await page.screenshot({ path: testInfo.outputPath("eight-people-wider-column.png"), fullPage: true });
+  await page.getByRole("tab", { name: "出勤可能日", exact: true }).click();
+  await expect(page.getByText("未定", { exact: true })).toBeVisible();
+  await expect(page.getByText("undecided", { exact: true })).toHaveCount(0);
+});

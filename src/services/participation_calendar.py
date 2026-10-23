@@ -56,6 +56,8 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
     query = session.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None))
     if series_id:
         query = query.filter(OrderRequestSeries.id == series_id)
+    from src.models.master import Worker
+    worker_names = {w.id: w.name for w in session.query(Worker).all()}
     days: dict[str, dict[str, dict]] = defaultdict(dict)
     for series in query.all():
         answerable = session.get(OrderRequestVersion, series.answerable_version_id)
@@ -80,7 +82,7 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
             state = ws.current_state(session, delivery)
             dates = list(state.dates) if state is not None else []
             kind = OK if delivery.version_id == series.answerable_version_id else CHANGING
-            buckets[app.worker_id] = (kind, dates, delivery.worker_name_snapshot)
+            buckets[app.worker_id] = (kind, dates, worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
         for delivery in session.query(OrderRequestDelivery).filter(OrderRequestDelivery.version_id == answerable.id).all():
             if delivery.view_revoked:
                 continue
@@ -94,14 +96,14 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                 if state is not None:
                     refused |= offered - set(state.dates)
             if refused:
-                unavailable[delivery.worker_id] = (refused, delivery.worker_name_snapshot)
+                unavailable[delivery.worker_id] = (refused, worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
             if delivery.worker_id in buckets:
                 continue
             if delivery.send_status not in (SEND_ACCEPTED, SEND_UNKNOWN) or delivery.ack_status not in (ACK_UNACKED, ACK_DECLINE_PENDING):
                 continue
             if delivery.offered_dates is None:
                 continue
-            buckets[delivery.worker_id] = (UNANSWERED, list(delivery.offered_dates), delivery.worker_name_snapshot)
+            buckets[delivery.worker_id] = (UNANSWERED, list(delivery.offered_dates), worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
         def event_of(day: str) -> dict:
             return days[day].setdefault(
                 series.id,

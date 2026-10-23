@@ -59,6 +59,7 @@ const AVAIL_LABEL: Record<string, { label: string; color: string }> = {
   available_after_15: { label: "△", color: "#f59e0b" },
   unavailable: { label: "✗", color: "#ef4444" },
   consult_required: { label: "要相談", color: "#8b5cf6" },
+  undecided: { label: "未定", color: "#6b7280" },
 };
 
 function AvailBadge({ status }: { status: string | null }) {

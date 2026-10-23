@@ -206,3 +206,37 @@ def test_calendar_can_select_test_only_without_formal_mixing(api_client, db_sess
     response = api_client.get(f"/api/order-requests/participation-calendar?month={month}&test_only=true", headers=_auth(admin_user.username))
     assert response.status_code == 200, response.text
     assert {e["version_id"] for day in response.json()["days"] for e in day["events"]} == {demo["id"]}
+
+
+def test_tune_adds_four_to_eight_people_without_double_booking_and_renames_display(db_session, admin_user, client, pdf_root):
+    from scripts.seed_calendar_demo import rebalance_demo, DEMO_EXTRA_NAMES
+    from scripts.tune_calendar_demo import tune, DATASET as TUNING_DATASET
+    from src.models.master import Worker
+    for name in ["テスト アカウント", "坂井 貴博"] + [f"ダミー{i}" for i in range(18)]:
+        _worker(db_session, name)
+    seed(db_session, per_month=45, convert_existing=False, include_long_events=True)
+    rebalance_demo(db_session)
+    for index, (name, _) in enumerate(DEMO_EXTRA_NAMES, 1):
+        db_session.query(Worker).filter_by(name=name).one().name = f"【テスト】追加スタッフ{index:02d}"
+    db_session.flush()
+    original_snapshots = {v.id: (v.snapshot_json, v.pdf_object_key) for v in db_session.query(OrderRequestVersion)}
+    result = tune(db_session)
+    db_session.flush()
+    assert result["renamed"] == 5
+    assert sorted(e["count"] for e in result["created"]) == [4, 5, 6, 8]
+    assert result["max_events_per_worker_day"] == 1 and result["max_participants"] == 8
+    assert db_session.query(Worker).count() == 24
+    assert not db_session.query(Worker).filter(Worker.name.like("【テスト】%")).count()
+    assert db_session.query(Worker).filter(Worker.name.in_(("渡邊 健太郎", "長谷川 亜香里"))).count() == 2
+    assert not db_session.query(WorkerAvailability).filter(WorkerAvailability.notes.like("calendar-demo-%"), WorkerAvailability.status == "undecided").count()
+    group = db_session.query(OrderRequestVersion).filter_by(counterparty_note=TUNING_DATASET + ":8").one()
+    days = build(db_session, series_id=group.series_id)
+    assert [len(day["events"][0]["ok"]) for day in days] == [8, 7, 6]
+    calendar = build(db_session, start="2026-10-01", end="2026-12-13", test_only=True)
+    assert all("テスト" not in p["name"] for day in calendar for event in day["events"] for state in ("ok", "changing", "unanswered", "unavailable") for p in event[state])
+    for identifier, before in original_snapshots.items():
+        v = db_session.get(OrderRequestVersion, identifier)
+        assert (v.snapshot_json, v.pdf_object_key) == before
+    repeated = tune(db_session)
+    assert repeated["renamed"] == repeated["availability_updated"] == 0 and not repeated["created"]
+    assert rebalance_demo(db_session)["workers_added"] == 0

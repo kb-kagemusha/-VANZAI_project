@@ -237,7 +237,7 @@ export function OrderOverviewBody() {
                         {row.lineLinked === null ? <span className="ov-row-sub">登録の一覧にない人</span> : null}
                       </th>
                       <td colSpan={days.length} className="overview-worker-track-cell">
-                        <div className="ov-worker-track" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(92px, 1fr))`, backgroundSize: `${100 / days.length}% 100%` }}>
+                        <div className="ov-worker-track" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(var(--overview-day-width), 1fr))`, backgroundSize: `${100 / days.length}% 100%` }}>
                           {workerRuns(row, days).map((run) => {
                             const event = eventById.get(run.items[0].seriesId);
                             if (!event) return null;

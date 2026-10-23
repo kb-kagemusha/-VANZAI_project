@@ -9,13 +9,13 @@
 .overview-legend { display: flex; gap: 6px; margin: 0; align-items: center; }
 
 .overview-scroll { overflow: auto; max-height: calc(100dvh - 240px); min-height: 160px; padding: 0; }
-.overview-grid { border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
+.overview-grid { --overview-day-width: 116px; border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
 .overview-grid th, .overview-grid td { border-bottom: 1px solid var(--line, #e3e5ea); border-right: 1px solid var(--line, #e3e5ea); vertical-align: top; }
 .overview-head-name, .overview-row-name { position: sticky; left: 0; z-index: 2; background: var(--panel, #fff); width: 200px; min-width: 200px; max-width: 200px; text-align: left; padding: 8px 10px; }
 .overview-head-name { z-index: 3; }
 .overview-grid thead th { position: sticky; top: 0; background: var(--panel, #fff); z-index: 1; }
 .overview-grid thead .overview-head-name { z-index: 4; }
-.overview-head-day { width: 92px; min-width: 92px; text-align: center; padding: 4px 0; font-weight: 600; }
+.overview-head-day { width: var(--overview-day-width); min-width: var(--overview-day-width); text-align: center; padding: 4px 0; font-weight: 600; }
 .overview-head-day.is-sun { color: #c0392b; background: #fdf3f2; }
 .overview-head-day.is-sat { color: #2563eb; background: #f1f5fe; }
 .overview-head-day.is-today { box-shadow: inset 0 -3px 0 #2563eb; }
@@ -96,3 +96,7 @@ html[data-theme="dark"] .ov-line-badge { background: #4a2020; color: #fecaca; bo
 .ov-person.is-unavailable { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
 .ov-worker-run.is-unavailable { border-style: dashed; background: #fee2e2; color: #991b1b; }
 html[data-theme="dark"] .ov-person.is-unavailable, html[data-theme="dark"] .ov-worker-run.is-unavailable { background: #442029; color: #fecaca; }
+
+/* ×付きの氏名に、列幅の拡張分を使えるよう余白も調整する。 */
+.ov-event-run .ov-event-box { padding-left: 4px; padding-right: 4px; }
+.ov-event-run .ov-person { padding-left: 2px; padding-right: 2px; }
