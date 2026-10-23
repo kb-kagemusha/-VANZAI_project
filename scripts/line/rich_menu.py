@@ -98,8 +98,17 @@ def load_stage(stage: str) -> dict:
         else:
             sys.exit(f"未対応の押せる範囲: {action.get('type')}")
     menu_actions = actions & MENU_ACTIONS
-    if area_actions != menu_actions:
-        sys.exit(f"押せる範囲 {sorted(area_actions)} と enabled_actions のメニュー機能 {sorted(menu_actions)} が一致しません。")
+    # 押せる範囲のない旧い経路（前のメニューで届いたトークのボタン用）。明示したものだけを認める（A2、DEC-084）
+    legacy = set(spec.get("legacy_actions", []))
+    if legacy - menu_actions:
+        sys.exit(f"legacy_actions {sorted(legacy - menu_actions)} が enabled_actions にありません。")
+    if legacy & area_actions:
+        sys.exit(f"legacy_actions {sorted(legacy & area_actions)} に押せる範囲があります。")
+    if area_actions | legacy != menu_actions:
+        sys.exit(f"押せる範囲 {sorted(area_actions)}（旧い経路 {sorted(legacy)}）と enabled_actions のメニュー機能 {sorted(menu_actions)} が一致しません。")
+    uri_count = sum(1 for area in spec["rich_menu"]["areas"] if area["action"].get("type") == "uri")
+    if uri_count and not actions & {"web_home", "web_orders"}:
+        sys.exit("Web画面を開く範囲があるのに、web_home・web_orders が enabled_actions にありません。")
     return spec
 
 

@@ -1,7 +1,7 @@
 """稼働者向けLIFF画面のAPI（統合計画 ①）。管理画面のログインとは別のBearer（稼働者セッション）だけを受け付ける。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from src.api.deps import get_db
 from src.models.line_daily import FEATURE_KEYS
 from src.services.line_daily import enabled_actions
 from src.services.line_worker import LineWorkerError, LineWorkerService, worker_liff_id
+from src.services.line_worker_portal import LineWorkerPortal, PortalError
 
 router = APIRouter(prefix="/api/line/worker", tags=["LINE worker"])
 
@@ -87,3 +88,49 @@ def pick_accept(
         db.rollback()
         raise
     return result
+
+
+# ---- Web確認画面（統合計画 ②、DEC-084）。閲覧専用 ---------------------------------------------
+
+def _portal_error(exc: PortalError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail={"message": exc.message, "code": exc.code})
+
+
+@router.get("/home")
+def worker_home(request: Request, response: Response, month: str | None = Query(default=None, max_length=7), db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        _row, worker = LineWorkerService(db).authenticate(_bearer(request))
+        return LineWorkerPortal(db).home(worker, month)
+    except LineWorkerError as exc:
+        raise _error(exc) from None
+    except PortalError as exc:
+        raise _portal_error(exc) from None
+
+
+@router.get("/orders")
+def worker_orders(request: Request, response: Response, db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        _row, worker = LineWorkerService(db).authenticate(_bearer(request))
+        return LineWorkerPortal(db).orders(worker)
+    except LineWorkerError as exc:
+        raise _error(exc) from None
+    except PortalError as exc:
+        raise _portal_error(exc) from None
+
+
+@router.post("/deliveries/{delivery_id}/pdf-link")
+def worker_pdf_link(delivery_id: str, request: Request, response: Response, db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        _row, worker = LineWorkerService(db).authenticate(_bearer(request))
+        result = LineWorkerPortal(db).pdf_link(worker, delivery_id)
+        db.commit()
+        return result
+    except LineWorkerError as exc:
+        db.rollback()
+        raise _error(exc) from None
+    except PortalError as exc:
+        db.rollback()
+        raise _portal_error(exc) from None

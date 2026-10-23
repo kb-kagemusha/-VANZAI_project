@@ -75,3 +75,24 @@ set -a; . ./.env; set +a
 
 停止すると、送付メッセージに「日付を選んで受諾する」ボタンが出なくなり、すでに送ったボタンから開いても「この機能はまだご利用いただけません」と表示される。
 
+## A2（0.50.0〜、DEC-084）：⑤⑥をWeb確認画面へ
+
+| パネル | A2 |
+|---|---|
+| ①起床報告 | 今までどおりトークの返信（`wk_wake`） |
+| ②③④ | 「準備中」（押せない） |
+| ⑤受託済みの発注依頼書 | Web確認画面の「受託済みの発注依頼書」を開く（`https://liff.line.me/<LIFF ID>?m=orders`、業務機能 `web_orders`） |
+| ⑥スケジュール確認 | Web確認画面のホーム（月間・直近7日・確認が必要な依頼・報酬見込み）を開く（`?m=home`、業務機能 `web_home`） |
+
+- 画像は `scripts/line/rich_menu/a2.png`（`make_a2.py` で作成。A1 と同じ絵柄で、⑤「一覧を開く」・⑥「月間・7日分の予定」）。
+- `a2.json` の `legacy_actions`（`wk_orders`・`wk_schedule`）は、A1 のときにトークへ届いたボタン（「続きを見る」「依頼書を開く」）のための移行用。押せる範囲はないが、押されたら今までどおり返事をする。移行が済んだら外す。
+- 公開：
+
+```bash
+.venv/bin/python scripts/line/rich_menu.py check --stage a2
+.venv/bin/python scripts/line/rich_menu.py apply --stage a2 --image scripts/line/rich_menu/a2.png --by <自分の名前>
+.venv/bin/python scripts/line/rich_menu.py status
+```
+
+- 戻すとき：`apply --stage a1 --image scripts/line/rich_menu/a1.png`（A1 の公開記録には `web_home`・`web_orders` がないので、Web確認画面のAPIも止まる。`pick_dates` を使う場合は続けて `features --enable pick_dates`）。
+- Web確認画面だけを止めるとき：`features --disable web_home web_orders`（メニューはA2のまま。⑤⑥を押すと「この機能はまだご利用いただけません」と表示される）。

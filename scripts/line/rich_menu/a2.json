@@ -1,0 +1,66 @@
+{
+  "stage": "a2",
+  "enabled_actions": [
+    "wk_wake",
+    "wk_orders",
+    "wk_schedule",
+    "pick_dates",
+    "web_home",
+    "web_orders"
+  ],
+  "legacy_actions": [
+    "wk_orders",
+    "wk_schedule"
+  ],
+  "rich_menu": {
+    "size": {
+      "width": 2500,
+      "height": 1686
+    },
+    "selected": true,
+    "name": "VANZAI 稼働者メニュー A2",
+    "chatBarText": "メニュー",
+    "areas": [
+      {
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 833,
+          "height": 843
+        },
+        "action": {
+          "type": "postback",
+          "data": "wk_wake",
+          "displayText": "起床報告"
+        }
+      },
+      {
+        "bounds": {
+          "x": 834,
+          "y": 843,
+          "width": 833,
+          "height": 843
+        },
+        "action": {
+          "type": "uri",
+          "label": "受託済みの発注依頼書",
+          "uri": "https://liff.line.me/2011980694-YAd1Kdaq?m=orders"
+        }
+      },
+      {
+        "bounds": {
+          "x": 1667,
+          "y": 843,
+          "width": 833,
+          "height": 843
+        },
+        "action": {
+          "type": "uri",
+          "label": "スケジュール確認",
+          "uri": "https://liff.line.me/2011980694-YAd1Kdaq?m=home"
+        }
+      }
+    ]
+  },
+  "layout_note": "A1 と同じ6分割。①起床報告はトークの返信（postback）。⑤⑥はWeb確認画面（LIFF）を直接開く（統合計画 ②、0.50.0、DEC-084）。web_home・web_orders を enabled_actions に入れて公開を管理する。legacy_actions の wk_orders・wk_schedule は、前のメニューで届いたトークのボタンのための移行用（押せる範囲はない）。"
+}

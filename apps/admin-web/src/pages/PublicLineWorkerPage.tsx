@@ -1,11 +1,13 @@
 /**
  * 稼働者向けLIFF画面（統合計画 ①）。LINEの中で開き、本人確認のあとで画面を出す。
- * いまは「日付を選んで受諾」（?m=pick&d=送付行ID）だけ。Web確認画面（②）もこのページに追加する。
+ * 「日付を選んで受諾」（?m=pick&d=送付行ID）と、Web確認画面（②、0.50.0）：予定のホーム（?m=home、リッチメニュー⑥）・
+ * 受託済みの依頼書（?m=orders、リッチメニュー⑤）。m がなければホーム。
  */
 import { useEffect, useMemo, useState } from "react";
 
 import registrationLogo from "../assets/registration-logo.png";
 import { MonthCalendar, monthOf } from "../components/MonthCalendar";
+import { LineWorkerPortal } from "../components/LineWorkerPortal";
 import { participationDateLines, participationPeriodLabel } from "../lib/participationDateFormat";
 import {
   ApiError,
@@ -87,6 +89,8 @@ export function PublicLineWorkerPage() {
   const [month, setMonth] = useState("");
   const [sending, setSending] = useState(false);
   const [submitKey, setSubmitKey] = useState(newKey);
+  const [portal, setPortal] = useState<"home" | "orders" | null>(null);
+  const [features, setFeatures] = useState<string[]>([]);
   const { mode, delivery } = useMemo(readParams, []);
 
   useEffect(() => {
@@ -95,6 +99,7 @@ export function PublicLineWorkerPage() {
       try {
         const entry = await getLineWorkerEntry();
         if (!entry.liff_id) throw new Error("この画面は準備中です。運営へお問い合わせください。");
+        setFeatures(entry.features ?? []);
         await loadLiff(entry.liff_id);
         const liff = liffClient();
         if (!liff) throw new Error("LINEの画面を開けませんでした。");
@@ -107,7 +112,13 @@ export function PublicLineWorkerPage() {
         const session = await createLineWorkerSession(idToken);
         if (!active) return;
         setToken(session.token);
-        if (mode !== "pick" || !delivery) throw new Error("開く画面が指定されていません。LINEのボタンから開き直してください。");
+        if (mode !== "pick") {
+          // Web確認画面（②）。機能が止まっているときは画面の中で案内する
+          setPortal(mode === "orders" ? "orders" : "home");
+          setPhase("ready");
+          return;
+        }
+        if (!delivery) throw new Error("開く画面が指定されていません。LINEのボタンから開き直してください。");
         const loaded = await getLineWorkerPick(session.token, delivery);
         if (!active) return;
         setView(loaded);
@@ -178,6 +189,7 @@ export function PublicLineWorkerPage() {
         </header>
 
         {phase === "checking" ? <p className="lw-status">読み込んでいます…</p> : null}
+        {phase === "ready" && portal && token ? <LineWorkerPortal token={token} initial={portal} features={features} /> : null}
         {phase === "error" ? <div className="lw-card lw-error"><p>{message}</p></div> : null}
 
         {phase === "done" ? (

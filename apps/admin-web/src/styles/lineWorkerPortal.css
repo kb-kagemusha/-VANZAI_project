@@ -1,0 +1,35 @@
+/* 稼働者向けのWeb確認画面（統合計画 ②、DEC-084）。lineWorker.css（日付を選ぶ画面）の部品を使い、ここでは追加分だけを書く。 */
+.lwp-alert { display: block; margin: 10px 0 4px; padding: 12px 14px; border-radius: 12px; background: #fff4d6; color: #7a4d00; font-weight: 700; text-decoration: none; border: 1px solid #f2cf78; }
+.lwp-no-confirm { margin-top: 6px; }
+.lwp-summary { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eceef1; }
+.lwp-summary-item { display: grid; gap: 2px; }
+.lwp-summary-label { font-size: 12px; color: var(--lr-muted); }
+.lwp-summary-value { font-size: 22px; line-height: 1.3; }
+.lwp-summary-note { grid-column: 1 / -1; margin-top: 0; }
+.lwp-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #f1f2f5; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+.lwp-tabs button { height: 42px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-weight: 700; color: #555; cursor: pointer; }
+.lwp-tabs button.is-active { background: #fff; color: #1b3f8f; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.lwp-cal-day { width: 100%; min-height: 48px; border-radius: 10px; border: 1px solid transparent; background: transparent; display: grid; place-items: center; align-content: center; padding: 4px 0; font: inherit; color: #9a9ba3; }
+.lwp-cal-day.has-work { color: #1b3f8f; background: #f1f6ff; border-color: #c9d9fb; cursor: pointer; }
+.lwp-cal-day.is-changing { background: #fff6e6; border-color: #f2cf78; color: #7a4d00; }
+.lwp-cal-day.is-selected { outline: 2px solid #1c64f2; outline-offset: 1px; }
+.lwp-cal-day.is-today .lw-day-num { text-decoration: underline; }
+.lwp-cal-day:disabled { cursor: default; }
+.lwp-dot { font-size: 11px; line-height: 1.1; }
+.lwp-legend-mark { color: #1b3f8f; margin-right: 2px; }
+.lwp-legend-mark.is-changing { color: #b7791f; }
+.lwp-week-range { font-weight: 700; margin: 0 0 10px; }
+.lwp-day-block { margin-top: 14px; }
+.lwp-day-block h3 { font-size: 15px; margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid #eceef1; }
+.lwp-entry { border: 1px solid #e4e5e9; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.lwp-entry.is-changing { border-color: #f2cf78; background: #fffaf0; }
+.lwp-entry-time { margin: 0; font-size: 13px; color: #44464f; font-weight: 700; }
+.lwp-entry-title { margin: 2px 0 4px; font-size: 16px; font-weight: 700; line-height: 1.4; }
+.lwp-badge { display: inline-block; margin: 6px 0 0; padding: 3px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.lwp-badge.is-changing { background: #fff0cc; color: #7a4d00; }
+.lwp-badge.is-unanswered { background: #fde8e7; color: #8a2b25; }
+.lwp-confirm-item { border: 1px solid #e4e5e9; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.lwp-actions { display: grid; gap: 8px; margin-top: 10px; }
+.lwp-link-button { display: grid; place-items: center; text-decoration: none; height: 48px; font-size: 16px; }
+.lwp-retry { margin-top: 12px; }
+.lwp-fetched { text-align: center; margin-bottom: 20px; }

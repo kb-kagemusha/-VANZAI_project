@@ -1612,6 +1612,7 @@
 - Validation: `tests/test_company_profile_and_wake_contacts.py`（今することの段階と順番、電話番号・連絡の記録・権限・監査、会社情報の権限・競合・発行元設定との一致、発行時点の会社情報の保存と再発行、PDF生成）。全体の試験。
 - Version: 既存の設定の移し替えと既存画面への情報・記録の追加として Z（0.49.8）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11、DEC-066/074/075、統合計画 §7.1、`docs/runbook/WAKE_VISUAL_CHECK_RUNBOOK.md`。
 
+
 ## DEC-083: カレンダーのテスト表示・カテゴリー配色・金額入力の体験（2026-10-23）
 
 - 目的: クライアントが架空データでカレンダーと金額確定を確認する。必要人数・不足判定は今回保留（ユーザーが確認予定）。
@@ -1623,3 +1624,17 @@
 - DB最小セットは既存OrderRequestDocument/Version/Delivery/Series/WorkerApplication/DeliveryParticipationState、Worker/WorkerAvailability、OrderBillingAmount、AuditLog。スキーマ変更・DDLなし。
 - VPSでは既存のデプロイ環境を利用し、通常デプロイからデータ投入を分離した明示オプションのみで実行する。秘密情報ファイルの値を取得・表示・変更しない。手順はdocs/ops/CALENDAR_DEMO_RUNBOOK.md。
 - 既存画面の表示と入力対象の変更なのでZ: 0.49.8 → 0.49.9。
+
+## DEC-084: 稼働者向けのWeb確認画面（統合計画 ②）とリッチメニューA2（2026-10-23）
+- Status: Accepted（ユーザー指定：1か月の予定などを公式LINEから確認できるようにする。計画どおり (b)＝予定・確認事項・報酬見込みをまとめて作り、⑤⑥からWeb画面を直接開く）
+- Purpose: 稼働者がトークをたどらずに「いつ働くか・いくらになりそうか・何を確認すべきか」を把握する（Web確認画面計画 v0.2 §1）。DEC-064 の「トーク内で完結」を、⑤⑥についてはWeb画面（LIFF）へ広げる正式な変更。
+- Screen: 既存の稼働者向けLIFF（`/public/line-worker`、日付を選んで受諾と同じLIFFアプリ）に、ホーム（`?m=home`）と受託済みの依頼書（`?m=orders`）を追加。ホームは、確認が必要な依頼の件数→その月の報酬見込みと稼働日数→［月間］［直近7日］の切り替え（月間は仕事のある日に●、内容変更の確認待ちは◆、日付を押すとその日の仕事）→確認が必要な依頼の一覧（依頼書PDFを開く・日付を選べる依頼書は日付を選ぶ画面へ）→受託済みの依頼書へ。閲覧専用で、受諾・辞退・既読などの状態を変えない（PDFリンクの発行だけ従来の⑤と同じく監査に残す。actor=line-worker-web）。
+- Estimate: 統合計画 F-01・F-02・D-02・D-06・D-08 のとおり。予定（受諾した版）ごとに依頼書の日給を1回、別々の依頼書の同じ日はそれぞれ、稼働日数は日付の数。時給・単価不明は対象外の件数、テストは含めない、変更確認中は旧い版の単価、インセンティブ・税は加減しない、合計は小数のまま足して表示時に円未満切り捨て。表は増やさず毎回再計算（計算式の版 `daily-v1`）。交通費・昼食代が「別途」の日があれば注記。
+- Confirmations: 運営の参加カレンダー（D-07）と同じ判定。回答受付版に本人宛ての送付済み・返事なしの送付行がある系列を、受諾がなければ「未回答」、旧い版の受諾があれば「変更確認待ち」として系列ごとに1件。取消・送付停止・閲覧停止・削除は出さない。
+- Orders: 今月1日以降に予定（有効・変更確認中）がある受託済みの依頼書（P-08）。変更確認中は新しい版のPDFも開ける。
+- API: `GET /api/line/worker/home?month=YYYY-MM`（`web_home`、今月から前後24か月）、`GET /api/line/worker/orders`（`web_orders`）、`POST /api/line/worker/deliveries/{id}/pdf-link`（どちらか公開中）。稼働者セッション（Bearer）で毎回、連携・稼働者・機能の公開状態を確かめる。応答は no-store。
+- Rich menu: A2（`scripts/line/rich_menu/a2.json`・`a2.png`）。⑤⑥を LIFF のURLに、①は従来の postback。`legacy_actions` で A1 のトークのボタン（wk_orders・wk_schedule）を移行用に残す。`rich_menu.py` の検証は、URIの範囲があるのに web_home・web_orders がない定義を止める。
+- Not included: 未回答の依頼への返事（受諾・辞退）はWebでは行わない（日付を選べる依頼書を除く）。統合計画 ③ で、この画面の上に返事・参加日の変更依頼を置く候補。
+- Data / Migration: なし。
+- Validation: `tests/test_line_worker_pick.py` の本人確認の仕組みを使った `tests/test_line_worker_portal.py`（機能の公開、月・7日・見込み・未回答、修正版の変更確認待ちと旧い単価、テストの扱い、他人の依頼書のPDF、月の指定、時給・単価不明・端数）。全体の試験。実機（LINEアプリ）での確認は公開後に行う。
+- Version: 予定・確認事項・見込みを一画面で確認する新しい流れとして Y（0.50.0）。Spec Reference: DESIGN_SPEC_v0.3 §3/5、DEC-042/063/064/065/070、統合計画 ②、Web確認画面計画 v0.2。
