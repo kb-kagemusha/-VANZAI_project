@@ -1,0 +1,17 @@
+.attendance-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; padding: .75rem; }
+.attendance-notes label { display: flex; flex-direction: column; gap: .4rem; }
+.attendance-notes .table-card { overflow-x: auto; }
+.attendance-notes .data-table { min-width: 1050px; }
+.attendance-notes .data-table td:first-child { white-space: nowrap; }
+.attendance-filters label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+.attendance-filters button { border: 1px solid var(--color-border, #98a2b3); border-radius: .4rem; padding: .45rem .75rem; background: transparent; color: inherit; cursor: pointer; }
+.attendance-notes .attendance-void-button { white-space: nowrap; }
+.attendance-form { display: grid; gap: 1rem; }
+.attendance-form fieldset { border: 1px solid var(--color-border, #98a2b3); border-radius: .6rem; padding: 1rem; min-width: 0; }
+.attendance-form legend { font-weight: 700; padding: 0 .4rem; }
+.attendance-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-bottom: .8rem; }
+.attendance-form label { display: flex; flex-direction: column; gap: .4rem; }
+.attendance-notes button[aria-pressed="true"] { background: #dcfce7; color: #166534; border-color: #15803d; font-weight: 700; }
+.attendance-void-button { border: 1px solid #b42318; color: #b42318; background: transparent; border-radius: .4rem; padding: .5rem .8rem; cursor: pointer; }
+.attendance-void-button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 640px) { .attendance-form-grid { grid-template-columns: 1fr; } }

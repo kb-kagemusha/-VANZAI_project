@@ -102,6 +102,8 @@ for _role in (UserRole.OPS, UserRole.ACCOUNTING):
                                    Permission.REGISTRATION_READ, Permission.ASSIGNMENT_REMIND})
 ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ORDER_READ, Permission.ORDER_WRITE, Permission.WAKE_STATUS_READ})
 ROLE_PERMISSIONS[UserRole.SITE_MANAGER].add(Permission.AVAILABILITY_READ)
+ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ATTENDANCE_NOTE_READ, Permission.ATTENDANCE_NOTE_WRITE})
+ROLE_PERMISSIONS[UserRole.ACCOUNTING].add(Permission.ATTENDANCE_NOTE_READ)
 
 
 class AuthorizationError(Exception):

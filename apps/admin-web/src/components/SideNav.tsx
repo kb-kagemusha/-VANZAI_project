@@ -62,6 +62,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/order-requests": ScrollText,
   "/operations/notices": MessageSquare,
   "/operations/wake-status": AlarmClock,
+  "/operations/attendance-notes": ClipboardList,
   "/operations/participation-calendar": CalendarCheck,
   "/operations/order-overview": CalendarRange,
   "/operations/calendar": CalendarDays,

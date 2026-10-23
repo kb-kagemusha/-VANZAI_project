@@ -229,6 +229,8 @@ class Permission(str, Enum):
     ORDER_READ = "order_read"
     ORDER_WRITE = "order_write"
     WAKE_STATUS_READ = "wake_status_read"
+    ATTENDANCE_NOTE_READ = "attendance_note_read"
+    ATTENDANCE_NOTE_WRITE = "attendance_note_write"
     # 起床報告が無い場合の連絡を公式LINEで受け取る（A2で使う。役割ごとに付与。DEC-066）
     WAKE_ALERT_RECEIVE = "wake_alert_receive"
     REGISTRATION_READ = "registration_read"

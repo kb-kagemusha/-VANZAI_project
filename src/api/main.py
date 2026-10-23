@@ -9909,6 +9909,9 @@ app.include_router(line_worker_router)
 from src.api.access_routes import router as access_router
 app.include_router(access_router)
 
+from src.api.attendance_note_routes import router as attendance_note_router
+app.include_router(attendance_note_router)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

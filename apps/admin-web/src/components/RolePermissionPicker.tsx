@@ -6,6 +6,7 @@ const SUBJECTS: Record<string, string> = {
   payout: "支払", soft_close: "仮締め", hard_close: "本締め", expense: "経費",
   incentive: "インセンティブ", audit_log: "監査ログ", notice: "スタッフ通知", ocr: "OCR・在庫照合",
   order: "発注依頼書", registration: "登録申請", wake_status: "起床状況",
+  attendance_note: "遅刻・キャンセル記録",
 };
 const ACTIONS: Record<string, string> = { read: "閲覧", write: "編集", generate: "生成", issue: "発行", correct: "訂正",
   approve: "承認", submit: "提出", import: "取込", calculate: "計算", release: "解除", response: "回答", remind: "催促・要対応通知" };

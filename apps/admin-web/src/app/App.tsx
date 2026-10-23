@@ -32,6 +32,7 @@ import { NoticesPage } from "../pages/NoticesPage";
 import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
 import { OrderRequestsPage } from "../pages/OrderRequestsPage";
 import { WakeStatusPage } from "../pages/WakeStatusPage";
+import { AttendanceNotesPage } from "../pages/AttendanceNotesPage";
 import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
 import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
 import { PublicLineWorkerPage } from "../pages/PublicLineWorkerPage";
@@ -228,6 +229,7 @@ export function App() {
             }
           />
           <Route path="/account/profile" element={<AccountProfilePage />} />
+          <Route path="/operations/attendance-notes" element={<PermissionRoute allowedRoles={["admin", "ops", "accounting"]}><AttendanceNotesPage /></PermissionRoute>} />
           <Route path="/billing/order-amounts" element={<PermissionRoute allowedRoles={["admin"]}><OrderBillingPage /></PermissionRoute>} />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
           <Route

@@ -1,4 +1,6 @@
 import { FormDialog } from "../components/FormDialog";
+import { PaymentAttendanceWarnings } from "../components/PaymentAttendanceWarnings";
+import { getAttendancePaymentSummary } from "../lib/attendanceNotesApi";
 import { useAuth } from "../lib/auth/auth-context";
 import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
@@ -21,6 +23,7 @@ const PAGE_SIZE = 20;
 
 export function PayoutsPage() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [warningTarget, setWarningTarget] = useState<{ worker_id?: string; name: string; amount?: string; project?: string } | null>(null);
   const { user } = useAuth();
   const canGenerate = hasPermission(user, "payout_generate");
   const [monthValue, setMonthValue] = useState(currentMonthInput());
@@ -44,6 +47,9 @@ export function PayoutsPage() {
   const [deliveryInternalNote, setDeliveryInternalNote] = useState("");
   const periodKey = toPeriodKey(monthValue);
   const queryClient = useQueryClient();
+
+  const attendanceSummary = useQuery({ queryKey: ["attendance-payment-summary", periodKey],
+    queryFn: () => getAttendancePaymentSummary(periodKey), enabled: !!periodKey });
 
   const payoutsQuery = useQuery({
     queryKey: ["payouts", periodKey, recipientType, status, deliveryState, missingDefaultRecipientOnly, sortBy, sortOrder, page],
@@ -264,12 +270,24 @@ export function PayoutsPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack payouts-page">
       <PageHeader title="支払一覧" description="支払明細の相手先、版、承認・支払日時を参照します。" />
+      {attendanceSummary.isPending ? <p role="status">支払の注意事項を確認中...</p> : attendanceSummary.isError ? <p role="alert">遅刻・キャンセルの注意事項を取得できません。注意事項なしとは判断せず、再読み込みしてください。</p> : attendanceSummary.data.total > 0 ? <section className="card" style={{ padding: "1rem", border: "2px solid #b7791f" }}>
+        <strong>対象月の遅刻・キャンセルに注意事項があります（{attendanceSummary.data.total}件）</strong>
+        <p>支払額の確定前に確認してください。支払明細が未生成の人の記録も含みます。</p>
+        <button type="button" className="secondary-button" onClick={() => setWarningTarget({ name: "対象月の全員" })}>注意事項を確認する</button>
+      </section> : null}
+      <FormDialog open={!!warningTarget} title="月次支払の注意事項" onClose={() => setWarningTarget(null)}>
+        <strong>{warningTarget?.name}／{monthValue}</strong>
+        <p>同じ本人・対象月の全イベントの記録です。各支払明細の対象案件と照合してください。</p>
+        {warningTarget && <PaymentAttendanceWarnings key={`${periodKey}:${warningTarget.worker_id ?? "all"}`} periodKey={periodKey} workerId={warningTarget.worker_id} />}
+        {warningTarget?.amount !== undefined && <div>この支払明細の合計：{formatCurrency(warningTarget.amount)}{warningTarget.project ? `／${warningTarget.project}` : ""}</div>}
+      </FormDialog>
 
       {/* 支払明細生成フォーム */}
       {canGenerate && (<div className="record-list-actions"><button type="button" className="primary-button create-button" onClick={() => { setGenError(""); setCreateOpen(true); }}>支払明細を生成</button></div>)}
 <FormDialog open={canGenerate && createOpen} title="支払明細を生成" onClose={() => setCreateOpen(false)} busy={generateMutation.isPending}>
+{genRecipientType === "worker" && genRecipientId && <PaymentAttendanceWarnings key={`${periodKey}:${genRecipientId}`} periodKey={periodKey} workerId={genRecipientId} />}
 <section className="card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
         <strong style={{ width: "100%" }}>支払明細を生成</strong>
         <label>
@@ -411,6 +429,10 @@ export function PayoutsPage() {
           { key: "period", header: "対象月", render: (row) => row.period_key },
           { key: "version", header: "版", render: (row) => row.version },
           { key: "status", header: "状態", render: (row) => <StatusBadge value={row.status} /> },
+          { key: "attendance", header: "支払前の注意事項", render: row => {
+            const warning = attendanceSummary.data?.payouts[row.id];
+            return attendanceSummary.isError ? "取得失敗・要確認" : attendanceSummary.isPending ? "確認中" : warning ? <button type="button" className="secondary-button" style={{ color: "#b45309", borderColor: "#b45309" }} onClick={() => setWarningTarget({ worker_id: warning.worker_id, name: row.payee_name, amount: row.total_amount, project: row.project_name })}>注意事項あり（{warning.count}件）</button> : "—";
+          } },
           { key: "amount", header: "合計", render: (row) => formatCurrency(row.total_amount) },
           {
             key: "pdf_storage",
