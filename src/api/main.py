@@ -1432,8 +1432,20 @@ def _calculate_attendance_result(project, start_time: time, end_time: time, brea
     )
 
 
+def _invoice_issuer(invoice) -> dict | None:
+    """PDFの発行元。発行済みは発行時点の内容だけ（0.49.8 より前の発行分は出さない）。下書きは今の会社情報。"""
+    if invoice.issuer_snapshot:
+        return invoice.issuer_snapshot
+    if _status_to_str(invoice.status) == "preparing":
+        from sqlalchemy.orm import object_session
+        from src.services.company_profile import current_profile
+        session = object_session(invoice)
+        return current_profile(session) if session is not None else None
+    return None
+
+
 def _store_invoice_pdf(invoice) -> str:
-    pdf_bytes = PDFGenerator().generate_invoice_pdf(invoice, list(invoice.lines))
+    pdf_bytes = PDFGenerator().generate_invoice_pdf(invoice, list(invoice.lines), issuer=_invoice_issuer(invoice))
     if isinstance(pdf_bytes, str):
         pdf_bytes = Path(pdf_bytes).read_bytes()
     storage = DocumentStorage()
@@ -1448,7 +1460,7 @@ def _load_invoice_pdf_bytes(invoice) -> bytes:
         if storage.exists(invoice.pdf_object_key):
             return storage.read_bytes(invoice.pdf_object_key)
 
-    pdf_bytes = PDFGenerator().generate_invoice_pdf(invoice, list(invoice.lines))
+    pdf_bytes = PDFGenerator().generate_invoice_pdf(invoice, list(invoice.lines), issuer=_invoice_issuer(invoice))
     if isinstance(pdf_bytes, str):
         return Path(pdf_bytes).read_bytes()
     return pdf_bytes
@@ -9856,6 +9868,8 @@ app.include_router(public_ocr_router)
 app.include_router(order_request_router)
 from src.api.order_billing_routes import router as order_billing_router
 app.include_router(order_billing_router)
+from src.api.company_profile_routes import router as company_profile_router
+app.include_router(company_profile_router)
 from src.api.operator_staff_routes import router as operator_staff_router
 app.include_router(operator_staff_router)
 from src.api.place_routes import router as place_router

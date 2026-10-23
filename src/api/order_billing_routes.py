@@ -55,6 +55,9 @@ class IssuerBody(BaseModel):
     registration_number: str = Field(default="", max_length=50)
     bank_details: str = Field(default="", max_length=2000)
     payment_terms: str = Field(default="", max_length=1000)
+    phone: str = Field(default="", max_length=30)
+    email: str = Field(default="", max_length=200)
+    representative: str = Field(default="", max_length=100)
 
 
 def call(db, action):

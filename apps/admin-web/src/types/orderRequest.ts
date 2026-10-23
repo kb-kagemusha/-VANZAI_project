@@ -61,10 +61,34 @@ export interface WakeStatusEntry {
   status: "active" | "changing";
 }
 
+export type WakeContactResult = "line_sent" | "confirmed_awake" | "no_answer" | "site_notified" | "absent";
+
+/** 起床の目視確認で運営が連絡した結果（0.49.8、W-2）。 */
+export interface WakeContact {
+  id: string;
+  result: WakeContactResult;
+  result_label: string;
+  note: string | null;
+  actor_name: string;
+  created_at: string;
+}
+
+/** 今すること（0.49.8、W-3）。priority が小さいほど先に対応する。 */
+export interface WakeNextAction {
+  step: "reported" | "resolved" | "wait" | "line" | "call" | "site" | "started" | "none" | "future";
+  label: string;
+  priority: number;
+  next_at: string | null;
+}
+
 export interface WakeStatusItem {
   worker_id: string;
   worker_name: string;
+  /** 電話番号（0.49.8、W-1）。未登録は null */
+  phone: string | null;
   line_linked: boolean;
+  next_action: WakeNextAction;
+  contacts: WakeContact[];
   first_start: string | null;
   overlap_warning: boolean;
   entries: WakeStatusEntry[];

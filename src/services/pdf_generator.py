@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -60,7 +61,7 @@ class PDFGenerator:
             output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_invoice_pdf(
-        self, invoice: Invoice, lines: list[InvoiceLine]
+        self, invoice: Invoice, lines: list[InvoiceLine], issuer: dict | None = None
     ) -> bytes | str:
         """
         請求書PDFを生成
@@ -128,6 +129,13 @@ class PDFGenerator:
             story.append(Spacer(1, 2 * mm))
             story.append(Paragraph(str(invoice.addressee_address).replace("\n", "<br/>"), normal_style))
         story.append(Spacer(1, 6 * mm))
+
+        # 発行元（会社情報。0.49.8、DEC-082）。発行時点の内容を invoice.issuer_snapshot に保存している
+        from src.services.company_profile import issuer_lines
+        issuer_rows = issuer_lines(issuer)
+        if issuer_rows:
+            story.append(Paragraph("<br/>".join(escape(line) for line in issuer_rows), right_style))
+            story.append(Spacer(1, 6 * mm))
 
         if getattr(invoice, "invoice_subject", None):
             story.append(Paragraph(f"<b>件名:</b> {invoice.invoice_subject}", normal_style))

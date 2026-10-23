@@ -9,7 +9,7 @@ async function mocks(page: Page, role = "admin", stale = false, incentive = fals
   let saved = false;
   let savedIncentive: string | null = null;
   let invoice: any = null;
-  let issuer = { revision: 1, name: "株式会社VANZAI", postal_code: "116-0002", address: "東京都荒川区荒川1丁目39-11 東京アルバタワー1703", registration_number: "", bank_details: "", payment_terms: "" };
+  let issuer = { revision: 1, name: "株式会社VANZAI", postal_code: "116-0002", address: "東京都荒川区荒川1丁目39-11 東京アルバタワー1703", registration_number: "", bank_details: "", payment_terms: "", phone: "", email: "", representative: "" };
   const order = { version_id: "v1", series_id: "s1", document_number: "ORD-001", version_no: 1,
     project_name: "秋のイベント", work_date_label: "10月30日～11月2日", categories: ["飲食店巡回", "研修"], client_id: "c1", client_name: "依頼元会社",
     revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing",
@@ -23,7 +23,7 @@ async function mocks(page: Page, role = "admin", stale = false, incentive = fals
     if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
     if (path.startsWith("/api/order-billing")) calls.push(path);
     if (method === "POST" || method === "PUT") writes.push({ path, body: route.request().postData() ? route.request().postDataJSON() : null });
-    if (path.endsWith("/order-billing/issuer")) {
+    if (path.endsWith("/order-billing/issuer") || path.endsWith("/company-profile")) {
       if (method === "PUT") { const { expected_revision, ...values } = route.request().postDataJSON(); issuer = { ...values, revision: expected_revision + 1 }; }
       return reply(issuer);
     }
@@ -129,22 +129,22 @@ test("accounting permissions cannot reveal menu or request billing data", async 
   expect(state.calls).toHaveLength(0);
 });
 
-test("issuer settings start with supplied company address and can be edited in a popup", async ({ page }, testInfo) => {
+test("company profile page edits the invoice issuer and the billing page links to it", async ({ page }, testInfo) => {
   const state = await mocks(page);
   await page.goto("/billing/order-amounts");
-  await page.getByRole("button", { name: "発行元・振込先設定", exact: true }).click();
-  const settings = page.getByRole("dialog", { name: "請求書の発行元・振込先設定", exact: true });
-  await expect(settings.getByLabel("発行元の正式名称（必須）")).toHaveValue("株式会社VANZAI");
-  await expect(settings.getByLabel("郵便番号", { exact: true })).toHaveValue("116-0002");
-  await expect(settings.getByRole("textbox", { name: "発行元住所", exact: true })).toHaveValue("東京都荒川区荒川1丁目39-11 東京アルバタワー1703");
-  await settings.getByRole("textbox", { name: "振込先（任意）", exact: true }).fill("検証用銀行 検証支店\n普通 1234567 カ）バンザイ");
-  await settings.getByRole("textbox", { name: "支払期限・条件（任意）", exact: true }).fill("請求月の翌月末まで");
-  await page.screenshot({ path: testInfo.outputPath("issuer-settings.png") });
-  await settings.getByRole("button", { name: "設定を保存する" }).click();
-  await expect(settings).toHaveCount(0);
-  expect(state.writes[0].body).toMatchObject({ expected_revision: 1, name: "株式会社VANZAI", bank_details: "検証用銀行 検証支店\n普通 1234567 カ）バンザイ" });
-  await page.getByRole("button", { name: "発行元・振込先設定", exact: true }).click();
-  await expect(settings.getByRole("textbox", { name: "支払期限・条件（任意）", exact: true })).toHaveValue("請求月の翌月末まで");
+  await expect(page.getByRole("link", { name: "会社情報（発行元・振込先）", exact: true })).toHaveAttribute("href", "/settings/company");
+  await page.goto("/settings/company");
+  await expect(page.getByLabel("会社の正式名称（必須）")).toHaveValue("株式会社VANZAI");
+  await expect(page.getByLabel("郵便番号", { exact: true })).toHaveValue("116-0002");
+  await expect(page.getByRole("textbox", { name: "住所", exact: true })).toHaveValue("東京都荒川区荒川1丁目39-11 東京アルバタワー1703");
+  await page.getByLabel("電話番号", { exact: true }).fill("03-1234-5678");
+  await page.getByRole("textbox", { name: "振込先", exact: true }).fill("検証用銀行 検証支店
+普通 1234567 カ）バンザイ");
+  await page.screenshot({ path: testInfo.outputPath("company-profile.png") });
+  await page.getByRole("button", { name: "保存する" }).click();
+  await expect(page.getByRole("status")).toContainText("保存しました");
+  expect(state.writes[0].body).toMatchObject({ expected_revision: 1, name: "株式会社VANZAI", phone: "03-1234-5678", bank_details: "検証用銀行 検証支店
+普通 1234567 カ）バンザイ" });
 });
 
 test("incentive memo is copied verbatim and pending amount stays in the red badge until zero is confirmed", async ({ page }, testInfo) => {

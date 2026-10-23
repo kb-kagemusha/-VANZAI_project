@@ -225,6 +225,40 @@ class WakeReport(Base):
     )
 
 
+WAKE_CONTACT_RESULTS = {
+    "line_sent": "LINEで連絡した",
+    "confirmed_awake": "電話で起床を確認",
+    "no_answer": "電話がつながらない",
+    "site_notified": "現場へ連絡した",
+    "absent": "欠勤",
+}
+# 連絡を終えたとみなす結果（「今すること」を出さない）
+WAKE_CONTACT_RESOLVED = {"confirmed_awake", "absent"}
+
+
+class WakeContactLog(Base):
+    """起床の目視確認で、運営が連絡した結果（0.49.8、DEC-082）。追記のみ。"""
+
+    __tablename__ = "wake_contact_logs"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    worker_id: Mapped[str] = mapped_column(String(26), ForeignKey("workers.id"), nullable=False)
+    contact_date: Mapped[date] = mapped_column(Date, nullable=False)
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_user_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    actor_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "result IN ('line_sent','confirmed_awake','no_answer','site_notified','absent')",
+            name="ck_wake_contact_logs_result",
+        ),
+        Index("ix_wake_contact_logs_date_worker", "contact_date", "worker_id"),
+    )
+
+
 class LineActionToken(Base):
     """「続きを見る」「依頼書を開く」の短命トークン。平文は保存しない。"""
 

@@ -6,6 +6,7 @@ import re
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from src.services.company_profile import profile_snapshot
 from src.models.base import generate_ulid
 from src.models.master import Client
 from src.models.line_daily import OrderRequestSeries
@@ -43,18 +44,18 @@ class OrderBillingService:
 
     def issuer_snapshot(self):
         row = self.issuer_settings()
-        return {key: getattr(row, key) for key in ("revision", "name", "postal_code", "address", "registration_number", "bank_details", "payment_terms")}
+        return profile_snapshot(row)
 
     def update_issuer(self, *, expected_revision, actor, **values):
         self.session.execute(select(OrderBillingIssuer).where(OrderBillingIssuer.id == "default").with_for_update().execution_options(populate_existing=True)).scalars().all()
         row = self.issuer_settings()
         if row.revision != expected_revision:
-            raise OrderRequestError(409, "別の操作で発行元設定が変更されました。開き直して確認してください")
+            raise OrderRequestError(409, "別の操作で会社情報が変更されました。開き直して確認してください")
         before = self.issuer_snapshot()
         for key, value in values.items():
             setattr(row, key, value.strip())
         if not row.name:
-            raise OrderRequestError(400, "発行元の正式名称を入力してください")
+            raise OrderRequestError(400, "会社の正式名称を入力してください")
         row.revision += 1
         AuditService(self.session).log("order_billing_issuer_updated", target_type="order_billing_issuer", target_id=row.id,
             actor=actor.username, actor_role=actor.role, before_value=before, after_value=self.issuer_snapshot())

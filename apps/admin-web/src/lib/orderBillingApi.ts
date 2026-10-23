@@ -1,8 +1,13 @@
 import { apiFetch } from "./api/client";
 
-export type BillingIssuer = { revision: number; name: string; postal_code: string; address: string; registration_number: string; bank_details: string; payment_terms: string };
-export const getBillingIssuer = () => apiFetch<BillingIssuer>("/api/order-billing/issuer");
-export const saveBillingIssuer = ({ revision, ...values }: BillingIssuer) => apiFetch<BillingIssuer>("/api/order-billing/issuer", { method: "PUT", body: JSON.stringify({ ...values, expected_revision: revision }) });
+/** 請求書に保存した発行元（作成時点の会社情報）。0.49.8 より前の請求書には電話番号などがない。 */
+export type BillingIssuer = { revision: number; name: string; postal_code: string; address: string; registration_number: string; bank_details: string; payment_terms: string;
+  phone?: string; email?: string; representative?: string };
+/** 会社情報（0.49.8、DEC-082）。サイドメニュー「会社情報」で編集する。 */
+export type CompanyProfile = { revision: number; name: string; postal_code: string; address: string; phone: string; email: string; representative: string;
+  registration_number: string; bank_details: string; payment_terms: string };
+export const getCompanyProfile = () => apiFetch<CompanyProfile>("/api/company-profile");
+export const saveCompanyProfile = ({ revision, ...values }: CompanyProfile) => apiFetch<CompanyProfile>("/api/company-profile", { method: "PUT", body: JSON.stringify({ ...values, expected_revision: revision }) });
 
 export type BillingOrder = { version_id: string; series_id: string; document_number: string; version_no: number; project_name: string;
   work_date_label: string; categories: string[]; client_id: string | null; client_name: string; revision: number; amount_id: string | null; amount: string | null;

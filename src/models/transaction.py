@@ -523,6 +523,8 @@ class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     )
     
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 発行した時点の会社情報（0.49.8、DEC-082）。これより前に発行した請求書は NULL（PDFに発行元を出さない）。
+    issuer_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
     from src.models.master import Client

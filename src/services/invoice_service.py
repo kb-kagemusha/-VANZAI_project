@@ -23,6 +23,7 @@ from src.models.transaction import (
 )
 from src.services.financial_guards import lock_client_projects, ensure_unallocated, archive_drafts, copy_lines, ancestor_ids, ensure_components_unallocated
 from src.services.audit import log
+from src.services.company_profile import current_profile
 from src.services.price_resolver import resolve_sales_price
 from src.exceptions import (
     InvoiceAlreadyIssuedException,
@@ -299,6 +300,8 @@ def issue_invoice(
     ensure_components_unallocated(session, invoice, "invoice")
     invoice.status = InvoiceStatus.ISSUED
     invoice.issued_at = datetime.now()
+    # 発行した時点の会社情報を保存する（0.49.8、DEC-082）
+    invoice.issuer_snapshot = current_profile(session)
     
     log(
         session,
@@ -480,6 +483,8 @@ def reissue_invoice(
         addressee_address=original_invoice.addressee_address,
         fixed_office_fee_amount=original_invoice.fixed_office_fee_amount,
         notes=original_invoice.notes,
+        # 再発行は新しい発行なので、今の会社情報を保存する（0.49.8、DEC-082）
+        issuer_snapshot=current_profile(session),
     )
     session.add(new_invoice)
     session.flush()

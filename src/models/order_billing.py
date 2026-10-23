@@ -27,6 +27,10 @@ class OrderBillingIssuer(Base, TimestampMixin):
     registration_number: Mapped[str] = mapped_column(String(50), nullable=False)
     bank_details: Mapped[str] = mapped_column(Text, nullable=False)
     payment_terms: Mapped[str] = mapped_column(Text, nullable=False)
+    # 会社情報（0.49.8、DEC-082）。サイドメニュー「会社情報」で編集し、請求書の発行元に使う。
+    phone: Mapped[str] = mapped_column(String(30), nullable=False, default="", server_default="")
+    email: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
+    representative: Mapped[str] = mapped_column(String(100), nullable=False, default="", server_default="")
     __table_args__ = (CheckConstraint("id = 'default' AND revision > 0", name="ck_order_billing_issuer_singleton"),)
 
 

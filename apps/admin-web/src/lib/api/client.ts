@@ -132,6 +132,8 @@ import type {
   OrderRequestTemplateItem,
   OrderRequestTemplateDetail,
   WakeStatusList,
+  WakeContact,
+  WakeContactResult,
 } from "../../types/orderRequest";
 import type { OperatorStaffItem, OperatorStaffWrite } from "../../types/operatorStaff";
 
@@ -1866,6 +1868,10 @@ export function withdrawOrderRequestAcceptance(documentId: string, workerId: str
 
 export function getWakeStatus(date?: string) {
   return apiFetch<WakeStatusList>("/api/line-daily/wake-status", undefined, date ? { date } : undefined);
+}
+
+export function recordWakeContact(body: { day: string; worker_id: string; result: WakeContactResult; note: string }) {
+  return apiFetch<WakeContact>("/api/line-daily/wake-contacts", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function sendOrderRequestLine(deliveryId: string) {

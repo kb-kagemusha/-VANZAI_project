@@ -8,6 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from src.services.company_profile import issuer_lines
 from src.services.pdf_generator import DEFAULT_FONT
 
 
@@ -29,8 +30,7 @@ def generate_pdf(invoice, lines) -> bytes:
     if invoice.status != "issued":
         story += [para("下書き（未発行）", body), Spacer(1, 3 * mm)]
     issuer = invoice.issuer_snapshot
-    issuer_text = "\n".join(filter(None, [issuer["name"], "〒" + issuer["postal_code"] if issuer.get("postal_code") else "",
-        issuer.get("address", ""), "登録番号：" + issuer["registration_number"] if issuer.get("registration_number") else ""]))
+    issuer_text = "\n".join(issuer_lines(issuer))
     parties = Table([[para(invoice.client_snapshot["name"] + " 御中\n" + invoice.client_snapshot.get("address", "")), para(issuer_text, small)]], colWidths=[98 * mm, 76 * mm])
     parties.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story += [parties, Spacer(1, 5 * mm)]

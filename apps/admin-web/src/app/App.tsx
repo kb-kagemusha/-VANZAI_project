@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { CalendarHubPage } from "../pages/CalendarHubPage";
 import { OrderBillingPage } from "../pages/OrderBillingPage";
+import { CompanyProfilePage } from "../pages/CompanyProfilePage";
 import { AppShell } from "../components/AppShell";
 import { AccessManagementPage } from "../pages/AccessManagementPage";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -85,6 +86,7 @@ export function App() {
         />
         <Route element={<AppShell />}>
           <Route path="/settings/access" element={<PermissionRoute allowedRoles={["admin"]}><AccessManagementPage /></PermissionRoute>} />
+          <Route path="/settings/company" element={<PermissionRoute allowedRoles={["admin"]}><CompanyProfilePage /></PermissionRoute>} />
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"

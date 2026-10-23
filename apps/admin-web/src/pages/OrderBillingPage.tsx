@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { FormDialog } from "../components/FormDialog";
 import { BillingAmountInput } from "../components/BillingAmountInput";
 import { isValidBillingAmount } from "../lib/billingAmountFormat";
@@ -12,7 +12,6 @@ import { confirmApp, promptApp } from "../lib/appDialog";
 import { fetchOrderBillingPdf } from "../lib/api/client";
 import { getBillingClients, getBillingOrders, getOrderBillingSummary, saveBillingAmount, getBillingHistory, getBillingInvoices,
   createBillingInvoice, getBillingInvoice, issueBillingInvoice, cancelBillingInvoice, type BillingOrder, type BillingHistory } from "../lib/orderBillingApi";
-import { getBillingIssuer, saveBillingIssuer, type BillingIssuer } from "../lib/orderBillingApi";
 
 const yen = (value: string) => new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 2 }).format(Number(value));
 const monthLabel = (month: string) => `${month.slice(0, 4)}年${Number(month.slice(4))}月`;
@@ -43,7 +42,6 @@ export function OrderBillingPage() {
   const [createDate, setCreateDate] = useState(todayInTokyo());
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [issuer, setIssuer] = useState<BillingIssuer | null>(null);
   const summary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: getOrderBillingSummary, enabled: allowed, refetchOnWindowFocus: true });
   const clients = useQuery({ queryKey: ["order-billing", "clients"], queryFn: getBillingClients, enabled: allowed });
   const orders = useQuery({ queryKey: ["order-billing", "orders", status, search, page], queryFn: () => getBillingOrders({ status, q: search, offset: page * 30, limit: 30 }), enabled: allowed, refetchOnWindowFocus: true });
@@ -53,19 +51,6 @@ export function OrderBillingPage() {
   if (!allowed) return <Navigate to="/403" replace />;
 
   async function refresh() { await client.invalidateQueries({ queryKey: ["order-billing"] }); }
-  async function openIssuer() {
-    setError(""); setDialogError(""); setBusy(true);
-    try { setIssuer(await getBillingIssuer()); }
-    catch (err) { setError(message(err)); }
-    finally { setBusy(false); }
-  }
-  async function saveIssuer() {
-    if (!issuer || busy) return;
-    setBusy(true); setDialogError("");
-    try { await saveBillingIssuer(issuer); setIssuer(null); }
-    catch (err) { setDialogError(message(err)); }
-    finally { setBusy(false); }
-  }
   function openEdit(row: BillingOrder) {
     setEdit(row); setEditMonth(row.billing_month ? `${row.billing_month.slice(0, 4)}-${row.billing_month.slice(4)}` : "");
     setEditIncentive((row.incentive_amount ?? "").replace(/\.0+$/, ""));
@@ -149,10 +134,10 @@ export function OrderBillingPage() {
     <section className="card" style={{ padding: "1rem" }}>
       <h3>依頼元別の月次請求書</h3>
       <p className="order-field-hint">この画面で金額確定した依頼をまとめます。消費税10%・税抜小計に対して円未満切捨て。同じ依頼元・請求月で、実績から生成する既存請求書との重複作成はできません。</p>
-      <p className="order-field-hint">発行元・振込先・支払期限は設定から変更できます。変更は新しく作成する請求書に反映されます。</p>
+      <p className="order-field-hint">発行元・振込先・支払期限は、サイドメニューの「会社情報」で変更します。変更は新しく作成する請求書に反映されます。</p>
       <div className="order-template-actions"><label>請求月<input type="month" value={invoiceMonth} onChange={(e) => { setInvoiceMonth(e.target.value); setInvoicePage(0); }} /></label>
         <button type="button" className="btn create-button" disabled={!invoiceMonth} onClick={() => { setCreateClient(""); setDialogError(""); setCreateOpen(true); }}>月次請求書を作成</button>
-        <button type="button" className="btn btn-line-blue" disabled={busy} onClick={() => void openIssuer()}>発行元・振込先設定</button>
+        <Link className="btn btn-line-blue" to="/settings/company">会社情報（発行元・振込先）</Link>
       </div>
       {invoices.isError ? <p className="form-error">請求書一覧を取得できませんでした。</p> : null}
       <div className="order-list-table"><table className="data-table"><thead><tr><th>請求書番号</th><th>請求先</th><th>請求月</th><th>状態</th><th>合計（税込）</th><th>操作</th></tr></thead><tbody>
@@ -196,7 +181,7 @@ export function OrderBillingPage() {
       {invoice.data ? <><h4>{invoice.data.client_name}　{monthLabel(invoice.data.billing_month)}　{invoiceStatus[invoice.data.status]}</h4><p>{invoice.data.document_number}　第{invoice.data.version}版</p>
         <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書</th><th>案件名・稼働日</th><th>税抜金額</th></tr></thead><tbody>{invoice.data.lines?.map((line) => <tr key={line.id}><td>{line.document_number}</td><td className="order-cell-multiline">{line.description}<br />{line.work_date_label}{line.incentive_amount != null ? <><br />インセンティブ：{line.incentive_note}<br />内訳：通常 {yen(String(Number(line.amount) - Number(line.incentive_amount)))} ＋ インセンティブ {yen(line.incentive_amount)}</> : null}</td><td>{yen(line.amount)}</td></tr>)}</tbody></table></div>
         <p>税抜小計 {yen(invoice.data.subtotal)} ／ 消費税 {yen(invoice.data.tax_amount)} ／ 合計 {yen(invoice.data.total_amount)}</p>
-        <div className="order-cell-multiline"><strong>発行元：{invoice.data.issuer_snapshot?.name}</strong><br />{invoice.data.issuer_snapshot?.postal_code ? `〒${invoice.data.issuer_snapshot.postal_code} ` : ""}{invoice.data.issuer_snapshot?.address}<br />{invoice.data.issuer_snapshot?.registration_number ? `登録番号：${invoice.data.issuer_snapshot.registration_number}` : "登録番号：未設定"}<br />振込先：{invoice.data.issuer_snapshot?.bank_details || "未設定"}<br />支払期限・条件：{invoice.data.issuer_snapshot?.payment_terms || "未設定"}</div>
+        <div className="order-cell-multiline"><strong>発行元：{invoice.data.issuer_snapshot?.name}</strong><br />{invoice.data.issuer_snapshot?.postal_code ? `〒${invoice.data.issuer_snapshot.postal_code} ` : ""}{invoice.data.issuer_snapshot?.address}<br />{invoice.data.issuer_snapshot?.phone ? <>TEL：{invoice.data.issuer_snapshot.phone}<br /></> : null}{invoice.data.issuer_snapshot?.email ? <>メール：{invoice.data.issuer_snapshot.email}<br /></> : null}{invoice.data.issuer_snapshot?.registration_number ? `登録番号：${invoice.data.issuer_snapshot.registration_number}` : "登録番号：未設定"}<br />振込先：{invoice.data.issuer_snapshot?.bank_details || "未設定"}<br />支払期限・条件：{invoice.data.issuer_snapshot?.payment_terms || "未設定"}</div>
         <div className="order-template-actions"><button type="button" className="btn btn-line-blue" disabled={busy} onClick={() => void showPdf(invoice.data!.id)}>PDFを表示</button>
           {invoice.data.status === "draft" ? <><button type="button" className="btn create-button" disabled={busy} onClick={() => void issue(invoice.data!.id)}>確認して発行する</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void cancel(invoice.data!.id)}>下書きを取り消す</button></> : null}
         </div>
@@ -204,19 +189,6 @@ export function OrderBillingPage() {
       {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
     </FormDialog>
     <FormDialog open={!!pdfUrl} title="月次請求書PDF" onClose={() => setPdfUrl(null)}>{pdfUrl ? <iframe title="月次請求書PDF" src={pdfUrl} style={{ width: "100%", height: "70vh", border: 0 }} /> : null}</FormDialog>
-    <FormDialog open={!!issuer} title="請求書の発行元・振込先設定" busy={busy} onClose={() => setIssuer(null)}>
-      <p className="order-field-hint">保存後に作成する請求書へ反映します。作成済みの請求書は変わりません。未発行の下書きへ反映する場合は、下書きを取り消して再作成してください。空の任意項目はPDFに記載しません。</p>
-      {issuer ? <div className="order-billing-settings-grid">
-        <label className="order-field">発行元の正式名称（必須）<input maxLength={200} disabled={busy} value={issuer.name} onChange={(e) => setIssuer({ ...issuer, name: e.target.value })} /></label>
-        <label className="order-field">郵便番号<input maxLength={20} disabled={busy} value={issuer.postal_code} onChange={(e) => setIssuer({ ...issuer, postal_code: e.target.value })} /></label>
-        <label className="order-field" style={{ gridColumn: "1 / -1" }}>発行元住所<textarea rows={2} maxLength={1000} disabled={busy} value={issuer.address} onChange={(e) => setIssuer({ ...issuer, address: e.target.value })} /></label>
-        <label className="order-field">登録番号（任意）<input maxLength={50} disabled={busy} value={issuer.registration_number} onChange={(e) => setIssuer({ ...issuer, registration_number: e.target.value })} /></label>
-        <label className="order-field">支払期限・条件（任意）<textarea rows={3} maxLength={1000} placeholder="例：請求月の翌月末まで" disabled={busy} value={issuer.payment_terms} onChange={(e) => setIssuer({ ...issuer, payment_terms: e.target.value })} /></label>
-        <label className="order-field" style={{ gridColumn: "1 / -1" }}>振込先（任意）<textarea rows={4} maxLength={2000} placeholder="銀行名・支店名・口座種別・口座番号・口座名義など" disabled={busy} value={issuer.bank_details} onChange={(e) => setIssuer({ ...issuer, bank_details: e.target.value })} /></label>
-      </div> : null}
-      {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
-      <button type="button" className="btn create-button" disabled={busy || !issuer?.name.trim()} onClick={() => void saveIssuer()}>設定を保存する</button>
-    </FormDialog>
     <FormDialog open={!!history} title={`金額確定履歴 ${history?.title || ""}`} onClose={() => setHistory(null)}>{history?.items.map((r) => <p className="order-cell-multiline" key={r.revision}>第{r.revision}版　{r.client_name}　{monthLabel(r.billing_month)}　通常 {yen(r.amount)}{r.incentive_enabled ? <><br />インセンティブ：{r.incentive_note}　{r.incentive_amount !== null ? yen(r.incentive_amount) : "金額未確定"}</> : null}<br />{r.reason || "初回確定"}　{r.created_at}</p>)}</FormDialog>
     {source ? <OrderRequestDetailDialog versionId={source} onClose={() => setSource(null)} /> : null}
   </div>;
