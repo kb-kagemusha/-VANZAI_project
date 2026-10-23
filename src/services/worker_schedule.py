@@ -64,7 +64,10 @@ def _postgresql(session: Session) -> bool:
 # ---- 系列 -------------------------------------------------------------------
 
 def _confirm_order(version: OrderRequestVersion) -> tuple:
-    return (version.confirmed_at or datetime.min.replace(tzinfo=timezone.utc), version.version_no, version.id)
+    moment = version.confirmed_at or datetime.min.replace(tzinfo=timezone.utc)
+    # 確定日時はUTC。SQLiteの再読込でtzinfoが外れても、保存直後の値と同じ基準で比較する。
+    moment = moment.replace(tzinfo=timezone.utc) if moment.tzinfo is None else moment.astimezone(timezone.utc)
+    return (moment, version.version_no, version.id)
 
 
 

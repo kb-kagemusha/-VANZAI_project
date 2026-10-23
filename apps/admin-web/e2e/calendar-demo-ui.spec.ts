@@ -41,20 +41,21 @@ test("test filter persists across four calendars and category color is stable", 
   await page.screenshot({ path: testInfo.outputPath("availability-demo.png"), fullPage: true });
 });
 
-test("billing test orders are opt-in and labelled in amount dialog", async ({ page }) => {
+test("billing test orders are opt-in and labelled in amount dialog", async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
   const row = { version_id: "v1", series_id: "s1", document_number: "TEST-001", version_no: 1, is_test: true,
     project_name: "金額確認テスト", work_date_label: "2026年11月1日", categories: ["研修"], client_id: "c1", client_name: "ダミー依頼元",
-    revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing", incentive_enabled: false,
-    incentive_note: "インセンティブなし", incentive_amount: null, total_amount: null, billing_ready: false, client_mismatch: false };
+    revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing", incentive_enabled: true,
+    incentive_note: "売上1件につき500円（テスト）", incentive_amount: null, total_amount: null, billing_ready: false, client_mismatch: false };
   let saved = false;
+  let savedIncentive: string | null = null;
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     if (!url.pathname.startsWith("/api/")) return route.continue();
     const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     if (url.pathname.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
     if (url.pathname.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
-    if (url.pathname.endsWith("/orders/v1/confirm")) { saved = true; return reply({ id: "amount1", revision: 1 }); }
+    if (url.pathname.endsWith("/orders/v1/confirm")) { savedIncentive = route.request().postDataJSON().incentive_amount; saved = true; return reply({ id: "amount1", revision: 1 }); }
     if (url.pathname.endsWith("/order-billing/orders")) {
       const items = url.searchParams.get("include_test") === "true" && !saved ? [row] : [];
       return reply({ items, total: items.length });
@@ -63,16 +64,25 @@ test("billing test orders are opt-in and labelled in amount dialog", async ({ pa
   });
   await page.goto("/billing/order-amounts");
   await expect(page.getByText("該当する依頼書はありません。")).toBeVisible();
+  const filters = page.locator(".order-billing-filters");
+  const bounds = await filters.locator('select, input:not([type="checkbox"]), button, label.order-check').evaluateAll((els) => els.map((el) => ({ y: el.getBoundingClientRect().y, height: el.getBoundingClientRect().height })));
+  expect(bounds).toHaveLength(4);
+  expect(Math.max(...bounds.map((r) => r.y)) - Math.min(...bounds.map((r) => r.y))).toBeLessThan(1);
+  expect(Math.max(...bounds.map((r) => r.height)) - Math.min(...bounds.map((r) => r.height))).toBeLessThan(1);
+
   await page.getByRole("checkbox", { name: "テストも含む" }).check();
   await expect(page.locator(".order-list-table .test-data-badge")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("billing-filters-aligned.png"), fullPage: true });
   await page.getByRole("button", { name: "請求金額を確定", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "依頼書の請求金額を確定" });
   await expect(dialog.locator(".test-data-badge")).toBeVisible();
   await dialog.getByLabel("請求月（必須）").fill("2026-11");
   await dialog.getByLabel("通常請求額（インセンティブを除く・税抜・円）", { exact: true }).fill("200000");
+  await dialog.getByLabel("インセンティブ金額（税抜・円）", { exact: true }).fill("15000");
   await dialog.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(saved).toBe(true);
+  expect(savedIncentive).toBe("15000");
 });
 
 test("event outlines stay rectangular and worker runs span consecutive dates without bridging NG days", async ({ page }, testInfo) => {

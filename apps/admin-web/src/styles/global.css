@@ -5702,7 +5702,7 @@ html[data-theme="dark"] .calendar-test-toggle .btn.is-active, html[data-theme="d
 .order-list-frame .order-list-filters .order-list-size { margin-bottom: 0; }
 /* 送付先ごとではなく、文書1件の行全体を交互色で区切る。 */
 .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #fff; }
-.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #f2f2f2; }
+.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #f7f7f7; }
 html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #242833; }
 html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #303030; }
 
@@ -5714,3 +5714,13 @@ html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbod
 .pc-summary-count { display: block; margin-bottom: 8px; }
 .pc-summary-names { display: grid; gap: 5px; padding: 0; margin: 0; list-style: none; }
 .pc-summary-names > li { display: block; white-space: nowrap; line-height: 1.5; }
+
+/* 金額確定の操作は入力の下端・高さをそろえる。 */
+.order-billing-filters { --billing-filter-height: 2.5rem; display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; margin-bottom: .75rem; }
+.order-billing-filters > label { margin: 0; }
+.order-billing-filters > .order-check { height: var(--billing-filter-height); white-space: nowrap; }
+.order-billing-filters > .order-check input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex: none; }
+.order-billing-filters > .order-billing-status { width: 10rem; }
+.order-billing-filters > .order-billing-search { flex: 1 1 20rem; max-width: 32rem; }
+.order-billing-filters input:not([type="checkbox"]), .order-billing-filters select, .order-billing-filters > button { height: var(--billing-filter-height); box-sizing: border-box; }
+.order-billing-filters > button { padding-block: 0; }

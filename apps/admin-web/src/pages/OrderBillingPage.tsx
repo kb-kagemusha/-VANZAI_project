@@ -107,12 +107,12 @@ export function OrderBillingPage() {
     <section className="card" style={{ padding: "1rem" }}>
       <h3>請求金額の記録　{summary.data ? `未入力 ${summary.data.missing_count}件` : ""}</h3>
       <p className="order-field-hint">確定済みの最新依頼書が対象です。テストは金額入力を試せますが、正式な月次請求書には含まれません。請求先は案件のクライアントに固定します。インセンティブありの金額未確定も未入力件数に含みます。稼働者への支払額とは別です。</p>
-      <div className="order-template-actions">
+      <div className="order-billing-filters">
         <label className="order-check"><input type="checkbox" checked={includeTest} onChange={(e) => { setIncludeTest(e.target.checked); setPage(0); }} />テストも含む</label>
-        <label>表示<select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+        <label className="order-billing-status">表示<select aria-label="金額確定の表示条件" value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
           <option value="missing">金額未入力</option><option value="confirmed">金額確定済み</option><option value="invoice_created">請求書作成済み</option><option value="all">すべて</option>
         </select></label>
-        <label>依頼書・案件名・依頼元で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} maxLength={100} /></label>
+        <label className="order-billing-search">依頼書・案件名・依頼元で検索<input aria-label="依頼書・案件名・依頼元で検索" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} maxLength={100} /></label>
         <button type="button" className="btn btn-ghost" onClick={() => void refresh()}>更新</button>
       </div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}

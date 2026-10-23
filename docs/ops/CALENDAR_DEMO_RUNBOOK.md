@@ -91,3 +91,11 @@ calendar_demo_worker_renamedの監査から、高橋直樹へ変更した本人�
 旧「サンプルイベント」（番号付き・非表示分も含む）だけであることを確認し、`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --legacy-samples-remove` を実行する。
 結果active_entries_remaining=0を確認。全期間の受諾済み予定・適用受諾・回答受付を解除し、閲覧リンクを無効化、一覧から全件除外する。再実行はchanged_documents等0。
 請求書・有効な勤怠報告・対象外と共有の系列があれば停止する。原PDF・旧回答・監査は保持。新しいデモのデータセットには触れない。既存の実行設定は承認済みの内部読み込みのみ、値の表示/取得/変更はしない。
+
+
+## インセンティブ入力例8件（0.51.9、DEC-098）
+
+通常デプロイ後 `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-incentives-preview` で対象を照合する。
+`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-incentives-apply` で原則10月4件/11月4件を新しい版へ改訂する。元のPDF・回答履歴は保持。現在の参加/未回答/不可/変更確認待ちが一致しなければロールバック。
+金額履歴・請求使用・入力途中版・実送信/閲覧取消のある依頼は保護する。金額そのものは未入力。金額確定画面で「テストも含む」をオンにし、新しい8件の通常額とインセンティブ額を入力できることを確認する。正式の月次請求には含めない。
+初回revised=8/ enabled_demo_count=8、再実行revised=0（既存のありの件数によって初回の改訂数は減る）。監査calendar_demo_incentive_revised。実行設定は承認済み内部読み込みのみ、LINE送信なし。

@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove) ;;
+    ""|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
@@ -32,6 +32,10 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
     set +a
     if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--demo-incentives-preview" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/enable_demo_incentives.py"
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--demo-incentives-apply" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/enable_demo_incentives.py" --apply
     elif [ "${CALENDAR_DEMO_ACTION}" = "--legacy-samples-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/remove_legacy_samples.py"
     elif [ "${CALENDAR_DEMO_ACTION}" = "--legacy-samples-remove" ]; then
