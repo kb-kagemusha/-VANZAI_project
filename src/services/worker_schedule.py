@@ -345,6 +345,13 @@ def day_start_time(version: OrderRequestVersion, day: str) -> str | None:
 
 # ---- 再構築 ------------------------------------------------------------------
 
+def visible_schedule_entries(session: Session):
+    """削除済み依頼の古い派生予定を、LINE・Web・起床確認に出さない。"""
+    return session.query(WorkerScheduleEntry).join(
+        OrderRequestDocument, OrderRequestDocument.id == WorkerScheduleEntry.document_id
+    ).filter(OrderRequestDocument.deleted_at.is_(None))
+
+
 def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> list[dict]:
     """(系列 × 稼働者) の稼働予定を、元データだけからあるべき状態に合わせる。変更した行の一覧を返す。"""
     series = session.get(OrderRequestSeries, series_id)
@@ -354,6 +361,12 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
         if application is not None and application.applied_delivery_id
         else None
     )
+    if applied is not None:
+        applied_version = session.get(OrderRequestVersion, applied.version_id)
+        applied_document = session.get(OrderRequestDocument, applied_version.document_id)
+        if applied_document.deleted_at is not None:
+            # 受諾履歴は保持するが、削除済み文書から有効な予定を再生成しない。
+            applied = None
 
     expected: dict[tuple, dict] = {}
     applied_state = None
@@ -466,6 +479,9 @@ def pdf_viewable(session: Session, delivery: OrderRequestDelivery) -> bool:
     """PDFトークンの発行と読み出しで共通に使う閲覧条件。"""
     version = session.get(OrderRequestVersion, delivery.version_id)
     if version is None or version.status == STATUS_CANCELLED or version.dispatch_stopped or delivery.view_revoked:
+        return False
+    document = session.get(OrderRequestDocument, version.document_id)
+    if document is None or document.deleted_at is not None:
         return False
     if not version.series_id:
         return True  # 系列が未設定の旧データは従来どおり

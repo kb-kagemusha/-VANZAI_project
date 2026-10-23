@@ -83,6 +83,9 @@ def seed(db, *, convert_existing=True, per_month=15, prune_legacy_samples=False,
                 raise RuntimeError("整理対象のサンプルが請求書で使用済みです。変更を停止しました")
             document.deleted_at = datetime.now(timezone.utc)
             document.deleted_by_user_id = actor.id
+            for series_id in sorted(series_ids):
+                ws.lock_series(db, series_id)
+                ws.rebuild_series(db, series_id, actor=actor.username)
             audit.log("calendar_demo_duplicate_archived", target_type="order_request_document", target_id=document.id,
                 actor=actor.username, actor_role=actor.role, reason="ユーザー指定: 旧サンプルイベントは1件のみ残す",
                 before_value={"deleted_at": None}, after_value={"retained_document_id": legacy[0].id, "is_test": True})
@@ -360,6 +363,7 @@ def rebalance_demo(db):
         document = db.get(OrderRequestDocument, source.document_id)
         document.deleted_at = datetime.now(timezone.utc)
         document.deleted_by_user_id = actor.id
+        ws.rebuild_series(db, source.series_id, actor=actor.username)
         audit.log("calendar_demo_rebalanced", target_type="order_request_document", target_id=document.id, actor=actor.username, actor_role=actor.role,
             reason="ユーザー指定: 原則1人1日1件のダミー予定に置換・旧PDF保持", after_value={"replacement_document_id": version.document_id, "dataset": BALANCED_DATASET})
     # 新規の4名にも可否表示を補完する。既存の入力は上書きしない。

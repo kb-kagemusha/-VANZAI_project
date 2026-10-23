@@ -109,6 +109,7 @@ def enrich(db, today=None):
             ws.set_application(db, series_id=replacement.series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor.username)
         document.deleted_at = datetime.now(timezone.utc)
         document.deleted_by_user_id = actor.id
+        ws.rebuild_series(db, source.series_id, actor=actor.username)
         log("calendar_demo_daily_variation_replaced", "order_request_document", document.id,
             before={"deleted_at": None}, after={"replacement_document_id": replacement.document_id, "daily_ok_counts": [DAILY_COUNTS[i % len(DAILY_COUNTS)] for i in range(20)]})
         created += 1

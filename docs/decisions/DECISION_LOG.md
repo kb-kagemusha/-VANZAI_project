@@ -1790,3 +1790,13 @@
 - 再実行で8件以上なら追加改訂なし。監査はcalendar_demo_incentive_revisedと既存order_request_revised/confirmed、参加状態/適用受諾/予定再構築。既存02_app_deploy.shの明示モードで、承認済みの実行設定内部読み込みのみを使用する。
 - 確定日時は既存仕様どおりUTC。SQLiteの再読込でtzinfoが外れた値と保存直後のaware値が予定再構築で比較されるため、_confirm_orderでUTCへ正規化してから比較する。DB保存値や過去の確定日時を変更しない。
 - 最小モデルは既存依頼書/版/送付行/参加状態/適用受諾/予定/金額/請求明細/監査。DDL不要。既存画面・データ例の修正としてZ: 0.51.8→0.51.9。検証: test_demo_incentives.py、test_order_billing.py、test_line_daily.py、calendar-demo-ui.spec.ts、order-lists-ui.spec.ts、ビルド。
+
+
+## DEC-099: 置換済みダミーのLINE残存予定を解除する（2026-10-24）
+
+- 目的: 本人のテストアカウントで受託した依頼がすべて変更確認待ちに見える原因を確認し、一覧除外した旧ダミーをLINE/Webに出さない。
+- 実データ確認: 本人の今後の予定は3文書8日、すべてchanging。OR-20261023-100A/120Aの2文書6日はv1デモをv2へ置換した際にdeleted_atだけを付け、派生予定が残った。OR-20261023-179Aの2日はv2デモの意図的な変更確認待ち（2026-10-23 23:51 JST）。改名は翌0:12、氏名復元は0:36で、どちらもWorker氏名/ふりがなだけの更新。最新インセンティブ改訂も元からの確認待ちを保持している。高橋健二は別worker IDで改名履歴なし。
+- LINEトークの日次予定/受託済み、Web確認画面の月/週予定・見込み/受託済み、起床確認は同じvisible_schedule_entriesを使い、削除済み文書を除外する。確認必要一覧には既に同じ除外がある。旧PDFの新規リンクも停止するが、ファイルは保持する。
+- 再構築は削除済み文書の適用受諾から予定を再生成しない。既存予定はcancelledまたはsupersededとし、原受諾/参加状態/送付時氏名/PDF/会計は変更しない。新たな依頼書の改訂・本人の確認の代行はしない。今後のデモ置換時にも旧系列を再構築する。
+- 既存補正は--archived-demo-schedules-preview/--archived-demo-schedules-repair。置換の監査記録があり、全版がcalendar-demo由来かつ一覧除外済みテスト文書だけを選ぶ。系列ロック下で再構築し残存active/changingがあればロールバック。既存auditとarchived_demo_schedules_repairedへ記録、再実行の変更0。実行設定は既承認の内部読み込みのみ。実際のLINEメッセージは送信しない。
+- 最小モデルは既存の文書/版/送付行/参加状態/適用受諾/派生予定/監査。DDL不要。既存機能の不具合修正としてZ: 0.51.9→0.51.10。検証はCHANGELOG参照。

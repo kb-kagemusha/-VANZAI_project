@@ -170,7 +170,7 @@ class LineWorkerPortal:
     # ---- 予定 -----------------------------------------------------------------
     def _entries(self, worker_id: str, start: date, end: date) -> list[WorkerScheduleEntry]:
         return (
-            self.session.query(WorkerScheduleEntry)
+            ws.visible_schedule_entries(self.session)
             .filter(
                 WorkerScheduleEntry.worker_id == worker_id,
                 WorkerScheduleEntry.work_date >= start,
@@ -286,7 +286,7 @@ class LineWorkerPortal:
         today = ws.today_jst()
         since = today.replace(day=1)  # 今月の初めから（今月すでに働いた分も見られるように。P-08）
         rows = (
-            self.session.query(WorkerScheduleEntry)
+            ws.visible_schedule_entries(self.session)
             .filter(
                 WorkerScheduleEntry.worker_id == worker.id,
                 WorkerScheduleEntry.work_date >= since,

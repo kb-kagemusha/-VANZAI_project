@@ -95,7 +95,7 @@ def wake_status(
         raise HTTPException(status_code=403, detail="起床状況を見る権限がありません")
     target = day or ws.today_jst()
     entries = (
-        db.query(WorkerScheduleEntry)
+        ws.visible_schedule_entries(db)
         .filter(
             WorkerScheduleEntry.work_date == target,
             WorkerScheduleEntry.is_test.is_(False),

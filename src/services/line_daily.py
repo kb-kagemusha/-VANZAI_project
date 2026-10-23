@@ -163,7 +163,7 @@ class LineDailyService:
     # ---- 予定の読み出し ------------------------------------------------------------
     def _entries(self, worker_id: str, start: date, end: date) -> list[WorkerScheduleEntry]:
         return (
-            self.session.query(WorkerScheduleEntry)
+            ws.visible_schedule_entries(self.session)
             .filter(
                 WorkerScheduleEntry.worker_id == worker_id,
                 WorkerScheduleEntry.work_date >= start,
@@ -308,7 +308,7 @@ class LineDailyService:
     def orders(self, worker: Worker) -> tuple[str, list[dict]]:
         today = ws.today_jst()
         rows = (
-            self.session.query(WorkerScheduleEntry)
+            ws.visible_schedule_entries(self.session)
             .filter(
                 WorkerScheduleEntry.worker_id == worker.id,
                 WorkerScheduleEntry.work_date >= today,

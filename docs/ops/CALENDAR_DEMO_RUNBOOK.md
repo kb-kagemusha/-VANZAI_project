@@ -99,3 +99,11 @@ calendar_demo_worker_renamedの監査から、高橋直樹へ変更した本人�
 `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-incentives-apply` で原則10月4件/11月4件を新しい版へ改訂する。元のPDF・回答履歴は保持。現在の参加/未回答/不可/変更確認待ちが一致しなければロールバック。
 金額履歴・請求使用・入力途中版・実送信/閲覧取消のある依頼は保護する。金額そのものは未入力。金額確定画面で「テストも含む」をオンにし、新しい8件の通常額とインセンティブ額を入力できることを確認する。正式の月次請求には含めない。
 初回revised=8/ enabled_demo_count=8、再実行revised=0（既存のありの件数によって初回の改訂数は減る）。監査calendar_demo_incentive_revised。実行設定は承認済み内部読み込みのみ、LINE送信なし。
+
+
+## 置換済みダミーのLINE残存予定（0.51.10、DEC-099）
+
+通常デプロイ後、`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --archived-demo-schedules-preview` で残存件数を確認。
+`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --archived-demo-schedules-repair` で置換監査のある非表示テスト文書の派生予定だけを再構築する。
+結果active_entries_remaining=0、再実行schedule_entries_removed=0を確認する。原回答/参加日/送付時氏名/旧PDF/金額を保持し、有効な依頼の確認待ちを自動承認しない。
+LINEの過去に送られたメッセージは取り消さない。メニューから受託済み依頼を取り直す。今後の依頼のうち意図的なデモ改訂があるものは、引き続き確認待ちになる。

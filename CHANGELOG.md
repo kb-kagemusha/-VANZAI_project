@@ -4,6 +4,13 @@
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
 - **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
 
+## [0.51.10] - 2026-10-24
+
+- 置換後に一覧から除外したダミー依頼の予定が、LINEの受託済み一覧・予定とWeb確認画面に残る不具合を修正。起床確認も共通して削除済み文書を除外する。
+- 予定再構築では削除済み依頼から有効な予定を再生成しない。ダミー入替時も旧予定を再構築し、既存の残存予定だけを監査付きで解除する専用モードを追加。氏名・受諾履歴・確定内容・PDF・金額は保持。有効な依頼の変更確認待ちは自動承認しない。
+- 原因確認: 本人の改名/復元は依頼書を改訂していない。本人の今後の3依頼中2件は旧ダミーの残存、1件は意図的に作った変更確認待ちの例だった。
+- 仕様: DESIGN_SPEC §3/14.3/16、DEC-099。DDLなし。監査: worker_schedule_entries_rebuilt、archived_demo_schedules_repaired。検証: test_archived_demo_schedules.py、test_line_daily.py、test_line_worker_portal.py、test_calendar_demo.py、test_worker_director.py。
+
 ## [0.51.9] - 2026-10-24
 
 - 発注依頼書一覧の交互背景をさらに薄いグレー（#f7f7f7）へ調整。通常の表形式は維持。
