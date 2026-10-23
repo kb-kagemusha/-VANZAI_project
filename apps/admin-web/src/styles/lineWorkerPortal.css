@@ -13,7 +13,11 @@
 .lwp-cal-day.has-work { color: #1b3f8f; background: #f1f6ff; border-color: #c9d9fb; cursor: pointer; }
 .lwp-cal-day.is-changing { background: #fff6e6; border-color: #f2cf78; color: #7a4d00; }
 .lwp-cal-day.is-selected { outline: 2px solid #1c64f2; outline-offset: 1px; }
-.lwp-cal-day.is-today .lw-day-num { text-decoration: underline; }
+/* 今日（0.51.6）：オレンジの枠で、仕事の有無に関係なく分かるようにする（凡例にも「今日」） */
+.lwp-cal-day.is-today { box-shadow: inset 0 0 0 2px #f08c00; border-color: #f08c00; }
+.lwp-cal-day.is-today:not(.has-work) { background: #fff7eb; color: #9a5b00; }
+.lwp-cal-day.is-today .lw-day-num { color: #c26a00; }
+.lwp-legend-today { display: inline-block; width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 2px #f08c00; margin-right: 4px; vertical-align: -1px; }
 .lwp-cal-day:disabled { cursor: default; }
 .lwp-dot { font-size: 11px; line-height: 1.1; }
 .lwp-legend-mark { color: #1b3f8f; margin-right: 2px; }

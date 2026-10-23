@@ -20,6 +20,7 @@ import {
 import "../styles/lineRegistration.css";
 import "../styles/monthCalendar.css";
 import "../styles/lineWorker.css";
+import "../styles/lineWorkerDark.css";
 
 type LiffClient = {
   init: (config: { liffId: string }) => Promise<void>;

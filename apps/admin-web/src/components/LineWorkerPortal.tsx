@@ -234,14 +234,14 @@ function HomeView({ token, onOrders }: { token: string; onOrders: () => void }) 
                 const changing = info?.entries.some((e) => e.changing);
                 const classes = ["lwp-cal-day", info ? "has-work" : "", changing ? "is-changing" : "", day === home.today ? "is-today" : "", day === selectedDay ? "is-selected" : ""].filter(Boolean).join(" ");
                 return (
-                  <button type="button" className={classes} disabled={!info} aria-pressed={day === selectedDay} aria-label={info ? `${dayLabel(day)} 仕事あり` : dayLabel(day)} onClick={() => setSelectedDay(day === selectedDay ? "" : day)}>
+                  <button type="button" className={classes} disabled={!info} aria-pressed={day === selectedDay} aria-label={`${day === home.today ? "今日 " : ""}${dayLabel(day)}${info ? " 仕事あり" : ""}`} aria-current={day === home.today ? "date" : undefined} onClick={() => setSelectedDay(day === selectedDay ? "" : day)}>
                     <span className="lw-day-num">{Number(day.slice(8))}</span>
                     {info ? <span className="lwp-dot" aria-hidden="true">{changing ? "◆" : "●"}</span> : null}
                   </button>
                 );
               }}
             />
-            <p className="lw-legend"><span className="lwp-legend-mark">●</span>仕事がある日 <span className="lwp-legend-mark is-changing">◆</span>内容変更の確認待ち</p>
+            <p className="lw-legend"><span className="lwp-legend-mark">●</span>仕事がある日 <span className="lwp-legend-mark is-changing">◆</span>内容変更の確認待ち <span className="lwp-legend-today" aria-hidden="true" />今日</p>
             {loading ? <p className="lw-note">読み込んでいます…</p> : null}
             {selected ? <DayBlock day={selected} /> : home.month_days.length > 0
               ? <p className="lw-note">●の日を押すと、その日の仕事を表示します。</p>
