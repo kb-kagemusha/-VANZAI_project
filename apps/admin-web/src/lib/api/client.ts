@@ -860,6 +860,12 @@ export function downloadPayoutPdf(payoutId: string) {
   return downloadBinaryFile(`/api/payouts/${payoutId}/pdf`, `payout_${payoutId}.pdf`);
 }
 
+export async function fetchOrderBillingPdf(id: string): Promise<Blob> {
+  const response = await fetchAuthorized(buildUrl(`/api/order-billing/invoices/${encodeURIComponent(id)}/pdf`));
+  if (!response.ok) throw new ApiError(response.status, "請求書PDFを読み込めませんでした", await readResponse(response));
+  return response.blob();
+}
+
 export function deliverPayout(
   payoutId: string,
   options?: {

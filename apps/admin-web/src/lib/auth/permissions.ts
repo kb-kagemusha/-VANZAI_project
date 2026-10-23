@@ -10,6 +10,7 @@ export interface NavItem {
 export const DASHBOARD_ROLES: UserRole[] = ["admin", "ops", "accounting", "site_manager"];
 
 export const NAV_ITEMS: NavItem[] = [
+  { to: "/billing/order-amounts", label: "依頼書の金額確定", description: "請求額の確定と依頼元別の月次請求書", allowedRoles: ["admin"] },
   { to: "/settings/access", label: "ID・権限管理", description: "ログインIDと役割ごとの権限を設定", allowedRoles: ["admin"] },
   {
     to: "/dashboard",
@@ -175,6 +176,7 @@ export const PATH_PERMISSIONS: Record<string, string[]> = {
 export function canView(user: AuthUser | null, path: string, fallbackRoles: UserRole[] = []): boolean {
   if (!user?.is_active) return false;
   if (user.role === "admin") return true;
+  if (path === "/billing/order-amounts" || path.startsWith("/billing/order-amounts/")) return false;
   if (path.startsWith("/dashboard/preview")) return false;
   if (path.startsWith("/settings/") || path === "/operations/order-requests/deleted") return false;
   const key = Object.keys(PATH_PERMISSIONS).sort((a, b) => b.length - a.length).find(item => path === item || path.startsWith(item + "/"));

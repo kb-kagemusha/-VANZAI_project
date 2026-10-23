@@ -1516,3 +1516,17 @@
 - Version: 既存フォームの修正としてZ（0.48.13）。
 - Spec Reference: DESIGN_SPEC_v0.3 §5.2/14.5、DEC-069/071/072。
 
+### DEC-074: 依頼書の請求総額確定と依頼元別月次請求（2026-10-23）
+- Status: Confirmed（全体管理者専用・未入力バッジ・月次請求はユーザー依頼。金額単位、対象、請求月、税計算は個別回答で確定）
+- Purpose: 依頼を受けたクライアントへの請求額の記入漏れを見えるようにし、月末の依頼元別請求を再現可能にする。
+- Decision: 金額は依頼書1件の請求総額・税抜。正式・確定済みの最新依頼書だけを対象とし、下書き・テスト・取消・削除・置換済み旧版を除く。0円は記入済み。月をまたぐ場合も金額確定時に請求月を指定し、その月に全額計上する。税は依頼元別月次税抜小計の10%、円未満切捨て。
+- Data / Migration: `order_billing_tax_rules`（10%・floor_yenの初期マスタ）、`order_billing_issuer`（発行元設定・revision）、`order_billing_amounts`（版別追記履歴・楽観的revision）、`order_billing_invoices`（版・親・請求先/発行元/税ルールsnapshot・PDF参照）、`order_billing_invoice_lines`（明細正本・系列単位の一意割当）。既存テーブルを変えない追加migration `20261023c001`。金額はDecimal/Numeric、合計は明細から集計。
+- Lifecycle: 依頼書の改訂版へ旧金額を自動継承しない。下書き生成は再試行で同じ下書きを返す。下書き作成後の依頼改訂・取消・追加金額を検出して発行を止める。下書き取消は理由を必須にし、旧版・明細・PDFを残して割当を解放する。発行時は別PDFキーに保管し、以後の金額・明細・PDFを上書きしない。保管PDFがない場合は再生成せず404。
+- Implementation guard: 既存の実績ベース請求との明細対応を推測しない。同一請求先・請求月の両経路併用を生成時に相互拒否する（見積は除く）。同時実行はクライアント→依頼系列の順にロックし、系列の重複計上と同一請求先/月の有効帳票はDB制約でも防止する。既存の支払・実績集計を更新しない。
+- Permission / Audit: メニュー・画面・全API・PDF・件数をadmin限定。カスタム経理権限でも許可しない。一般担当者の監査検索から`order_billing_*`を除外。`order_billing_amount_confirmed` / `order_billing_invoice_created` / `order_billing_invoice_issued` / `order_billing_invoice_draft_cancelled`に実行者・対象・金額/月/版・理由を記録。
+- Additional Decision（ユーザー追加回答）: 発行元情報は今後の変更に対応する設定方式とする。初期値は株式会社VANZAI／〒116-0002 東京都荒川区荒川1丁目39-11 東京アルバタワー1703。全体管理者が正式名称・郵便番号・住所・登録番号・振込先・支払期限/条件を編集する。未指定の任意項目は空欄でPDFに出さず、支払条件は自由文。作成済み帳票には設定revisionと内容を保持し、設定変更を遡及しない。`order_billing_issuer_updated`へ変更前後と実行者を監査記録する。
+- Boundary: 発行済み訂正/追加請求の伝票運用は別途定義する。発行済み依頼が改訂されても二重請求や上書きはせず、既存請求を確認する。既存の実績請求一覧とは独立する。
+- Version: 依頼書ごとのクライアント請求額の確定から、依頼元別月次請求書の作成・発行までを独立して行える新業務のためY（0.49.0）。
+- Validation: `tests/test_order_billing.py`（権限・監査秘匿・履歴・請求月・小計課税切捨て・版固定・重複防止・migration）、既存請求/締め回帰テスト、`apps/admin-web/e2e/order-billing-ui.spec.ts`（バッジ即時更新・請求月必須・金額保存・発行・競合・経理権限拒否）。PDFの1ページ/3ページを画像化して視覚確認。運用は `docs/ops/ORDER_BILLING_RUNBOOK.md`。
+- Spec Reference: DESIGN_SPEC_v0.3 §11.1/11.3/11.4/16、DEC-005/015。
+

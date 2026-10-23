@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { CalendarHubPage } from "../pages/CalendarHubPage";
+import { OrderBillingPage } from "../pages/OrderBillingPage";
 import { AppShell } from "../components/AppShell";
 import { AccessManagementPage } from "../pages/AccessManagementPage";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -225,6 +226,7 @@ export function App() {
             }
           />
           <Route path="/account/profile" element={<AccountProfilePage />} />
+          <Route path="/billing/order-amounts" element={<PermissionRoute allowedRoles={["admin"]}><OrderBillingPage /></PermissionRoute>} />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
           <Route
             path="/operations/order-requests"

@@ -453,6 +453,7 @@ export function OrderRequestsPage() {
   function refresh() {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ["order-requests"] }),
+      queryClient.invalidateQueries({ queryKey: ["order-billing"] }),
       queryClient.invalidateQueries({ queryKey: ["order-request-replies"] }),
     ]);
   }

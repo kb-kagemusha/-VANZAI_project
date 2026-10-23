@@ -54,6 +54,7 @@ def _resolve_target_type_aliases(target_type: str) -> tuple[str, ...]:
 class AuditLogSearchFilter:
     """監査ログ検索フィルタ"""
     period_key: Optional[str] = None  # YYYYMM形式
+    exclude_admin_billing: bool = False
     project_id: Optional[str] = None
     action_type: Optional[AuditAction | str] = None
     action_group: Optional[str] = None
@@ -302,6 +303,8 @@ class AuditService:
         """
         # 条件構築
         conditions = []
+        if filter.exclude_admin_billing:
+            conditions.append(~AuditLog.action.like("order_billing_%"))
         
         if filter.period_key:
             # period_key は extra_metadata や before_value/after_value に含まれる可能性がある

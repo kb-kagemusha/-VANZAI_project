@@ -60,6 +60,13 @@ def generate_invoice(
     Returns:
         生成された Invoice
     """
+    from src.models.master import Client
+    from src.models.order_billing import OrderBillingInvoice
+    session.execute(select(Client).where(Client.id == client_id).with_for_update()).scalars().all()
+    if document_type == "invoice" and session.query(OrderBillingInvoice.id).filter(
+            OrderBillingInvoice.client_id == client_id, OrderBillingInvoice.billing_month == period_key,
+            OrderBillingInvoice.status.in_(["draft", "issued"])).first():
+        raise ValidationException("同じ請求先・請求月に依頼書から作成した請求書があります。二重請求を防ぐため、請求経路を確認してください")
     lock_client_projects(session, client_id)
     actuals = _fetch_actuals_for_invoice(session, client_id, project_id, period_key)
     ensure_unallocated(session, [row.id for row in actuals], "invoice")

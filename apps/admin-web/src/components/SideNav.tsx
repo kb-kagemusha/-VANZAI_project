@@ -1,4 +1,6 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { getOrderBillingSummary } from "../lib/orderBillingApi";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -47,6 +49,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/operations/projects": Briefcase,
   "/operations/shift-slots": Grid3X3,
   "/billing/invoices": FileText,
+  "/billing/order-amounts": Receipt,
   "/billing/payouts": CreditCard,
   "/billing/expenses": Receipt,
   "/masters/workers": UserRound,
@@ -70,6 +73,8 @@ type SideNavProps = {
 
 export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
+  const billingSummary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: getOrderBillingSummary,
+    enabled: user?.role === "admin" && user.is_active, refetchInterval: 30_000, refetchOnWindowFocus: true });
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const displayedName = user?.display_name || user?.username || "";
   const visibleItems = NAV_ITEMS.filter((item) => canView(user, item.to, item.allowedRoles));
@@ -117,13 +122,18 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
                     key={item.to}
                     to={item.to}
                     end
-                    aria-label={collapsed ? item.label : undefined}
+                    aria-label={item.to === "/billing/order-amounts" && user?.role === "admin" && billingSummary.data ? `${item.label} 未入力${billingSummary.data.missing_count}件` : collapsed ? item.label : undefined}
                     className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
                   >
                     {Icon ? <Icon className="nav-link-icon" size={20} aria-hidden="true" /> : null}
                     <span className="nav-link-text">
                       <span className="nav-link-label">{item.label}</span>
                     </span>
+                    {item.to === "/billing/order-amounts" && user?.role === "admin" && ((billingSummary.data?.missing_count ?? 0) > 0 || billingSummary.isError) ? (
+                      <span className="nav-unread-badge" title={billingSummary.isError ? "未入力件数を取得できません" : `金額未入力 ${billingSummary.data!.missing_count}件`}>
+                        {billingSummary.isError ? "!" : billingSummary.data!.missing_count > 99 ? "99+" : billingSummary.data!.missing_count}
+                      </span>
+                    ) : null}
                   </NavLink>
                 );
               })}

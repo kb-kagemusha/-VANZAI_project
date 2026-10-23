@@ -9213,6 +9213,7 @@ async def search_audit_logs(
         result = audit_service.search_audit_logs(
             AuditLogSearchFilter(
                 period_key=request.period_key,
+                exclude_admin_billing=current_user.role != UserRole.ADMIN.value,
                 project_id=request.project_id,
                 action_type=request.action_type,
                 action_group=request.action_group,
@@ -9853,6 +9854,8 @@ app.include_router(ocr_router)
 app.include_router(inventory_router)
 app.include_router(public_ocr_router)
 app.include_router(order_request_router)
+from src.api.order_billing_routes import router as order_billing_router
+app.include_router(order_billing_router)
 from src.api.operator_staff_routes import router as operator_staff_router
 app.include_router(operator_staff_router)
 from src.api.place_routes import router as place_router
