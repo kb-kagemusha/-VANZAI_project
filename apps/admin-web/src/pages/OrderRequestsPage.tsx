@@ -1032,8 +1032,8 @@ export function OrderRequestsPage() {
           <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>
             新規の依頼書を作成
           </button>
-          <button type="button" className="btn btn-ghost" onClick={() => setTemplatesOpen(true)}>保存済みテンプレート</button>
-          {canWrite ? <button type="button" className="btn create-button" onClick={startNewTemplate}>テンプレートの作成</button> : null}
+          <button type="button" className="btn order-template-browse-button" onClick={() => setTemplatesOpen(true)}>保存済みテンプレート</button>
+          {canWrite ? <button type="button" className="btn order-template-create-button" onClick={startNewTemplate}>テンプレートの作成</button> : null}
           </div>
         )}
       />

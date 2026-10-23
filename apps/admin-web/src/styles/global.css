@@ -4136,6 +4136,14 @@ a.primary-button {
 .order-created-table .order-row-actions { width: max-content; }
 .order-detail-body { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; margin: 0; }
 .order-template-pagination, .order-template-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.order-template-browse-button { --template-button-color: #875000; --template-button-hover: #fff4df; }
+.order-template-create-button { --template-button-color: #75409c; --template-button-hover: #f5ecfc; }
+.btn.order-template-browse-button, .btn.order-template-create-button { border: 2px solid var(--template-button-color); color: var(--template-button-color); background: var(--surface, #fff); }
+html[data-theme="dark"] .btn.order-template-browse-button, html[data-theme="dark"] .btn.order-template-create-button { border-color: var(--template-button-color); color: var(--template-button-color); background: var(--panel); }
+.btn.order-template-browse-button:hover:not(:disabled), .btn.order-template-create-button:hover:not(:disabled) { background: var(--template-button-hover); }
+.btn.order-template-browse-button:focus-visible, .btn.order-template-create-button:focus-visible { outline: 3px solid var(--template-button-color); outline-offset: 3px; }
+html[data-theme="dark"] .order-template-browse-button { --template-button-color: #f2bd6a; --template-button-hover: #42331c; }
+html[data-theme="dark"] .order-template-create-button { --template-button-color: #d4acf1; --template-button-hover: #3d294d; }
 
 .order-document {
   display: grid;
