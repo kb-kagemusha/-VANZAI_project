@@ -107,3 +107,11 @@ calendar_demo_worker_renamedの監査から、高橋直樹へ変更した本人�
 `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --archived-demo-schedules-repair` で置換監査のある非表示テスト文書の派生予定だけを再構築する。
 結果active_entries_remaining=0、再実行schedule_entries_removed=0を確認する。原回答/参加日/送付時氏名/旧PDF/金額を保持し、有効な依頼の確認待ちを自動承認しない。
 LINEの過去に送られたメッセージは取り消さない。メニューから受託済み依頼を取り直す。今後の依頼のうち意図的なデモ改訂があるものは、引き続き確認待ちになる。
+
+
+## 参加日からLINE用予定を復元（0.51.12、DEC-100）
+
+通常デプロイ後、`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-schedule-gaps-preview` で有効なダミーの参加日とLINE用予定の不足/余剰を確認する。
+`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-schedule-gaps-repair` で元受諾から派生予定を再構築。結果remaining_missing_worker_days=0かつremaining_unexpected_worker_days=0を確認する。
+再プレビューで両差分0。原回答・参加日・版・PDF・金額・削除済み依頼は変更しない。実送信なし。
+本人についてはカレンダーの全参加日とWebの月/受託済み一覧を照合する。LINEトークの予定は直近7日、受託済みは本日以降、Web受託済みは当月初以降という既存期間差に注意し、同じ期間で比較する。

@@ -189,6 +189,7 @@ def seed(db, *, convert_existing=True, per_month=15, prune_legacy_samples=False,
                     selected = offered[::2] if pos % 3 == 1 and not requested_worker else offered
                     ws.append_state(db, delivery, dates=selected, source=ws.SOURCE_FULL_ACCEPT, actor=actor.username, reason="テスト参加状態・実送信なし")
                     ws.set_application(db, series_id=version.series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor.username)
+                    ws.rebuild(db, version.series_id, delivery.worker_id, actor=actor.username)
             # 一部を改訂し、旧版受諾者の変更確認待ちを再現。
             if not is_long and index % 5 == 0:
                 revised = service.revise(version, actor=actor, reason="テスト: 集合場所の変更確認")
@@ -353,6 +354,7 @@ def rebalance_demo(db):
                 ws.append_state(db, delivery, dates=selected, source="partial_accept" if selected != dates else "full_accept",
                     actor=actor.username, reason="ダミー予定の同日重複解消")
                 ws.set_application(db, series_id=version.series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor.username)
+                ws.rebuild(db, version.series_id, delivery.worker_id, actor=actor.username)
         if int(marker.rsplit(":", 1)[1]) < 45 and int(marker.rsplit(":", 1)[1]) % 5 == 0:
             revised = service.revise(version, actor=actor, reason="テスト: 変更確認待ちの表示")
             revised.counterparty_note = marker + ":revision"

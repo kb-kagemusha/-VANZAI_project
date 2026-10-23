@@ -77,6 +77,9 @@ def test_newcomer_demo_has_daily_variation_without_overlap(db_session, admin_use
     assert len(events[1]["unavailable"]) == 4
     assert new_ids.issubset({p["worker_id"] for e in events for p in e["ok"]})
     assert {d.send_status for d in db_session.query(OrderRequestDelivery).filter_by(version_id=replacement.id)} == {"unknown"}
+    from scripts.repair_demo_schedule_gaps import comparison, target_series
+    expected, actual = comparison(db_session, target_series(db_session))
+    assert expected == actual
     repeat = enrich(db_session, today=date(2026,10,24))
     assert repeat["workers_added"] == repeat["events_replaced"] == repeat["start_dates_filled"] == 0
 

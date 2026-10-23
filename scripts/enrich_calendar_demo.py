@@ -107,6 +107,7 @@ def enrich(db, today=None):
             selected = accepted[delivery.worker_id]
             ws.append_state(db, delivery, dates=selected, source="full_accept" if selected == dates else "partial_accept", actor=actor.username, reason="ダミー: 日によって参加可能人数が異なる回答")
             ws.set_application(db, series_id=replacement.series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor.username)
+            ws.rebuild(db, replacement.series_id, delivery.worker_id, actor=actor.username)
         document.deleted_at = datetime.now(timezone.utc)
         document.deleted_by_user_id = actor.id
         ws.rebuild_series(db, source.series_id, actor=actor.username)

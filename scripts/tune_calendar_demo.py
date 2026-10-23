@@ -92,6 +92,7 @@ def tune(db):
             selected = dates[:max(1, len(dates) - (index - count + 3))] if index >= count - 2 else dates
             ws.append_state(db, delivery, dates=selected, source="partial_accept" if selected != dates else "full_accept", actor=actor.username, reason="人数のばらつき確認")
             ws.set_application(db, series_id=version.series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor.username)
+            ws.rebuild(db, version.series_id, delivery.worker_id, actor=actor.username)
             occupied[delivery.worker_id].update(dates)
             positive[delivery.worker_id].update(selected)
         created.append({"version_id": version.id, "count": count, "from": dates[0], "to": dates[-1]})

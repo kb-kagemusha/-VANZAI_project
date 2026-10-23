@@ -44,6 +44,9 @@ def test_calendar_demo_is_test_only_idempotent_and_visible_in_all_calendars(api_
     included = api_client.get(url + "&include_test=true", headers=auth)
     assert included.status_code == 200, included.text
     assert any(day["order_events"] for w in included.json()["workers"] for day in w["days"].values())
+    from scripts.repair_demo_schedule_gaps import comparison, target_series
+    expected, actual = comparison(db_session, target_series(db_session))
+    assert expected == actual
     repeat = seed(db_session, convert_existing=False)
     assert repeat["created"] == repeat["availability_created"] == 0
     assert db_session.query(OrderRequestDocument).count() == 30
@@ -80,6 +83,9 @@ def test_expand_demo_and_archive_only_duplicate_legacy_samples(api_client, db_se
         assert count == 45
     days = build(db_session, start="2026-10-01", end="2026-11-30", include_test=True)
     assert any(e["unavailable"] for day in days for e in day["events"])
+    from scripts.repair_demo_schedule_gaps import comparison, target_series
+    expected, actual = comparison(db_session, target_series(db_session))
+    assert expected == actual
     repeat = seed(db_session, per_month=45, prune_legacy_samples=True)
     assert repeat["created"] == repeat["archived"] == 0
 
@@ -185,6 +191,9 @@ def test_balanced_demo_has_no_double_bookings_and_keeps_history(db_session, admi
     cross = db_session.query(OrderRequestVersion).filter_by(counterparty_note=f"{BALANCED_DATASET}:10:47").one()
     assert len(build(db_session, start="2026-10-01", end="2026-10-31", series_id=cross.series_id)) == 8
     assert len(build(db_session, start="2026-11-01", end="2026-11-30", series_id=cross.series_id)) == 12
+    from scripts.repair_demo_schedule_gaps import comparison, target_series
+    expected, actual = comparison(db_session, target_series(db_session))
+    assert expected == actual
     repeat = rebalance_demo(db_session)
     assert repeat["created"] == repeat["archived"] == repeat["workers_added"] == 0
 
@@ -238,6 +247,9 @@ def test_tune_adds_four_to_eight_people_without_double_booking_and_renames_displ
     for identifier, before in original_snapshots.items():
         v = db_session.get(OrderRequestVersion, identifier)
         assert (v.snapshot_json, v.pdf_object_key) == before
+    from scripts.repair_demo_schedule_gaps import comparison, target_series
+    expected, actual = comparison(db_session, target_series(db_session))
+    assert expected == actual
     repeated = tune(db_session)
     assert repeated["renamed"] == repeated["availability_updated"] == 0 and not repeated["created"]
     assert rebalance_demo(db_session)["workers_added"] == 0

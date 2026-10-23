@@ -4,6 +4,13 @@
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
 - **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
 
+## [0.51.12] - 2026-10-24
+
+- ダミー依頼の受諾・参加日はカレンダーにあるのにLINE/Web用予定が生成されていない不整合を修正。初期投入・同日重複解消・人数追加・新人/長期イベント追加の全経路で、受諾保存後に予定を再構築する。
+- 有効なダミー依頼の予定を元の受諾から復元する専用モードを追加。全参加日をカレンダーと照合し、参加者・日付・参加OK/変更確認待ちが一致しなければロールバック。正式・削除済み依頼を除外し、元回答/版/PDF/金額は変更しない。LINE送信なし。
+- 前回の調査不足を訂正: 旧予定の残存に加え、元から欠けていた現行デモの予定があった。本人の有効な9依頼のうち7依頼で予定が未生成、「11月20日間の飲食店巡回」の20日も含む。全ダミーでは639人日が不足していた。
+- 仕様: DESIGN_SPEC §3/14.3/16、DEC-100。DDLなし。監査: worker_schedule_entries_rebuilt、demo_schedule_gaps_repaired。検証: test_demo_schedule_gaps.py、test_calendar_demo.py、test_worker_newcomer.py（カレンダーとLINE用予定の一致）、test_line_daily.py、test_line_worker_portal.py、test_archived_demo_schedules.py。
+
 ## [0.51.11] - 2026-10-24
 
 - 旧ダミー予定解除の集約監査IDを既存DBの26文字制約以内へ修正。本番の長さ制約により初回解除は全件ロールバック、表示除外の修正は有効。受諾/会計/有効な確認待ちを保持する範囲は0.51.10と同じ。検証: test_archived_demo_schedules.py（監査IDの長さ・再実行0件も確認）。DDLなし。
