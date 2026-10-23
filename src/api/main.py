@@ -2757,7 +2757,8 @@ async def get_availability_calendar(
     date_from: date = Query(..., description="表示開始日"),
     date_to: date = Query(..., description="表示終了日"),
     is_active: bool = Query(True, description="有効スタッフのみ"),
-    include_test: bool = Query(False, description="テスト依頼書も表示"),
+    include_test: bool = Query(False, description="テスト依頼書も表示（互換）"),
+    test_only: bool = Query(False, description="テスト依頼書のみ表示"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -2839,11 +2840,14 @@ async def get_availability_calendar(
             )
         )
 
+    # 既存の配置にはテスト区分がないため、テスト専用表示へ混在させない。
+    if test_only:
+        assign_map = {}
     # 依頼書由来の参加状況は配置とは別に保持し、依頼書の閲覧権限を確認する。
     order_map = {}
     if has_permission(current_user, Permission.ORDER_READ):
         from src.services.participation_calendar import build
-        for day in build(db, start=date_from.isoformat(), end=date_to.isoformat(), include_test=include_test):
+        for day in build(db, start=date_from.isoformat(), end=date_to.isoformat(), include_test=include_test, test_only=test_only):
             for event in day["events"]:
                 for state in ("ok", "changing", "unanswered", "unavailable"):
                     for person in event[state]:

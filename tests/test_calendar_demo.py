@@ -127,3 +127,82 @@ def test_named_workers_receive_test_plans_even_if_line_linked(db_session, admin_
     assert all(count > 0 for count in result["requested_worker_days"].values())
     assert db_session.query(LineWorkerLink).count() == 2
     assert {d.send_status for d in db_session.query(OrderRequestDelivery)} == {"unknown"}
+
+
+def test_long_events_are_append_only_and_continue_across_months(db_session, admin_user, client, pdf_root):
+    import json
+    workers = [_worker(db_session, name) for name in ("テスト アカウント", "坂井 貴博", "ダミーA", "ダミーB")]
+    seed(db_session, per_month=45, convert_existing=False)
+    originals = {v.id: (json.dumps(v.snapshot_json, sort_keys=True), v.pdf_object_key)
+        for v in db_session.query(OrderRequestVersion)}
+    result = seed(db_session, per_month=45, convert_existing=False, include_long_events=True)
+    assert result["created"] == result["long_events_created"] == 6
+    assert result["worker_count"] == len(workers)
+    assert sorted(e["days"] for e in result["long_event_samples"]) == [10, 10, 20, 20, 20, 20]
+    assert all((json.dumps(db_session.get(OrderRequestVersion, identifier).snapshot_json, sort_keys=True),
+                db_session.get(OrderRequestVersion, identifier).pdf_object_key) == before for identifier, before in originals.items())
+    cross = db_session.query(OrderRequestVersion).filter_by(counterparty_note=f"{DATASET}:10:47").one()
+    for start, end, expected in (("2026-10-01", "2026-10-31", 8), ("2026-11-01", "2026-11-30", 12)):
+        days = build(db_session, start=start, end=end, series_id=cross.series_id, include_test=True)
+        assert len(days) == expected
+        for day in days:
+            assert day["events"][0]["version_id"] == cross.id
+            assert {w.id for w in workers[:2]} <= {p["worker_id"] for p in day["events"][0]["ok"]}
+    november = db_session.query(OrderRequestVersion).filter_by(counterparty_note=f"{DATASET}:11:47").one()
+    december = build(db_session, start="2026-12-01", end="2026-12-31", series_id=november.series_id, include_test=True)
+    assert len(december) == 13
+    assert december[-1]["date"] == "2026-12-13"
+    repeated = seed(db_session, per_month=45, convert_existing=False, include_long_events=True)
+    assert repeated["created"] == repeated["long_events_created"] == repeated["availability_created"] == 0
+
+
+def test_balanced_demo_has_no_double_bookings_and_keeps_history(db_session, admin_user, client, pdf_root):
+    from scripts.seed_calendar_demo import rebalance_demo, BALANCED_DATASET
+    from src.models.master import Worker
+    names = ["テスト アカウント", "坂井 貴博"] + [f"ダミー{i}" for i in range(18)]
+    for name in names:
+        _worker(db_session, name)
+    seed(db_session, per_month=45, convert_existing=False, include_long_events=True)
+    original_keys = {v.id: v.pdf_object_key for v in db_session.query(OrderRequestVersion)}
+    result = rebalance_demo(db_session)
+    db_session.flush()
+    assert result["created"] == result["archived"] == 96
+    assert result["workers_added"] == 4 and result["worker_count"] == 24
+    assert result["max_events_per_worker_day"] == 1
+    assert all(count > 0 for count in result["requested_worker_days"].values())
+    assert db_session.query(OrderRequestDocument).filter(OrderRequestDocument.deleted_at.is_(None)).count() == 96
+    assert db_session.query(Worker).count() == 24
+    assert all(db_session.get(OrderRequestVersion, identifier).pdf_object_key == key for identifier, key in original_keys.items())
+    calendar = build(db_session, start="2026-10-01", end="2026-12-13", test_only=True)
+    occupied = set()
+    for day in calendar:
+        for event in day["events"]:
+            for state in ("ok", "changing", "unanswered", "unavailable"):
+                for person in event[state]:
+                    key = (person["worker_id"], day["date"])
+                    assert key not in occupied
+                    occupied.add(key)
+    cross = db_session.query(OrderRequestVersion).filter_by(counterparty_note=f"{BALANCED_DATASET}:10:47").one()
+    assert len(build(db_session, start="2026-10-01", end="2026-10-31", series_id=cross.series_id)) == 8
+    assert len(build(db_session, start="2026-11-01", end="2026-11-30", series_id=cross.series_id)) == 12
+    repeat = rebalance_demo(db_session)
+    assert repeat["created"] == repeat["archived"] == repeat["workers_added"] == 0
+
+
+def test_calendar_can_select_test_only_without_formal_mixing(api_client, db_session, admin_user, client, pdf_root):
+    worker = _worker(db_session, "対象")
+    formal = _create_confirm(api_client, admin_user, [worker.id], kind="formal", project="正式案件")
+    demo = _create_confirm(api_client, admin_user, [worker.id], kind="test", project="確認用")
+    for version in (formal, demo):
+        delivery = db_session.query(OrderRequestDelivery).filter_by(version_id=version["id"]).one()
+        delivery.send_status = "unknown"
+    db_session.flush()
+    default = build(db_session)
+    exclusive = build(db_session, test_only=True)
+    assert {e["version_id"] for day in default for e in day["events"]} == {formal["id"]}
+    assert {e["version_id"] for day in exclusive for e in day["events"]} == {demo["id"]}
+    # 期間はfixtureの日付に依存するため応答から取得する。
+    month = exclusive[0]["date"][:7]
+    response = api_client.get(f"/api/order-requests/participation-calendar?month={month}&test_only=true", headers=_auth(admin_user.username))
+    assert response.status_code == 200, response.text
+    assert {e["version_id"] for day in response.json()["days"] for e in day["events"]} == {demo["id"]}

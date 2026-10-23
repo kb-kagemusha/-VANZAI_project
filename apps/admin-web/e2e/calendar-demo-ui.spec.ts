@@ -14,7 +14,7 @@ test("test filter persists across four calendars and category color is stable", 
     const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     if (url.pathname.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
     if (url.pathname.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
-    const include = url.searchParams.get("include_test") === "true";
+    const include = url.searchParams.get("test_only") === "true";
     if (url.pathname.endsWith("/participation-calendar")) return reply({ workers: [{ worker_id: "w1", name: "ダミー稼働者", line_linked: false }],
       days: include ? [{ date: "2026-10-10", events }] : [] });
     if (url.pathname.endsWith("/availability-calendar")) return reply({ date_from: "2026-10-01", date_to: "2026-10-31",
@@ -26,18 +26,18 @@ test("test filter persists across four calendars and category color is stable", 
   await page.goto("/operations/calendar?view=event&month=2026-10");
   await page.screenshot({ path: testInfo.outputPath("initial.png"), fullPage: true });
   await expect(page.getByText("この月に依頼済みのイベントはありません。")).toBeVisible();
-  await page.getByRole("button", { name: "テストも表示", exact: true }).click();
+  await page.getByRole("button", { name: "テストのみ", exact: true }).click();
   await expect(page.locator(".ov-event-box.ov-c3")).toContainText("フェステスト");
   await expect(page.locator(".ov-event-box.ov-c6")).toContainText("研修テスト");
-  await expect(page.locator(".overview-row-name .test-data-badge")).toHaveCount(2);
+  await expect(page.locator(".overview-row-name .test-data-badge")).toHaveCount(0);
   for (const name of ["稼働者ごと", "参加カレンダー", "出勤可能日"]) {
     await page.getByRole("tab", { name, exact: true }).click();
-    await expect(page.getByRole("button", { name: "テストも表示", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "テストのみ", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".ov-c3").filter({ hasText: "フェステスト" }).first()).toBeVisible();
   }
   await page.getByRole("button", { name: "正式のみ", exact: true }).click();
   await expect(page.getByText("フェステスト", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "テストも表示", exact: true }).click();
+  await page.getByRole("button", { name: "テストのみ", exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath("availability-demo.png"), fullPage: true });
 });
 

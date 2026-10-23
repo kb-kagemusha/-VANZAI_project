@@ -7,7 +7,6 @@ import { MonthCalendar, todayInTokyo } from "../components/MonthCalendar";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError, getParticipationCalendar, type ParticipationDay, type ParticipationEvent } from "../lib/api/client";
 import { categoryColor } from "../lib/calendarCategory";
-import { TestBadge } from "../components/TestBadge";
 import "../styles/monthCalendar.css";
 import "../styles/orderOverview.css";
 
@@ -75,7 +74,7 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
       <span className="pc-day-num">{Number(day.slice(8))}</span>
       {(data?.events ?? []).map((event) => (
         <span key={event.series_id} className={`pc-event ov-c${categoryColor(event.categories)}`} title={event.project_name}>
-          <span className="pc-event-name">{event.is_test ? <TestBadge /> : null}{(event.project_name || "").split("\n")[0] || event.document_number}</span>
+          <span className="pc-event-name">{(event.project_name || "").split("\n")[0] || event.document_number}</span>
           <span className="pc-ok">{event.ok.length}</span>
           {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
           {event.unanswered.length > 0 ? <span className="pc-unanswered">{event.unanswered.length}</span> : null}
@@ -89,7 +88,7 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
 function EventDetail({ event }: { event: ParticipationEvent }) {
   return (
     <div className="pc-detail-event">
-      <strong>{event.is_test ? <TestBadge /> : null}{event.project_name || "案件名なし"}</strong>
+      <strong>{event.project_name || "案件名なし"}</strong>
       <span className="order-field-hint">　{event.document_number}</span>
       {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{event.unavailable.map((p) => p.name).join("、")}</p> : null}
       <p>参加OK {event.ok.length}人：{event.ok.map((p) => p.name).join("、") || "なし"}</p>

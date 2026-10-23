@@ -12,7 +12,6 @@ import { OrderRequestDetailDialog } from "../components/OrderRequestDetailDialog
 import { shiftMonth, todayInTokyo } from "../components/MonthCalendar";
 import { ApiError, getParticipationCalendar, type ParticipationEvent } from "../lib/api/client";
 import { categoryColor } from "../lib/calendarCategory";
-import { TestBadge } from "../components/TestBadge";
 import "../styles/orderOverview.css";
 
 type Status = "ok" | "changing" | "unanswered" | "unavailable";
@@ -200,7 +199,7 @@ export function OrderOverviewBody() {
                     <tr key={row.seriesId}>
                       <th className="overview-row-name" scope="row">
                         <span className={`ov-swatch ov-c${row.color}`} aria-hidden="true" />
-                        <span className="ov-row-title">{row.isTest ? <TestBadge /> : null}{row.name}</span>
+                        <span className="ov-row-title">{row.name}</span>
                         <span className="ov-row-sub"><button type="button" className="ov-document-link" onClick={() => setDetailVersionId(row.versionId)}>{row.documentNumber}</button></span>
                       </th>
                       {(() => {
@@ -248,7 +247,7 @@ export function OrderOverviewBody() {
                               data-series-id={event.seriesId} data-lane={run.lane} data-days={run.items.length}
                               style={{ gridColumn: `${run.start + 1} / span ${run.items.length}`, gridRow: run.lane + 1 }}
                               title={`${event.name}（${event.documentNumber}）${label}`}>
-                              <span className="ov-worker-run-title">{event.isTest ? <TestBadge /> : null}{event.name}{run.items.length > 1 ? <small className="ov-run-length">{run.items.length}日間</small> : null}</span>
+                              <span className="ov-worker-run-title">{event.name}{run.items.length > 1 ? <small className="ov-run-length">{run.items.length}日間</small> : null}</span>
                               <div className="ov-worker-run-days" style={{ gridTemplateColumns: `repeat(${run.items.length}, minmax(0, 1fr))` }}>
                                 {run.items.map((item, index) => <small key={index}>{Number(days[run.start + index].slice(8))}日 {STATUS_LABEL[item.status]}</small>)}
                               </div>

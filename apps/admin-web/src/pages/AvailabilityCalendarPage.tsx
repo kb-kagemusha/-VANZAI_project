@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useRef, useCallback } from "react";
 
 import { categoryColor } from "../lib/calendarCategory";
-import { TestBadge } from "../components/TestBadge";
 import "../styles/orderOverview.css";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
@@ -184,7 +183,7 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
 
   const calendarQuery = useQuery({
     queryKey: ["availability-calendar", dateFromStr, dateToStr, includeTest],
-    queryFn: () => getAvailabilityCalendar({ date_from: dateFromStr, date_to: dateToStr, include_test: includeTest }),
+    queryFn: () => getAvailabilityCalendar({ date_from: dateFromStr, date_to: dateToStr, test_only: includeTest }),
   });
   const workerTagsQuery = useQuery({
     queryKey: ["worker-tags"],
@@ -795,7 +794,7 @@ function DayCell({
         <AvailBadge status={avStatus} />
 
         {(dayInfo?.order_events ?? []).map((event) => <span key={event.version_id} className={`ov-event-chip ov-c${categoryColor(event.categories)} is-${event.status}`} title={event.project_name}>
-          {event.is_test ? <TestBadge /> : null}{event.project_name}
+          {event.project_name}
           {event.status !== "ok" ? <small>{event.status === "unavailable" ? "× 参加不可" : event.status === "changing" ? "変更確認待ち" : "未回答"}</small> : null}
         </span>)}
         {/* 配置チップ */}

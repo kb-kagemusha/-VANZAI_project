@@ -51,7 +51,7 @@ def registered_workers(session: Session) -> list[dict]:
     return [{"worker_id": w.id, "name": w.name, "line_linked": w.id in linked} for w in workers]
 
 
-def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False) -> list[dict]:
+def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False, test_only: bool = False) -> list[dict]:
     """日付ごとに、イベントの人数と名前を返す。[{date, events: [{series_id, version_id, document_number, project_name, ok, changing, unanswered}]}]"""
     query = session.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None))
     if series_id:
@@ -61,7 +61,9 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
         answerable = session.get(OrderRequestVersion, series.answerable_version_id)
         document = session.get(OrderRequestDocument, answerable.document_id)
         # 月のカレンダーは正式だけ。依頼書ごとの確認（series_id 指定）はテストも表示する
-        if (document.kind != KIND_FORMAL and not series_id and not include_test) or document.deleted_at is not None:
+        if test_only and document.kind == KIND_FORMAL:
+            continue
+        if (document.kind != KIND_FORMAL and not series_id and not include_test and not test_only) or document.deleted_at is not None:
             continue
         display = ws.version_display(answerable)
         # 稼働者ごとの分類と日付

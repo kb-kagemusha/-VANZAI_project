@@ -975,6 +975,7 @@ export function getAvailabilityCalendar(params: {
   date_to: string;
   is_active?: boolean;
   include_test?: boolean;
+  test_only?: boolean;
 }) {
   return apiFetch<AvailabilityCalendarResponse>("/api/availability-calendar", undefined, params as Record<string, string | number | boolean | undefined>);
 }
@@ -1857,7 +1858,7 @@ export function getParticipationCalendar(params: { month?: string; versionId?: s
   return apiFetch<{ month?: string; days: ParticipationDay[]; workers?: ParticipationWorker[] }>("/api/order-requests/participation-calendar", undefined, {
     month: params.month,
     version_id: params.versionId,
-    include_test: params.includeTest ? true : undefined,
+    test_only: params.includeTest ? true : undefined,
     include_workers: params.includeWorkers ? true : undefined,
   });
 }
