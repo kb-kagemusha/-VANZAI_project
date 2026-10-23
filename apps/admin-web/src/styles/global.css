@@ -5690,3 +5690,9 @@ html[data-theme="dark"] .calendar-test-toggle .btn.is-active, html[data-theme="d
 .order-reply-status.is-acked { color: #166534; background: #dcfce7; border-color: #86efac; }
 .order-reply-status.is-unacked { color: #475569; background: #f1f5f9; }
 .order-reply-status.is-declined, .order-reply-status.is-decline_pending { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
+
+/* 両一覧は同じフィルター構造・共通入力を使い、日付の折返し分を案件名へ配分する。 */
+.order-list-table .order-project-name { min-width: 18rem; width: 24%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.order-list-table .order-list-date { min-width: 10.5rem; width: 11rem; }
+.order-list-date-range > span { display: block; white-space: nowrap; line-height: 1.5; }
+.order-list-date-label { white-space: pre-wrap; }

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("sent requests are grouped by document and both lists paginate and show tests", async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
   const all = Array.from({ length: 55 }, (_, i) => ({ document_id: `doc${i}`, version_id: `v${i}`, document_number: `REQ-${String(i).padStart(3, "0")}`,
-    kind: i % 2 ? "formal" : "test", version_no: 1, project_name: `イベント${i}`, categories: ["フェス系"], status: "confirmed", work_date_label: "10月25〜27日", created_by_name: "担当者",
+    kind: i % 2 ? "formal" : "test", version_no: 1, project_name: `イベント${i}`, categories: ["フェス系"], status: "confirmed", work_date_label: "2026年10月25日～2026年10月27日", created_by_name: "担当者",
     recipient_count: 3, change_documents: [], recipients: ["acked", "unacked", "declined"].map((ack_status, j) => ({ delivery_id: `d${i}-${j}`, worker_name: ["渡邊 健太郎", "長谷川 亜香里", "山田 太郎"][j], ack_status, send_status: "accepted", version_no: 1 })) }));
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url()); const path = url.pathname;
@@ -24,6 +24,19 @@ test("sent requests are grouped by document and both lists paginate and show tes
   const sent = page.locator(".order-list-frame.is-sent"), created = page.locator(".order-list-frame.is-created");
   await expect(sent.locator("tbody > tr")).toHaveCount(10);
   await expect(created.locator("tbody > tr")).toHaveCount(10);
+  const selectStyle = async (selector: string) => page.getByLabel(selector).evaluate((el) => {
+    const style = getComputedStyle(el); return [style.width, style.height, style.appearance, style.padding, style.backgroundImage, style.fontSize, style.borderRadius];
+  });
+  expect(await selectStyle("送信した依頼の表示件数")).toEqual(await selectStyle("作成した依頼書の表示件数"));
+  for (const section of [sent, created]) {
+    const date = section.locator("tbody > tr").first().locator(".order-list-date");
+    await expect(date).toContainText("2026年10月25日から");
+    await expect(date).toContainText("2026年10月27日まで");
+    const lines = await date.locator(".order-list-date-range > span").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().y));
+    expect(lines[1]).toBeGreaterThan(lines[0]);
+    expect(await section.locator("tbody > tr").first().locator(".order-project-name").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(288);
+  }
+
   const first = sent.locator("tbody > tr").first();
   await expect(first.getByRole("button", { name: "REQ-000", exact: true })).toHaveCount(1);
   await expect(first.locator(".order-reply-recipients li")).toHaveCount(3);
@@ -46,6 +59,16 @@ test("sent requests are grouped by document and both lists paginate and show tes
   await expect(sent.locator("tbody > tr")).toHaveCount(28);
   await expect(created.getByRole("button", { name: "REQ-000", exact: true })).toBeVisible();
   await expect(sent.locator("tbody > tr .test-data-badge")).toHaveCount(28);
+  await page.goto("/masters/workers");
+  await page.goto("/operations/order-requests");
+  await expect(sent.getByLabel("送信した依頼の表示件数")).toHaveValue("50");
+  await expect(created.getByLabel("作成した依頼書の表示件数")).toHaveValue("20");
+  await expect(sent.locator("tbody > tr")).toHaveCount(50);
+  await expect(created.locator("tbody > tr")).toHaveCount(20);
+  await page.reload();
+  await expect(sent.getByLabel("送信した依頼の表示件数")).toHaveValue("50");
+  await expect(created.getByLabel("作成した依頼書の表示件数")).toHaveValue("20");
+
 });
 
 test("master roster and worker registration use the same newcomer and director marks", async ({ page }) => {

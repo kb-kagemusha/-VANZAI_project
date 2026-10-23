@@ -205,8 +205,8 @@ export function OrderRequestsPage() {
   const [kind, setKind] = useState<OrderRequestKind | "all">("all");
   const [sentPage, setSentPage] = useState(0);
   const [createdPage, setCreatedPage] = useState(0);
-  const [sentLimit, setSentLimit] = useState(10);
-  const [createdLimit, setCreatedLimit] = useState(10);
+  const [sentLimit, setSentLimit] = useOrderListSize(`vanzai.order-list-size.${user?.username ?? "local"}.sent`);
+  const [createdLimit, setCreatedLimit] = useOrderListSize(`vanzai.order-list-size.${user?.username ?? "local"}.created`);
   const [queue, setQueue] = useState<OrderRequestQueue>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1062,7 +1062,9 @@ export function OrderRequestsPage() {
 
       <section className="order-list-frame is-sent">
         <h3>送信した依頼</h3>
-        <OrderListSize label="送信した依頼の表示件数" value={sentLimit} onChange={(value) => { setSentLimit(value); setSentPage(0); }} />
+        <div className="order-list-filters">
+          <OrderListSize label="送信した依頼の表示件数" value={sentLimit} onChange={(value) => { setSentLimit(value); setSentPage(0); }} />
+        </div>
         {repliesQuery.isError ? <ErrorState title="送信した依頼を取得できませんでした" description={messageOf(repliesQuery.error)} /> : null}
         {repliesQuery.isLoading ? <LoadingOverlay /> : null}
         <p className="order-list-lead">同じ文書番号を1件にまとめ、送付先ごとの受諾・未回答・辞退を表示します。日付は稼働日です。内容を変えるときは「変更を作成」（元の依頼書の受諾・予定を置き換えます）、同じイベントを別の日に行うときは「別日で新規作成」（元の依頼書には影響しません）を使います。</p>
@@ -1071,9 +1073,9 @@ export function OrderRequestsPage() {
             <thead>
               <tr>
                 <th>文書番号</th>
-                <th>案件名</th>
+                <th className="order-project-name">案件名</th>
                 <th>カテゴリ</th>
-                <th>日付</th>
+                <th className="order-list-date">日付</th>
                 <th>送付先・回答</th>
                 <th>変更</th>
               </tr>
@@ -1091,9 +1093,9 @@ export function OrderRequestsPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="order-cell-multiline">{row.kind === "test" ? <TestBadge /> : null}{siteLabelForList(row.project_name)}</td>
+                  <td className="order-cell-multiline order-project-name">{row.kind === "test" ? <TestBadge /> : null}{siteLabelForList(row.project_name)}</td>
                   <td className="order-cell-multiline">{categoryLabelForList(row.categories)}</td>
-                  <td className="order-cell-multiline">{row.work_date_label}</td>
+                  <td className="order-list-date"><OrderListDate label={row.work_date_label} /></td>
                   <td>
                     <ul className="order-reply-recipients">
                       {row.recipients.map((person) => (
@@ -1171,11 +1173,11 @@ export function OrderRequestsPage() {
           <thead>
             <tr>
               <th>文書番号</th>
-              <th>案件名</th>
+              <th className="order-project-name">案件名</th>
               <th>版</th>
               <th>状態</th>
               <th>カテゴリ</th>
-              <th>日付</th>
+              <th className="order-list-date">日付</th>
               <th>作成者</th>
               <th>送付先</th>
               <th>期限</th>
@@ -1204,7 +1206,7 @@ export function OrderRequestsPage() {
                     </span>
                   ) : null}
                 </td>
-                <td className="order-cell-multiline">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
+                <td className="order-cell-multiline order-project-name">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
                 <td>
                   {STATUS_LABEL[item.status]}
@@ -1212,7 +1214,7 @@ export function OrderRequestsPage() {
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
                 <td className="order-cell-category">{categoryLabelForList(item.categories)}</td>
-                <td className="order-cell-multiline">{item.work_date_label}</td>
+                <td className="order-list-date"><OrderListDate label={item.work_date_label} /></td>
                 <td>{item.created_by_name}</td>
                 <td>{item.recipient_count}</td>
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
@@ -2201,4 +2203,25 @@ function OrderListSize({ label, value, onChange }: { label: string; value: numbe
   return <label className="order-list-size">表示件数 <select aria-label={label} value={value} onChange={(event) => onChange(Number(event.target.value))}>
     {[10, 20, 50].map((size) => <option key={size} value={size}>{size}件</option>)}
   </select></label>;
+}
+
+function useOrderListSize(storageKey: string) {
+  const [size, setSize] = useState(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(storageKey));
+      return [10, 20, 50].includes(stored) ? stored : 10;
+    } catch { return 10; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(storageKey, String(size)); } catch { /* 保存不可でも一覧の操作は継続する。 */ }
+  }, [storageKey, size]);
+  return [size, setSize] as const;
+}
+
+function OrderListDate({ label }: { label: string }) {
+  const range = parseWorkDateRange((label || "").replace(/\s+/g, ""));
+  if (range?.from && range.to && range.from !== range.to) {
+    return <span className="order-list-date-range"><span>{formatWorkDateRange(range.from, "")}から</span><span>{formatWorkDateRange(range.to, "")}まで</span></span>;
+  }
+  return <span className="order-list-date-label">{label || "—"}</span>;
 }

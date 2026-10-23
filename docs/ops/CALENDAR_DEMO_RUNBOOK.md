@@ -83,3 +83,11 @@ calendar_demo_worker_renamedの監査から、高橋直樹へ変更した本人�
 通常デプロイ後 `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --calendar-demo-directors` を実行する。
 既存ダミーの山田太郎/渡邊健太郎/長谷川亜香里を氏名で一意に照合し、directorタグを追記する。既存タグ・日付・本人のテストアカウントは保持。初回tagged=3、再実行0。監査calendar_demo_director_tagged。
 マスター一覧の名簿と稼働者登録一覧で青いDを、新人5名で🔰を確認する。発注依頼書は区分「すべて」または「テストのみ」で確認し、送信した依頼が同じ文書番号ごとにまとまること、各一覧の件数と次ページを確認する。
+
+
+## 以前のサンプルイベント全件の整理（0.51.3、DEC-092）
+
+通常デプロイ後、`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --legacy-samples-preview` で文書番号/案件名/区分を照合する。
+旧「サンプルイベント」（番号付き・非表示分も含む）だけであることを確認し、`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --legacy-samples-remove` を実行する。
+結果active_entries_remaining=0を確認。全期間の受諾済み予定・適用受諾・回答受付を解除し、閲覧リンクを無効化、一覧から全件除外する。再実行はchanged_documents等0。
+請求書・有効な勤怠報告・対象外と共有の系列があれば停止する。原PDF・旧回答・監査は保持。新しいデモのデータセットには触れない。既存の実行設定は承認済みの内部読み込みのみ、値の表示/取得/変更はしない。
