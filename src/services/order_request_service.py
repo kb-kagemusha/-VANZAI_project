@@ -414,6 +414,8 @@ class OrderRequestService:
             )
         )
         missing = [name for name, value in required if not _clean(value)]
+        if sections and sections.get("incentive_enabled") is True and not sections.get("incentive", "").strip():
+            missing.append("インセンティブの詳細")
         self._check_offered_days(version, worker_ids)
         if version.follow_up_due_on is None:
             missing.append("期限の案内")

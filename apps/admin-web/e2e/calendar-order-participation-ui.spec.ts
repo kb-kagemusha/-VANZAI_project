@@ -62,6 +62,27 @@ async function adminMocks(page: Page) {
   return writes;
 }
 
+test("new order defaults to no incentive and only yes exposes an empty conditions field", async ({ page }, testInfo) => {
+  const writes = await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("radio", { name: "インセンティブなし", exact: true })).toBeChecked();
+  await expect(draft.getByText("インセンティブなし", { exact: true })).toBeVisible();
+  await expect(draft.getByRole("textbox", { name: "インセンティブの詳細", exact: true })).toHaveCount(0);
+  await draft.getByRole("radio", { name: "インセンティブあり", exact: true }).check();
+  const details = draft.getByRole("textbox", { name: "インセンティブの詳細", exact: true });
+  await expect(details).toHaveValue("");
+  await details.fill("販売1台につき500円\n翌月に販売実績確定");
+  await page.screenshot({ path: testInfo.outputPath("order-incentive-toggle.png") });
+  await draft.getByRole("radio", { name: "インセンティブなし", exact: true }).check();
+  await expect(details).toHaveCount(0);
+  await expect(draft.getByText("インセンティブなし", { exact: true })).toBeVisible();
+  await draft.getByRole("radio", { name: "インセンティブあり", exact: true }).check();
+  await expect(details).toHaveValue("");
+  expect(writes).toEqual([]);
+});
+
 test("worker calendar retains dates while scrolling; event document opens details", async ({ page }, testInfo) => {
   await adminMocks(page);
   await page.goto("/operations/calendar?view=worker&month=2026-10");

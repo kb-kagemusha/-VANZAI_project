@@ -43,6 +43,7 @@ import {
 import {
   composeOrderDocument,
   EMPTY_ORDER_SECTIONS,
+  NO_INCENTIVE,
   formatWorkDateRange,
   LINE_ACCEPT_LABEL,
   LINE_BUTTON_TEXT,
@@ -852,6 +853,7 @@ export function OrderRequestsPage() {
   function missingSendFields(): string[] {
     const missing: string[] = [];
     if (!sections.projectName.trim()) missing.push("案件名");
+    if (sections.incentiveEnabled && !sections.incentive.trim()) missing.push("インセンティブの詳細");
     if (sections.categories.length === 0) missing.push("カテゴリ");
     if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
     if (!form.site_name.trim()) missing.push("稼働場所");
@@ -1551,16 +1553,14 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, fee: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  <label className="order-field order-span-4">
+                  <div className="order-field order-span-4 order-incentive-field">
                     <span className="order-field-label">インセンティブ</span>
-                    <textarea
-                      className="is-tall"
-                      value={sections.incentive}
-                      disabled={!editable}
-                      placeholder={"※インセン無し\nまたは日ごとの金額"}
-                      onChange={(event) => setSections({ ...sections, incentive: withFullwidthTilde(event.target.value) })}
-                    />
-                  </label>
+                    <div className="order-incentive-options" role="group" aria-label="インセンティブの有無">
+                      <label><input type="radio" name="order-incentive" aria-label="インセンティブなし" checked={!sections.incentiveEnabled} disabled={!editable} onChange={() => setSections({ ...sections, incentiveEnabled: false, incentive: NO_INCENTIVE })} />なし</label>
+                      <label><input type="radio" name="order-incentive" aria-label="インセンティブあり" checked={!!sections.incentiveEnabled} disabled={!editable} onChange={() => setSections({ ...sections, incentiveEnabled: true, incentive: "" })} />あり</label>
+                    </div>
+                    {sections.incentiveEnabled ? <label className="order-incentive-detail">インセンティブの詳細<textarea className="is-tall" value={sections.incentive} disabled={!editable} placeholder="販売台数などに応じた条件を入力" onChange={(event) => setSections({ ...sections, incentive: withFullwidthTilde(event.target.value) })} /></label> : <p>{NO_INCENTIVE}</p>}
+                  </div>
                   <label className="order-field order-span-12">
                     <span className="order-field-label">備考</span>
                     <textarea

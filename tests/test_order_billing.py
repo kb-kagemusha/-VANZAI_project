@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 import importlib.util
+import json
 from io import StringIO
 
 import pytest
@@ -31,10 +32,14 @@ def admin_user(db_session):
     return user
 
 
-def source(api, db, user, client, *, kind="formal"):
+def source(api, db, user, client, *, kind="formal", incentive=None):
     worker = _worker(db, "依頼先")
     body = _payload([worker.id], kind=kind)
     body["internal_source"] = {"client_id": client.id, "client_staff_id": None}
+    if incentive is not None:
+        conditions = json.loads(body["request_conditions"])
+        conditions.update(incentive_enabled=True, incentive=incentive)
+        body["request_conditions"] = json.dumps(conditions)
     created = api.post("/api/order-requests", json=body, headers=_auth(user.username))
     assert created.status_code == 200, created.text
     result = api.post(f"/api/order-requests/versions/{created.json()['id']}/confirm", headers=_auth(user.username))
@@ -272,3 +277,90 @@ def test_editable_issuer_is_snapshotted_and_conflicts_are_rejected(api_client, d
     recreated = generate(api_client, admin_user, client).json()
     assert recreated["issuer_snapshot"]["name"] == "変更後の発行元"
     assert recreated["issuer_snapshot"]["bank_details"] == settings["bank_details"]
+
+
+def test_client_is_fixed_server_side_and_legacy_mismatch_needs_reconfirmation(api_client, db_session, admin_user, client, pdf_root):
+    other = Client(name="選んではいけない請求先")
+    db_session.add(other)
+    db_session.commit()
+    row = source(api_client, db_session, admin_user, client)
+    assert save(api_client, admin_user, row, other).status_code == 400
+    auth = _auth(admin_user.username)
+    payload = {"amount": "100", "billing_month": "202611", "expected_revision": 0}
+    assert api_client.post(f"/api/order-billing/orders/{row['id']}/confirm", headers=auth, json=payload).status_code == 200
+    record = db_session.query(OrderBillingAmount).one()
+    assert record.client_id == client.id
+    # Reproduce a choice saved with the previous release, without rewriting it on read.
+    record.client_id = other.id
+    db_session.commit()
+    result = api_client.get("/api/order-billing/orders", headers=auth).json()["items"][0]
+    assert result["client_id"] == client.id and result["client_mismatch"] and not result["billing_ready"]
+    assert generate(api_client, admin_user, client).status_code == 409
+    assert save(api_client, admin_user, row, client, "100", expected_revision=1, reason="案件のクライアントで再確認").status_code == 200
+    assert db_session.get(OrderBillingAmount, record.id).client_id == other.id
+    assert generate(api_client, admin_user, client).json()["client_id"] == client.id
+
+
+def test_incentive_pending_zero_and_addition_to_frozen_monthly_lines(api_client, db_session, admin_user, client, pdf_root):
+    note = "販売1台につき500円\n確定台数に応じて精算"
+    row = source(api_client, db_session, admin_user, client, incentive=note)
+    auth = _auth(admin_user.username)
+    assert save(api_client, admin_user, row, client).status_code == 200
+    pending = api_client.get("/api/order-billing/orders", headers=auth).json()["items"][0]
+    assert pending["incentive_note"] == note and pending["incentive_amount"] is None and pending["total_amount"] is None
+    assert not pending["billing_ready"] and api_client.get("/api/order-billing/summary", headers=auth).json()["missing_count"] == 1
+    assert generate(api_client, admin_user, client).status_code == 409
+    for invalid in ("-1", "NaN", "0.001"):
+        assert save(api_client, admin_user, row, client, expected_revision=1, reason="実績", incentive_amount=invalid).status_code == 422
+    assert save(api_client, admin_user, row, client, expected_revision=1, reason="販売実績が0円", incentive_amount="0").status_code == 200
+    assert api_client.get("/api/order-billing/summary", headers=auth).json()["missing_count"] == 0
+    assert save(api_client, admin_user, row, client, expected_revision=2, reason="販売実績確定", incentive_amount="499.99").status_code == 200
+    invoice = generate(api_client, admin_user, client).json()
+    assert (invoice["subtotal"], invoice["tax_amount"], invoice["total_amount"]) == ("10500.99", "1050.00", "11550.99")
+    line = api_client.get(f"/api/order-billing/invoices/{invoice['id']}", headers=auth).json()["lines"][0]
+    assert line["incentive_note"] == note and line["incentive_amount"] == "499.99" and line["amount"] == "10500.99"
+    assert api_client.post(f"/api/order-billing/invoices/{invoice['id']}/issue", headers=auth).status_code == 200
+    first_pdf = api_client.get(f"/api/order-billing/invoices/{invoice['id']}/pdf", headers=auth).content
+    _revise_confirm(api_client, admin_user, row["id"])
+    assert api_client.get(f"/api/order-billing/invoices/{invoice['id']}/pdf", headers=auth).content == first_pdf
+    history = api_client.get(f"/api/order-billing/orders/{row['id']}/history", headers=auth).json()["items"]
+    assert [h["incentive_amount"] for h in history] == ["499.99", "0.00", None]
+
+
+def test_no_incentive_does_not_accept_amount_and_missing_client_cannot_be_overridden(api_client, db_session, admin_user, client, pdf_root):
+    from src.models.order_request import OrderRequestVersion
+    row = source(api_client, db_session, admin_user, client)
+    assert save(api_client, admin_user, row, client, incentive_amount="0").status_code == 400
+    stored = db_session.get(OrderRequestVersion, row["id"])
+    stored.internal_client_id = None
+    db_session.commit()
+    assert save(api_client, admin_user, row, client).status_code == 400
+    assert api_client.post(f"/api/order-billing/orders/{row['id']}/confirm", headers=_auth(admin_user.username),
+                          json={"amount": "100", "billing_month": "202611", "expected_revision": 0}).status_code == 400
+
+
+def test_additive_incentive_migration_preserves_existing_amounts():
+    path = Path(__file__).resolve().parents[1] / "alembic/versions/20261023d001_order_billing_incentives.py"
+    spec = importlib.util.spec_from_file_location("billing_incentive_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE order_billing_amounts (id VARCHAR PRIMARY KEY, amount NUMERIC(15,2) NOT NULL)"))
+        connection.execute(text("CREATE TABLE order_billing_invoice_lines (id VARCHAR PRIMARY KEY, amount NUMERIC(15,2) NOT NULL)"))
+        connection.execute(text("INSERT INTO order_billing_amounts VALUES ('old-amount', 123)"))
+        connection.execute(text("INSERT INTO order_billing_invoice_lines VALUES ('old-line', 123)"))
+        with Operations.context(MigrationContext.configure(connection)):
+            module.upgrade()
+        assert connection.execute(text("SELECT amount, incentive_amount FROM order_billing_amounts")).one() == (123, None)
+        assert connection.execute(text("SELECT amount, incentive_amount, incentive_note FROM order_billing_invoice_lines")).one() == (123, None, None)
+
+
+def test_long_incentive_note_can_span_pdf_pages(api_client, db_session, admin_user, client, pdf_root):
+    note = "販売実績を確認してインセンティブを精算します。\n" * 100
+    row = source(api_client, db_session, admin_user, client, incentive=note)
+    assert save(api_client, admin_user, row, client, incentive_amount="500").status_code == 200
+    response = generate(api_client, admin_user, client)
+    assert response.status_code == 200, response.text
+    stored = db_session.query(OrderBillingInvoiceLine).filter_by(invoice_id=response.json()["id"]).one()
+    assert stored.incentive_note == note.strip()

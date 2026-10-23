@@ -537,7 +537,7 @@ def _field_table(
             _paragraph(caption, styles["label"]),
             _paragraph(text, value_style, empty_style),
         ])
-    table = Table(rows, colWidths=[accent_width, label_width, value_width])
+    table = Table(rows, colWidths=[accent_width, label_width, value_width], splitInRow=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (0, -1), _ACCENT),
         ("BACKGROUND", (1, 0), (1, -1), _LABEL_BG),

@@ -2,16 +2,18 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 1440, height: 1000 } });
 
-async function mocks(page: Page, role = "admin", stale = false) {
+async function mocks(page: Page, role = "admin", stale = false, incentive = false) {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
   const writes: any[] = [];
   const calls: string[] = [];
   let saved = false;
+  let savedIncentive: string | null = null;
   let invoice: any = null;
   let issuer = { revision: 1, name: "株式会社VANZAI", postal_code: "116-0002", address: "東京都荒川区荒川1丁目39-11 東京アルバタワー1703", registration_number: "", bank_details: "", payment_terms: "" };
   const order = { version_id: "v1", series_id: "s1", document_number: "ORD-001", version_no: 1,
     project_name: "秋のイベント", work_date_label: "10月30日～11月2日", client_id: "c1", client_name: "依頼元会社",
-    revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing" };
+    revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing",
+    incentive_enabled: incentive, incentive_note: incentive ? "販売1台につき500円\n翌月実績確定" : "インセンティブなし", incentive_amount: null, total_amount: null, billing_ready: false, client_mismatch: false };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
@@ -25,13 +27,16 @@ async function mocks(page: Page, role = "admin", stale = false) {
       if (method === "PUT") { const { expected_revision, ...values } = route.request().postDataJSON(); issuer = { ...values, revision: expected_revision + 1 }; }
       return reply(issuer);
     }
-    if (path.endsWith("/order-billing/summary")) return reply({ missing_count: saved ? 0 : 1, total: 1 });
+    if (path.endsWith("/order-billing/summary")) return reply({ missing_count: saved && (!incentive || savedIncentive !== null) ? 0 : 1, total: 1 });
     if (path.endsWith("/order-billing/clients")) return reply({ items: [{ id: "c1", name: "依頼元会社" }] });
     if (path.endsWith("/orders/v1/confirm")) {
       if (stale) return reply({ detail: "別の操作で金額が更新されました。一覧を更新して確認してください" }, 409);
-      saved = true; return reply({ id: "a1", revision: 1 });
+      saved = true; savedIncentive = route.request().postDataJSON().incentive_amount; return reply({ id: "a1", revision: 1 });
     }
-    if (path.endsWith("/order-billing/orders")) return reply({ items: saved ? [] : [order], total: saved ? 0 : 1 });
+    if (path.endsWith("/order-billing/orders")) {
+      const complete = saved && (!incentive || savedIncentive !== null);
+      return reply({ items: complete ? [] : [{ ...order, ...(saved ? { amount_id: "a1", amount: "10001.00", revision: 1, billing_month: "202611" } : {}) }], total: complete ? 0 : 1 });
+    }
     if (path.endsWith("/order-billing/invoices")) {
       if (method === "POST") {
         invoice = { id: "i1", document_number: "OB-202611-001", client_id: "c1", client_name: "依頼元会社", billing_month: "202611",
@@ -57,6 +62,10 @@ test("admin selects billing month explicitly, saves total, clears red badge, cre
   await expect(nav.locator(".nav-unread-badge")).toBeVisible();
   await page.getByRole("button", { name: "請求金額を確定", exact: true }).click();
   const edit = page.getByRole("dialog", { name: "依頼書の請求金額を確定", exact: true });
+  await expect(edit.getByRole("combobox")).toHaveCount(0);
+  await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveValue("依頼元会社");
+  await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveAttribute("readonly", "");
+  await expect(edit.getByRole("spinbutton", { name: "インセンティブ金額（税抜・円）", exact: true })).toHaveCount(0);
   await expect(edit.getByLabel("請求月（必須）")).toHaveValue("");
   await expect(edit.getByRole("button", { name: "請求金額を確定する", exact: true })).toBeDisabled();
   await edit.getByLabel("請求月（必須）").fill("2026-11");
@@ -64,7 +73,8 @@ test("admin selects billing month explicitly, saves total, clears red badge, cre
   await edit.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
   await expect(edit).toHaveCount(0);
   await expect(page.getByRole("link", { name: "依頼書の金額確定 未入力0件" }).locator(".nav-unread-badge")).toHaveCount(0);
-  expect(state.writes[0].body).toMatchObject({ amount: "10001", billing_month: "202611", client_id: "c1", expected_revision: 0 });
+  expect(state.writes[0].body).toMatchObject({ amount: "10001", billing_month: "202611", expected_revision: 0, incentive_amount: null });
+  expect(state.writes[0].body).not.toHaveProperty("client_id");
   await page.getByLabel("請求月", { exact: true }).fill("2026-11");
   await page.getByRole("button", { name: "月次請求書を作成", exact: true }).click();
   expect(state.writes).toHaveLength(1);
@@ -117,4 +127,24 @@ test("issuer settings start with supplied company address and can be edited in a
   expect(state.writes[0].body).toMatchObject({ expected_revision: 1, name: "株式会社VANZAI", bank_details: "検証用銀行 検証支店\n普通 1234567 カ）バンザイ" });
   await page.getByRole("button", { name: "発行元・振込先設定", exact: true }).click();
   await expect(settings.getByRole("textbox", { name: "支払期限・条件（任意）", exact: true })).toHaveValue("請求月の翌月末まで");
+});
+
+test("incentive memo is copied verbatim and pending amount stays in the red badge until zero is confirmed", async ({ page }, testInfo) => {
+  const state = await mocks(page, "admin", false, true);
+  await page.goto("/billing/order-amounts");
+  await page.getByRole("button", { name: "請求金額を確定", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "依頼書の請求金額を確定", exact: true });
+  await expect(edit.getByText("販売1台につき500円\n翌月実績確定", { exact: true })).toBeVisible();
+  await edit.getByLabel("請求月（必須）").fill("2026-11");
+  await edit.getByRole("spinbutton", { name: "通常請求額（インセンティブを除く・税抜・円）", exact: true }).fill("10001");
+  await edit.getByRole("button", { name: "通常請求額を保存（インセンティブ未確定）", exact: true }).click();
+  await expect(edit).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "依頼書の金額確定 未入力1件", exact: true }).locator(".nav-unread-badge")).toHaveText("1");
+  await page.getByRole("button", { name: "金額・請求月を変更", exact: true }).click();
+  await edit.getByRole("spinbutton", { name: "インセンティブ金額（税抜・円）", exact: true }).fill("0");
+  await edit.getByRole("textbox", { name: "変更理由（必須）", exact: true }).fill("販売実績が0円");
+  await page.screenshot({ path: testInfo.outputPath("incentive-amount.png") });
+  await edit.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
+  await expect(page.getByRole("link", { name: "依頼書の金額確定 未入力0件", exact: true }).locator(".nav-unread-badge")).toHaveCount(0);
+  expect(state.writes[1].body.incentive_amount).toBe("0");
 });

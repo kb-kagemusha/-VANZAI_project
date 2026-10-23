@@ -22,6 +22,12 @@ export function categoryLabelForList(categories: string[] | undefined): string {
 }
 export const ORDER_FORMAT_ID = "additional-request-v1";
 export const DEFAULT_ORDER_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。";
+export const NO_INCENTIVE = "インセンティブなし";
+export function hasOrderIncentive(note: string, flag?: boolean): boolean {
+  if (typeof flag === "boolean") return flag;
+  const text = note.normalize("NFKC").replace(/\s/g, "").replace(/^[※・]+/, "");
+  return !!text && !["なし", "無し", "無", "インセンなし", "インセン無し", "インセンティブなし", "インセンティブ無し"].includes(text);
+}
 
 export interface OrderDocumentSections {
   /** 全体の稼働日。excluded_dates は全体の休業日（0.48.5〜。旧データには無い）。 */
@@ -46,6 +52,7 @@ export interface OrderDocumentSections {
   belongings: string;
   fee: string;
   incentive: string;
+  incentiveEnabled?: boolean;
   notes: string;
 }
 
@@ -61,7 +68,8 @@ export const EMPTY_ORDER_SECTIONS: OrderDocumentSections = {
   content: "",
   belongings: "",
   fee: "",
-  incentive: "",
+  incentive: NO_INCENTIVE,
+  incentiveEnabled: false,
   notes: DEFAULT_ORDER_NOTES,
 };
 
@@ -93,7 +101,8 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
     content: wavy(sections.content.trim()),
     belongings: wavy(sections.belongings.trim()),
     fee: wavy(sections.schedule ? scheduleFees(sections.schedule) : sections.fee.trim()),
-    incentive: wavy(sections.incentive.trim()),
+    incentive_enabled: hasOrderIncentive(sections.incentive, sections.incentiveEnabled),
+    incentive: hasOrderIncentive(sections.incentive, sections.incentiveEnabled) ? wavy(sections.incentive.trim()) : NO_INCENTIVE,
     notes: wavy(sections.notes.trim()),
     ...(sections.schedule ? { schedule: syncSchedule(sections.schedule) } : {}),
     ...(sections.siteStationWalkMinutes.trim() ? { site_station_walk_minutes: Number(sections.siteStationWalkMinutes.trim()) } : {}),
@@ -148,7 +157,7 @@ export function composeOrderDocument(
     wavy(sections.schedule ? scheduleFees(sections.schedule) : sections.fee.trim()),
     "",
     "■インセンティブ：",
-    wavy(sections.incentive.trim()),
+    hasOrderIncentive(sections.incentive, sections.incentiveEnabled) ? wavy(sections.incentive.trim()) : NO_INCENTIVE,
     "",
     "■備考：",
     notes,
@@ -183,7 +192,8 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       content: textOf(data.content),
       belongings: textOf(data.belongings),
       fee: textOf(data.fee) || legacyFee(data),
-      incentive: textOf(data.incentive),
+      incentiveEnabled: hasOrderIncentive(textOf(data.incentive), typeof data.incentive_enabled === "boolean" ? data.incentive_enabled : undefined),
+      incentive: hasOrderIncentive(textOf(data.incentive), typeof data.incentive_enabled === "boolean" ? data.incentive_enabled : undefined) ? textOf(data.incentive) : NO_INCENTIVE,
       notes: textOf(data.notes),
     };
   } catch {

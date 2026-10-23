@@ -27,9 +27,9 @@ export function OrderBillingPage() {
   const [invoicePage, setInvoicePage] = useState(0);
   const [invoiceMonth, setInvoiceMonth] = useState(todayInTokyo().slice(0, 7));
   const [edit, setEdit] = useState<BillingOrder | null>(null);
-  const [editClient, setEditClient] = useState("");
   const [editMonth, setEditMonth] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editIncentive, setEditIncentive] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [dialogError, setDialogError] = useState("");
@@ -65,14 +65,15 @@ export function OrderBillingPage() {
     finally { setBusy(false); }
   }
   function openEdit(row: BillingOrder) {
-    setEdit(row); setEditClient(row.client_id || ""); setEditMonth(row.billing_month ? `${row.billing_month.slice(0, 4)}-${row.billing_month.slice(4)}` : "");
+    setEdit(row); setEditMonth(row.billing_month ? `${row.billing_month.slice(0, 4)}-${row.billing_month.slice(4)}` : "");
+    setEditIncentive(row.incentive_amount ?? "");
     setEditAmount(row.amount ?? ""); setReason(""); setDialogError("");
   }
   async function save() {
     if (!edit || busy) return;
     setBusy(true); setDialogError("");
     try {
-      await saveBillingAmount(edit.version_id, { client_id: editClient, billing_month: editMonth.replace("-", ""), amount: editAmount, expected_revision: edit.revision, reason });
+      await saveBillingAmount(edit.version_id, { billing_month: editMonth.replace("-", ""), amount: editAmount, incentive_amount: edit.incentive_enabled && editIncentive !== "" ? editIncentive : null, expected_revision: edit.revision, reason });
       setEdit(null); await refresh();
     } catch (err) { setDialogError(message(err)); }
     finally { setBusy(false); }
@@ -116,7 +117,7 @@ export function OrderBillingPage() {
     <PageHeader title="依頼書の金額確定" eyebrow="全体管理者専用" description="クライアントへの請求総額（税抜）を依頼書ごとに確定し、指定した請求月・依頼元別に請求書を作成します。" />
     <section className="card" style={{ padding: "1rem" }}>
       <h3>請求金額の記録　{summary.data ? `未入力 ${summary.data.missing_count}件` : ""}</h3>
-      <p className="order-field-hint">正式・確定済みの最新依頼書が対象です。下書き・テスト・取消・削除・旧版は除外します。稼働者への支払額とは別です。</p>
+      <p className="order-field-hint">正式・確定済みの最新依頼書が対象です。請求先は案件のクライアントに固定します。インセンティブありの金額未確定も未入力件数に含みます。稼働者への支払額とは別です。</p>
       <div className="order-template-actions">
         <label>表示<select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
           <option value="missing">金額未入力</option><option value="confirmed">金額確定済み</option><option value="invoice_created">請求書作成済み</option><option value="all">すべて</option>
@@ -127,11 +128,12 @@ export function OrderBillingPage() {
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {orders.isError || summary.isError ? <p className="form-error">金額一覧・未入力件数を取得できませんでした。更新してお試しください。</p> : null}
       {orders.isLoading ? <p>読み込んでいます…</p> : null}
-      <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書・案件名</th><th>稼働日</th><th>請求先</th><th>請求月</th><th>税抜総額</th><th>操作</th></tr></thead><tbody>
+      <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書・案件名</th><th>稼働日</th><th>請求先</th><th>請求月</th><th>請求額（税抜）</th><th>インセンティブ</th><th>操作</th></tr></thead><tbody>
         {(orders.data?.items ?? []).map((row) => <tr key={row.version_id}>
           <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSource(row.version_id)}>{row.document_number} 第{row.version_no}版</button><div className="order-cell-multiline">{row.project_name || "案件名なし"}</div></td>
-          <td className="order-cell-multiline">{row.work_date_label}</td><td>{row.client_name}</td><td>{row.billing_month ? monthLabel(row.billing_month) : "未設定"}</td><td>{row.amount !== null ? yen(row.amount) : <strong style={{ color: "#dc2626" }}>未入力</strong>}</td>
-          <td><div className="order-row-actions"><button type="button" className="btn create-button btn-sm" disabled={!!row.invoice_id} onClick={() => openEdit(row)}>{row.invoice_id ? "請求書作成済み" : row.amount_id ? "金額・請求先を変更" : "請求金額を確定"}</button>
+          <td className="order-cell-multiline">{row.work_date_label}</td><td>{row.client_name}{row.client_mismatch ? <p className="form-error">旧記録の請求先と不一致・再確認が必要</p> : null}</td><td>{row.billing_month ? monthLabel(row.billing_month) : "未設定"}</td><td>{row.amount !== null ? <>通常 {yen(row.amount)}{row.billing_ready && row.incentive_enabled ? <div>合計 {yen(row.total_amount!)}</div> : null}</> : <strong style={{ color: "#dc2626" }}>未入力</strong>}</td>
+          <td className="order-cell-multiline">{row.incentive_enabled ? <>{row.incentive_note}<br />{row.incentive_amount !== null ? yen(row.incentive_amount) : <strong className="form-error">金額未確定</strong>}</> : "インセンティブなし"}</td>
+          <td><div className="order-row-actions"><button type="button" className="btn create-button btn-sm" disabled={!!row.invoice_id} onClick={() => openEdit(row)}>{row.invoice_id ? "請求書作成済み" : row.amount_id ? "金額・請求月を変更" : "請求金額を確定"}</button>
             {row.invoice_id && !row.amount_id ? <span className="form-error">依頼書が改訂されています。作成済みの請求書を確認してください。</span> : null}
             {row.amount_id ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => void showHistory(row)}>確定履歴</button> : null}
             {row.invoice_id ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDialogError(""); setInvoiceId(row.invoice_id); }}>請求書を確認</button> : null}
@@ -160,14 +162,19 @@ export function OrderBillingPage() {
 
     <FormDialog open={!!edit} title="依頼書の請求金額を確定" size="compact" busy={busy} onClose={() => setEdit(null)}>
       <p>{edit?.document_number}　{edit?.project_name}</p>
-      {clients.isError ? <p className="form-error">請求先を取得できませんでした。</p> : null}
-      <label className="order-field">請求先（必須）<select value={editClient} disabled={busy} onChange={(e) => setEditClient(e.target.value)}><option value="">依頼元を選択</option>{clients.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <label className="order-field">請求先（案件のクライアント・変更不可）<input readOnly value={edit?.client_name || "未設定"} /></label>
+      {!edit?.client_id ? <p className="form-error">依頼書の発注元にクライアントを設定してください。</p> : null}
       <label className="order-field">請求月（必須）<input type="month" value={editMonth} disabled={busy} onChange={(e) => setEditMonth(e.target.value)} /></label>
       <p className="order-field-hint">月をまたぐ依頼も、ここで指定した月へ全額計上します。</p>
-      <label className="order-field">依頼書1件の請求総額（税抜・円）<input type="number" min="0" step="0.01" value={editAmount} disabled={busy} onChange={(e) => setEditAmount(e.target.value)} /></label>
+      <label className="order-field">通常請求額（インセンティブを除く・税抜・円）<input type="number" min="0" step="0.01" value={editAmount} disabled={busy} onChange={(e) => setEditAmount(e.target.value)} /></label>
+      {edit?.incentive_enabled ? <div className="card" style={{ padding: "1rem" }}><strong>インセンティブ条件（依頼書の記載）</strong><p className="order-cell-multiline">{edit.incentive_note}</p>
+        <label className="order-field">インセンティブ金額（税抜・円）<input type="number" min="0" step="0.01" value={editIncentive} disabled={busy} onChange={(e) => setEditIncentive(e.target.value)} /></label>
+        <p className="order-field-hint">販売実績が出るまでは空欄で保存できます。空欄の間は未処理として残り、月次請求書を作成できません。実績が0円なら0を入力してください。</p>
+        {editAmount !== "" && editIncentive !== "" ? <p>請求総額（税抜） {yen(String(Number(editAmount) + Number(editIncentive)))}</p> : null}
+      </div> : <p>インセンティブなし</p>}
       <label className="order-field">{edit?.revision ? "変更理由（必須）" : "記録メモ（任意）"}<textarea rows={2} maxLength={2000} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
       {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
-      <button type="button" className="btn create-button" disabled={busy || !editClient || !editMonth || editAmount === "" || Number(editAmount) < 0 || (!!edit?.revision && !reason.trim())} onClick={() => void save()}>{busy ? "保存しています…" : "請求金額を確定する"}</button>
+      <button type="button" className="btn create-button" disabled={busy || !edit?.client_id || !editMonth || editAmount === "" || Number(editAmount) < 0 || Number(editIncentive) < 0 || (!!edit?.revision && !reason.trim())} onClick={() => void save()}>{busy ? "保存しています…" : edit?.incentive_enabled && editIncentive === "" ? "通常請求額を保存（インセンティブ未確定）" : "請求金額を確定する"}</button>
     </FormDialog>
     <FormDialog open={createOpen} title="依頼元別の月次請求書を作成" size="compact" busy={busy} onClose={() => setCreateOpen(false)}>
       <p>{invoiceMonth}分。金額確定済みの依頼だけをまとめ、まず未発行の下書きを作成します。</p>
@@ -180,7 +187,7 @@ export function OrderBillingPage() {
       {invoice.isLoading ? <p>読み込んでいます…</p> : null}
       {invoice.isError ? <p className="form-error">請求書を取得できませんでした。</p> : null}
       {invoice.data ? <><h4>{invoice.data.client_name}　{monthLabel(invoice.data.billing_month)}　{invoiceStatus[invoice.data.status]}</h4><p>{invoice.data.document_number}　第{invoice.data.version}版</p>
-        <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書</th><th>案件名・稼働日</th><th>税抜金額</th></tr></thead><tbody>{invoice.data.lines?.map((line) => <tr key={line.id}><td>{line.document_number}</td><td>{line.description}<br />{line.work_date_label}</td><td>{yen(line.amount)}</td></tr>)}</tbody></table></div>
+        <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書</th><th>案件名・稼働日</th><th>税抜金額</th></tr></thead><tbody>{invoice.data.lines?.map((line) => <tr key={line.id}><td>{line.document_number}</td><td className="order-cell-multiline">{line.description}<br />{line.work_date_label}{line.incentive_amount != null ? <><br />インセンティブ：{line.incentive_note}<br />内訳：通常 {yen(String(Number(line.amount) - Number(line.incentive_amount)))} ＋ インセンティブ {yen(line.incentive_amount)}</> : null}</td><td>{yen(line.amount)}</td></tr>)}</tbody></table></div>
         <p>税抜小計 {yen(invoice.data.subtotal)} ／ 消費税 {yen(invoice.data.tax_amount)} ／ 合計 {yen(invoice.data.total_amount)}</p>
         <div className="order-cell-multiline"><strong>発行元：{invoice.data.issuer_snapshot?.name}</strong><br />{invoice.data.issuer_snapshot?.postal_code ? `〒${invoice.data.issuer_snapshot.postal_code} ` : ""}{invoice.data.issuer_snapshot?.address}<br />{invoice.data.issuer_snapshot?.registration_number ? `登録番号：${invoice.data.issuer_snapshot.registration_number}` : "登録番号：未設定"}<br />振込先：{invoice.data.issuer_snapshot?.bank_details || "未設定"}<br />支払期限・条件：{invoice.data.issuer_snapshot?.payment_terms || "未設定"}</div>
         <div className="order-template-actions"><button type="button" className="btn btn-line-blue" disabled={busy} onClick={() => void showPdf(invoice.data!.id)}>PDFを表示</button>
@@ -203,7 +210,7 @@ export function OrderBillingPage() {
       {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
       <button type="button" className="btn create-button" disabled={busy || !issuer?.name.trim()} onClick={() => void saveIssuer()}>設定を保存する</button>
     </FormDialog>
-    <FormDialog open={!!history} title={`金額確定履歴 ${history?.title || ""}`} onClose={() => setHistory(null)}>{history?.items.map((r) => <p key={r.revision}>第{r.revision}版　{r.client_name}　{monthLabel(r.billing_month)}　{yen(r.amount)}<br />{r.reason || "初回確定"}　{r.created_at}</p>)}</FormDialog>
+    <FormDialog open={!!history} title={`金額確定履歴 ${history?.title || ""}`} onClose={() => setHistory(null)}>{history?.items.map((r) => <p className="order-cell-multiline" key={r.revision}>第{r.revision}版　{r.client_name}　{monthLabel(r.billing_month)}　通常 {yen(r.amount)}{r.incentive_enabled ? <><br />インセンティブ：{r.incentive_note}　{r.incentive_amount !== null ? yen(r.incentive_amount) : "金額未確定"}</> : null}<br />{r.reason || "初回確定"}　{r.created_at}</p>)}</FormDialog>
     {source ? <OrderRequestDetailDialog versionId={source} onClose={() => setSource(null)} /> : null}
   </div>;
 }

@@ -43,8 +43,10 @@ def generate_pdf(invoice, lines) -> bytes:
     rows = [[para("依頼内容"), para("数量"), para("税抜金額", right)]]
     for line in lines:
         text = f"{line.description}\n{line.work_date_label}\n依頼書：{line.document_number}"
+        if getattr(line, "incentive_amount", None) is not None:
+            text += f"\nインセンティブ条件：{line.incentive_note or ''}\n内訳：通常 {money(line.amount - line.incentive_amount)} ＋ インセンティブ {money(line.incentive_amount)}"
         rows.append([para(text, small), para("1件"), para(money(line.amount), right)])
-    table = Table(rows, colWidths=[110 * mm, 24 * mm, 40 * mm], repeatRows=1, hAlign="LEFT")
+    table = Table(rows, colWidths=[110 * mm, 24 * mm, 40 * mm], repeatRows=1, splitInRow=1, hAlign="LEFT")
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8edf4")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#cad1dc")),
         ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))

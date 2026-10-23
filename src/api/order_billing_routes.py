@@ -26,9 +26,10 @@ router = APIRouter(prefix="/api/order-billing", tags=["Order Billing"], dependen
 
 class AmountBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    client_id: str = Field(min_length=1, max_length=26)
+    client_id: str | None = Field(default=None, min_length=1, max_length=26)
     billing_month: str = Field(pattern=r"^[1-9]\d{3}(0[1-9]|1[0-2])$")
     amount: Decimal = Field(ge=0, max_digits=15, decimal_places=2, allow_inf_nan=False)
+    incentive_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2, allow_inf_nan=False)
     expected_revision: int = Field(ge=0)
     reason: str = Field(default="", max_length=2000)
 
@@ -96,7 +97,7 @@ def update_issuer(body: IssuerBody, user: User = Depends(admin), db: Session = D
 @router.get("/summary")
 def summary(db: Session = Depends(get_db)):
     rows = OrderBillingService(db).rows()
-    return {"missing_count": sum(r["amount_id"] is None for r in rows), "total": len(rows)}
+    return {"missing_count": sum(not r["billing_ready"] for r in rows), "total": len(rows)}
 
 
 @router.get("/clients")
@@ -110,7 +111,7 @@ def orders(status: str = Query(default="missing", pattern="^(missing|confirmed|i
            db: Session = Depends(get_db)):
     rows = OrderBillingService(db).rows()
     if status == "missing":
-        rows = [r for r in rows if r["amount_id"] is None]
+        rows = [r for r in rows if not r["billing_ready"]]
     elif status != "all":
         rows = [r for r in rows if r["status"] == status]
     if q.strip():
@@ -128,7 +129,9 @@ def confirm(version_id: str, body: AmountBody, user: User = Depends(admin), db: 
 def history(version_id: str, db: Session = Depends(get_db)):
     rows = db.query(OrderBillingAmount).filter_by(version_id=version_id).order_by(OrderBillingAmount.revision.desc()).all()
     return {"items": [{"revision": r.revision, "client_id": r.client_id, "client_name": r.snapshot["client_name"],
-                      "amount": str(r.amount), "billing_month": r.billing_month, "reason": r.reason, "created_at": r.created_at} for r in rows]}
+                      "amount": str(r.amount), "incentive_amount": str(r.incentive_amount) if r.incentive_amount is not None else None,
+                      "incentive_enabled": r.snapshot.get("incentive_enabled", False), "incentive_note": r.snapshot.get("incentive_note", ""),
+                      "billing_month": r.billing_month, "reason": r.reason, "created_at": r.created_at} for r in rows]}
 
 
 @router.get("/invoices")
@@ -158,7 +161,8 @@ def detail(invoice_id: str, db: Session = Depends(get_db)):
     except OrderRequestError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
     return {**invoice_out(row), "lines": [{"id": l.id, "description": l.description, "document_number": l.document_number,
-        "work_date_label": l.work_date_label, "amount": str(l.amount)} for l in service.lines(row)]}
+        "work_date_label": l.work_date_label, "amount": str(l.amount), "incentive_amount": str(l.incentive_amount) if l.incentive_amount is not None else None,
+        "incentive_note": l.incentive_note} for l in service.lines(row)]}
 
 
 @router.post("/invoices/{invoice_id}/issue")

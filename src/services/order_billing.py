@@ -13,7 +13,7 @@ from src.models.order_request import OrderRequestDocument, OrderRequestVersion
 from src.models.order_billing import OrderBillingAmount, OrderBillingInvoice, OrderBillingInvoiceLine, OrderBillingTaxRule, OrderBillingIssuer
 from src.services.audit import AuditService
 from src.services.document_storage import DocumentStorage
-from src.services.order_request_format import parse_sections
+from src.services.order_request_format import parse_sections, incentive_details
 from src.services.order_request_service import OrderRequestError
 from src.services import worker_schedule as ws
 
@@ -81,19 +81,28 @@ class OrderBillingService:
         for version, document in self.eligible():
             amount = amounts.get(version.id)
             claim = claims.get(version.series_id)
-            client_id = amount.client_id if amount else version.internal_client_id
+            client_id = version.internal_client_id
             client = clients.get(client_id)
             sections = parse_sections(version.request_conditions) or {}
+            incentive_enabled, incentive_note = incentive_details(sections)
+            client_matches = bool(amount and amount.client_id == client_id)
+            incentive_reviewed = not incentive_enabled or bool(amount and amount.snapshot.get("incentive_enabled") is True and amount.incentive_amount is not None)
+            ready = client_matches and incentive_reviewed
+            total = amount.amount + (amount.incentive_amount or Decimal(0)) if amount and ready else None
             result.append({"version_id": version.id, "series_id": version.series_id, "document_number": document.document_number,
                 "version_no": version.version_no, "project_name": sections.get("project_name", ""), "work_date_label": version.work_date_label,
                 "client_id": client_id, "client_name": client.name if client else "未設定", "revision": amount.revision if amount else 0,
                 "amount_id": amount.id if amount else None, "amount": str(amount.amount) if amount else None,
+                "incentive_enabled": incentive_enabled, "incentive_note": incentive_note,
+                "incentive_amount": str(amount.incentive_amount) if amount and amount.incentive_amount is not None else None,
+                "total_amount": str(total) if total is not None else None, "billing_ready": ready,
+                "client_mismatch": bool(amount and not client_matches),
                 "billing_month": amount.billing_month if amount else None, "confirmed_at": amount.created_at.isoformat() if amount else None,
                 "invoice_id": claim.invoice_id if claim else None,
-                "status": "invoice_created" if claim else "confirmed" if amount else "missing"})
+                "status": "invoice_created" if claim else "confirmed" if ready else "missing"})
         return result
 
-    def save_amount(self, version_id, *, client_id, billing_month, amount, expected_revision, reason, actor):
+    def save_amount(self, version_id, *, billing_month, amount, expected_revision, reason, actor, client_id=None, incentive_amount=None):
         validate_month(billing_month)
         self.lock()
         source = self.session.get(OrderRequestVersion, version_id)
@@ -104,6 +113,9 @@ class OrderBillingService:
         if pair is None:
             raise OrderRequestError(409, "正式・確定済みの最新依頼書だけ金額を確定できます。一覧を更新してください")
         source, document = pair
+        if client_id is not None and client_id != source.internal_client_id:
+            raise OrderRequestError(400, "請求先は案件のクライアントに固定されています。別の請求先は指定できません")
+        client_id = source.internal_client_id
         if self.session.query(OrderBillingInvoiceLine).filter_by(active_series_id=source.series_id).first():
             raise OrderRequestError(409, "この依頼は請求書に含まれています。下書きは取り消してから変更してください。発行済みは上書きできません")
         current = self.latest_amounts().get(version_id)
@@ -111,21 +123,27 @@ class OrderBillingService:
         if expected_revision != revision:
             raise OrderRequestError(409, "別の操作で金額が更新されました。一覧を更新して確認してください")
         if current and not reason.strip():
-            raise OrderRequestError(400, "金額や請求先・請求月を変更する理由を入力してください")
-        client = self.session.get(Client, client_id)
+            raise OrderRequestError(400, "金額や請求月を変更する理由を入力してください")
+        client = self.session.get(Client, client_id) if client_id else None
         if client is None or client.deleted_at is not None:
-            raise OrderRequestError(400, "有効な請求先を選択してください")
+            raise OrderRequestError(400, "依頼書の発注元に有効なクライアントを設定してください。金額画面では請求先を変更できません")
         sections = parse_sections(source.request_conditions) or {}
+        incentive_enabled, incentive_note = incentive_details(sections)
+        if not incentive_enabled and incentive_amount is not None:
+            raise OrderRequestError(400, "インセンティブなしの依頼にはインセンティブ金額を入力できません")
+        if amount + (incentive_amount or Decimal(0)) > Decimal("9999999999999.99"):
+            raise OrderRequestError(400, "通常請求額とインセンティブの合計が保存可能な上限を超えています")
         row = OrderBillingAmount(version_id=version_id, revision=revision + 1, client_id=client_id,
-            billing_month=billing_month, amount=amount, reason=reason.strip(), created_by_user_id=actor.id, created_at=now(),
+            billing_month=billing_month, amount=amount, incentive_amount=incentive_amount, reason=reason.strip(), created_by_user_id=actor.id, created_at=now(),
             snapshot={"document_number": document.document_number, "version_no": source.version_no,
+                      "incentive_enabled": incentive_enabled, "incentive_note": incentive_note,
                       "project_name": sections.get("project_name", ""), "work_date_label": source.work_date_label, "client_name": client.name})
         self.session.add(row)
         self.session.flush()
         AuditService(self.session).log("order_billing_amount_confirmed", target_type="order_billing_amount", target_id=row.id,
             actor=actor.username, actor_role=actor.role, reason=row.reason,
-            before_value={"amount": str(current.amount), "client_id": current.client_id, "billing_month": current.billing_month} if current else None,
-            after_value={"amount": str(amount), "client_id": client_id, "billing_month": billing_month, "version_id": version_id, "revision": row.revision})
+            before_value={"amount": str(current.amount), "incentive_amount": str(current.incentive_amount) if current.incentive_amount is not None else None, "client_id": current.client_id, "billing_month": current.billing_month} if current else None,
+            after_value={"amount": str(amount), "incentive_amount": str(incentive_amount) if incentive_amount is not None else None, "incentive_note": incentive_note, "client_id": client_id, "billing_month": billing_month, "version_id": version_id, "revision": row.revision})
         return row
 
     def get_invoice(self, invoice_id):
@@ -155,6 +173,8 @@ class OrderBillingService:
         rows = [r for r in self.rows() if r["client_id"] == client_id and r["billing_month"] == billing_month and r["amount_id"]]
         if not rows:
             raise OrderRequestError(400, "この請求先・請求月に金額確定済みの依頼がありません")
+        if any(not r["billing_ready"] for r in rows):
+            raise OrderRequestError(409, "インセンティブ金額が未確定、または案件のクライアントと請求先が不一致の依頼があります。金額を確認してください")
         if any(r["invoice_id"] for r in rows):
             raise OrderRequestError(409, "既に別の請求書に含まれている依頼があります。二重には請求できません")
         for series_id in sorted(r["series_id"] for r in rows):
@@ -177,7 +197,9 @@ class OrderBillingService:
         for index, row in enumerate(sorted(rows, key=lambda r: r["document_number"]), 1):
             self.session.add(OrderBillingInvoiceLine(invoice_id=invoice.id, amount_id=row["amount_id"], series_id=row["series_id"],
                 active_series_id=row["series_id"], line_number=index, description=row["project_name"] or "案件", document_number=row["document_number"],
-                work_date_label=row["work_date_label"], amount=Decimal(row["amount"])))
+                work_date_label=row["work_date_label"], amount=Decimal(row["total_amount"]),
+                incentive_amount=Decimal(row["incentive_amount"]) if row["incentive_enabled"] else None,
+                incentive_note=row["incentive_note"] if row["incentive_enabled"] else None))
         self.session.flush()
         invoice.subtotal = sum((line.amount for line in self.lines(invoice)), Decimal(0))
         invoice.tax_amount = (invoice.subtotal * invoice.tax_rate).quantize(Decimal("1"), rounding=ROUND_FLOOR)
@@ -211,7 +233,7 @@ class OrderBillingService:
         current = {r["version_id"]: r for r in self.rows()}
         for line in lines:
             amount = self.session.get(OrderBillingAmount, line.amount_id)
-            if amount.version_id not in current or current[amount.version_id]["amount_id"] != amount.id:
+            if amount.version_id not in current or current[amount.version_id]["amount_id"] != amount.id or not current[amount.version_id]["billing_ready"] or current[amount.version_id]["client_id"] != invoice.client_id:
                 raise OrderRequestError(409, "請求書作成後に依頼が変更・取消されました。下書きを取り消して確認してください")
         # Unallocated new orders for the same client/month must not silently disappear.
         if any(r["client_id"] == invoice.client_id and r["billing_month"] == invoice.billing_month and not r["invoice_id"] for r in current.values()):

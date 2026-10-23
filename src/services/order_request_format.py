@@ -1,5 +1,6 @@
 """案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
+import unicodedata
 from src.domain.order_schedule import apply_period_holidays, normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.domain.maps_url import validate_maps_url
 
@@ -21,6 +22,20 @@ CATEGORY_OPTIONS = (
     TRAINING_CATEGORY,
 )
 DEFAULT_NOTES = "報酬の期限等その他の事項は、業務委託契約書記載のとおり。"
+NO_INCENTIVE = "インセンティブなし"
+
+
+def incentive_details(sections: dict | None) -> tuple[bool, str]:
+    """Legacy text is retained; only explicit, unambiguous negatives mean none."""
+    sections = sections or {}
+    note = _text(sections.get("incentive"))
+    flag = sections.get("incentive_enabled")
+    if flag is not None and not isinstance(flag, bool):
+        raise ValueError("インセンティブのあり・なしを選択してください")
+    if flag is None:
+        normalized = "".join(unicodedata.normalize("NFKC", note).split()).lstrip("※・")
+        flag = bool(normalized and normalized not in {"なし", "無し", "無", "インセンなし", "インセン無し", "インセンティブなし", "インセンティブ無し"})
+    return flag, note if flag else NO_INCENTIVE
 
 _SECTION_KEYS = (
     "project_name",
@@ -55,6 +70,12 @@ def parse_sections(request_conditions: str | None) -> dict | None:
     if not isinstance(data, dict) or data.get("format") != FORMAT_ID:
         return None
     sections = {key: _text(data.get(key)) for key in (*_SECTION_KEYS, *_LEGACY_KEYS)}
+    if "incentive_enabled" in data:
+        if not isinstance(data["incentive_enabled"], bool):
+            raise ValueError("インセンティブのあり・なしを選択してください")
+        sections["incentive_enabled"] = data["incentive_enabled"]
+        if not data["incentive_enabled"]:
+            sections["incentive"] = NO_INCENTIVE
     for key in ("previous_hours", "previous_fee", "place_id"):
         if key in data:
             sections[key] = _text(data[key])
@@ -134,7 +155,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
         notes = f"・{notes}"
     hours = _text(sections.get("hours")) or _legacy_hours(sections)
     fee = _text(sections.get("fee")) or _legacy_fee(sections)
-    incentive = _text(sections.get("incentive"))
+    incentive = incentive_details(sections)[1]
     return "\n".join(
         [
             DOCUMENT_TITLE,
@@ -183,7 +204,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
-    for key in ("categories", "schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url", "site_station_walk_minutes"):
+    for key in ("categories", "schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url", "site_station_walk_minutes", "incentive_enabled"):
         if key in sections:
             payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)

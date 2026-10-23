@@ -39,11 +39,13 @@ class OrderBillingAmount(Base):
     client_id: Mapped[str] = mapped_column(String(26), ForeignKey("clients.id"), nullable=False)
     billing_month: Mapped[str] = mapped_column(String(6), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    incentive_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[str] = mapped_column(String(26), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (UniqueConstraint("version_id", "revision", name="uq_order_billing_amount_revision"),
+                     CheckConstraint("incentive_amount IS NULL OR incentive_amount >= 0", name="ck_order_billing_incentive_amount"),
                      CheckConstraint("amount >= 0 AND revision > 0", name="ck_order_billing_amount"),
                      CheckConstraint("length(billing_month) = 6", name="ck_order_billing_month"),
                      Index("ix_order_billing_amount_client_month", "client_id", "billing_month"))
@@ -92,6 +94,9 @@ class OrderBillingInvoiceLine(Base):
     document_number: Mapped[str] = mapped_column(String(40), nullable=False)
     work_date_label: Mapped[str] = mapped_column(Text, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    incentive_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    incentive_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (UniqueConstraint("invoice_id", "line_number", name="uq_order_billing_line_number"),
+                     CheckConstraint("incentive_amount IS NULL OR (incentive_amount >= 0 AND incentive_amount <= amount)", name="ck_order_billing_line_incentive"),
                      CheckConstraint("amount >= 0 AND line_number > 0", name="ck_order_billing_line"),
                      CheckConstraint("active_series_id IS NULL OR active_series_id = series_id", name="ck_order_billing_line_claim"))
