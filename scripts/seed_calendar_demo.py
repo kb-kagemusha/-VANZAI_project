@@ -29,7 +29,7 @@ from src.services import worker_schedule as ws
 DATASET = "calendar-demo-202610-v1"
 BALANCED_DATASET = "calendar-demo-202610-v2"
 MARKERS = ("サンプル", "テスト", "sample", "dummy", "デモ")
-REQUESTED_WORKERS = ("テストアカウント", "高橋直樹", "坂井貴博")
+REQUESTED_WORKERS = ("テストアカウント", "坂井貴博")
 DEMO_EXTRA_NAMES = (("渡邊 健太郎", "わたなべ けんたろう"), ("長谷川 亜香里", "はせがわ あかり"), ("岡田 直人", "おかだ なおと"), ("松本 彩乃", "まつもと あやの"))
 
 

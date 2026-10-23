@@ -1836,7 +1836,7 @@ export function revokeLineLink(workerId: string, reason: string) {
   );
 }
 
-export type ParticipationPerson = { worker_id: string; name: string; is_newcomer?: boolean };
+export type ParticipationPerson = { worker_id: string; name: string; is_newcomer?: boolean; is_director?: boolean };
 export type ParticipationEvent = {
   series_id: string;
   version_id: string;
@@ -1852,7 +1852,7 @@ export type ParticipationEvent = {
   unavailable?: ParticipationPerson[];
 };
 export type ParticipationDay = { date: string; events: ParticipationEvent[] };
-export type ParticipationWorker = { worker_id: string; name: string; line_linked: boolean; is_newcomer?: boolean };
+export type ParticipationWorker = { worker_id: string; name: string; line_linked: boolean; is_newcomer?: boolean; is_director?: boolean };
 
 export function getParticipationCalendar(params: { month?: string; versionId?: string; includeTest?: boolean; includeWorkers?: boolean }) {
   return apiFetch<{ month?: string; days: ParticipationDay[]; workers?: ParticipationWorker[] }>("/api/order-requests/participation-calendar", undefined, {

@@ -5,10 +5,12 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 NEWCOMER_CODE = "newcomer"
+DIRECTOR_CODE = "director"
 NEWCOMER_MONTHS = 3
 
 WORKER_TAGS: tuple[tuple[str, str, str], ...] = (
     ("newcomer", "新人", "付けてから3ヶ月で外れます"),
+    ("director", "ディレクター可能", "現場の監督・進行管理を担当できる（氏名に青地・白文字のDマークを表示）"),
     ("food_d", "飲食D", "飲食店の巡回ができる"),
     ("commercial_d", "商業D", "商業施設の現場ができる"),
     ("shibuya_smoke_d", "渋喫D", "渋谷の喫煙所ができる"),
@@ -150,3 +152,7 @@ def is_newcomer_from_start(start_date: date | None, today: date | None = None) -
     """稼働開始日から暦の3か月間。未来・未設定・満了日当日は対象外。"""
     current = today or tokyo_today()
     return start_date is not None and start_date <= current < add_months(start_date, 3)
+
+
+def is_director(tags: object) -> bool:
+    return DIRECTOR_CODE in stored_worker_tags(tags)

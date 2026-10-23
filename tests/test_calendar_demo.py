@@ -222,7 +222,7 @@ def test_tune_adds_four_to_eight_people_without_double_booking_and_renames_displ
     original_snapshots = {v.id: (v.snapshot_json, v.pdf_object_key) for v in db_session.query(OrderRequestVersion)}
     result = tune(db_session)
     db_session.flush()
-    assert result["renamed"] == 5
+    assert result["renamed"] == 4
     assert sorted(e["count"] for e in result["created"]) == [4, 5, 6, 8]
     assert result["max_events_per_worker_day"] == 1 and result["max_participants"] == 8
     assert db_session.query(Worker).count() == 24
@@ -233,7 +233,8 @@ def test_tune_adds_four_to_eight_people_without_double_booking_and_renames_displ
     days = build(db_session, series_id=group.series_id)
     assert [len(day["events"][0]["ok"]) for day in days] == [8, 7, 6]
     calendar = build(db_session, start="2026-10-01", end="2026-12-13", test_only=True)
-    assert all("テスト" not in p["name"] for day in calendar for event in day["events"] for state in ("ok", "changing", "unanswered", "unavailable") for p in event[state])
+    assert db_session.query(Worker).filter_by(name="テスト アカウント").count() == 1
+    assert not db_session.query(Worker).filter_by(name="高橋 直樹").count()
     for identifier, before in original_snapshots.items():
         v = db_session.get(OrderRequestVersion, identifier)
         assert (v.snapshot_json, v.pdf_object_key) == before

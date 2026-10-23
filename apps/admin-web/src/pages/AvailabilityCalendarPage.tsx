@@ -676,7 +676,7 @@ function WorkerRow({
         title={[worker.name, ...(worker.tags ?? []).map(tagLabel)].filter(Boolean).join(" / ")}
       >
         <div style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          <WorkerName name={worker.name} isNewcomer={worker.is_newcomer} />
+          <WorkerName name={worker.name} isNewcomer={worker.is_newcomer} isDirector={worker.is_director} />
           {!worker.is_active && (
             <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 4 }}>(無効)</span>
           )}

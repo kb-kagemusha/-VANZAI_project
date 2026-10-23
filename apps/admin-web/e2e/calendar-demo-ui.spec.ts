@@ -120,7 +120,7 @@ test("event outlines stay rectangular and worker runs span consecutive dates wit
 
 test("NG name fits the wider day column and undecided is Japanese", async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
-  const people = Array.from({ length: 8 }, (_, i) => ({ worker_id: `w${i}`, is_newcomer: i === 0, name: i === 0 ? "長谷川 亜香里" : i === 1 ? "渡邊 健太郎" : `稼働者${i}` }));
+  const people = Array.from({ length: 8 }, (_, i) => ({ worker_id: `w${i}`, is_newcomer: i === 0, is_director: i === 0, name: i === 0 ? "長谷川 亜香里" : i === 1 ? "渡邊 健太郎" : `稼働者${i}` }));
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
@@ -131,18 +131,19 @@ test("NG name fits the wider day column and undecided is Japanese", async ({ pag
       { date: "2026-10-01", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people, changing: [], unanswered: [], unavailable: [] }] },
       { date: "2026-10-02", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people.slice(1, 5), changing: [], unanswered: [], unavailable: [people[0], ...people.slice(5)] }] },
     ] });
-    if (path.endsWith("/availability-calendar")) return reply({ workers: [{ id: "w0", name: "長谷川 亜香里", is_newcomer: true, is_active: true, tags: [], days: { "2026-10-01": { availability_status: "undecided", assignments: [], order_events: [] } } }] });
+    if (path.endsWith("/availability-calendar")) return reply({ workers: [{ id: "w0", name: "長谷川 亜香里", is_newcomer: true, is_director: true, is_active: true, tags: [], days: { "2026-10-01": { availability_status: "undecided", assignments: [], order_events: [] } } }] });
     return reply({ items: [], total: 0, missing_count: 0 });
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/operations/calendar?view=event&month=2026-10&test=1");
   const refused = page.locator(".ov-event-box .ov-person.is-unavailable").first();
-  await expect(refused).toHaveText("× 長谷川 亜香里🔰");
+  await expect(refused).toHaveText("× 長谷川 亜香里🔰D");
   expect(await refused.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-  expect(await page.locator(".overview-head-day").first().evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(116);
+  expect(await page.locator(".overview-head-day").first().evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(160);
   await expect(page.locator(".ov-event-box").first()).toContainText("参加OK 8人");
   await expect(page.locator(".ov-event-box").nth(1)).toContainText("参加OK 4人");
   await expect(refused.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
+  await expect(refused.getByRole("img", { name: "ディレクター可能", exact: true })).toBeVisible();
   const boxes = await page.locator(".ov-event-box").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
   expect(Math.abs(boxes[0] - boxes[1])).toBeLessThan(1);
   await page.screenshot({ path: testInfo.outputPath("eight-to-four-newcomer.png"), fullPage: true });
@@ -155,4 +156,35 @@ test("NG name fits the wider day column and undecided is Japanese", async ({ pag
   await expect(page.getByText("未定", { exact: true })).toBeVisible();
   await expect(page.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
   await expect(page.getByText("undecided", { exact: true })).toHaveCount(0);
+});
+
+
+test("director checkbox is available and independent of event-size tags", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
+  const worker = { id: "w", name: "監督 担当", is_active: true, tags: ["director", "event_large_d"], is_director: true, is_newcomer: false, profile: {} };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
+    if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
+    if (path.endsWith("/worker-tags")) return reply({ items: [{ code: "director", label: "ディレクター可能", description: "現場の監督ができる" }, { code: "event_large_d", label: "大型イベD", description: "大型イベントの現場" }] });
+    if (path.endsWith("/workers/w/edit-guard")) return reply({ worker, edit_guard: "guard" });
+    if (path.endsWith("/workers")) return reply({ items: [worker], total: 1 });
+    return reply({ items: [], total: 0 });
+  });
+  await page.goto("/masters/workers");
+  await expect(page.getByRole("img", { name: "ディレクター可能", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toHaveCount(0);
+  await page.getByRole("button", { name: "編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "監督 担当 を編集" });
+  const director = dialog.getByRole("checkbox", { name: "ディレクター可能 現場の監督ができる" });
+  const large = dialog.getByRole("checkbox", { name: "大型イベD 大型イベントの現場" });
+  await expect(director).toBeChecked();
+  await expect(large).toBeChecked();
+  await director.uncheck();
+  await expect(director).not.toBeChecked();
+  await expect(large).toBeChecked();
+  await director.check();
+  await expect(director).toBeChecked();
 });

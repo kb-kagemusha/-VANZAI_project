@@ -315,6 +315,7 @@ def test_worker_tags_are_predefined_only(api_client, db_session):
     codes = [item["code"] for item in items]
     assert codes == [
         "newcomer",
+        "director",
         "food_d",
         "commercial_d",
         "shibuya_smoke_d",

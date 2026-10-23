@@ -137,5 +137,5 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
 }
 
 function participantNames(list: ParticipationPerson[]) {
-  return list.map((person, index) => <span key={person.worker_id}>{index ? "、" : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} /></span>);
+  return list.map((person, index) => <span key={person.worker_id}>{index ? "、" : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} isDirector={person.is_director} /></span>);
 }

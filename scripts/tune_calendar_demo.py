@@ -30,7 +30,7 @@ def tune(db):
         raise RuntimeError("有効な管理者が必要です")
     audit = AuditService(db)
     renames = {f"【テスト】追加スタッフ{i}": value for i, value in zip(("01", "02", "03", "04"), DEMO_EXTRA_NAMES)}
-    renames.update({"テスト アカウント": ("高橋 直樹", "たかはし なおき"), "テストアカウント": ("高橋 直樹", "たかはし なおき")})
+    # 本人のテストアカウントはダミー名への改名対象にしない（DEC-089）。
     renamed = 0
     for worker in db.query(Worker).filter(Worker.deleted_at.is_(None)):
         if worker.name not in renames:

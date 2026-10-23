@@ -30,7 +30,7 @@ type EventRow = {
   days: Map<string, ParticipationEvent>;
 };
 type WorkerCell = { seriesId: string; status: Status };
-type WorkerRow = { workerId: string; name: string; isNewcomer?: boolean; lineLinked: boolean | null; days: Map<string, WorkerCell[]> };
+type WorkerRow = { workerId: string; name: string; isNewcomer?: boolean; isDirector?: boolean; lineLinked: boolean | null; days: Map<string, WorkerCell[]> };
 
 /** 日付の欠けた所で分割。月の表示範囲を越えては結合しない。 */
 function consecutiveRuns<T>(days: string[], valueOf: (day: string) => T | undefined): { start: number; items: T[] }[] {
@@ -104,7 +104,7 @@ export function OrderOverviewBody() {
     const workerMap = new Map<string, WorkerRow>();
     // 登録のある稼働者は、依頼がなくても全員出す（登録の順＝ふりがな順）
     for (const worker of query.data?.workers ?? []) {
-      workerMap.set(worker.worker_id, { workerId: worker.worker_id, name: worker.name, isNewcomer: worker.is_newcomer, lineLinked: worker.line_linked, days: new Map() });
+      workerMap.set(worker.worker_id, { workerId: worker.worker_id, name: worker.name, isNewcomer: worker.is_newcomer, isDirector: worker.is_director, lineLinked: worker.line_linked, days: new Map() });
     }
     const registeredCount = workerMap.size;
     for (const day of query.data?.days ?? []) {
@@ -127,7 +127,7 @@ export function OrderOverviewBody() {
           for (const person of (event[status] ?? [])) {
             let worker = workerMap.get(person.worker_id);
             if (!worker) {
-              worker = { workerId: person.worker_id, name: person.name, isNewcomer: person.is_newcomer, lineLinked: null, days: new Map() };
+              worker = { workerId: person.worker_id, name: person.name, isNewcomer: person.is_newcomer, isDirector: person.is_director, lineLinked: null, days: new Map() };
               workerMap.set(person.worker_id, worker);
             }
             const cells = worker.days.get(day.date) ?? [];
@@ -218,7 +218,7 @@ export function OrderOverviewBody() {
                                   <span className={`ov-event-name${index ? " is-repeat" : ""}`} aria-hidden={index > 0}>{row.name}</span>
                                   <span className="ov-count">参加OK {event.ok.length}人</span>
                                   {total === 0 ? <span className="ov-empty">まだ誰もいません</span> : null}
-                                  {STATUSES.flatMap((status) => (event[status] ?? []).map((person) => <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{status === "unavailable" ? "× " : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} /></span>))}
+                                  {STATUSES.flatMap((status) => (event[status] ?? []).map((person) => <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{status === "unavailable" ? "× " : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} isDirector={person.is_director} /></span>))}
                                 </div>;
                               })}
                             </div>
@@ -233,7 +233,7 @@ export function OrderOverviewBody() {
                 : workers.map((row) => (
                     <tr key={row.workerId} data-worker-id={row.workerId}>
                       <th className="overview-row-name" scope="row">
-                        <span className="ov-row-title"><WorkerName name={row.name} isNewcomer={row.isNewcomer} /></span>
+                        <span className="ov-row-title"><WorkerName name={row.name} isNewcomer={row.isNewcomer} isDirector={row.isDirector} /></span>
                         {row.lineLinked === false ? <span className="ov-line-badge">LINE未連携</span> : null}
                         {row.lineLinked === null ? <span className="ov-row-sub">登録の一覧にない人</span> : null}
                       </th>
