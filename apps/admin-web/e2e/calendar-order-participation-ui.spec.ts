@@ -269,6 +269,17 @@ test("form layout and detail dates stay within the overall work period", async (
   await page.goto("/operations/order-requests");
   await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
   const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  const meeting = await draft.getByRole("textbox", { name: "集合場所（任意）", exact: true }).locator("..").boundingBox();
+  const station = await draft.getByRole("textbox", { name: "会場の最寄り駅（任意）", exact: true }).locator("..").boundingBox();
+  const walk = await draft.getByRole("spinbutton", { name: "駅から徒歩（分）", exact: true }).locator("..").boundingBox();
+  const period = await draft.locator(".order-work-period-field").boundingBox();
+  expect(Math.abs(meeting!.y - station!.y)).toBeLessThan(2);
+  expect(Math.abs(meeting!.y - walk!.y)).toBeLessThan(2);
+  expect(station!.x).toBeGreaterThan(meeting!.x + meeting!.width);
+  expect(walk!.x).toBeGreaterThan(station!.x + station!.width);
+  expect(Math.abs(period!.x - meeting!.x)).toBeLessThan(2);
+  expect(period!.y).toBeGreaterThan(meeting!.y + meeting!.height);
+  await draft.locator(".order-meeting-row").screenshot({ path: testInfo.outputPath("aligned-meeting-fields.png") });
   await expect(draft.getByRole("button", { name: "稼働日の詳細1の開始日", exact: true })).toBeDisabled();
   const templateButton = draft.getByRole("button", { name: "テンプレートから呼び出す", exact: true });
   await expect(templateButton).toHaveClass(/btn-line-blue/);

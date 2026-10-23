@@ -132,7 +132,7 @@ export function OrderBillingPage() {
       {orders.isLoading ? <p>読み込んでいます…</p> : null}
       <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書・案件名</th><th>稼働日</th><th>請求先</th><th>請求月</th><th>請求額（税抜）</th><th>インセンティブ</th><th>操作</th></tr></thead><tbody>
         {(orders.data?.items ?? []).map((row) => <tr key={row.version_id}>
-          <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSource(row.version_id)}>{row.document_number} 第{row.version_no}版</button><div className="order-cell-multiline">{row.project_name || "案件名なし"}</div></td>
+          <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSource(row.version_id)}>{row.document_number} 第{row.version_no}版</button><div className="order-cell-multiline">{row.project_name || "案件名なし"}</div><div className="order-cell-multiline">カテゴリ：{row.categories?.join("、") || "未設定"}</div></td>
           <td className="order-cell-multiline">{row.work_date_label}</td><td>{row.client_name}{row.client_mismatch ? <p className="form-error">旧記録の請求先と不一致・再確認が必要</p> : null}</td><td>{row.billing_month ? monthLabel(row.billing_month) : "未設定"}</td><td>{row.amount !== null ? <>通常 {yen(row.amount)}{row.billing_ready && row.incentive_enabled ? <div>合計 {yen(row.total_amount!)}</div> : null}</> : <strong style={{ color: "#dc2626" }}>未入力</strong>}</td>
           <td className="order-cell-multiline">{row.incentive_enabled ? <>{row.incentive_note}<br />{row.incentive_amount !== null ? yen(row.incentive_amount) : <strong className="form-error">金額未確定</strong>}</> : "インセンティブなし"}</td>
           <td><div className="order-row-actions"><button type="button" className="btn create-button btn-sm" disabled={!!row.invoice_id} onClick={() => openEdit(row)}>{row.invoice_id ? "請求書作成済み" : row.amount_id ? "金額・請求月を変更" : "請求金額を確定"}</button>
@@ -163,7 +163,12 @@ export function OrderBillingPage() {
     </section>
 
     <FormDialog open={!!edit} title="依頼書の請求金額を確定" size="compact" busy={busy} onClose={() => setEdit(null)}>
-      <p>{edit?.document_number}　{edit?.project_name}</p>
+      <dl className="billing-order-context">
+        <div><dt>文書番号</dt><dd>{edit?.document_number} 第{edit?.version_no}版</dd></div>
+        <div><dt>案件名</dt><dd>{edit?.project_name || "案件名なし"}</dd></div>
+        <div><dt>稼働期間</dt><dd>{edit?.work_date_label || "未設定"}</dd></div>
+        <div><dt>カテゴリ</dt><dd>{edit?.categories?.join("、") || "未設定"}</dd></div>
+      </dl>
       <label className="order-field">請求先（案件のクライアント・変更不可）<input readOnly value={edit?.client_name || "未設定"} /></label>
       {!edit?.client_id ? <p className="form-error">依頼書の発注元にクライアントを設定してください。</p> : null}
       <label className="order-field">請求月（必須）<input type="month" value={editMonth} disabled={busy} onChange={(e) => setEditMonth(e.target.value)} /></label>

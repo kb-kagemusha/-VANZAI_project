@@ -5,7 +5,7 @@ export const getBillingIssuer = () => apiFetch<BillingIssuer>("/api/order-billin
 export const saveBillingIssuer = ({ revision, ...values }: BillingIssuer) => apiFetch<BillingIssuer>("/api/order-billing/issuer", { method: "PUT", body: JSON.stringify({ ...values, expected_revision: revision }) });
 
 export type BillingOrder = { version_id: string; series_id: string; document_number: string; version_no: number; project_name: string;
-  work_date_label: string; client_id: string | null; client_name: string; revision: number; amount_id: string | null; amount: string | null;
+  work_date_label: string; categories: string[]; client_id: string | null; client_name: string; revision: number; amount_id: string | null; amount: string | null;
   billing_month: string | null; invoice_id: string | null; status: string; incentive_enabled: boolean; incentive_note: string;
   incentive_amount: string | null; total_amount: string | null; billing_ready: boolean; client_mismatch: boolean };
 export type BillingInvoice = { id: string; document_number: string; client_id: string; client_name: string; billing_month: string; billing_date: string;

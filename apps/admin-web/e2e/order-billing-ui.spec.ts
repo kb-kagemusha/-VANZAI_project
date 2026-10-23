@@ -11,7 +11,7 @@ async function mocks(page: Page, role = "admin", stale = false, incentive = fals
   let invoice: any = null;
   let issuer = { revision: 1, name: "株式会社VANZAI", postal_code: "116-0002", address: "東京都荒川区荒川1丁目39-11 東京アルバタワー1703", registration_number: "", bank_details: "", payment_terms: "" };
   const order = { version_id: "v1", series_id: "s1", document_number: "ORD-001", version_no: 1,
-    project_name: "秋のイベント", work_date_label: "10月30日～11月2日", client_id: "c1", client_name: "依頼元会社",
+    project_name: "秋のイベント", work_date_label: "10月30日～11月2日", categories: ["飲食店巡回", "研修"], client_id: "c1", client_name: "依頼元会社",
     revision: 0, amount_id: null, amount: null, billing_month: null, invoice_id: null, status: "missing",
     incentive_enabled: incentive, incentive_note: incentive ? "販売1台につき500円\n翌月実績確定" : "インセンティブなし", incentive_amount: null, total_amount: null, billing_ready: false, client_mismatch: false };
   await page.route("**/api/**", async (route) => {
@@ -62,6 +62,8 @@ test("admin selects billing month explicitly, saves total, clears red badge, cre
   await expect(nav.locator(".nav-unread-badge")).toBeVisible();
   await page.getByRole("button", { name: "請求金額を確定", exact: true }).click();
   const edit = page.getByRole("dialog", { name: "依頼書の請求金額を確定", exact: true });
+  await expect(edit.locator(".billing-order-context")).toContainText("10月30日～11月2日");
+  await expect(edit.locator(".billing-order-context")).toContainText("飲食店巡回、研修");
   await expect(edit.getByRole("combobox")).toHaveCount(0);
   await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveValue("依頼元会社");
   await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveAttribute("readonly", "");

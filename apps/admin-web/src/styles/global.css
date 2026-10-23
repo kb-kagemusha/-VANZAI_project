@@ -4195,6 +4195,12 @@ html[data-theme="dark"] .order-template-create-button { --template-button-color:
 .order-span-6 { grid-column: span 6; }
 .order-span-8 { grid-column: span 8; }
 .order-span-12 { grid-column: span 12; }
+.order-meeting-row { grid-column: 1 / -1; }
+.order-work-period-field { grid-column: 1 / span 6; }
+.billing-order-context { display: grid; gap: .6rem; margin: 0 0 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.billing-order-context > div { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: .75rem; }
+.billing-order-context dt { color: var(--muted); }
+.billing-order-context dd { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
 
 .master-view-switch { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
 .master-view-switch button { min-height: 44px; border-width: 2px; border-style: solid; padding: .5rem .9rem; border-radius: 9px; background: var(--surface, #fff); color: var(--ink); font: inherit; cursor: pointer; }

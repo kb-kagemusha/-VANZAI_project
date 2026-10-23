@@ -1442,41 +1442,43 @@ export function OrderRequestsPage() {
                     />
                   </label>
                   <OrderLocationEditor disabled={!editable} venueName={form.site_name} address={form.site_address ?? ""} placeId={sections.placeId ?? ""} savedMapsUrl={sections.mapsUrl ?? ""} onMapsUrl={(mapsUrl) => { setSections({ ...sections, mapsUrl, placeId: "" }); setForm({ ...form, site_id: null }); }} onAddress={(address) => setForm({ ...form, site_id: null, site_address: address || null })} onPlaceId={(placeId) => { setSections({ ...sections, placeId, mapsUrl: "" }); if (placeId) setForm({ ...form, site_id: null }); }} />
-                  <label className="order-field order-span-6">
-                    <span className="order-field-label">集合場所（任意）</span>
-                    <textarea
-                      className="is-short"
-                      value={sections.meetingPlace}
-                      disabled={!editable}
-                      placeholder={"例：会場の正面入口前\n※未定の場合はその旨を記載"}
-                      onChange={(event) => setSections({ ...sections, meetingPlace: withFullwidthTilde(event.target.value) })}
-                    />
-                  </label>
-                  <label className="order-field order-span-4">
-                    <span className="order-field-label">会場の最寄り駅（任意）</span>
-                    <input
-                      value={sections.siteStation}
-                      disabled={!editable}
-                      maxLength={100}
-                      placeholder="例：新宿駅（南口）"
-                      onChange={(event) => setSections({ ...sections, siteStation: withFullwidthTilde(event.target.value) })}
-                    />
-                  </label>
-                  <label className="order-field order-span-2">
-                    <span className="order-field-label">駅から徒歩（分）</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={120}
-                      step={1}
-                      value={sections.siteStationWalkMinutes}
-                      disabled={!editable}
-                      placeholder="例：5"
-                      onChange={(event) => setSections({ ...sections, siteStationWalkMinutes: event.target.value.replace(/[^0-9]/g, "").slice(0, 3) })}
-                    />
-                  </label>
-                  {!templateMode && <><div className="order-field order-span-6">
+                  <div className="order-draft-grid order-span-12 order-meeting-row">
+                    <label className="order-field order-span-6">
+                      <span className="order-field-label">集合場所（任意）</span>
+                      <textarea
+                        className="is-short"
+                        value={sections.meetingPlace}
+                        disabled={!editable}
+                        placeholder={"例：会場の正面入口前\n※未定の場合はその旨を記載"}
+                        onChange={(event) => setSections({ ...sections, meetingPlace: withFullwidthTilde(event.target.value) })}
+                      />
+                    </label>
+                    <label className="order-field order-span-4">
+                      <span className="order-field-label">会場の最寄り駅（任意）</span>
+                      <input
+                        value={sections.siteStation}
+                        disabled={!editable}
+                        maxLength={100}
+                        placeholder="例：新宿駅（南口）"
+                        onChange={(event) => setSections({ ...sections, siteStation: withFullwidthTilde(event.target.value) })}
+                      />
+                    </label>
+                    <label className="order-field order-span-2">
+                      <span className="order-field-label">駅から徒歩（分）</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={120}
+                        step={1}
+                        value={sections.siteStationWalkMinutes}
+                        disabled={!editable}
+                        placeholder="例：5"
+                        onChange={(event) => setSections({ ...sections, siteStationWalkMinutes: event.target.value.replace(/[^0-9]/g, "").slice(0, 3) })}
+                      />
+                    </label>
+                  </div>
+                  {!templateMode && <><div className="order-field order-span-6 order-work-period-field">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <OrderDatePicker

@@ -32,10 +32,14 @@ def admin_user(db_session):
     return user
 
 
-def source(api, db, user, client, *, kind="formal", incentive=None):
+def source(api, db, user, client, *, kind="formal", incentive=None, categories=None):
     worker = _worker(db, "依頼先")
     body = _payload([worker.id], kind=kind)
     body["internal_source"] = {"client_id": client.id, "client_staff_id": None}
+    if categories is not None:
+        conditions = json.loads(body["request_conditions"])
+        conditions["categories"] = categories
+        body["request_conditions"] = json.dumps(conditions)
     if incentive is not None:
         conditions = json.loads(body["request_conditions"])
         conditions.update(incentive_enabled=True, incentive=incentive)
@@ -55,6 +59,17 @@ def save(api, user, version, client, amount="10001", **kwargs):
 
 def generate(api, user, client):
     return api.post("/api/order-billing/invoices", headers=_auth(user.username), json={"client_id": client.id, "billing_month": "202611", "billing_date": "2026-11-30"})
+
+
+def test_billing_context_retains_confirmed_period_and_categories(api_client, db_session, admin_user, client, pdf_root):
+    version = source(api_client, db_session, admin_user, client, categories=["飲食店巡回", "研修"])
+    response = api_client.get("/api/order-billing/orders?status=all", headers=_auth(admin_user.username))
+    assert response.status_code == 200
+    row = response.json()["items"][0]
+    assert row["version_id"] == version["id"]
+    assert row["work_date_label"] == version["work_date_label"]
+    assert row["categories"] == ["飲食店巡回", "研修"]
+    assert row["amount"] is None
 
 
 def test_latest_formal_confirmed_only_and_zero_is_not_missing(api_client, db_session, admin_user, client, pdf_root):

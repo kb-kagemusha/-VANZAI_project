@@ -91,6 +91,7 @@ class OrderBillingService:
             total = amount.amount + (amount.incentive_amount or Decimal(0)) if amount and ready else None
             result.append({"version_id": version.id, "series_id": version.series_id, "document_number": document.document_number,
                 "version_no": version.version_no, "project_name": sections.get("project_name", ""), "work_date_label": version.work_date_label,
+                "categories": sections.get("categories", []),
                 "client_id": client_id, "client_name": client.name if client else "未設定", "revision": amount.revision if amount else 0,
                 "amount_id": amount.id if amount else None, "amount": str(amount.amount) if amount else None,
                 "incentive_enabled": incentive_enabled, "incentive_note": incentive_note,
