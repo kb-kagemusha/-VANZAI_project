@@ -2845,7 +2845,7 @@ async def get_availability_calendar(
         from src.services.participation_calendar import build
         for day in build(db, start=date_from.isoformat(), end=date_to.isoformat(), include_test=include_test):
             for event in day["events"]:
-                for state in ("ok", "changing", "unanswered"):
+                for state in ("ok", "changing", "unanswered", "unavailable"):
                     for person in event[state]:
                         order_map.setdefault(person["worker_id"], {}).setdefault(day["date"], []).append({
                             "version_id": event["version_id"], "project_name": event["project_name"],

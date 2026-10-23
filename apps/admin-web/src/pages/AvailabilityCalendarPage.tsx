@@ -796,7 +796,7 @@ function DayCell({
 
         {(dayInfo?.order_events ?? []).map((event) => <span key={event.version_id} className={`ov-event-chip ov-c${categoryColor(event.categories)} is-${event.status}`} title={event.project_name}>
           {event.is_test ? <TestBadge /> : null}{event.project_name}
-          {event.status !== "ok" ? <small>{event.status === "changing" ? "変更確認待ち" : "未回答"}</small> : null}
+          {event.status !== "ok" ? <small>{event.status === "unavailable" ? "× 参加不可" : event.status === "changing" ? "変更確認待ち" : "未回答"}</small> : null}
         </span>)}
         {/* 配置チップ */}
         {assignments.map((a) => (

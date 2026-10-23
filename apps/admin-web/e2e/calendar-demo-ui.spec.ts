@@ -74,3 +74,46 @@ test("billing test orders are opt-in and labelled in amount dialog", async ({ pa
   await expect(dialog).toHaveCount(0);
   expect(saved).toBe(true);
 });
+
+test("event outlines stay rectangular and worker runs span consecutive dates without bridging NG days", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
+  const person = (id: string) => ({ worker_id: id, name: `稼働者${id}` });
+  const event = (id: string, ok: string[], unavailable: string[] = []) => ({ series_id: id, version_id: id, document_number: id,
+    project_name: id === "a" ? "連日フェス" : "連日巡回", categories: [id === "a" ? "フェス系" : "飲食店巡回"], is_test: true,
+    ok: ok.map(person), changing: [], unanswered: [], unavailable: unavailable.map(person) });
+  const days = [
+    { date: "2026-10-10", events: [event("a", ["1", "2"])] },
+    { date: "2026-10-11", events: [event("a", ["2", "3", "4", "5", "6"], ["1"]), event("b", ["1"])] },
+    { date: "2026-10-12", events: [event("a", ["1", "2"]), event("b", ["1"])] },
+    { date: "2026-10-14", events: [event("a", ["1", "2"])] },
+  ];
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
+    if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
+    if (path.endsWith("/participation-calendar")) return reply({ days, workers: ["1", "2"].map((id) => ({ ...person(id), line_linked: false })) });
+    return reply({ items: [], total: 0, missing_count: 0 });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/operations/calendar?view=event&month=2026-10&test=1");
+  const run = page.locator('.ov-event-run[data-series-id="a"]').first();
+  await expect(run.locator(".ov-event-box")).toHaveCount(3);
+  const rects = await run.locator(".ov-event-box").evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
+  expect(Math.max(...rects.map((r) => r.bottom)) - Math.min(...rects.map((r) => r.bottom))).toBeLessThan(1);
+  expect(Math.max(...rects.map((r) => r.top)) - Math.min(...rects.map((r) => r.top))).toBeLessThan(1);
+  await expect(run.locator(".is-unavailable")).toContainText("× 稼働者1");
+  await run.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("event-rectangle.png"), fullPage: true });
+  await page.getByRole("tab", { name: "稼働者ごと", exact: true }).click();
+  const w2 = page.locator('tr[data-worker-id="2"]');
+  await expect(w2.locator('.ov-worker-run[data-series-id="a"][data-days="3"]')).toHaveCount(1);
+  await expect(w2.locator('.ov-worker-run[data-series-id="a"]')).toHaveCount(2); // 13日の空白で分割
+  const w1 = page.locator('tr[data-worker-id="1"]');
+  await expect(w1.locator('.ov-worker-run[data-series-id="a"]')).toHaveCount(4); // NG日を跨がない
+  await expect(w1.locator('.ov-worker-run[data-series-id="b"][data-days="2"]')).toHaveCount(1);
+  await expect(w1.locator('.ov-worker-run.is-unavailable')).toContainText("11日 × 参加不可");
+  await w1.locator('.ov-worker-run[data-series-id="b"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("worker-continuous.png"), fullPage: true });
+});

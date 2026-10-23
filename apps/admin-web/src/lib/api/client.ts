@@ -1848,6 +1848,7 @@ export type ParticipationEvent = {
   ok: ParticipationPerson[];
   changing: ParticipationPerson[];
   unanswered: ParticipationPerson[];
+  unavailable?: ParticipationPerson[];
 };
 export type ParticipationDay = { date: string; events: ParticipationEvent[] };
 export type ParticipationWorker = { worker_id: string; name: string; line_linked: boolean };

@@ -50,7 +50,7 @@ export function ParticipationCalendarPage({ embedded = false }: { embedded?: boo
               onMonthChange={(next) => { setSelectedDay(null); setSearchParams((current) => { const params = new URLSearchParams(current); params.set("month", next); return params; }); }}
               renderDay={(day) => <DayCell day={day} data={byDay.get(day)} selected={selectedDay === day} onSelect={setSelectedDay} />}
             />
-            <p className="participation-legend"><span className="pc-ok">OK</span>参加OK　<span className="pc-changing">確認</span>変更確認待ち　<span className="pc-unanswered">未</span>未回答</p>
+            <p className="participation-legend"><span className="pc-ok">OK</span>参加OK　<span className="pc-changing">確認</span>変更確認待ち　<span className="pc-unanswered">未</span>未回答　<span className="pc-unavailable">×</span>参加不可</p>
           </section>
           <section className="card participation-detail">
             {selected ? (
@@ -79,6 +79,7 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
           <span className="pc-ok">{event.ok.length}</span>
           {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
           {event.unanswered.length > 0 ? <span className="pc-unanswered">{event.unanswered.length}</span> : null}
+          {event.unavailable?.length ? <span className="pc-unavailable">×{event.unavailable.length}</span> : null}
         </span>
       ))}
     </button>
@@ -90,6 +91,7 @@ function EventDetail({ event }: { event: ParticipationEvent }) {
     <div className="pc-detail-event">
       <strong>{event.is_test ? <TestBadge /> : null}{event.project_name || "案件名なし"}</strong>
       <span className="order-field-hint">　{event.document_number}</span>
+      {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{event.unavailable.map((p) => p.name).join("、")}</p> : null}
       <p>参加OK {event.ok.length}人：{event.ok.map((p) => p.name).join("、") || "なし"}</p>
       {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{event.changing.map((p) => p.name).join("、")}</p> : null}
       {event.unanswered.length > 0 ? <p>未回答 {event.unanswered.length}人：{event.unanswered.map((p) => p.name).join("、")}</p> : null}
@@ -113,7 +115,7 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
     <div className="order-draft-table">
       <table className="data-table">
         <thead>
-          <tr><th>日付</th><th>参加OK</th><th>変更確認待ち</th><th>未回答</th></tr>
+          <tr><th>日付</th><th>参加OK</th><th>変更確認待ち</th><th>未回答</th><th>参加不可</th></tr>
         </thead>
         <tbody>
           {days.map((day) => {
@@ -124,6 +126,7 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
                 <td><strong>{event.ok.length}人</strong>{names(event.ok)}</td>
                 <td>{event.changing.length}人{names(event.changing)}</td>
                 <td>{event.unanswered.length}人{names(event.unanswered)}</td>
+                <td>× {event.unavailable?.length ?? 0}人{names(event.unavailable ?? [])}</td>
               </tr>
             );
           })}

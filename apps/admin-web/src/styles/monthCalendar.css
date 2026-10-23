@@ -34,3 +34,5 @@
 .participation-legend { display: flex; gap: .4rem; align-items: center; font-size: .8rem; margin: .75rem 0 0; flex-wrap: wrap; }
 .pc-detail-event { border-top: 1px solid var(--line, #e4e5e9); padding: .6rem 0; }
 .pc-detail-event p { margin: .25rem 0 0; font-size: .85rem; }
+
+.pc-unavailable { display: inline-block; padding: 0 3px; border-radius: 4px; background: #fee2e2; color: #991b1b; font-size: .7rem; font-weight: 700; }

@@ -15,9 +15,9 @@ import { categoryColor } from "../lib/calendarCategory";
 import { TestBadge } from "../components/TestBadge";
 import "../styles/orderOverview.css";
 
-type Status = "ok" | "changing" | "unanswered";
-const STATUS_LABEL: Record<Status, string> = { ok: "参加OK", changing: "変更確認待ち", unanswered: "未回答" };
-const STATUSES: Status[] = ["ok", "changing", "unanswered"];
+type Status = "ok" | "changing" | "unanswered" | "unavailable";
+const STATUS_LABEL: Record<Status, string> = { ok: "参加OK", changing: "変更確認待ち", unanswered: "未回答", unavailable: "× 参加不可" };
+const STATUSES: Status[] = ["ok", "changing", "unanswered", "unavailable"];
 
 
 type EventRow = {
@@ -31,6 +31,32 @@ type EventRow = {
 };
 type WorkerCell = { seriesId: string; status: Status };
 type WorkerRow = { workerId: string; name: string; lineLinked: boolean | null; days: Map<string, WorkerCell[]> };
+
+/** 日付の欠けた所で分割。月の表示範囲を越えては結合しない。 */
+function consecutiveRuns<T>(days: string[], valueOf: (day: string) => T | undefined): { start: number; items: T[] }[] {
+  const runs: { start: number; items: T[] }[] = [];
+  days.forEach((day, index) => {
+    const item = valueOf(day);
+    if (item === undefined) return;
+    const last = runs[runs.length - 1];
+    if (last && last.start + last.items.length === index) last.items.push(item);
+    else runs.push({ start: index, items: [item] });
+  });
+  return runs;
+}
+
+function workerRuns(row: WorkerRow, days: string[]) {
+  const ids = new Set([...row.days.values()].flatMap((cells) => cells.map((cell) => cell.seriesId)));
+  const runs = [...ids].flatMap((seriesId) => [false, true].flatMap((refused) => consecutiveRuns(days, (day) => row.days.get(day)?.find((cell) => cell.seriesId === seriesId && (cell.status === "unavailable") === refused))));
+  runs.sort((a, b) => a.start - b.start || b.items.length - a.items.length || a.items[0].seriesId.localeCompare(b.items[0].seriesId));
+  const ends: number[] = [];
+  return runs.map((run) => {
+    let lane = ends.findIndex((end) => end < run.start);
+    if (lane < 0) lane = ends.length;
+    ends[lane] = run.start + run.items.length - 1;
+    return { ...run, lane };
+  });
+}
 
 function monthDays(month: string): string[] {
   const [year, mon] = month.split("-").map(Number);
@@ -98,7 +124,7 @@ export function OrderOverviewBody() {
         }
         row.days.set(day.date, event);
         for (const status of STATUSES) {
-          for (const person of event[status]) {
+          for (const person of (event[status] ?? [])) {
             let worker = workerMap.get(person.worker_id);
             if (!worker) {
               worker = { workerId: person.worker_id, name: person.name, lineLinked: null, days: new Map() };
@@ -141,6 +167,7 @@ export function OrderOverviewBody() {
           <span className="ov-person is-ok">参加OK</span>
           <span className="ov-person is-changing">変更確認待ち</span>
           <span className="ov-person is-unanswered">未回答</span>
+          <span className="ov-person is-unavailable">× 参加不可</span>
         </p>
       </section>
 
@@ -176,51 +203,59 @@ export function OrderOverviewBody() {
                         <span className="ov-row-title">{row.isTest ? <TestBadge /> : null}{row.name}</span>
                         <span className="ov-row-sub"><button type="button" className="ov-document-link" onClick={() => setDetailVersionId(row.versionId)}>{row.documentNumber}</button></span>
                       </th>
-                      {days.map((day, index) => {
-                        const event = row.days.get(day);
-                        if (!event) return <td key={day} className="overview-cell" />;
-                        const startsRun = !row.days.has(days[index - 1] ?? "");
-                        const endsRun = !row.days.has(days[index + 1] ?? "");
-                        const total = event.ok.length + event.changing.length + event.unanswered.length;
-                        return (
-                          <td key={day} className="overview-cell">
-                            <div className={`ov-event-box ov-c${row.color}${startsRun ? " is-start" : ""}${endsRun ? " is-end" : ""}`}>
-                              <span className={`ov-event-name${startsRun ? "" : " is-repeat"}`} aria-hidden={!startsRun}>{row.name}</span>
-                              <span className="ov-count">参加OK {event.ok.length}人</span>
-                              {total === 0 ? <span className="ov-empty">まだ誰もいません</span> : null}
-                              {STATUSES.flatMap((status) => event[status].map((person) => (
-                                <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{person.name}</span>
-                              )))}
+                      {(() => {
+                        const runs = consecutiveRuns(days, (day) => row.days.get(day));
+                        const cells = [];
+                        let cursor = 0;
+                        for (const run of runs) {
+                          if (run.start > cursor) cells.push(<td key={`empty-${cursor}`} colSpan={run.start - cursor} className="overview-cell" />);
+                          cells.push(<td key={run.start} colSpan={run.items.length} className="overview-cell overview-event-run-cell">
+                            <div className={`ov-event-run ov-c${row.color}`} data-series-id={row.seriesId}
+                              style={{ gridTemplateColumns: `repeat(${run.items.length}, minmax(0, 1fr))` }}>
+                              {run.items.map((event, index) => {
+                                const total = event.ok.length + event.changing.length + event.unanswered.length + (event.unavailable?.length ?? 0);
+                                return <div key={days[run.start + index]} className={`ov-event-box ov-c${row.color}`}>
+                                  <span className={`ov-event-name${index ? " is-repeat" : ""}`} aria-hidden={index > 0}>{row.name}</span>
+                                  <span className="ov-count">参加OK {event.ok.length}人</span>
+                                  {total === 0 ? <span className="ov-empty">まだ誰もいません</span> : null}
+                                  {STATUSES.flatMap((status) => (event[status] ?? []).map((person) => <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{status === "unavailable" ? "× " : ""}{person.name}</span>))}
+                                </div>;
+                              })}
                             </div>
-                          </td>
-                        );
-                      })}
+                          </td>);
+                          cursor = run.start + run.items.length;
+                        }
+                        if (cursor < days.length) cells.push(<td key={`empty-${cursor}`} colSpan={days.length - cursor} className="overview-cell" />);
+                        return cells;
+                      })()}
                     </tr>
                   ))
                 : workers.map((row) => (
-                    <tr key={row.workerId}>
+                    <tr key={row.workerId} data-worker-id={row.workerId}>
                       <th className="overview-row-name" scope="row">
                         <span className="ov-row-title">{row.name}</span>
                         {row.lineLinked === false ? <span className="ov-line-badge">LINE未連携</span> : null}
                         {row.lineLinked === null ? <span className="ov-row-sub">登録の一覧にない人</span> : null}
                       </th>
-                      {days.map((day) => {
-                        const cells = row.days.get(day) ?? [];
-                        return (
-                          <td key={day} className="overview-cell">
-                            {cells.map((cell) => {
-                              const event = eventById.get(cell.seriesId);
-                              if (!event) return null;
-                              return (
-                                <span key={cell.seriesId} className={`ov-event-chip ov-c${event.color} is-${cell.status}`} title={`${event.name}（${event.documentNumber}）${STATUS_LABEL[cell.status]}`}>
-                                  {event.isTest ? <TestBadge /> : null}{event.name}
-                                  {cell.status !== "ok" ? <small>{STATUS_LABEL[cell.status]}</small> : null}
-                                </span>
-                              );
-                            })}
-                          </td>
-                        );
-                      })}
+                      <td colSpan={days.length} className="overview-worker-track-cell">
+                        <div className="ov-worker-track" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(92px, 1fr))`, backgroundSize: `${100 / days.length}% 100%` }}>
+                          {workerRuns(row, days).map((run) => {
+                            const event = eventById.get(run.items[0].seriesId);
+                            if (!event) return null;
+                            const state = run.items.every((item) => item.status === run.items[0].status) ? run.items[0].status : "mixed";
+                            const label = `${Number(days[run.start].slice(8))}日〜${Number(days[run.start + run.items.length - 1].slice(8))}日（${run.items.length}日間）`;
+                            return <div key={`${event.seriesId}-${run.start}`} className={`ov-worker-run ov-event-chip ov-c${event.color} is-${state}`}
+                              data-series-id={event.seriesId} data-lane={run.lane} data-days={run.items.length}
+                              style={{ gridColumn: `${run.start + 1} / span ${run.items.length}`, gridRow: run.lane + 1 }}
+                              title={`${event.name}（${event.documentNumber}）${label}`}>
+                              <span className="ov-worker-run-title">{event.isTest ? <TestBadge /> : null}{event.name}{run.items.length > 1 ? <small className="ov-run-length">{run.items.length}日間</small> : null}</span>
+                              <div className="ov-worker-run-days" style={{ gridTemplateColumns: `repeat(${run.items.length}, minmax(0, 1fr))` }}>
+                                {run.items.map((item, index) => <small key={index}>{Number(days[run.start + index].slice(8))}日 {STATUS_LABEL[item.status]}</small>)}
+                              </div>
+                            </div>;
+                          })}
+                        </div>
+                      </td>
                     </tr>
                   ))}
             </tbody>
