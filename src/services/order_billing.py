@@ -61,11 +61,11 @@ class OrderBillingService:
             actor=actor.username, actor_role=actor.role, before_value=before, after_value=self.issuer_snapshot())
         return row
 
-    def eligible(self):
+    def eligible(self, *, include_test=False):
         return self.session.query(OrderRequestVersion, OrderRequestDocument).join(
             OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id
         ).join(OrderRequestSeries, OrderRequestSeries.answerable_version_id == OrderRequestVersion.id).filter(
-            OrderRequestVersion.status == "confirmed", OrderRequestDocument.kind == "formal",
+            OrderRequestVersion.status == "confirmed", OrderRequestDocument.kind.in_(("formal", "test") if include_test else ("formal",)),
             OrderRequestDocument.deleted_at.is_(None)
         ).order_by(OrderRequestVersion.confirmed_at.desc(), OrderRequestVersion.id).all()
 
@@ -74,12 +74,12 @@ class OrderBillingService:
         return {r.version_id: r for r in self.session.query(OrderBillingAmount).join(latest,
             (OrderBillingAmount.version_id == latest.c.version_id) & (OrderBillingAmount.revision == latest.c.revision)).all()}
 
-    def rows(self):
+    def rows(self, *, include_test=False):
         amounts = self.latest_amounts()
         clients = {c.id: c for c in self.session.query(Client).all()}
         claims = {l.series_id: l for l in self.session.query(OrderBillingInvoiceLine).filter(OrderBillingInvoiceLine.active_series_id.is_not(None)).all()}
         result = []
-        for version, document in self.eligible():
+        for version, document in self.eligible(include_test=include_test):
             amount = amounts.get(version.id)
             claim = claims.get(version.series_id)
             client_id = version.internal_client_id
@@ -91,6 +91,7 @@ class OrderBillingService:
             ready = client_matches and incentive_reviewed
             total = amount.amount + (amount.incentive_amount or Decimal(0)) if amount and ready else None
             result.append({"version_id": version.id, "series_id": version.series_id, "document_number": document.document_number,
+                "is_test": document.kind == "test",
                 "version_no": version.version_no, "project_name": sections.get("project_name", ""), "work_date_label": version.work_date_label,
                 "categories": sections.get("categories", []),
                 "client_id": client_id, "client_name": client.name if client else "未設定", "revision": amount.revision if amount else 0,
@@ -111,9 +112,9 @@ class OrderBillingService:
         if source is None or not source.series_id:
             raise OrderRequestError(404, "依頼書が見つかりません")
         ws.lock_series(self.session, source.series_id)
-        pair = next(((v, d) for v, d in self.eligible() if v.id == version_id), None)
+        pair = next(((v, d) for v, d in self.eligible(include_test=True) if v.id == version_id), None)
         if pair is None:
-            raise OrderRequestError(409, "正式・確定済みの最新依頼書だけ金額を確定できます。一覧を更新してください")
+            raise OrderRequestError(409, "確定済みの最新依頼書だけ金額を確定できます。一覧を更新してください")
         source, document = pair
         if client_id is not None and client_id != source.internal_client_id:
             raise OrderRequestError(400, "請求先は案件のクライアントに固定されています。別の請求先は指定できません")
@@ -138,6 +139,7 @@ class OrderBillingService:
         row = OrderBillingAmount(version_id=version_id, revision=revision + 1, client_id=client_id,
             billing_month=billing_month, amount=amount, incentive_amount=incentive_amount, reason=reason.strip(), created_by_user_id=actor.id, created_at=now(),
             snapshot={"document_number": document.document_number, "version_no": source.version_no,
+                      "is_test": document.kind == "test",
                       "incentive_enabled": incentive_enabled, "incentive_note": incentive_note,
                       "project_name": sections.get("project_name", ""), "work_date_label": source.work_date_label, "client_name": client.name})
         self.session.add(row)
@@ -145,7 +147,7 @@ class OrderBillingService:
         AuditService(self.session).log("order_billing_amount_confirmed", target_type="order_billing_amount", target_id=row.id,
             actor=actor.username, actor_role=actor.role, reason=row.reason,
             before_value={"amount": str(current.amount), "incentive_amount": str(current.incentive_amount) if current.incentive_amount is not None else None, "client_id": current.client_id, "billing_month": current.billing_month} if current else None,
-            after_value={"amount": str(amount), "incentive_amount": str(incentive_amount) if incentive_amount is not None else None, "incentive_note": incentive_note, "client_id": client_id, "billing_month": billing_month, "version_id": version_id, "revision": row.revision})
+            after_value={"amount": str(amount), "incentive_amount": str(incentive_amount) if incentive_amount is not None else None, "incentive_note": incentive_note, "client_id": client_id, "billing_month": billing_month, "version_id": version_id, "revision": row.revision, "is_test": document.kind == "test"})
         return row
 
     def get_invoice(self, invoice_id):

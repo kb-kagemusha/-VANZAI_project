@@ -7,6 +7,14 @@
 # =============================================================================
 set -euo pipefail
 
+# 明示した場合だけ、2026年10・11月のダミー依頼を確認／作成する。
+# 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
+CALENDAR_DEMO_ACTION="${1:-}"
+case "${CALENDAR_DEMO_ACTION}" in
+    ""|--calendar-demo-preview|--calendar-demo-apply) ;;
+    *) echo "不明なデプロイ引数"; exit 2 ;;
+esac
+
 APP_DIR="/var/www/vanzai"
 REPO_URL="https://github.com/kb-kagemusha/-VANZAI_project.git"
 VENV_DIR="${APP_DIR}/.venv"
@@ -59,7 +67,7 @@ echo "  コード取得完了: $(git log --oneline -1)"
 SCRIPT_HASH_AFTER=$(sha256sum "${SCRIPT_PATH}" | awk '{print $1}')
 if [ -n "${SCRIPT_HASH_BEFORE}" ] && [ "${SCRIPT_HASH_BEFORE}" != "${SCRIPT_HASH_AFTER}" ] && [ "${VANZAI_DEPLOY_REEXEC:-0}" != "1" ]; then
     export VANZAI_DEPLOY_REEXEC=1
-    exec bash "${SCRIPT_PATH}"
+    exec bash "${SCRIPT_PATH}" "$@"
 fi
 
 # ----------------------------------------
@@ -181,6 +189,12 @@ source "${APP_DIR}/.env"
 set +a
 ${VENV_DIR}/bin/alembic upgrade head
 echo "  マイグレーション完了"
+
+if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
+    "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
+elif [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-apply" ]; then
+    "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py" --apply
+fi
 
 # ----------------------------------------
 # 5. フロントエンドビルド（旧アセット保持付き）

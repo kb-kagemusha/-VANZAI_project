@@ -669,11 +669,20 @@ class CalendarDayAssignment(BaseModel):
     role_name: str
 
 
+class CalendarOrderEvent(BaseModel):
+    version_id: str
+    project_name: str
+    is_test: bool
+    categories: list[str] = Field(default_factory=list)
+    status: str
+
+
 class CalendarDayInfo(BaseModel):
     """カレンダー1日分の情報"""
     availability_status: Optional[str] = None
     availability_notes: Optional[str] = None
     assignments: list[CalendarDayAssignment] = Field(default_factory=list)
+    order_events: list[CalendarOrderEvent] = Field(default_factory=list)
 
 
 class CalendarWorkerRow(BaseModel):

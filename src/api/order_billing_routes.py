@@ -98,8 +98,8 @@ def update_issuer(body: IssuerBody, user: User = Depends(admin), db: Session = D
 
 
 @router.get("/summary")
-def summary(db: Session = Depends(get_db)):
-    rows = OrderBillingService(db).rows()
+def summary(include_test: bool = False, db: Session = Depends(get_db)):
+    rows = OrderBillingService(db).rows(include_test=include_test)
     return {"missing_count": sum(not r["billing_ready"] for r in rows), "total": len(rows)}
 
 
@@ -111,8 +111,8 @@ def clients(db: Session = Depends(get_db)):
 @router.get("/orders")
 def orders(status: str = Query(default="missing", pattern="^(missing|confirmed|invoice_created|all)$"),
            q: str = Query(default="", max_length=100), limit: int = Query(default=30, ge=1, le=100), offset: int = Query(default=0, ge=0),
-           db: Session = Depends(get_db)):
-    rows = OrderBillingService(db).rows()
+           include_test: bool = False, db: Session = Depends(get_db)):
+    rows = OrderBillingService(db).rows(include_test=include_test)
     if status == "missing":
         rows = [r for r in rows if not r["billing_ready"]]
     elif status != "all":

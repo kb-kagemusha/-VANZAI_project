@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { TestBadge } from "./TestBadge";
 import { FormDialog } from "./FormDialog";
 import { ErrorState } from "./ErrorState";
 import { getOrderRequestVersion } from "../lib/api/client";
@@ -11,6 +12,7 @@ export function OrderRequestDetailDialog({ versionId, onClose }: { versionId: st
     {query.isLoading ? <p>読み込んでいます…</p> : null}
     {query.isError ? <ErrorState title="依頼書を読み込めませんでした" description="時間をおいて再度お試しください。" /> : null}
     {detail ? <>
+      {detail.kind === "test" ? <p><TestBadge />正式な発注ではありません</p> : null}
       <p>稼働日：{detail.work_date_label}</p>
       <pre className="order-detail-body">{detail.body}</pre>
       <h4>送付先・返事</h4>

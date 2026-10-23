@@ -974,6 +974,7 @@ export function getAvailabilityCalendar(params: {
   date_from: string;
   date_to: string;
   is_active?: boolean;
+  include_test?: boolean;
 }) {
   return apiFetch<AvailabilityCalendarResponse>("/api/availability-calendar", undefined, params as Record<string, string | number | boolean | undefined>);
 }
@@ -1842,6 +1843,7 @@ export type ParticipationEvent = {
   document_number: string;
   project_name: string;
   site_name?: string;
+  categories?: string[];
   is_test?: boolean;
   ok: ParticipationPerson[];
   changing: ParticipationPerson[];

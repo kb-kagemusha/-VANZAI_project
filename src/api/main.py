@@ -2757,6 +2757,7 @@ async def get_availability_calendar(
     date_from: date = Query(..., description="表示開始日"),
     date_to: date = Query(..., description="表示終了日"),
     is_active: bool = Query(True, description="有効スタッフのみ"),
+    include_test: bool = Query(False, description="テスト依頼書も表示"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -2838,6 +2839,19 @@ async def get_availability_calendar(
             )
         )
 
+    # 依頼書由来の参加状況は配置とは別に保持し、依頼書の閲覧権限を確認する。
+    order_map = {}
+    if has_permission(current_user, Permission.ORDER_READ):
+        from src.services.participation_calendar import build
+        for day in build(db, start=date_from.isoformat(), end=date_to.isoformat(), include_test=include_test):
+            for event in day["events"]:
+                for state in ("ok", "changing", "unanswered"):
+                    for person in event[state]:
+                        order_map.setdefault(person["worker_id"], {}).setdefault(day["date"], []).append({
+                            "version_id": event["version_id"], "project_name": event["project_name"],
+                            "is_test": event["is_test"], "categories": event["categories"], "status": state,
+                        })
+
     # 組み立て
     worker_rows = []
     for w in workers:
@@ -2852,6 +2866,7 @@ async def get_availability_calendar(
                 availability_status=av_rec.status if av_rec else None,
                 availability_notes=av_rec.notes if av_rec else None,
                 assignments=am.get(ds, []),
+                order_events=order_map.get(w.id, {}).get(ds, []),
             )
             cur += timedelta(days=1)
 

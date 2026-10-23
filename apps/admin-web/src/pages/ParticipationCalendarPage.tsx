@@ -6,7 +6,10 @@ import { ErrorState } from "../components/ErrorState";
 import { MonthCalendar, todayInTokyo } from "../components/MonthCalendar";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError, getParticipationCalendar, type ParticipationDay, type ParticipationEvent } from "../lib/api/client";
+import { categoryColor } from "../lib/calendarCategory";
+import { TestBadge } from "../components/TestBadge";
 import "../styles/monthCalendar.css";
+import "../styles/orderOverview.css";
 
 function dayLabel(day: string): string {
   const [, m, d] = day.split("-").map(Number);
@@ -18,10 +21,11 @@ function dayLabel(day: string): string {
 export function ParticipationCalendarPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") || todayInTokyo().slice(0, 7);
+  const includeTest = searchParams.get("test") === "1";
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const query = useQuery({
-    queryKey: ["participation-calendar", month],
-    queryFn: () => getParticipationCalendar({ month }),
+    queryKey: ["participation-calendar", month, includeTest],
+    queryFn: () => getParticipationCalendar({ month, includeTest }),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
@@ -70,8 +74,8 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
     <button type="button" className={`pc-day${selected ? " is-selected" : ""}${today ? " is-today" : ""}`} onClick={() => onSelect(day)}>
       <span className="pc-day-num">{Number(day.slice(8))}</span>
       {(data?.events ?? []).map((event) => (
-        <span key={event.series_id} className="pc-event" title={event.project_name}>
-          <span className="pc-event-name">{(event.project_name || "").split("\n")[0] || event.document_number}</span>
+        <span key={event.series_id} className={`pc-event ov-c${categoryColor(event.categories)}`} title={event.project_name}>
+          <span className="pc-event-name">{event.is_test ? <TestBadge /> : null}{(event.project_name || "").split("\n")[0] || event.document_number}</span>
           <span className="pc-ok">{event.ok.length}</span>
           {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
           {event.unanswered.length > 0 ? <span className="pc-unanswered">{event.unanswered.length}</span> : null}
@@ -84,7 +88,7 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
 function EventDetail({ event }: { event: ParticipationEvent }) {
   return (
     <div className="pc-detail-event">
-      <strong>{event.project_name || "案件名なし"}</strong>
+      <strong>{event.is_test ? <TestBadge /> : null}{event.project_name || "案件名なし"}</strong>
       <span className="order-field-hint">　{event.document_number}</span>
       <p>参加OK {event.ok.length}人：{event.ok.map((p) => p.name).join("、") || "なし"}</p>
       {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{event.changing.map((p) => p.name).join("、")}</p> : null}

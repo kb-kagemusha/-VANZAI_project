@@ -4,6 +4,7 @@ import { Link, Navigate } from "react-router-dom";
 import { FormDialog } from "../components/FormDialog";
 import { BillingAmountInput } from "../components/BillingAmountInput";
 import { isValidBillingAmount } from "../lib/billingAmountFormat";
+import { TestBadge } from "../components/TestBadge";
 import { PageHeader } from "../components/PageHeader";
 import { OrderRequestDetailDialog } from "../components/OrderRequestDetailDialog";
 import { todayInTokyo } from "../components/MonthCalendar";
@@ -22,6 +23,7 @@ export function OrderBillingPage() {
   const { user } = useAuth();
   const client = useQueryClient();
   const allowed = user?.role === "admin";
+  const [includeTest, setIncludeTest] = useState(false);
   const [status, setStatus] = useState("missing");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -42,9 +44,9 @@ export function OrderBillingPage() {
   const [createDate, setCreateDate] = useState(todayInTokyo());
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const summary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: getOrderBillingSummary, enabled: allowed, refetchOnWindowFocus: true });
+  const summary = useQuery({ queryKey: ["order-billing", "summary", includeTest], queryFn: () => getOrderBillingSummary(includeTest), enabled: allowed, refetchOnWindowFocus: true });
   const clients = useQuery({ queryKey: ["order-billing", "clients"], queryFn: getBillingClients, enabled: allowed });
-  const orders = useQuery({ queryKey: ["order-billing", "orders", status, search, page], queryFn: () => getBillingOrders({ status, q: search, offset: page * 30, limit: 30 }), enabled: allowed, refetchOnWindowFocus: true });
+  const orders = useQuery({ queryKey: ["order-billing", "orders", status, search, page, includeTest], queryFn: () => getBillingOrders({ include_test: includeTest, status, q: search, offset: page * 30, limit: 30 }), enabled: allowed, refetchOnWindowFocus: true });
   const invoices = useQuery({ queryKey: ["order-billing", "invoices", invoiceMonth, invoicePage], queryFn: () => getBillingInvoices(invoiceMonth.replace("-", ""), invoicePage * 30), enabled: allowed, refetchOnWindowFocus: true });
   const invoice = useQuery({ queryKey: ["order-billing", "invoice", invoiceId], queryFn: () => getBillingInvoice(invoiceId!), enabled: allowed && !!invoiceId });
   useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
@@ -104,8 +106,9 @@ export function OrderBillingPage() {
     <PageHeader title="依頼書の金額確定" eyebrow="全体管理者専用" description="クライアントへの請求総額（税抜）を依頼書ごとに確定し、指定した請求月・依頼元別に請求書を作成します。" />
     <section className="card" style={{ padding: "1rem" }}>
       <h3>請求金額の記録　{summary.data ? `未入力 ${summary.data.missing_count}件` : ""}</h3>
-      <p className="order-field-hint">正式・確定済みの最新依頼書が対象です。請求先は案件のクライアントに固定します。インセンティブありの金額未確定も未入力件数に含みます。稼働者への支払額とは別です。</p>
+      <p className="order-field-hint">確定済みの最新依頼書が対象です。テストは金額入力を試せますが、正式な月次請求書には含まれません。請求先は案件のクライアントに固定します。インセンティブありの金額未確定も未入力件数に含みます。稼働者への支払額とは別です。</p>
       <div className="order-template-actions">
+        <label className="order-check"><input type="checkbox" checked={includeTest} onChange={(e) => { setIncludeTest(e.target.checked); setPage(0); }} />テストも含む</label>
         <label>表示<select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
           <option value="missing">金額未入力</option><option value="confirmed">金額確定済み</option><option value="invoice_created">請求書作成済み</option><option value="all">すべて</option>
         </select></label>
@@ -117,7 +120,7 @@ export function OrderBillingPage() {
       {orders.isLoading ? <p>読み込んでいます…</p> : null}
       <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書・案件名</th><th>稼働日</th><th>請求先</th><th>請求月</th><th>請求額（税抜）</th><th>インセンティブ</th><th>操作</th></tr></thead><tbody>
         {(orders.data?.items ?? []).map((row) => <tr key={row.version_id}>
-          <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSource(row.version_id)}>{row.document_number} 第{row.version_no}版</button><div className="order-cell-multiline">{row.project_name || "案件名なし"}</div><div className="order-cell-multiline">カテゴリ：{row.categories?.join("、") || "未設定"}</div></td>
+          <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSource(row.version_id)}>{row.document_number} 第{row.version_no}版</button><div className="order-cell-multiline">{row.is_test ? <TestBadge /> : null}{row.project_name || "案件名なし"}</div><div className="order-cell-multiline">カテゴリ：{row.categories?.join("、") || "未設定"}</div></td>
           <td className="order-cell-multiline">{row.work_date_label}</td><td>{row.client_name}{row.client_mismatch ? <p className="form-error">旧記録の請求先と不一致・再確認が必要</p> : null}</td><td>{row.billing_month ? monthLabel(row.billing_month) : "未設定"}</td><td>{row.amount !== null ? <>通常 {yen(row.amount)}{row.billing_ready && row.incentive_enabled ? <div>合計 {yen(row.total_amount!)}</div> : null}</> : <strong style={{ color: "#dc2626" }}>未入力</strong>}</td>
           <td className="order-cell-multiline">{row.incentive_enabled ? <>{row.incentive_note}<br />{row.incentive_amount !== null ? yen(row.incentive_amount) : <strong className="form-error">金額未確定</strong>}</> : "インセンティブなし"}</td>
           <td><div className="order-row-actions"><button type="button" className="btn create-button btn-sm" disabled={!!row.invoice_id} onClick={() => openEdit(row)}>{row.invoice_id ? "請求書作成済み" : row.amount_id ? "金額・請求月を変更" : "請求金額を確定"}</button>
@@ -133,7 +136,7 @@ export function OrderBillingPage() {
 
     <section className="card" style={{ padding: "1rem" }}>
       <h3>依頼元別の月次請求書</h3>
-      <p className="order-field-hint">この画面で金額確定した依頼をまとめます。消費税10%・税抜小計に対して円未満切捨て。同じ依頼元・請求月で、実績から生成する既存請求書との重複作成はできません。</p>
+      <p className="order-field-hint">この画面で金額確定した正式な依頼をまとめます。テストは対象外です。消費税10%・税抜小計に対して円未満切捨て。同じ依頼元・請求月で、実績から生成する既存請求書との重複作成はできません。</p>
       <p className="order-field-hint">発行元・振込先・支払期限は、サイドメニューの「会社情報」で変更します。変更は新しく作成する請求書に反映されます。</p>
       <div className="order-template-actions"><label>請求月<input type="month" value={invoiceMonth} onChange={(e) => { setInvoiceMonth(e.target.value); setInvoicePage(0); }} /></label>
         <button type="button" className="btn create-button" disabled={!invoiceMonth} onClick={() => { setCreateClient(""); setDialogError(""); setCreateOpen(true); }}>月次請求書を作成</button>
@@ -150,7 +153,7 @@ export function OrderBillingPage() {
     <FormDialog open={!!edit} title="依頼書の請求金額を確定" size="compact" busy={busy} onClose={() => setEdit(null)}>
       <dl className="billing-order-context">
         <div><dt>文書番号</dt><dd>{edit?.document_number} 第{edit?.version_no}版</dd></div>
-        <div><dt>案件名</dt><dd>{edit?.project_name || "案件名なし"}</dd></div>
+        <div><dt>案件名</dt><dd>{edit?.is_test ? <TestBadge /> : null}{edit?.project_name || "案件名なし"}</dd></div>
         <div><dt>稼働期間</dt><dd>{edit?.work_date_label || "未設定"}</dd></div>
         <div><dt>カテゴリ</dt><dd>{edit?.categories?.join("、") || "未設定"}</dd></div>
       </dl>

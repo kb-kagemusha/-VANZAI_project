@@ -25,6 +25,7 @@ from src.models.order_request import (
     OrderRequestVersion,
 )
 from src.services import worker_schedule as ws
+from src.services.order_request_format import parse_sections
 
 OK = "ok"
 CHANGING = "changing"
@@ -91,6 +92,7 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                     "project_name": display["project_name"],
                     "site_name": display.get("site_name") or "",
                     "is_test": document.kind != KIND_FORMAL,
+                    "categories": (parse_sections(answerable.request_conditions) or {}).get("categories", []),
                     OK: [],
                     CHANGING: [],
                     UNANSWERED: [],

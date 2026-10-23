@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
+import { TestBadge } from "../components/TestBadge";
 import { PageHeader } from "../components/PageHeader";
 import { FormDialog } from "../components/FormDialog";
 import { OrderDatePicker } from "../components/OrderDatePicker";
@@ -1182,7 +1183,7 @@ export function OrderRequestsPage() {
                     </span>
                   ) : null}
                 </td>
-                <td className="order-cell-multiline">{siteLabelForList(item.project_name)}</td>
+                <td className="order-cell-multiline">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
                 <td>
                   {STATUS_LABEL[item.status]}

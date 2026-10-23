@@ -4,6 +4,8 @@
  */
 import { useSearchParams } from "react-router-dom";
 
+import { CALENDAR_CATEGORIES } from "../lib/calendarCategory";
+import { CalendarTestToggle } from "../components/CalendarTestToggle";
 import { PageHeader } from "../components/PageHeader";
 import { useAuth } from "../lib/auth/auth-context";
 import { hasPermission } from "../lib/auth/permissions";
@@ -33,8 +35,8 @@ export function CalendarHubPage() {
     const next = new URLSearchParams();
     next.set("view", view);
     const month = searchParams.get("month");
-    if (month && view !== "availability") next.set("month", month);
-    if (searchParams.get("test") && (view === "event" || view === "worker")) next.set("test", searchParams.get("test") as string);
+    if (month) next.set("month", month);
+    if (searchParams.get("test")) next.set("test", searchParams.get("test") as string);
     setSearchParams(next);
   }
 
@@ -57,6 +59,8 @@ export function CalendarHubPage() {
           ))}
         </div>
       ) : null}
+      <CalendarTestToggle />
+      <div className="calendar-category-legend" aria-label="カテゴリの色">{[...CALENDAR_CATEGORIES, "未設定"].map((name, index) => <span key={name}><i className={`ov-swatch ov-c${index}`} />{name === "研修" ? "研修のみ" : name}</span>)}</div>
       {current?.key === "availability" ? <AvailabilityCalendarPage embedded /> : null}
       {current?.key === "event" || current?.key === "worker" ? <OrderOverviewBody /> : null}
       {current?.key === "participation" ? <ParticipationCalendarPage embedded /> : null}

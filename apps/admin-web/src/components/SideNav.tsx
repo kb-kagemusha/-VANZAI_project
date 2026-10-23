@@ -75,7 +75,7 @@ type SideNavProps = {
 
 export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
-  const billingSummary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: getOrderBillingSummary,
+  const billingSummary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: () => getOrderBillingSummary(),
     enabled: user?.role === "admin" && user.is_active, refetchInterval: 30_000, refetchOnWindowFocus: true });
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const displayedName = user?.display_name || user?.username || "";

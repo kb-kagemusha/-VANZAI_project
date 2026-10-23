@@ -768,6 +768,7 @@ export interface CalendarDayInfo {
   availability_status: string | null;
   availability_notes: string | null;
   assignments: CalendarDayAssignment[];
+  order_events?: { version_id: string; project_name: string; is_test: boolean; categories: string[]; status: string }[];
 }
 
 export interface CalendarWorkerRow {

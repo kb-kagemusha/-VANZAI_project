@@ -11,12 +11,14 @@ import { ErrorState } from "../components/ErrorState";
 import { OrderRequestDetailDialog } from "../components/OrderRequestDetailDialog";
 import { shiftMonth, todayInTokyo } from "../components/MonthCalendar";
 import { ApiError, getParticipationCalendar, type ParticipationEvent } from "../lib/api/client";
+import { categoryColor } from "../lib/calendarCategory";
+import { TestBadge } from "../components/TestBadge";
 import "../styles/orderOverview.css";
 
 type Status = "ok" | "changing" | "unanswered";
 const STATUS_LABEL: Record<Status, string> = { ok: "参加OK", changing: "変更確認待ち", unanswered: "未回答" };
 const STATUSES: Status[] = ["ok", "changing", "unanswered"];
-const PALETTE_SIZE = 8;
+
 
 type EventRow = {
   seriesId: string;
@@ -89,7 +91,7 @@ export function OrderOverviewBody() {
             name: firstLine(event.project_name),
             documentNumber: event.document_number,
             isTest: Boolean(event.is_test),
-            color: 0,
+            color: categoryColor(event.categories),
             days: new Map(),
           };
           eventMap.set(event.series_id, row);
@@ -109,12 +111,12 @@ export function OrderOverviewBody() {
         }
       }
     }
-    // イベントは最初の日の順、同じ日は名前の順。色はその順に割り当てる
+    // イベントは最初の日の順、同じ日は名前の順。色は依頼書のカテゴリに固定する
     const eventRows = [...eventMap.values()].sort((a, b) => {
       const first = (row: EventRow) => [...row.days.keys()].sort()[0] ?? "";
       return first(a).localeCompare(first(b)) || a.name.localeCompare(b.name, "ja");
     });
-    eventRows.forEach((row, index) => { row.color = index % PALETTE_SIZE; });
+
     // 登録の順のまま。登録一覧にない人（無効にした人など）は後ろに名前の順で付ける
     const allWorkers = [...workerMap.values()];
     const workerRows = [...allWorkers.slice(0, registeredCount), ...allWorkers.slice(registeredCount).sort((a, b) => a.name.localeCompare(b.name, "ja"))];
@@ -135,10 +137,6 @@ export function OrderOverviewBody() {
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => update({ month: null })}>今月</button>
           ) : null}
         </div>
-        <label className="order-check overview-test">
-          <input type="checkbox" checked={includeTest} onChange={(e) => update({ test: e.target.checked ? "1" : null })} />
-          テストの依頼書も表示
-        </label>
         <p className="overview-legend">
           <span className="ov-person is-ok">参加OK</span>
           <span className="ov-person is-changing">変更確認待ち</span>
@@ -175,7 +173,7 @@ export function OrderOverviewBody() {
                     <tr key={row.seriesId}>
                       <th className="overview-row-name" scope="row">
                         <span className={`ov-swatch ov-c${row.color}`} aria-hidden="true" />
-                        <span className="ov-row-title">{row.isTest ? <span className="ov-test">テスト</span> : null}{row.name}</span>
+                        <span className="ov-row-title">{row.isTest ? <TestBadge /> : null}{row.name}</span>
                         <span className="ov-row-sub"><button type="button" className="ov-document-link" onClick={() => setDetailVersionId(row.versionId)}>{row.documentNumber}</button></span>
                       </th>
                       {days.map((day, index) => {
@@ -215,7 +213,7 @@ export function OrderOverviewBody() {
                               if (!event) return null;
                               return (
                                 <span key={cell.seriesId} className={`ov-event-chip ov-c${event.color} is-${cell.status}`} title={`${event.name}（${event.documentNumber}）${STATUS_LABEL[cell.status]}`}>
-                                  {event.isTest ? "［テスト］" : ""}{event.name}
+                                  {event.isTest ? <TestBadge /> : null}{event.name}
                                   {cell.status !== "ok" ? <small>{STATUS_LABEL[cell.status]}</small> : null}
                                 </span>
                               );

@@ -1,7 +1,10 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useRef, useCallback } from "react";
 
+import { categoryColor } from "../lib/calendarCategory";
+import { TestBadge } from "../components/TestBadge";
+import "../styles/orderOverview.css";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
@@ -12,7 +15,7 @@ import type { CalendarDayInfo, CalendarWorkerRow, WorkerQualsUpdateRequest } fro
 
 // ─── 日付ヘルパー ───────────────────────────────────────────────
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -133,6 +136,8 @@ function WorkerQualBadge({ qKey, value }: { qKey: string; value: unknown }) {
 // ─── メインコンポーネント ─────────────────────────────────────
 export function AvailabilityCalendarPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const includeTest = searchParams.get("test") === "1";
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -140,7 +145,7 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
   }, []);
 
   const [mode, setMode] = useState<"month" | "week">("month");
-  const [anchorDate, setAnchorDate] = useState<Date>(today);
+  const [anchorDate, setAnchorDate] = useState<Date>(() => { const month = searchParams.get("month"); return month && /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T00:00:00`) : today; });
   const [showQual, setShowQual] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editQualsMap, setEditQualsMap] = useState<Record<string, WorkerQualsUpdateRequest>>({});
@@ -178,8 +183,8 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
   const todayStr = toDateStr(today);
 
   const calendarQuery = useQuery({
-    queryKey: ["availability-calendar", dateFromStr, dateToStr],
-    queryFn: () => getAvailabilityCalendar({ date_from: dateFromStr, date_to: dateToStr }),
+    queryKey: ["availability-calendar", dateFromStr, dateToStr, includeTest],
+    queryFn: () => getAvailabilityCalendar({ date_from: dateFromStr, date_to: dateToStr, include_test: includeTest }),
   });
   const workerTagsQuery = useQuery({
     queryKey: ["worker-tags"],
@@ -189,21 +194,17 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
     workerTagsQuery.data?.items.find((option) => option.code === code)?.label ?? code;
 
   // ─── ナビゲーション ─────────────────────────────────────────
+  function changeAnchor(next: Date) {
+    setAnchorDate(next);
+    setSearchParams((current) => { const params = new URLSearchParams(current); params.set("month", toDateStr(next).slice(0, 7)); return params; });
+  }
   function prevPeriod() {
-    setAnchorDate((prev) =>
-      mode === "week" ? addDays(prev, -7) : new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
-    );
+    changeAnchor(mode === "week" ? addDays(anchorDate, -7) : new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1));
   }
-
   function nextPeriod() {
-    setAnchorDate((prev) =>
-      mode === "week" ? addDays(prev, 7) : new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
-    );
+    changeAnchor(mode === "week" ? addDays(anchorDate, 7) : new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1));
   }
-
-  function goToday() {
-    setAnchorDate(today);
-  }
+  function goToday() { changeAnchor(today); }
 
   const periodLabel =
     mode === "month"
@@ -793,6 +794,10 @@ function DayCell({
         {/* 出勤可否 */}
         <AvailBadge status={avStatus} />
 
+        {(dayInfo?.order_events ?? []).map((event) => <span key={event.version_id} className={`ov-event-chip ov-c${categoryColor(event.categories)} is-${event.status}`} title={event.project_name}>
+          {event.is_test ? <TestBadge /> : null}{event.project_name}
+          {event.status !== "ok" ? <small>{event.status === "changing" ? "変更確認待ち" : "未回答"}</small> : null}
+        </span>)}
         {/* 配置チップ */}
         {assignments.map((a) => (
           <AssignChip key={a.id} name={a.project_name} status={a.status} />

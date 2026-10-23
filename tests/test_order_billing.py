@@ -72,6 +72,25 @@ def test_billing_context_retains_confirmed_period_and_categories(api_client, db_
     assert row["amount"] is None
 
 
+def test_test_amounts_are_opt_in_and_never_enter_formal_invoices(api_client, db_session, admin_user, client, pdf_root):
+    formal = source(api_client, db_session, admin_user, client)
+    demo = source(api_client, db_session, admin_user, client, kind="test")
+    auth = _auth(admin_user.username)
+    assert save(api_client, admin_user, demo, client, "999999").status_code == 200
+    default = api_client.get("/api/order-billing/orders?status=all", headers=auth).json()["items"]
+    assert [r["version_id"] for r in default] == [formal["id"]]
+    included = api_client.get("/api/order-billing/orders?status=all&include_test=true", headers=auth).json()["items"]
+    assert len(included) == 2 and next(r for r in included if r["is_test"])["amount"] == "999999.00"
+    assert api_client.get("/api/order-billing/summary", headers=auth).json()["total"] == 1
+    assert api_client.get("/api/order-billing/summary?include_test=true", headers=auth).json()["total"] == 2
+    assert save(api_client, admin_user, formal, client, "1000").status_code == 200
+    response = generate(api_client, admin_user, client)
+    assert response.status_code == 200, response.text
+    assert Decimal(response.json()["subtotal"]) == Decimal("1000")
+    lines = db_session.query(OrderBillingInvoiceLine).all()
+    assert len(lines) == 1 and lines[0].document_number == formal["document_number"]
+
+
 def test_latest_formal_confirmed_only_and_zero_is_not_missing(api_client, db_session, admin_user, client, pdf_root):
     first = source(api_client, db_session, admin_user, client)
     source(api_client, db_session, admin_user, client, kind="test")
