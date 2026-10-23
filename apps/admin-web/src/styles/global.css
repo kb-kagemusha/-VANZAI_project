@@ -5702,6 +5702,26 @@ html[data-theme="dark"] .calendar-test-toggle .btn.is-active, html[data-theme="d
 .order-list-frame .order-list-filters .order-list-size { margin-bottom: 0; }
 /* 送付先ごとではなく、文書1件の行全体を交互色で区切る。 */
 .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #fff; }
-.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #eef3fa; }
+.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #d8e7fa; }
 html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #242833; }
-html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #30394a; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #364963; }
+
+/* 行の色だけでなく、文書の外枠と余白で一つの塊を示す。 */
+.order-list-frame .order-list-table { background: #c1cedd; border-color: #54749b; }
+.order-list-frame .order-list-table > .data-table { border-collapse: separate; border-spacing: 0 8px; }
+.order-list-frame .order-list-table > .data-table > tbody > tr > td { border-top: 1px solid #54749b; border-bottom: 1px solid #54749b; }
+.order-list-frame .order-list-table > .data-table > tbody > tr > td:first-child { border-left: 4px solid #3d6798; border-radius: 6px 0 0 6px; }
+.order-list-frame .order-list-table > .data-table > tbody > tr > td:last-child { border-right: 1px solid #54749b; border-radius: 0 6px 6px 0; }
+html[data-theme="dark"] .order-list-frame .order-list-table { background: #0f172a; border-color: #7e9dc4; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr > td { border-top-color: #7e9dc4; border-bottom-color: #7e9dc4; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr > td:first-child { border-left-color: #91b8e8; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr > td:last-child { border-right-color: #7e9dc4; }
+
+/* 人数確認は各区分の人数と、1人1行の名前を分けて表示する。 */
+.participation-summary-table > .data-table { width: 100%; min-width: 850px; table-layout: fixed; }
+.participation-summary-table .pc-summary-date-column { width: 8rem; }
+.participation-summary-table > .data-table th, .participation-summary-table > .data-table td { padding: .75rem; }
+.participation-summary-table > .data-table th, .pc-summary-date, .pc-summary-count { white-space: nowrap; }
+.pc-summary-count { display: block; margin-bottom: 8px; }
+.pc-summary-names { display: grid; gap: 5px; padding: 0; margin: 0; list-style: none; }
+.pc-summary-names > li { display: block; white-space: nowrap; line-height: 1.5; }

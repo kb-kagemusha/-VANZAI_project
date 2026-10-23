@@ -1029,7 +1029,7 @@ export function OrderRequestsPage() {
       <FormDialog
         open={participationFor !== null}
         title={participationFor ? `参加人数の確認：${participationFor.title}` : ""}
-        size="compact"
+        size="wide"
         onClose={() => setParticipationFor(null)}
       >
         {participationFor ? <VersionParticipationSummary versionId={participationFor.versionId} /> : null}

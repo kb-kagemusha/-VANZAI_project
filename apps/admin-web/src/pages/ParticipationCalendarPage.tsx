@@ -110,23 +110,23 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
   if (query.isError) return <p className="form-error">参加人数を読み込めませんでした。</p>;
   const days = query.data?.days ?? [];
   if (days.length === 0) return <p className="order-field-hint">日付の決まった稼働日がありません（日程を入力して確定した依頼書で表示されます）。</p>;
-  const names = (list: ParticipationPerson[]) => list.length ? <>：{participantNames(list)}</> : null;
   return (
-    <div className="order-draft-table">
+    <div className="order-draft-table participation-summary-table">
       <table className="data-table">
+        <colgroup><col className="pc-summary-date-column" /><col /><col /><col /><col /></colgroup>
         <thead>
-          <tr><th>日付</th><th>参加OK</th><th>変更確認待ち</th><th>未回答</th><th>参加不可</th></tr>
+          <tr><th scope="col">日付</th><th scope="col">参加OK</th><th scope="col">変更確認待ち</th><th scope="col">未回答</th><th scope="col">参加不可</th></tr>
         </thead>
         <tbody>
           {days.map((day) => {
             const event = day.events[0];
             return (
               <tr key={day.date}>
-                <td>{dayLabel(day.date)}</td>
-                <td><strong>{event.ok.length}人</strong>{names(event.ok)}</td>
-                <td>{event.changing.length}人{names(event.changing)}</td>
-                <td>{event.unanswered.length}人{names(event.unanswered)}</td>
-                <td>× {event.unavailable?.length ?? 0}人{names(event.unavailable ?? [])}</td>
+                <td className="pc-summary-date">{dayLabel(day.date)}</td>
+                <td><ParticipationMembers label="参加OK" people={event.ok} /></td>
+                <td><ParticipationMembers label="変更確認待ち" people={event.changing} /></td>
+                <td><ParticipationMembers label="未回答" people={event.unanswered} /></td>
+                <td><ParticipationMembers label="参加不可" people={event.unavailable ?? []} unavailable /></td>
               </tr>
             );
           })}
@@ -134,6 +134,15 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
       </table>
     </div>
   );
+}
+
+function ParticipationMembers({ label, people, unavailable = false }: { label: string; people: ParticipationPerson[]; unavailable?: boolean }) {
+  return <>
+    <strong className="pc-summary-count">{unavailable ? "× " : ""}{people.length}人</strong>
+    {people.length > 0 ? <ul className="pc-summary-names" aria-label={`${label}の稼働者`}>
+      {people.map((person) => <li key={person.worker_id}><WorkerName name={person.name} isNewcomer={person.is_newcomer} isDirector={person.is_director} /></li>)}
+    </ul> : null}
+  </>;
 }
 
 function participantNames(list: ParticipationPerson[]) {

@@ -46,6 +46,12 @@ test("sent requests are grouped by document and both lists paginate and show tes
     expect(new Set(rowColors[0]).size).toBe(1);
     expect(new Set(rowColors[1]).size).toBe(1);
     expect(rowColors[0][0]).not.toBe(rowColors[1][0]);
+    const frame = await section.locator(".order-list-table > table").evaluate((el) => ({ collapse: getComputedStyle(el).borderCollapse, spacing: getComputedStyle(el).borderSpacing }));
+    expect(frame.collapse).toBe("separate");
+    expect(frame.spacing).toBe("0px 8px");
+    const boundary = await section.locator("tbody > tr > td").first().evaluate((el) => ({ width: getComputedStyle(el).borderLeftWidth, style: getComputedStyle(el).borderLeftStyle }));
+    expect(boundary).toEqual({ width: "4px", style: "solid" });
+
 
     expect(await section.locator("tbody > tr").first().locator(".order-project-name").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(288);
   }
@@ -116,4 +122,54 @@ test("master roster and worker registration use the same newcomer and director m
     await expect(novice.getByRole("img", { name: "ディレクター可能", exact: true })).toHaveCount(0);
     await expect(director.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toHaveCount(0);
   }
+});
+
+
+test("participation popup is wide and lists one person on each line", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
+  const people = ["長谷川 亜香里", "渡邊 健太郎", "坂井 貴博", "伊東 空", "宮本 悠真", "大西 結菜", "小野寺 陽介", "石川 美月"].map((name, i) => ({ worker_id: `w${i}`, name, is_newcomer: i >= 3, is_director: i === 1 }));
+  const item = { document_id: "doc", version_id: "version", document_number: "OR-20261024-005A", kind: "test", version_no: 1,
+    project_name: "【テスト】10月 20日間の飲食店巡回", categories: ["飲食店巡回"], status: "confirmed", work_date_label: "2026年10月10日～2026年10月29日",
+    created_by_name: "担当者", recipient_count: 8, change_documents: [], recipients: people.map((p) => ({ ...p, delivery_id: p.worker_id, worker_name: p.name, ack_status: "acked", send_status: "accepted", version_no: 1 })) };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    const reply = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/auth/me")) return reply({ id: "admin", username: "admin", role: "admin", is_active: true });
+    if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
+    if (path.endsWith("/reply-groups") || path === "/api/order-requests") return reply({ items: [item], total: 1 });
+    if (path.endsWith("/participation-calendar")) return reply({ days: [
+      { date: "2026-10-10", events: [{ series_id: "s", ...item, ok: people, changing: [], unanswered: [], unavailable: [] }] },
+      { date: "2026-10-11", events: [{ series_id: "s", ...item, ok: people.slice(0, 4), changing: people.slice(4, 6), unanswered: people.slice(6, 7), unavailable: people.slice(7) }] },
+    ] });
+    return reply({ items: [], total: 0 });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: "参加人数の確認", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: /参加人数の確認/ });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(1000);
+  const first = dialog.locator("tbody > tr").first();
+  const names = first.getByRole("list", { name: "参加OKの稼働者", exact: true }).getByRole("listitem");
+  await expect(names).toHaveCount(8);
+  const geometry = await names.evaluateAll((els) => els.map((el) => ({ y: el.getBoundingClientRect().y, clipped: el.scrollWidth > el.clientWidth, text: el.textContent })));
+  geometry.forEach((row, index) => {
+    expect(row.clipped).toBe(false);
+    expect(row.text).not.toContain("、");
+    if (index) expect(row.y).toBeGreaterThan(geometry[index - 1].y);
+  });
+  await expect(first.locator(".pc-summary-count")).toHaveText(["8人", "0人", "0人", "× 0人"]);
+  const second = dialog.locator("tbody > tr").nth(1);
+  await expect(second.getByRole("list", { name: "参加OKの稼働者", exact: true }).getByRole("listitem")).toHaveCount(4);
+  await expect(second.getByRole("list", { name: "変更確認待ちの稼働者", exact: true }).getByRole("listitem")).toHaveCount(2);
+  await expect(second.getByRole("list", { name: "未回答の稼働者", exact: true }).getByRole("listitem")).toHaveCount(1);
+  await expect(second.getByRole("list", { name: "参加不可の稼働者", exact: true }).getByRole("listitem")).toHaveCount(1);
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("wide-participation-one-person-per-line.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThanOrEqual(350);
+  expect(await dialog.locator(".participation-summary-table").evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
 });
