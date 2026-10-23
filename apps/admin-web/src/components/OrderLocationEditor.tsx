@@ -59,8 +59,8 @@ export function OrderLocationEditor({ disabled, venueName, address, placeId, sav
   }, onError: (e, request) => { if (request.version === inputVersion.current) setError(e instanceof ApiError ? e.message : "所在地を取得できませんでした"); } });
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || venueName || address)}${placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : ""}`;
   return <div className="order-location order-span-12">
-    <label className="order-field" style={{ maxWidth: 220 }}>郵便番号<input aria-label="稼働場所の郵便番号" inputMode="numeric" autoComplete="postal-code" value={postalCode} disabled={disabled} placeholder="例: 231-0001" onChange={(event) => { postalTouched.current = true; setPostalCode(event.target.value); setPostalMessage(""); setPostalChoices([]); }} /></label>
-    <p className="order-field-hint">郵便番号7桁から住所を補完します。番地・建物名は確認して入力してください。</p>
+    <div className="order-postal-heading"><label htmlFor="order-site-postal">郵便番号</label><span className="order-field-hint">郵便番号7桁から住所を補完します。番地・建物名は確認して入力してください。</span></div>
+    <input id="order-site-postal" className="order-postal-input" aria-label="稼働場所の郵便番号" inputMode="numeric" autoComplete="postal-code" value={postalCode} disabled={disabled} placeholder="例: 231-0001" onChange={(event) => { postalTouched.current = true; setPostalCode(event.target.value); setPostalMessage(""); setPostalChoices([]); }} />
     {postalMessage && <p className="order-field-hint" role="status">{postalMessage}</p>}
     {postalChoices.map((choice) => <button key={choice} type="button" className="btn btn-ghost order-address-choice" disabled={disabled} onClick={() => { onAddress(choice); lastAutoAddress.current = choice; setPostalChoices([]); setPostalMessage("番地・建物名を確認して入力してください。"); }}>{choice}</button>)}
     <label className="order-field">稼働場所の住所<textarea rows={2} value={address} disabled={disabled} placeholder="〒231-0001 神奈川県横浜市中区新港1丁目1−1" onChange={(e) => { addressRevision.current += 1; onAddress(e.target.value); }} /></label>

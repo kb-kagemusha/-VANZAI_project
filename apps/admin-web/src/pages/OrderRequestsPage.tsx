@@ -777,7 +777,6 @@ export function OrderRequestsPage() {
     onError: (error) => setActionError(messageOf(error)),
   });
 
-  const layoutPending = listQuery.data ? !listQuery.data.template_layout_applied : true;
   const lineReady = Boolean(listQuery.data?.line_send_available || detail?.line_send_available);
 
   const sendLine = useMutation({
@@ -1037,14 +1036,6 @@ export function OrderRequestsPage() {
           </div>
         )}
       />
-      <p className="card" style={{ padding: "0.9rem 1rem" }}>
-        {layoutPending
-          ? "弁護士確認済み書式のレイアウトは未適用です。いまのPDFは入力内容の保存です。"
-          : "正式区分の書式を適用しています。"}
-        {lineReady
-          ? " 確定後、選んだ送付先のうち公式LINEと紐付いた人へ送れます。紐付けは稼働者登録・一覧で行います。"
-          : " 送信には、サーバーへのチャネル設定がまだ必要です。紐付けは稼働者登録・一覧で行います。"}
-      </p>
 
       {!createModal && actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
       {!createModal && actionMessage ? <p>{actionMessage}</p> : null}

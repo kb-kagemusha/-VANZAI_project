@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
+import { RegistrationUrlsButton } from "../components/RegistrationUrlsButton";
+import { useColorTheme } from "../lib/theme";
 import { ApiError, changePassword, updateProfile } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { formatRole } from "../lib/formatters";
@@ -9,6 +11,7 @@ import { SEAL_COLORS, useSealColor } from "./previewSeal";
 
 export function AccountProfilePage() {
   const { user, logout, refreshUser } = useAuth();
+  const { theme, toggleTheme } = useColorTheme();
   const displayedName = user?.display_name || user?.username || "";
   const initial = displayedName.slice(0, 1) || "V";
   const isAdmin = user?.role === "admin";
@@ -79,7 +82,7 @@ export function AccountProfilePage() {
     <section className="account-profile">
       <PageHeader
         eyebrow="アカウント"
-        title="プロフィール"
+        title="設定・プロフィール"
         description="ログイン中のアカウントです。"
       />
       <article className="card account-profile-hero">
@@ -101,8 +104,16 @@ export function AccountProfilePage() {
       </article>
 
       <article className="card">
+        <h2>表示設定</h2>
+        <div className="master-view-switch" role="group" aria-label="カラーモード">
+          <button type="button" aria-pressed={theme === "light"} onClick={() => { if (theme !== "light") toggleTheme(); }}>ライトモード</button>
+          <button type="button" aria-pressed={theme === "dark"} onClick={() => { if (theme !== "dark") toggleTheme(); }}>ダークモード</button>
+        </div>
+      </article>
+
+      <article className="card">
         <h2>シールの色</h2>
-        <p className="account-profile-note">丸いシール、選択中のメニュー、「新しい版を反映」、ダークモードの切り替えに反映します。</p>
+        <p className="account-profile-note">丸いシール、選択中のメニュー、「新しい版を反映」に反映します。</p>
         <div className="account-seal-choices" role="radiogroup" aria-label="シールの色">
           {SEAL_COLORS.map((color) => (
             <button
@@ -211,6 +222,8 @@ export function AccountProfilePage() {
           </Link>
         </article>
       ) : null}
+
+      <RegistrationUrlsButton />
 
       <article className="card">
         <button type="button" className="ghost-button" onClick={logout}>

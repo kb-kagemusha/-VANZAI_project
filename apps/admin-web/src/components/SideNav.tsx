@@ -144,7 +144,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
       <NavLink
         to="/account/profile"
         className={({ isActive }) => `side-nav-user side-nav-user-button${isActive ? " is-active" : ""}`}
-        aria-label={`${displayedName || "ユーザー"}のプロフィール`}
+        aria-label={`${displayedName || "ユーザー"}の設定・プロフィール`}
       >
         <span className="side-nav-avatar" aria-hidden="true">{displayedName.slice(0, 1) || "V"}</span>
         <span className="side-nav-user-copy">

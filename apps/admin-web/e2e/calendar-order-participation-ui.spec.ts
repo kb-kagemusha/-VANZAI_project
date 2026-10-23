@@ -89,6 +89,10 @@ test("order name and reference URL stay separate and postal lookup preserves man
   expect(Math.abs(nameCard!.width - category!.width)).toBeLessThan(2);
   expect(category!.x).toBeGreaterThan(nameCard!.x + nameCard!.width);
   const postal = editor.getByRole("textbox", { name: "稼働場所の郵便番号", exact: true });
+  const postalLabel = await editor.locator(".order-postal-heading > label").boundingBox();
+  const postalHint = await editor.locator(".order-postal-heading > .order-field-hint").boundingBox();
+  expect(postalHint!.x).toBeGreaterThan(postalLabel!.x + postalLabel!.width);
+  expect(Math.abs(postalHint!.y - postalLabel!.y)).toBeLessThan(10);
   const address = editor.getByRole("textbox", { name: "稼働場所の住所", exact: true });
   await postal.fill("２３１－０００１");
   await expect(address).toHaveValue("〒231-0001 神奈川県横浜市中区新港");
@@ -111,6 +115,40 @@ test("order name and reference URL stay separate and postal lookup preserves man
   const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
   await expect(draft.getByRole("textbox", { name: "参考URL（任意）", exact: true })).toHaveValue("https://example.com/~event");
   await expect(draft.getByRole("textbox", { name: "案件名", exact: true })).toHaveAttribute("aria-required", "true");
+});
+
+test("settings replaces the top bar and keeps theme across navigation with compact profile forms", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await expect(page.locator(".topbar")).toHaveCount(0);
+  await expect(page.getByText("弁護士確認済み書式のレイアウトは未適用です。", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "登録画面のURL確認", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "ダークモードに切り替え", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "adminの設定・プロフィール", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "設定・プロフィール", exact: true })).toBeVisible();
+  const profile = page.locator(".account-profile");
+  expect((await profile.boundingBox())!.width).toBeLessThanOrEqual(720);
+  const save = page.getByRole("button", { name: "保存", exact: true });
+  expect((await save.boundingBox())!.width).toBeLessThan(160);
+  await page.getByRole("button", { name: "ダークモード", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({ path: testInfo.outputPath("compact-settings-dark.png"), fullPage: true });
+  await page.getByRole("button", { name: "登録画面のURL確認", exact: true }).click();
+  const urls = page.getByRole("dialog", { name: "登録画面のURL一覧", exact: true });
+  await expect(urls.getByText("稼働者登録", { exact: true })).toBeVisible();
+  await urls.getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.getByRole("link", { name: "発注依頼書", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.goto("/account/profile");
+  await page.getByRole("button", { name: "ライトモード", exact: true }).click();
+  await expect(page.getByRole("button", { name: "ライトモード", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: testInfo.outputPath("compact-settings-light.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(profile).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: testInfo.outputPath("compact-settings-mobile.png"), fullPage: true });
 });
 
 test("direct template creation stores reusable content without creating or sending an order", async ({ page }, testInfo) => {

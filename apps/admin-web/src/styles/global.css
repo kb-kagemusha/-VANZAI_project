@@ -1277,9 +1277,12 @@ a.primary-button {
 .account-profile {
   display: grid;
   gap: 16px;
-  width: 100%;
+  width: min(100%, 720px);
   min-width: 0;
 }
+
+.account-profile .login-form > button, .account-profile > .ghost-button { justify-self: start; width: auto; }
+.account-profile .account-profile-hero dd { overflow-wrap: anywhere; }
 
 .account-profile .card {
   display: grid;
@@ -4261,6 +4264,9 @@ html[data-theme="dark"] .order-schedule-row input:not([type="checkbox"]), html[d
 .operator-role-options { display: flex; gap: 1rem; flex-wrap: wrap; padding: .6rem; }
 .operator-role-options label { display: flex; gap: .4rem; align-items: center; }
 .order-location { display: grid; gap: .75rem; padding: 1rem; border: 2px solid #b6c6d8; border-radius: 12px; background: #f3f7fc; }
+.order-postal-heading { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
+.order-postal-heading > label { flex-shrink: 0; }
+.order-location > .order-postal-input { width: min(100%, 220px); min-width: 0; padding: .72rem .85rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); }
 .order-address-choice { justify-self: start; min-height: 44px; padding: .6rem .9rem; border: 2px solid #507ba6; text-align: left; }
 .order-location > a { width: fit-content; padding: .6rem .9rem; border: 1px solid #42845b; border-radius: 8px; color: #15542e; background: #e7f3eb; font-weight: 600; }
 .order-location-search { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; }
