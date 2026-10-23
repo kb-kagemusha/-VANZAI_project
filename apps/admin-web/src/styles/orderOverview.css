@@ -9,7 +9,7 @@
 .overview-legend { display: flex; gap: 6px; margin: 0; align-items: center; }
 
 .overview-scroll { overflow: auto; max-height: calc(100dvh - 240px); min-height: 160px; padding: 0; }
-.overview-grid { --overview-day-width: 116px; border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
+.overview-grid { --overview-day-width: 140px; border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
 .overview-grid th, .overview-grid td { border-bottom: 1px solid var(--line, #e3e5ea); border-right: 1px solid var(--line, #e3e5ea); vertical-align: top; }
 .overview-head-name, .overview-row-name { position: sticky; left: 0; z-index: 2; background: var(--panel, #fff); width: 200px; min-width: 200px; max-width: 200px; text-align: left; padding: 8px 10px; }
 .overview-head-name { z-index: 3; }

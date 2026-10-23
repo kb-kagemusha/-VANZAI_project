@@ -4,6 +4,12 @@
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
 - **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
 
+## [0.50.4] - 2026-10-24
+
+- 稼働者一覧・4カレンダーの氏名の後ろに、稼働開始日から暦の3か月間だけ🔰を表示（日本時間、満了日・未来・未設定は対象外）。既存の手動タグとは独立して判定。NG・長い氏名・アイコンが同時に収まるよう列幅を調整。
+- ダミーの未設定開始日を補完し、日本名の新人5名を追加。10/10〜29と11/10〜29の各20日間イベントを、同じイベント内で参加OKが8→4→6→3→7→5→8→4→5→7人と変わる回答へ置換。旧PDF・回答を保存し、同日別イベントの重複を防止。
+- 仕様: DESIGN_SPEC §6.1/14.3/16、DEC-088。DB/DDL変更なし。監査: calendar_demo_newcomer_created/start_date_filled/daily_variation_replaced/newcomers_completed。検証: tests/test_worker_newcomer.py、既存カレンダー/APIテスト、calendar-demo-ui.spec.ts、ビルド。
+
 ## [0.50.3] - 2026-10-24
 
 - 出勤可否のundecidedを「未定」と日本語表示。デモ由来の未定日を可否へ補完し、参加予定日は出勤可と整合させる（一般の入力は変更しない、前後を監査）。

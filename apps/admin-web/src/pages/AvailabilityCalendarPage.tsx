@@ -1,3 +1,4 @@
+import { WorkerName } from "../components/WorkerName";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useRef, useCallback } from "react";
@@ -335,7 +336,7 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
             style={{
               height: 1,
               width:
-                130 +
+                160 +
                 (showQual ? 64 * 6 : 0) +
                 days.length * 72,
             }}
@@ -362,7 +363,7 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
           >
             <colgroup>
               {/* 左固定列: 名前列と資格列 */}
-              <col style={{ width: 130 }} />
+              <col style={{ width: 160 }} />
               {showQual && QUAL_DEFS.map((q) => <col key={q.key} style={{ width: 64 }} />)}
               {/* 日付列 */}
               {days.map((d) => (
@@ -399,7 +400,7 @@ export function AvailabilityCalendarPage({ embedded = false }: { embedded?: bool
                       style={{
                         position: "sticky",
                         top: 0,
-                        left: 130 + i * 64,
+                        left: 160 + i * 64,
                         zIndex: 25,
                         background: "#f3f4f6",
                         borderRight: i === QUAL_DEFS.length - 1 ? "2px solid #d1d5db" : "1px solid #e5e7eb",
@@ -650,7 +651,7 @@ function WorkerRow({
   isLastRow: boolean;
 }) {
   const rowBg = rowIndex % 2 === 0 ? "#ffffff" : "#f9fafb";
-  const qualStickyLeft = 130;
+  const qualStickyLeft = 160;
 
   return (
     <tr>
@@ -667,7 +668,7 @@ function WorkerRow({
           fontSize: 13,
           fontWeight: 500,
           whiteSpace: "nowrap",
-          maxWidth: 130,
+          maxWidth: 160,
           overflow: "hidden",
           textOverflow: "ellipsis",
           color: worker.is_active ? "#111827" : "#9ca3af",
@@ -675,7 +676,7 @@ function WorkerRow({
         title={[worker.name, ...(worker.tags ?? []).map(tagLabel)].filter(Boolean).join(" / ")}
       >
         <div style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {worker.name}
+          <WorkerName name={worker.name} isNewcomer={worker.is_newcomer} />
           {!worker.is_active && (
             <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 4 }}>(無効)</span>
           )}

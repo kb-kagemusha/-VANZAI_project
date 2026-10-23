@@ -2772,7 +2772,7 @@ async def get_availability_calendar(
         raise HTTPException(status_code=400, detail="date range exceeds 60 days")
 
     from datetime import timedelta
-    from src.domain.worker_tags import expire_elapsed_newcomer_tags, stored_worker_tags
+    from src.domain.worker_tags import expire_elapsed_newcomer_tags, stored_worker_tags, is_newcomer_from_start
     from src.models.master import Worker, Role
     from src.models.transaction import Assignment, ShiftSlot, WorkerAvailability
     from src.models.transaction import Project
@@ -2876,6 +2876,7 @@ async def get_availability_calendar(
 
         worker_rows.append(
             CalendarWorkerRow(
+                is_newcomer=is_newcomer_from_start(w.available_start_date),
                 id=w.id,
                 name=w.name,
                 is_active=w.is_active,

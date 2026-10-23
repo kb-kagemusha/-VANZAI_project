@@ -144,3 +144,9 @@ def expire_elapsed_newcomer_tags(db, today: date | None = None) -> None:
             changed = True
     if changed:
         db.commit()
+
+
+def is_newcomer_from_start(start_date: date | None, today: date | None = None) -> bool:
+    """稼働開始日から暦の3か月間。未来・未設定・満了日当日は対象外。"""
+    current = today or tokyo_today()
+    return start_date is not None and start_date <= current < add_months(start_date, 3)

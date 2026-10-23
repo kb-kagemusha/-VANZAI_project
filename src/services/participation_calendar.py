@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from src.domain.worker_tags import is_newcomer_from_start, tokyo_today
 
 from sqlalchemy.orm import Session
 
@@ -48,7 +49,8 @@ def registered_workers(session: Session) -> list[dict]:
     linked = {wid for (wid,) in session.query(LineWorkerLink.worker_id).filter(LineWorkerLink.status == LINK_ACTIVE).all()}
     workers = session.query(Worker).filter(Worker.is_active.is_(True)).all()
     workers.sort(key=lambda w: ((w.furigana or w.name or ""), w.name or ""))
-    return [{"worker_id": w.id, "name": w.name, "line_linked": w.id in linked} for w in workers]
+    today = tokyo_today()
+    return [{"worker_id": w.id, "name": w.name, "line_linked": w.id in linked, "is_newcomer": is_newcomer_from_start(w.available_start_date, today)} for w in workers]
 
 
 def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False, test_only: bool = False) -> list[dict]:
@@ -57,7 +59,10 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
     if series_id:
         query = query.filter(OrderRequestSeries.id == series_id)
     from src.models.master import Worker
-    worker_names = {w.id: w.name for w in session.query(Worker).all()}
+    workers = session.query(Worker).all()
+    worker_names = {w.id: w.name for w in workers}
+    today = tokyo_today()
+    newcomers = {w.id: is_newcomer_from_start(w.available_start_date, today) for w in workers}
     days: dict[str, dict[str, dict]] = defaultdict(dict)
     for series in query.all():
         answerable = session.get(OrderRequestVersion, series.answerable_version_id)
@@ -131,12 +136,12 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
             for day in set(dates):
                 if not _in_range(day, start, end):
                     continue
-                event_of(day)[kind].append({"worker_id": worker_id, "name": name})
+                event_of(day)[kind].append({"worker_id": worker_id, "name": name, "is_newcomer": newcomers.get(worker_id, False)})
         for worker_id, (dates, name) in unavailable.items():
             assigned_dates = set(buckets[worker_id][1]) if worker_id in buckets else set()
             for day in dates - assigned_dates:
                 if _in_range(day, start, end):
-                    event_of(day)[UNAVAILABLE].append({"worker_id": worker_id, "name": name})
+                    event_of(day)[UNAVAILABLE].append({"worker_id": worker_id, "name": name, "is_newcomer": newcomers.get(worker_id, False)})
     result = []
     for day in sorted(days):
         events = sorted(days[day].values(), key=lambda e: (e["project_name"], e["document_number"]))

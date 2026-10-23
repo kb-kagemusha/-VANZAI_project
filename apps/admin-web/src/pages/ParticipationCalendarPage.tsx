@@ -1,3 +1,4 @@
+import { WorkerName } from "../components/WorkerName";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -5,7 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { ErrorState } from "../components/ErrorState";
 import { MonthCalendar, todayInTokyo } from "../components/MonthCalendar";
 import { PageHeader } from "../components/PageHeader";
-import { ApiError, getParticipationCalendar, type ParticipationDay, type ParticipationEvent } from "../lib/api/client";
+import { ApiError, getParticipationCalendar, type ParticipationDay, type ParticipationEvent, type ParticipationPerson } from "../lib/api/client";
 import { categoryColor } from "../lib/calendarCategory";
 import "../styles/monthCalendar.css";
 import "../styles/orderOverview.css";
@@ -90,10 +91,10 @@ function EventDetail({ event }: { event: ParticipationEvent }) {
     <div className="pc-detail-event">
       <strong>{event.project_name || "案件名なし"}</strong>
       <span className="order-field-hint">　{event.document_number}</span>
-      {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{event.unavailable.map((p) => p.name).join("、")}</p> : null}
-      <p>参加OK {event.ok.length}人：{event.ok.map((p) => p.name).join("、") || "なし"}</p>
-      {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{event.changing.map((p) => p.name).join("、")}</p> : null}
-      {event.unanswered.length > 0 ? <p>未回答 {event.unanswered.length}人：{event.unanswered.map((p) => p.name).join("、")}</p> : null}
+      {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{participantNames(event.unavailable)}</p> : null}
+      <p>参加OK {event.ok.length}人：{event.ok.length ? participantNames(event.ok) : "なし"}</p>
+      {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{participantNames(event.changing)}</p> : null}
+      {event.unanswered.length > 0 ? <p>未回答 {event.unanswered.length}人：{participantNames(event.unanswered)}</p> : null}
     </div>
   );
 }
@@ -109,7 +110,7 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
   if (query.isError) return <p className="form-error">参加人数を読み込めませんでした。</p>;
   const days = query.data?.days ?? [];
   if (days.length === 0) return <p className="order-field-hint">日付の決まった稼働日がありません（日程を入力して確定した依頼書で表示されます）。</p>;
-  const names = (list: { name: string }[]) => (list.length ? `：${list.map((p) => p.name).join("、")}` : "");
+  const names = (list: ParticipationPerson[]) => list.length ? <>：{participantNames(list)}</> : null;
   return (
     <div className="order-draft-table">
       <table className="data-table">
@@ -133,4 +134,8 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
       </table>
     </div>
   );
+}
+
+function participantNames(list: ParticipationPerson[]) {
+  return list.map((person, index) => <span key={person.worker_id}>{index ? "、" : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} /></span>);
 }

@@ -120,7 +120,7 @@ test("event outlines stay rectangular and worker runs span consecutive dates wit
 
 test("NG name fits the wider day column and undecided is Japanese", async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
-  const people = Array.from({ length: 8 }, (_, i) => ({ worker_id: `w${i}`, name: i === 0 ? "長谷川 亜香里" : i === 1 ? "渡邊 健太郎" : `稼働者${i}` }));
+  const people = Array.from({ length: 8 }, (_, i) => ({ worker_id: `w${i}`, is_newcomer: i === 0, name: i === 0 ? "長谷川 亜香里" : i === 1 ? "渡邊 健太郎" : `稼働者${i}` }));
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
@@ -129,19 +129,30 @@ test("NG name fits the wider day column and undecided is Japanese", async ({ pag
     if (path.endsWith("/auth/session")) return reply({ access_token: "test-token", token_type: "bearer" });
     if (path.endsWith("/participation-calendar")) return reply({ workers: people.map((p) => ({ ...p, line_linked: false })), days: [
       { date: "2026-10-01", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people, changing: [], unanswered: [], unavailable: [] }] },
-      { date: "2026-10-02", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people.slice(1), changing: [], unanswered: [], unavailable: [people[0]] }] },
+      { date: "2026-10-02", events: [{ series_id: "s", version_id: "v", document_number: "D", project_name: "受付", categories: ["商業施設/たばこ屋"], ok: people.slice(1, 5), changing: [], unanswered: [], unavailable: [people[0], ...people.slice(5)] }] },
     ] });
-    if (path.endsWith("/availability-calendar")) return reply({ workers: [{ id: "w0", name: "長谷川 亜香里", is_active: true, tags: [], days: { "2026-10-01": { availability_status: "undecided", assignments: [], order_events: [] } } }] });
+    if (path.endsWith("/availability-calendar")) return reply({ workers: [{ id: "w0", name: "長谷川 亜香里", is_newcomer: true, is_active: true, tags: [], days: { "2026-10-01": { availability_status: "undecided", assignments: [], order_events: [] } } }] });
     return reply({ items: [], total: 0, missing_count: 0 });
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/operations/calendar?view=event&month=2026-10&test=1");
-  const refused = page.locator(".ov-event-box .ov-person.is-unavailable");
-  await expect(refused).toHaveText("× 長谷川 亜香里");
+  const refused = page.locator(".ov-event-box .ov-person.is-unavailable").first();
+  await expect(refused).toHaveText("× 長谷川 亜香里🔰");
   expect(await refused.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   expect(await page.locator(".overview-head-day").first().evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(116);
-  await page.screenshot({ path: testInfo.outputPath("eight-people-wider-column.png"), fullPage: true });
+  await expect(page.locator(".ov-event-box").first()).toContainText("参加OK 8人");
+  await expect(page.locator(".ov-event-box").nth(1)).toContainText("参加OK 4人");
+  await expect(refused.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
+  const boxes = await page.locator(".ov-event-box").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+  expect(Math.abs(boxes[0] - boxes[1])).toBeLessThan(1);
+  await page.screenshot({ path: testInfo.outputPath("eight-to-four-newcomer.png"), fullPage: true });
+  await page.getByRole("tab", { name: "稼働者ごと", exact: true }).click();
+  await expect(page.locator('tr[data-worker-id="w0"] th').getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
+  await page.getByRole("tab", { name: "参加カレンダー", exact: true }).click();
+  await page.locator(".pc-day").filter({ hasText: "受付" }).first().click();
+  await expect(page.locator(".pc-detail-event").getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
   await page.getByRole("tab", { name: "出勤可能日", exact: true }).click();
   await expect(page.getByText("未定", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "新人（稼働開始日から3か月）" })).toBeVisible();
   await expect(page.getByText("undecided", { exact: true })).toHaveCount(0);
 });

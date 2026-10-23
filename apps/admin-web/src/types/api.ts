@@ -675,6 +675,7 @@ export interface WorkerProfile extends WorkerProfileInput {
 }
 
 export interface WorkerListItem {
+  is_newcomer?: boolean;
   id: string;
   name: string;
   furigana: string | null;
@@ -772,6 +773,7 @@ export interface CalendarDayInfo {
 }
 
 export interface CalendarWorkerRow {
+  is_newcomer?: boolean;
   id: string;
   name: string;
   is_active: boolean;

@@ -687,6 +687,7 @@ class CalendarDayInfo(BaseModel):
 
 class CalendarWorkerRow(BaseModel):
     """カレンダービューの1稼働者行"""
+    is_newcomer: bool = False
     id: str
     name: str
     is_active: bool
@@ -1138,6 +1139,13 @@ class WorkerListItem(BaseModel):
     license_type: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     profile: WorkerProfile = Field(default_factory=WorkerProfile)
+
+    @computed_field
+    @property
+    def is_newcomer(self) -> bool:
+        from src.domain.worker_tags import is_newcomer_from_start
+
+        return is_newcomer_from_start(self.profile.available_start_date)
 
 
 class WorkerTagOption(BaseModel):

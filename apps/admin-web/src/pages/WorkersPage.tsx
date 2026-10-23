@@ -1,3 +1,4 @@
+import { WorkerName } from "../components/WorkerName";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -806,7 +807,7 @@ export function WorkersPage() {
               key: "name",
               header: "名前",
               render: (row) => (
-                <span style={{ fontWeight: 500 }}>{row.name}</span>
+                <span style={{ fontWeight: 500 }}><WorkerName name={row.name} isNewcomer={row.is_newcomer} /></span>
               ),
             },
             {
