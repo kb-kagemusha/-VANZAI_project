@@ -110,6 +110,8 @@ def test_test_documents_are_shown_but_not_counted(api_client, db_session, ops_us
     body = api_client.get("/api/line/worker/home", params={"month": _month_of(1)}, headers=_session(api_client)).json()
     assert body["month_days"][0]["entries"][0]["is_test"] is True
     assert body["estimate"]["amount"] is None and body["estimate"]["work_days"] == 0
+    # テストの分は正式に混ぜず、別に返す（画面では【テスト】として表示）
+    assert body["estimate"]["test"]["amount"] == "15000" and body["estimate"]["test"]["work_days"] == 1
 
 
 def test_pdf_link_only_for_own_delivery(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
@@ -172,3 +174,4 @@ def test_estimate_excludes_hourly_and_unknown_and_floors_yen(db_session):
     assert result["work_days"] == 3  # 11/1・11/2・11/3（同じ日の2件は1日。テストは数えない）
     assert result["excluded_hourly"] == 1 and result["excluded_unknown"] == 1
     assert result["separate_cost"] is True
+    assert result["test"]["amount"] == "15000" and result["test"]["work_days"] == 1  # 15000.50 → 切り捨て

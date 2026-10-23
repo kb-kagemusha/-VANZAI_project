@@ -13,6 +13,7 @@ import {
   type PortalConfirmation,
   type PortalDay,
   type PortalEntry,
+  type PortalEstimate,
   type PortalHome,
   type PortalOrders,
 } from "../lib/lineWorkerPortalApi";
@@ -125,22 +126,32 @@ function ConfirmationCard({ item, onPdf, pdfBusy }: { item: PortalConfirmation; 
   );
 }
 
+function amountLabel(estimate: Omit<PortalEstimate, "test">): string {
+  return estimate.amount !== null ? `約${yen(estimate.amount)}` : estimate.work_days > 0 ? "算出できません" : "0円";
+}
+
 function EstimateCard({ home }: { home: PortalHome }) {
-  const { estimate } = home;
+  const formal = home.estimate;
+  const test = formal.test && formal.test.work_days > 0 ? formal.test : null;
+  // 正式の予定がなくテストだけのときは、テストの分を大きく出す（【テスト】と明記。正式の合計には混ぜない）
+  const testOnly = !!test && formal.work_days === 0;
+  const estimate = testOnly && test ? test : formal;
   const [year, mon] = home.month.split("-").map(Number);
   const excluded = estimate.excluded_hourly + estimate.excluded_unknown;
   return (
     <div className="lwp-summary">
+      {testOnly ? <p className="lw-test lwp-summary-test">【テスト】テストの依頼書の予定から出した見込みです（正式な発注ではありません）</p> : null}
       <div className="lwp-summary-item">
         <span className="lwp-summary-label">{year}年{mon}月の報酬見込み</span>
-        <strong className="lwp-summary-value">
-          {estimate.amount !== null ? `約${yen(estimate.amount)}` : estimate.work_days > 0 ? "算出できません" : "0円"}
-        </strong>
+        <strong className="lwp-summary-value">{amountLabel(estimate)}</strong>
       </div>
       <div className="lwp-summary-item">
         <span className="lwp-summary-label">稼働日数</span>
         <strong className="lwp-summary-value">{estimate.work_days}日</strong>
       </div>
+      {test && !testOnly ? (
+        <p className="lwp-summary-testrow"><span className="lwp-test-chip">テスト</span>テストの依頼書の分：{amountLabel(test)}・{test.work_days}日（上の金額・日数には含みません）</p>
+      ) : null}
       <p className="lw-note lwp-summary-note">
         受諾した予定と依頼書の日給から出した目安です。インセンティブは含みません。実際の支払額とは変わる場合があります。
         {estimate.separate_cost ? "交通費・昼食代を別に精算する日の分は含みません。" : ""}

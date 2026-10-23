@@ -106,19 +106,25 @@ def estimate_for(session: Session, entries: list[WorkerScheduleEntry]) -> dict:
     - 依頼書の日給を、参加する日ごとに1回（予定の1行＝1つの依頼書の1日）。別々の依頼書で同じ日に働けばそれぞれ数える。
     - 稼働日数は日付で数える（同じ日に2件でも1日）。
     - 時給・単価の分からない予定は0円とせず、対象外として件数を返す。
-    - 変更確認中は旧い受諾の版（予定に記録された版）の単価。テストは含めない。インセンティブ・税は加減しない。
+    - 変更確認中は旧い受諾の版（予定に記録された版）の単価。インセンティブ・税は加減しない。
     - 合計は小数のまま足し、表示用に円未満を切り捨てる。
+    - テストの依頼書の予定は正式の合計に混ぜず、"test" に同じ計算で別に返す（0.51.5：画面の確認用に【テスト】として表示する）。
     """
+    versions: dict[str, dict] = {}
+    formal = _estimate(session, [e for e in entries if not e.is_test], versions)
+    tests = [e for e in entries if e.is_test]
+    formal["test"] = _estimate(session, tests, versions) if tests else None
+    return formal
+
+
+def _estimate(session: Session, entries: list[WorkerScheduleEntry], versions: dict[str, dict]) -> dict:
     total = Decimal("0")
     counted = 0
     hourly = 0
     unknown = 0
     separate_cost = False
     days: set[date] = set()
-    versions: dict[str, dict] = {}
     for entry in entries:
-        if entry.is_test:
-            continue
         days.add(entry.work_date)
         if entry.version_id not in versions:
             version = session.get(OrderRequestVersion, entry.version_id)

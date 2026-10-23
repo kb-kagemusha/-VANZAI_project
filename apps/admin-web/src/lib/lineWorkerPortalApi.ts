@@ -57,6 +57,8 @@ export type PortalEstimate = {
   excluded_unknown: number;
   separate_cost: boolean;
   formula_version: string;
+  /** テストの依頼書の分（正式とは別。0.51.5）。テストの予定がなければ null */
+  test?: Omit<PortalEstimate, "test"> | null;
 };
 
 export type PortalConfirmation = {
