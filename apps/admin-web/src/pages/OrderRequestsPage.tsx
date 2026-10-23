@@ -1393,16 +1393,21 @@ export function OrderRequestsPage() {
               <div className="order-document">
                 <p className="order-document-title">【案件依頼】</p>
                 <div className="order-draft-grid">
-                  <label className="order-field order-span-6">
-                    <span className="order-field-label">案件名</span>
-                    <textarea
-                      className="is-short"
+                  <div className="order-field order-span-6 order-project-field">
+                    <label className="order-field-label"><span>案件名{!templateMode && <span aria-hidden="true">（必須）</span>}</span>
+                    <input
+                      aria-label="案件名"
+                      aria-required={!templateMode}
                       value={sections.projectName}
                       disabled={!editable}
-                      placeholder={"【イベント名】\nhttps://example.com/event"}
+                      placeholder="イベント名"
                       onChange={(event) => setSections({ ...sections, projectName: withFullwidthTilde(event.target.value) })}
                     />
-                  </label>
+                    </label>
+                    <label className="order-field-label">参考URL（任意）
+                      <input type="url" aria-label="参考URL（任意）" value={sections.referenceUrl ?? ""} maxLength={4096} disabled={!editable} placeholder="https://example.com/event" onChange={(event) => setSections({ ...sections, referenceUrl: event.target.value })} />
+                    </label>
+                  </div>
                   <fieldset className="order-field order-span-6 order-category-field">
                     <legend className="order-field-label">
                       カテゴリ
@@ -1432,7 +1437,7 @@ export function OrderRequestsPage() {
                       className="is-short is-site"
                       value={form.site_name}
                       disabled={!editable}
-                      placeholder={"会場名\n（住所）"}
+                      placeholder="会場名"
                       onChange={(event) => { setForm({ ...form, site_id: null, site_name: withFullwidthTilde(event.target.value) }); setSections({ ...sections, placeId: "", mapsUrl: "" }); }}
                     />
                   </label>

@@ -1,6 +1,7 @@
 """案件依頼の本文。欄は既存の本文へ見出し付きでまとめる。"""
 import json
 import unicodedata
+from urllib.parse import urlsplit
 from src.domain.order_schedule import apply_period_holidays, normalize_schedule, normalize_work_period, schedule_text, work_period_label
 from src.domain.maps_url import validate_maps_url
 
@@ -81,6 +82,20 @@ def parse_sections(request_conditions: str | None) -> dict | None:
             sections[key] = _text(data[key])
     if "categories" in data:
         sections["categories"] = normalize_categories(data["categories"])
+    if "reference_url" in data:
+        url = data["reference_url"]
+        if not isinstance(url, str):
+            raise ValueError("参考URLはhttpまたはhttpsのURLを入力してください")
+        url = url.strip()
+        try:
+            parsed = urlsplit(url)
+            valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname) and not parsed.username and not parsed.password
+            parsed.port  # 不正なポートも拒否する。
+        except ValueError:
+            valid = False
+        if url and (not valid or len(url) > 4096 or any(c.isspace() or ord(c) < 32 for c in url)):
+            raise ValueError("参考URLはhttpまたはhttpsのURLを入力してください")
+        sections["reference_url"] = url
     if "maps_url" in data:
         if not isinstance(data["maps_url"], str):
             raise ValueError("Google Mapsの共有URLを入力してください")
@@ -162,6 +177,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
             "",
             "■案件名",
             _text(sections.get("project_name")),
+            *(["", "■参考URL", sections["reference_url"]] if sections.get("reference_url") else []),
             "",
             "■背景",
             _text(sections.get("background")),
@@ -204,7 +220,7 @@ def compose_document(sections: dict, *, work_date_label: str, site_name: str, si
 def canonical_conditions(sections: dict) -> str:
     payload = {"format": FORMAT_ID}
     payload.update({key: _text(sections.get(key)) for key in _SECTION_KEYS})
-    for key in ("categories", "schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url", "site_station_walk_minutes", "incentive_enabled"):
+    for key in ("categories", "schedule", "work_period", "previous_hours", "previous_fee", "place_id", "maps_url", "reference_url", "site_station_walk_minutes", "incentive_enabled"):
         if key in sections:
             payload[key] = sections[key]
     return json.dumps(payload, ensure_ascii=False)

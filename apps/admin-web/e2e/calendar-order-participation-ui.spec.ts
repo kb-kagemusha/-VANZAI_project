@@ -68,6 +68,51 @@ async function adminMocks(page: Page) {
   return writes;
 }
 
+test("order name and reference URL stay separate and postal lookup preserves manual addresses", async ({ page }, testInfo) => {
+  const writes = await adminMocks(page);
+  await page.route("https://zipcloud.ibsnet.co.jp/api/search?*", async (route) => {
+    const postal = new URL(route.request().url()).searchParams.get("zipcode");
+    if (postal === "1000001") await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ status: 200, results: [{ zipcode: postal, address1: "神奈川県", address2: "横浜市中区", address3: "新港" }] }) });
+  });
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "テンプレートの作成", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "テンプレートの作成", exact: true });
+  await editor.getByRole("textbox", { name: "テンプレート名（必須）", exact: true }).fill("URLと住所");
+  await editor.getByRole("textbox", { name: "案件名", exact: true }).fill("案内イベント");
+  await editor.getByRole("textbox", { name: "参考URL（任意）", exact: true }).fill("https://example.com/~event");
+  await editor.getByRole("textbox", { name: "稼働場所", exact: true }).fill("会場名のみ");
+  await expect(editor.getByRole("textbox", { name: "稼働場所", exact: true })).toHaveAttribute("placeholder", "会場名");
+  const nameCard = await editor.locator(".order-project-field").boundingBox();
+  const category = await editor.locator(".order-category-field").boundingBox();
+  expect(Math.abs(nameCard!.y - category!.y)).toBeLessThan(24);
+  expect(Math.abs(nameCard!.width - category!.width)).toBeLessThan(2);
+  expect(category!.x).toBeGreaterThan(nameCard!.x + nameCard!.width);
+  const postal = editor.getByRole("textbox", { name: "稼働場所の郵便番号", exact: true });
+  const address = editor.getByRole("textbox", { name: "稼働場所の住所", exact: true });
+  await postal.fill("２３１－０００１");
+  await expect(address).toHaveValue("〒231-0001 神奈川県横浜市中区新港");
+  await address.fill("〒231-0001 神奈川県横浜市中区新港1-1 会場ビル3F");
+  await postal.fill("1000001");
+  await expect(editor.getByRole("status")).toContainText("住所を検索中");
+  await address.fill("主催者確認済みの住所・建物名");
+  await expect(editor.getByRole("status")).toContainText("自動で変更しません");
+  await expect(address).toHaveValue("主催者確認済みの住所・建物名");
+  await page.screenshot({ path: testInfo.outputPath("order-name-url-address.png") });
+  await editor.getByRole("button", { name: "テンプレートを作成", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  const content = writes[0].body.content;
+  expect(JSON.parse(content.request_conditions).reference_url).toBe("https://example.com/~event");
+  expect(JSON.parse(content.request_conditions).project_name).toBe("案内イベント");
+  expect(content.site_name).toBe("会場名のみ");
+  expect(content.site_address).toBe("主催者確認済みの住所・建物名");
+  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  await page.getByRole("button", { name: "このテンプレートで新規作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("textbox", { name: "参考URL（任意）", exact: true })).toHaveValue("https://example.com/~event");
+  await expect(draft.getByRole("textbox", { name: "案件名", exact: true })).toHaveAttribute("aria-required", "true");
+});
+
 test("direct template creation stores reusable content without creating or sending an order", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   await page.goto("/operations/order-requests");
@@ -199,7 +244,7 @@ test("form layout and detail dates stay within the overall work period", async (
   const grid = await memo.locator("..").locator("..").boundingBox();
   expect(Math.abs(memoBox!.x + memoBox!.width - grid!.x - grid!.width)).toBeLessThan(2);
   await expect(memo.locator("..").locator(".order-field-hint")).toHaveText("PDFには記載しません");
-  await expect(draft.getByText("（必須）", { exact: true })).toBeVisible();
+  await expect(draft.locator(".order-field-hint").getByText("（必須）", { exact: true })).toBeVisible();
   await expect(draft.getByText("期限内に返事がない相手へ案内を送ります", { exact: true })).toBeVisible();
   const phone = draft.getByRole("checkbox", { name: /電話先行/ });
   const phoneMemo = draft.getByRole("textbox", { name: "電話メモ", exact: true });

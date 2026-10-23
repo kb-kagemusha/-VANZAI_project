@@ -1562,3 +1562,13 @@
 - Validation: `tests/test_order_request_templates.py`（直接作成・依頼書/送付を生成しない・業務状態除外・保存内容・重複・権限・参照・DDL/安全なdowngrade）、既存依頼書/インセンティブ回帰、ブラウザで直接作成→呼び出しと既存操作、補助表示の文字左端・16px以上のフォントを検証。操作・配置を画像で確認。
 - Version: 既存のテンプレート保存方法の追加と金額表示の改善としてZ（0.49.3）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-072/075/076。運用: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
 
+
+## DEC-078: 発注依頼書の案件名・参考URL分離と稼働場所の住所補完（2026-10-23）
+- Status: Accepted（ユーザー指定）
+- Purpose: 案件名にURL、会場名に住所が混在するのを防ぎ、現在の2列のバランスを維持して入力しやすくする。
+- Model: 既存request_conditions JSONに任意のreference_urlを追加。URL文字列のチルダを全角化せずhttp/https・長さ・制御文字等を検証する。住所は郵便番号を含めて既存site_addressへ保存する。テーブル/カラム/DDL変更なし。
+- UI: 左半分の同じカードに案件名（通常依頼書の確定時必須）と参考URL（任意）を配置し、右のカテゴリ、下の稼働場所と背景の2列は維持する。直接テンプレート作成の案件名はDEC-077どおり省略可能。稼働場所のplaceholderは会場名のみ。住所の名称を「稼働場所の住所」へ変更する。
+- Postal: 取引先登録のlookupPostalAddress/normalizePostalCodeを共用する。郵便番号7桁で都道府県・市区町村・町域を補完し、番地・建物名は手入力。350msの待機と中止制御を行い、入力済み住所や検索待ち中の追記を上書きしない。複数候補/手入力済みの場合は候補選択、失敗時は手入力を案内する。
+- Compatibility: 参考URLは本文・PDF・テンプレート保存と呼出しに引き継ぐ。従来の案件名に含まれるURLや住所は一括移動せず、旧版・発行済みPDF・金額を変更しない。既存の依頼書/テンプレート保存監査と権限を継続する。
+- Validation: tests/test_order_reference_url.py（任意URL・不正URL拒否・保存/テンプレート保持・案件名必須・旧名称保持）、依頼書/インセンティブ/テンプレート回帰、ブラウザの2列寸法・住所補完・検索中手入力保護・URL再読込、PDFを画像化して表示確認。
+- Version: 既存フォームの項目追加・表示変更としてZ（0.49.4）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2、DEC-072/077。

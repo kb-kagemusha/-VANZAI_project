@@ -43,6 +43,7 @@ export interface OrderDocumentSections {
   /** 会場の最寄り駅からの徒歩分（任意、0〜120）。空欄は "" */
   siteStationWalkMinutes: string;
   projectName: string;
+  referenceUrl?: string;
   /** カテゴリ（0.48.10〜。旧データは空）。 */
   categories: string[];
   background: string;
@@ -92,6 +93,7 @@ export function serializeOrderSections(sections: OrderDocumentSections): string 
   return JSON.stringify({
     format: ORDER_FORMAT_ID,
     project_name: wavy(sections.projectName.trim()),
+    ...(sections.referenceUrl?.trim() ? { reference_url: sections.referenceUrl.trim() } : {}),
     categories: ORDER_CATEGORY_OPTIONS.filter((value) => sections.categories.includes(value)),
     background: wavy(sections.background.trim()),
     meeting_place: wavy(sections.meetingPlace.trim()),
@@ -126,6 +128,7 @@ export function composeOrderDocument(
     "",
     "■案件名",
     wavy(sections.projectName.trim()),
+    ...(sections.referenceUrl?.trim() ? ["", "■参考URL", sections.referenceUrl.trim()] : []),
     "",
     "■背景",
     wavy(sections.background.trim()),
@@ -185,6 +188,7 @@ function parseSections(requestConditions: string): OrderDocumentSections | null 
       siteStation: textOf(data.site_station),
       siteStationWalkMinutes: typeof data.site_station_walk_minutes === "number" ? String(data.site_station_walk_minutes) : "",
       projectName: textOf(data.project_name),
+      referenceUrl: typeof data.reference_url === "string" ? data.reference_url.trim() : "",
       categories: Array.isArray(data.categories) ? data.categories.filter((item): item is string => typeof item === "string") : [],
       background: textOf(data.background),
       workDateDetail: textOf(data.work_date_detail),

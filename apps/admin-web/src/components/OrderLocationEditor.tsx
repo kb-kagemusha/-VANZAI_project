@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ApiError, getPlaceStatus, searchPlaces, type PlaceSearchItem } from "../lib/api/client";
+import { lookupPostalAddress, normalizePostalCode } from "../lib/postalAddress";
 
 function Attribution({ item }: { item: PlaceSearchItem }) {
   return <>{item.attributions.map((attribution, i) => <span key={i}>{attribution.providerUri && /^https:\/\//.test(attribution.providerUri) ? <a href={attribution.providerUri} target="_blank" rel="noopener noreferrer">{attribution.provider ?? "情報提供元"}</a> : attribution.provider ?? ""}</span>)}</>;
@@ -13,6 +14,41 @@ export function OrderLocationEditor({ disabled, venueName, address, placeId, sav
   const [items, setItems] = useState<PlaceSearchItem[]>([]);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const [postalCode, setPostalCode] = useState(() => address.match(/^〒?\s*(\d{3}-?\d{4})/)?.[1] ?? "");
+  const [postalMessage, setPostalMessage] = useState("");
+  const [postalChoices, setPostalChoices] = useState<string[]>([]);
+  const postalTouched = useRef(false);
+  const lastAutoAddress = useRef("");
+  const addressState = useRef({ address, onAddress });
+  addressState.current = { address, onAddress };
+  const addressRevision = useRef(0);
+  useEffect(() => {
+    if (disabled || !postalTouched.current) return;
+    const postal = normalizePostalCode(postalCode);
+    if (!/^[0-9]{7}$/.test(postal)) return;
+    const controller = new AbortController();
+    const revision = addressRevision.current;
+    const timer = setTimeout(async () => {
+      setPostalMessage("住所を検索中...");
+      try {
+        const choices = await lookupPostalAddress(postal, controller.signal);
+        if (controller.signal.aborted) return;
+        const values = choices.map((choice) => `〒${postal.slice(0, 3)}-${postal.slice(3)} ${choice.prefecture}${choice.address}`);
+        const current = addressState.current;
+        if (values.length === 1 && revision === addressRevision.current && (!current.address.trim() || current.address === lastAutoAddress.current)) {
+          current.onAddress(values[0]);
+          lastAutoAddress.current = values[0];
+          setPostalMessage("番地・建物名を確認して入力してください。");
+        } else {
+          setPostalChoices(values);
+          setPostalMessage(values.length ? "住所の候補を選択してください。入力済みの住所は自動で変更しません。" : "該当する住所がありません。住所を直接入力してください。");
+        }
+      } catch {
+        if (!controller.signal.aborted) setPostalMessage("住所を取得できませんでした。住所を直接入力してください。");
+      }
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [postalCode, disabled]);
   const inputVersion = useRef(0);
   const [picked, setPicked] = useState<PlaceSearchItem | null>(null);
   const status = useQuery({ queryKey: ["place-search-status"], queryFn: getPlaceStatus, retry: false });
@@ -23,7 +59,11 @@ export function OrderLocationEditor({ disabled, venueName, address, placeId, sav
   }, onError: (e, request) => { if (request.version === inputVersion.current) setError(e instanceof ApiError ? e.message : "所在地を取得できませんでした"); } });
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || venueName || address)}${placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : ""}`;
   return <div className="order-location order-span-12">
-    <label className="order-field">所在地の登録住所<textarea rows={2} value={address} disabled={disabled} placeholder="〒231-0001 神奈川県横浜市中区新港1丁目1−1" onChange={(e) => onAddress(e.target.value)} /></label>
+    <label className="order-field" style={{ maxWidth: 220 }}>郵便番号<input aria-label="稼働場所の郵便番号" inputMode="numeric" autoComplete="postal-code" value={postalCode} disabled={disabled} placeholder="例: 231-0001" onChange={(event) => { postalTouched.current = true; setPostalCode(event.target.value); setPostalMessage(""); setPostalChoices([]); }} /></label>
+    <p className="order-field-hint">郵便番号7桁から住所を補完します。番地・建物名は確認して入力してください。</p>
+    {postalMessage && <p className="order-field-hint" role="status">{postalMessage}</p>}
+    {postalChoices.map((choice) => <button key={choice} type="button" className="btn btn-ghost order-address-choice" disabled={disabled} onClick={() => { onAddress(choice); lastAutoAddress.current = choice; setPostalChoices([]); setPostalMessage("番地・建物名を確認して入力してください。"); }}>{choice}</button>)}
+    <label className="order-field">稼働場所の住所<textarea rows={2} value={address} disabled={disabled} placeholder="〒231-0001 神奈川県横浜市中区新港1丁目1−1" onChange={(e) => { addressRevision.current += 1; onAddress(e.target.value); }} /></label>
     <a href={mapsUrl} target="_blank" rel="noopener noreferrer">Google Mapsで所在地を検索</a>
     <label className="order-field">Google Mapsの共有URL<input type="url" value={savedMapsUrl} maxLength={4096} disabled={disabled} placeholder="https://maps.app.goo.gl/…" onChange={(e) => onMapsUrl(e.target.value)} /></label>
     <p className="order-field-hint">Google Mapsで会場を開き、「共有」→「リンクをコピー」で取得したURLを貼り付けます。この方式ではMaps APIを使用しません。</p>
