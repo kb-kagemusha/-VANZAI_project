@@ -47,10 +47,11 @@ test("sent requests are grouped by document and both lists paginate and show tes
     expect(new Set(rowColors[1]).size).toBe(1);
     expect(rowColors[0][0]).not.toBe(rowColors[1][0]);
     const frame = await section.locator(".order-list-table > table").evaluate((el) => ({ collapse: getComputedStyle(el).borderCollapse, spacing: getComputedStyle(el).borderSpacing }));
-    expect(frame.collapse).toBe("separate");
-    expect(frame.spacing).toBe("0px 8px");
+    expect(frame.collapse).toBe("collapse");
+    expect(rowColors[0][0]).toBe("rgb(255, 255, 255)");
+    expect(rowColors[1][0]).toBe("rgb(242, 242, 242)");
     const boundary = await section.locator("tbody > tr > td").first().evaluate((el) => ({ width: getComputedStyle(el).borderLeftWidth, style: getComputedStyle(el).borderLeftStyle }));
-    expect(boundary).toEqual({ width: "4px", style: "solid" });
+    expect(boundary.width).toBe("0px");
 
 
     expect(await section.locator("tbody > tr").first().locator(".order-project-name").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(288);
