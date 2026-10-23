@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from scripts.repair_archived_demo_schedules import repair
+from src.models.transaction import AuditLog
 from src.models.line_daily import WorkerScheduleEntry
 from src.models.order_request import OrderRequestDocument, OrderRequestVersion, OrderRequestDelivery
 from src.services import worker_schedule as ws
@@ -67,3 +68,6 @@ def test_archived_demo_hidden_and_repaired_without_accepting_current_changes(
     assert ws.get_application(db_session, db_session.get(OrderRequestVersion, current["id"]).series_id, worker.id).applied_version_id == current["id"]
     assert {e.status for e in db_session.query(WorkerScheduleEntry).filter_by(document_id=doc.id)} == {"cancelled"}
     assert {e.status for e in db_session.query(WorkerScheduleEntry).filter_by(document_id=current["document_id"])} == {"changing"}
+
+    audits = db_session.query(AuditLog).filter_by(action="archived_demo_schedules_repaired").all()
+    assert len(audits) == 1 and len(audits[0].target_id) <= 26

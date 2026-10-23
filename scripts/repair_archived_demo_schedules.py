@@ -55,7 +55,7 @@ def repair(db, *, apply=False):
         raise RuntimeError("旧予定が残っているため変更をロールバックします")
     if before:
         AuditService(db).log("archived_demo_schedules_repaired", target_type="calendar_demo",
-            target_id="calendar-demo-archived-schedules-v1", actor=actor.username, actor_role=actor.role,
+            target_id="archived-demo-repair-v1", actor=actor.username, actor_role=actor.role,
             reason="置換後もLINEに表示されていた削除済みダミー依頼の派生予定を解除",
             before_value={"stale_schedule_entries": before}, after_value={"active_entries_remaining": remaining})
     return {"archived_demo_documents": len(ids), "schedule_entries_removed": before, "active_entries_remaining": remaining}

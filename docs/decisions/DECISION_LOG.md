@@ -1800,3 +1800,5 @@
 - 再構築は削除済み文書の適用受諾から予定を再生成しない。既存予定はcancelledまたはsupersededとし、原受諾/参加状態/送付時氏名/PDF/会計は変更しない。新たな依頼書の改訂・本人の確認の代行はしない。今後のデモ置換時にも旧系列を再構築する。
 - 既存補正は--archived-demo-schedules-preview/--archived-demo-schedules-repair。置換の監査記録があり、全版がcalendar-demo由来かつ一覧除外済みテスト文書だけを選ぶ。系列ロック下で再構築し残存active/changingがあればロールバック。既存auditとarchived_demo_schedules_repairedへ記録、再実行の変更0。実行設定は既承認の内部読み込みのみ。実際のLINEメッセージは送信しない。
 - 最小モデルは既存の文書/版/送付行/参加状態/適用受諾/派生予定/監査。DDL不要。既存機能の不具合修正としてZ: 0.51.9→0.51.10。検証はCHANGELOG参照。
+
+- DEC-099補足（0.51.11）: 本番のaudit_logs.target_idはVARCHAR(26)。集約監査IDをarchived-demo-repair-v1へ短縮し、同じ制約を回帰試験で確認する。初回の解除はcommit時にロールバックされ、部分更新なし。
