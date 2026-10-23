@@ -10,7 +10,6 @@ export interface NavItem {
 export const DASHBOARD_ROLES: UserRole[] = ["admin", "ops", "accounting", "site_manager"];
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/operations/attendance-notes", label: "遅刻・キャンセル記録", description: "現場からの報告を記録し、支払時に確認", allowedRoles: ["admin", "ops", "accounting"] },
   { to: "/billing/order-amounts", label: "依頼書の金額確定", description: "請求額の確定と依頼元別の月次請求書", allowedRoles: ["admin"] },
   { to: "/settings/access", label: "ID・権限管理", description: "ログインIDと役割ごとの権限を設定", allowedRoles: ["admin"] },
   { to: "/settings/company", label: "会社情報", description: "会社名・住所・電話番号など（請求書の発行元）", allowedRoles: ["admin"] },
@@ -44,6 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
     description: "当日の稼働予定と公式LINEの起床報告",
     allowedRoles: ["admin", "ops"],
   },
+  { to: "/operations/attendance-notes", label: "遅刻・キャンセル記録", description: "現場からの報告を記録し、支払時に確認", allowedRoles: ["admin", "ops", "accounting"] },
   {
     to: "/operations/notices",
     label: "スタッフ通知",
