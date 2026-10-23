@@ -22,6 +22,22 @@ STAMP_DIR="${APP_DIR}/.deploy-stamps"
 # PaddleOCR 2.x と互換のある OpenCV 4.x（5.x は cv2.INTER_LINEAR 欠落で OCR 失敗）
 OPENCV_HEADLESS_PIN="opencv-python-headless==4.10.0.84"
 
+# 明示オプションはデプロイ済みコードで行う単独運用モード。
+# 実行設定の内部読み込みのみ、2026-10-23ユーザー承認。値の表示・変更は禁止。
+# git取得・ビルド・マイグレーション・サービス再起動・cron更新は行わない。
+if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
+    cd "${APP_DIR}"
+    set -a
+    source "${APP_DIR}/.env"
+    set +a
+    if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
+    else
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py" --apply
+    fi
+    exit 0
+fi
+
 echo "=============================="
 echo "  VANZAI アプリデプロイ開始"
 echo "=============================="
@@ -189,12 +205,6 @@ source "${APP_DIR}/.env"
 set +a
 ${VENV_DIR}/bin/alembic upgrade head
 echo "  マイグレーション完了"
-
-if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
-    "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
-elif [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-apply" ]; then
-    "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py" --apply
-fi
 
 # ----------------------------------------
 # 5. フロントエンドビルド（旧アセット保持付き）

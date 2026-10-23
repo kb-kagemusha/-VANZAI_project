@@ -12,10 +12,12 @@
 コードのcommit/push後、既存のデプロイ手順のみを使う。
 
 ```bash
+bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh
 bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --calendar-demo-preview
 bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --calendar-demo-apply
 ```
 
+通常モードでコード反映後、preview/applyを実行する。preview/applyはデプロイ済みコードによる単独運用モードで、git取得・ビルド・マイグレーション・API再起動・cron更新を行わない。
 previewは既存サンプルの文書番号・案件名・区分の3項目だけ表示する。通常依頼の内容を出さない。
 applyは既存サンプルをテストに変換し、各月15件を作成する。通常デプロイでは実行しない。新スクリプトへ自己更新する場合もオプションを保持する。
 
@@ -28,3 +30,5 @@ applyは既存サンプルをテストに変換し、各月15件を作成する�
 - 後片付けは通常の依頼書の一覧除外で行い、物理削除しない。可否の補完行はnotesのデータセットキーで識別できる。
 
 必要人数と不足表示は保留。テスト請求書の生成・発行は今回の対象外。
+
+2026-10-23 ユーザー承認: 今回のpreview/applyに限り、既存.envをアプリの実行設定として内部読み込みする。値の表示・取得・変更は認めない。

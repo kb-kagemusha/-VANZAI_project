@@ -10,6 +10,7 @@
 - イベントの色を依頼書のカテゴリーに固定。研修だけは専用色、他カテゴリーとの併用は業務側の色。未設定は別色。依頼書一覧・詳細・各カレンダー・金額入力で鮮明なテストラベルを表示する。
 - 金額確定は「テストも含む」を選択可能。テストの金額保存・履歴は正式請求と同じ監査付き追記方式で試せるが、正式な月次請求・既定の未入力バッジに混入しない。
 - 2026年10・11月各15件のテスト投入を明示実行する手順を追加。既存のLINE未連携ダミー稼働者を使い、参加OK・未回答・変更確認待ちを再現。既存の可否・タグは保持、空欄だけ補完。既存サンプルは区分変更を監査し、旧PDFを保持してテスト版を別保存。実績・請求・支払・LINE送信は作成しない。
+- 運用: ダミー確認・投入オプションは、サービス再起動などを伴わない単独運用モードとして実行する。実行設定の内部読み込みは今回の明示承認範囲に限定する。
 - DB/モデル: 既存の依頼書・参加状態・可否・金額履歴を再利用。新規テーブル・DDLなし。API応答にcategories/order_events/is_testを追加。
 - 仕様: DESIGN_SPEC §6.1/11.4/14.3/16、DEC-083。検証: tests/test_calendar_demo.py、tests/test_order_billing.py、calendar-demo-ui.spec.ts、関連APIテストとadmin-webビルド。監査: order_billing_amount_confirmed（is_test追加）、calendar_demo_created/reclassified/pdf_reclassified/worker_tags/seeded。
 
