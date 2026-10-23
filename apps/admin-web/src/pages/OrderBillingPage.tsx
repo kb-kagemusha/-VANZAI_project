@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { FormDialog } from "../components/FormDialog";
+import { BillingAmountInput } from "../components/BillingAmountInput";
+import { isValidBillingAmount } from "../lib/billingAmountFormat";
 import { PageHeader } from "../components/PageHeader";
 import { OrderRequestDetailDialog } from "../components/OrderRequestDetailDialog";
 import { todayInTokyo } from "../components/MonthCalendar";
@@ -66,8 +68,8 @@ export function OrderBillingPage() {
   }
   function openEdit(row: BillingOrder) {
     setEdit(row); setEditMonth(row.billing_month ? `${row.billing_month.slice(0, 4)}-${row.billing_month.slice(4)}` : "");
-    setEditIncentive(row.incentive_amount ?? "");
-    setEditAmount(row.amount ?? ""); setReason(""); setDialogError("");
+    setEditIncentive((row.incentive_amount ?? "").replace(/\.0+$/, ""));
+    setEditAmount((row.amount ?? "").replace(/\.0+$/, "")); setReason(""); setDialogError("");
   }
   async function save() {
     if (!edit || busy) return;
@@ -166,15 +168,15 @@ export function OrderBillingPage() {
       {!edit?.client_id ? <p className="form-error">依頼書の発注元にクライアントを設定してください。</p> : null}
       <label className="order-field">請求月（必須）<input type="month" value={editMonth} disabled={busy} onChange={(e) => setEditMonth(e.target.value)} /></label>
       <p className="order-field-hint">月をまたぐ依頼も、ここで指定した月へ全額計上します。</p>
-      <label className="order-field">通常請求額（インセンティブを除く・税抜・円）<input type="number" min="0" step="0.01" value={editAmount} disabled={busy} onChange={(e) => setEditAmount(e.target.value)} /></label>
+      <BillingAmountInput label="通常請求額（インセンティブを除く・税抜・円）" value={editAmount} disabled={busy} onChange={setEditAmount} />
       {edit?.incentive_enabled ? <div className="card" style={{ padding: "1rem" }}><strong>インセンティブ条件（依頼書の記載）</strong><p className="order-cell-multiline">{edit.incentive_note}</p>
-        <label className="order-field">インセンティブ金額（税抜・円）<input type="number" min="0" step="0.01" value={editIncentive} disabled={busy} onChange={(e) => setEditIncentive(e.target.value)} /></label>
+        <BillingAmountInput label="インセンティブ金額（税抜・円）" value={editIncentive} disabled={busy} onChange={setEditIncentive} />
         <p className="order-field-hint">販売実績が出るまでは空欄で保存できます。空欄の間は未処理として残り、月次請求書を作成できません。実績が0円なら0を入力してください。</p>
-        {editAmount !== "" && editIncentive !== "" ? <p>請求総額（税抜） {yen(String(Number(editAmount) + Number(editIncentive)))}</p> : null}
+        {isValidBillingAmount(editAmount) && isValidBillingAmount(editIncentive) ? <p>請求総額（税抜） {yen(String(Number(editAmount) + Number(editIncentive)))}</p> : null}
       </div> : <p>インセンティブなし</p>}
       <label className="order-field">{edit?.revision ? "変更理由（必須）" : "記録メモ（任意）"}<textarea rows={2} maxLength={2000} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
       {dialogError ? <p className="form-error" role="alert">{dialogError}</p> : null}
-      <button type="button" className="btn create-button" disabled={busy || !edit?.client_id || !editMonth || editAmount === "" || Number(editAmount) < 0 || Number(editIncentive) < 0 || (!!edit?.revision && !reason.trim())} onClick={() => void save()}>{busy ? "保存しています…" : edit?.incentive_enabled && editIncentive === "" ? "通常請求額を保存（インセンティブ未確定）" : "請求金額を確定する"}</button>
+      <button type="button" className="btn create-button" disabled={busy || !edit?.client_id || !editMonth || !isValidBillingAmount(editAmount) || (editIncentive !== "" && !isValidBillingAmount(editIncentive)) || (!!edit?.revision && !reason.trim())} onClick={() => void save()}>{busy ? "保存しています…" : edit?.incentive_enabled && editIncentive === "" ? "通常請求額を保存（インセンティブ未確定）" : "請求金額を確定する"}</button>
     </FormDialog>
     <FormDialog open={createOpen} title="依頼元別の月次請求書を作成" size="compact" busy={busy} onClose={() => setCreateOpen(false)}>
       <p>{invoiceMonth}分。金額確定済みの依頼だけをまとめ、まず未発行の下書きを作成します。</p>

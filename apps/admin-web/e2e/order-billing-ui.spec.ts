@@ -65,11 +65,21 @@ test("admin selects billing month explicitly, saves total, clears red badge, cre
   await expect(edit.getByRole("combobox")).toHaveCount(0);
   await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveValue("依頼元会社");
   await expect(edit.getByRole("textbox", { name: "請求先（案件のクライアント・変更不可）", exact: true })).toHaveAttribute("readonly", "");
-  await expect(edit.getByRole("spinbutton", { name: "インセンティブ金額（税抜・円）", exact: true })).toHaveCount(0);
+  await expect(edit.getByRole("textbox", { name: "インセンティブ金額（税抜・円）", exact: true })).toHaveCount(0);
   await expect(edit.getByLabel("請求月（必須）")).toHaveValue("");
   await expect(edit.getByRole("button", { name: "請求金額を確定する", exact: true })).toBeDisabled();
   await edit.getByLabel("請求月（必須）").fill("2026-11");
-  await edit.getByRole("spinbutton").fill("10001");
+  const amount = edit.getByRole("textbox", { name: "通常請求額（インセンティブを除く・税抜・円）", exact: true });
+  await amount.fill("２０００００");
+  await expect(amount).toHaveValue("200,000");
+  await expect(edit.getByText("20万円", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("grouped-billing-amount.png") });
+  await amount.press("Home");
+  await amount.press("ArrowRight");
+  await amount.press("1");
+  await expect(amount).toHaveValue("2,100,000");
+  await expect(edit.getByText("210万円", { exact: true })).toBeVisible();
+  await amount.fill("10001");
   await edit.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
   await expect(edit).toHaveCount(0);
   await expect(page.getByRole("link", { name: "依頼書の金額確定 未入力0件" }).locator(".nav-unread-badge")).toHaveCount(0);
@@ -97,10 +107,11 @@ test("stale amount preserves input and reports conflict", async ({ page }) => {
   await page.getByRole("button", { name: "請求金額を確定", exact: true }).click();
   const edit = page.getByRole("dialog", { name: "依頼書の請求金額を確定", exact: true });
   await edit.getByLabel("請求月（必須）").fill("2026-11");
-  await edit.getByRole("spinbutton").fill("10001");
+  const amount = edit.getByRole("textbox", { name: "通常請求額（インセンティブを除く・税抜・円）", exact: true });
+  await amount.fill("10001");
   await edit.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
   await expect(edit.getByRole("alert")).toContainText("別の操作で金額が更新");
-  await expect(edit.getByRole("spinbutton")).toHaveValue("10001");
+  await expect(amount).toHaveValue("10,001");
 });
 
 test("accounting permissions cannot reveal menu or request billing data", async ({ page }) => {
@@ -136,12 +147,17 @@ test("incentive memo is copied verbatim and pending amount stays in the red badg
   const edit = page.getByRole("dialog", { name: "依頼書の請求金額を確定", exact: true });
   await expect(edit.getByText("販売1台につき500円\n翌月実績確定", { exact: true })).toBeVisible();
   await edit.getByLabel("請求月（必須）").fill("2026-11");
-  await edit.getByRole("spinbutton", { name: "通常請求額（インセンティブを除く・税抜・円）", exact: true }).fill("10001");
+  await edit.getByRole("textbox", { name: "通常請求額（インセンティブを除く・税抜・円）", exact: true }).fill("10001");
   await edit.getByRole("button", { name: "通常請求額を保存（インセンティブ未確定）", exact: true }).click();
   await expect(edit).toHaveCount(0);
   await expect(page.getByRole("link", { name: "依頼書の金額確定 未入力1件", exact: true }).locator(".nav-unread-badge")).toHaveText("1");
   await page.getByRole("button", { name: "金額・請求月を変更", exact: true }).click();
-  await edit.getByRole("spinbutton", { name: "インセンティブ金額（税抜・円）", exact: true }).fill("0");
+  const incentive = edit.getByRole("textbox", { name: "インセンティブ金額（税抜・円）", exact: true });
+  await incentive.fill("２５００．７５");
+  await expect(incentive).toHaveValue("2,500.75");
+  await expect(edit.getByText("2500.75円", { exact: true })).toBeVisible();
+  await incentive.fill("0");
+  await expect(edit.getByText("0円", { exact: true })).toBeVisible();
   await edit.getByRole("textbox", { name: "変更理由（必須）", exact: true }).fill("販売実績が0円");
   await page.screenshot({ path: testInfo.outputPath("incentive-amount.png") });
   await edit.getByRole("button", { name: "請求金額を確定する", exact: true }).click();
