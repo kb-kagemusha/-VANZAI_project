@@ -883,6 +883,31 @@ class OrderRequestService:
             .all()
         )
 
+    def list_sent_reply_groups(self, *, kind: str, limit: int, offset: int):
+        """文書単位でページ化してから全送付先を取得。同一人物は最新の送付版を返す。"""
+        if kind not in (KIND_FORMAL, KIND_TEST, "all"):
+            raise OrderRequestError(400, "kind は formal、test、all のいずれかです")
+        query = (self.session.query(OrderRequestDocument.id.label("document_id"),
+                    func.max(OrderRequestDelivery.updated_at).label("updated_at"))
+            .join(OrderRequestVersion, OrderRequestVersion.document_id == OrderRequestDocument.id)
+            .join(OrderRequestDelivery, OrderRequestDelivery.version_id == OrderRequestVersion.id)
+            .filter(OrderRequestDocument.deleted_at.is_(None), OrderRequestDelivery.send_status != SEND_UNSENT))
+        if kind != "all":
+            query = query.filter(OrderRequestDocument.kind == kind)
+        query = query.group_by(OrderRequestDocument.id)
+        total = query.count()
+        document_ids = [row.document_id for row in query.order_by(func.max(OrderRequestDelivery.updated_at).desc(), OrderRequestDocument.id.desc()).offset(offset).limit(limit)]
+        groups = {identifier: {} for identifier in document_ids}
+        if document_ids:
+            rows = (self.session.query(OrderRequestDelivery, OrderRequestDocument, OrderRequestVersion)
+                .join(OrderRequestVersion, OrderRequestVersion.id == OrderRequestDelivery.version_id)
+                .join(OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id)
+                .filter(OrderRequestDocument.id.in_(document_ids), OrderRequestDelivery.send_status != SEND_UNSENT)
+                .order_by(OrderRequestVersion.version_no.desc(), OrderRequestDelivery.updated_at.desc(), OrderRequestDelivery.id.desc()).all())
+            for delivery, document, version in rows:
+                groups[document.id].setdefault(delivery.worker_id, (delivery, document, version))
+        return [list(group.values()) for group in groups.values()], total
+
     def _matches_queue(self, version: OrderRequestVersion, queue: str) -> bool:
         if queue == "all":
             return True

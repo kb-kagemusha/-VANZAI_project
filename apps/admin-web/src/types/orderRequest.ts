@@ -295,3 +295,14 @@ export interface OrderRequestWrite {
   /** 日付を選んで受諾できる（A1+ §3.1） */
   allow_partial_accept?: boolean;
 }
+
+export interface OrderRequestReplyGroup extends Omit<OrderRequestReplyItem, "delivery_id" | "worker_name" | "send_status" | "ack_status" | "decline_reason" | "acked_at" | "ack_reminded_at"> {
+  document_id: string;
+  recipients: OrderRequestReplyItem[];
+}
+export interface OrderRequestReplyGroupList {
+  items: OrderRequestReplyGroup[];
+  total: number;
+  limit: number;
+  offset: number;
+}

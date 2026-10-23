@@ -127,6 +127,7 @@ import type {
   DeletedOrderRequestListResponse,
   OrderRequestListResponse,
   OrderRequestReplyList,
+  OrderRequestReplyGroupList,
   OrderRequestVersion,
   OrderRequestWrite,
   OrderRequestTemplateItem,
@@ -1887,3 +1888,7 @@ export type ClosingApprovalItem = { id: string; project_id: string; project_name
 export function getClosingApprovals(periodKey: string) { return apiFetch<{ items: ClosingApprovalItem[] }>("/api/closing/approvals", undefined, { period_key: periodKey }); }
 export function approveClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/approve", { method: "POST" }); }
 export function rejectClosingRequest(id: string) { return apiFetch("/api/closing/approvals/" + id + "/reject", { method: "POST" }); }
+
+export function listOrderRequestReplyGroups(params: { kind: string; limit: number; offset: number }) {
+  return apiFetch<OrderRequestReplyGroupList>("/api/order-requests/reply-groups", undefined, params);
+}

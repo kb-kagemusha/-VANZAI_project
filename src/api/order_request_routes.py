@@ -786,6 +786,28 @@ def participation_calendar(
     return result
 
 
+def _reply_item(delivery, document, version, sources, changes):
+    return {
+        "delivery_id": delivery.id,
+        "version_id": version.id,
+        "document_number": document.document_number,
+        "version_no": version.version_no,
+        **_relation_fields(version, sources, changes),
+        "kind": document.kind,
+        "project_name": _project_name(version.request_conditions),
+        "categories": _categories(version.request_conditions),
+        "site_name": version.site_name,
+        "work_date_label": version.work_date_label,
+        "worker_name": delivery.worker_name_snapshot,
+        "send_status": delivery.send_status,
+        "ack_status": delivery.ack_status,
+        "decline_reason": delivery.decline_reason,
+        "acked_at": delivery.acked_at,
+        "follow_up_due_on": version.follow_up_due_on,
+        "ack_reminded_at": delivery.ack_reminded_at,
+    }
+
+
 @router.get("/replies")
 def list_order_request_replies(
     current_user: User = Depends(get_current_active_user),
@@ -797,28 +819,35 @@ def list_order_request_replies(
     changes = _changes_by_source(db, {version.id for _delivery, _document, version in rows})
     return {
         "items": [
-            {
-                "delivery_id": delivery.id,
-                "version_id": version.id,
-                "document_number": document.document_number,
-                "version_no": version.version_no,
-                **_relation_fields(version, sources, changes),
-                "kind": document.kind,
-                "project_name": _project_name(version.request_conditions),
-                "categories": _categories(version.request_conditions),
-                "site_name": version.site_name,
-                "work_date_label": version.work_date_label,
-                "worker_name": delivery.worker_name_snapshot,
-                "send_status": delivery.send_status,
-                "ack_status": delivery.ack_status,
-                "decline_reason": delivery.decline_reason,
-                "acked_at": delivery.acked_at,
-                "follow_up_due_on": version.follow_up_due_on,
-                "ack_reminded_at": delivery.ack_reminded_at,
-            }
+            _reply_item(delivery, document, version, sources, changes)
             for delivery, document, version in rows
         ]
     }
+
+
+@router.get("/reply-groups")
+def list_order_request_reply_groups(
+    kind: str = Query(default="all"),
+    limit: int = Query(default=10, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure(current_user)
+    try:
+        groups, total = _service(db).list_sent_reply_groups(kind=kind, limit=limit, offset=offset)
+    except OrderRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    rows = [row for group in groups for row in group]
+    sources = _source_labels(db, {version.revision_of_version_id for _, _, version in rows})
+    changes = _changes_by_source(db, {version.id for _, _, version in rows})
+    items = []
+    person_fields = {"delivery_id", "worker_name", "send_status", "ack_status", "decline_reason", "acked_at", "ack_reminded_at"}
+    for group in groups:
+        recipients = [_reply_item(d, doc, v, sources, changes) for d, doc, v in group]
+        items.append({**{k: v for k, v in recipients[0].items() if k not in person_fields},
+            "document_id": group[0][1].id, "recipients": sorted(recipients, key=lambda p: p["worker_name"])})
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/line-links")

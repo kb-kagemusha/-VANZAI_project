@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { PaginationBar } from "../components/PaginationBar";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
@@ -35,7 +36,7 @@ import {
   getWorkerTags,
   hideOrderRequest,
   listLineLinks,
-  listOrderRequestReplies,
+  listOrderRequestReplyGroups,
   listOrderRequests,
   reviseOrderRequest,
   sendOrderRequestLine,
@@ -201,7 +202,11 @@ export function OrderRequestsPage() {
   const templateBusyRef = useRef(false);
   templateBusyRef.current = templateSaving;
   const [templateError, setTemplateError] = useState("");
-  const [kind, setKind] = useState<OrderRequestKind | "all">("formal");
+  const [kind, setKind] = useState<OrderRequestKind | "all">("all");
+  const [sentPage, setSentPage] = useState(0);
+  const [createdPage, setCreatedPage] = useState(0);
+  const [sentLimit, setSentLimit] = useState(10);
+  const [createdLimit, setCreatedLimit] = useState(10);
   const [queue, setQueue] = useState<OrderRequestQueue>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -235,17 +240,23 @@ export function OrderRequestsPage() {
   sectionsRef.current = sections;
 
   const listQuery = useQuery({
-    queryKey: ["order-requests", kind, queue],
-    queryFn: () => listOrderRequests({ kind, queue, limit: 50, offset: 0 }),
+    queryKey: ["order-requests", kind, queue, createdPage, createdLimit],
+    queryFn: () => listOrderRequests({ kind, queue, limit: createdLimit, offset: createdPage * createdLimit }),
   });
   const repliesQuery = useQuery({
-    queryKey: ["order-request-replies"],
-    queryFn: listOrderRequestReplies,
+    queryKey: ["order-request-replies", kind, sentPage, sentLimit],
+    queryFn: () => listOrderRequestReplyGroups({ kind, limit: sentLimit, offset: sentPage * sentLimit }),
     // 公式LINEでの受諾・辞退を、画面を開き直さずに反映する
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
+  useEffect(() => {
+    if (listQuery.data) setCreatedPage((page) => Math.min(page, Math.max(0, Math.ceil(listQuery.data.total / createdLimit) - 1)));
+  }, [listQuery.data, createdLimit]);
+  useEffect(() => {
+    if (repliesQuery.data) setSentPage((page) => Math.min(page, Math.max(0, Math.ceil(repliesQuery.data.total / sentLimit) - 1)));
+  }, [repliesQuery.data, sentLimit]);
   const workersQuery = useQuery({
     queryKey: ["order-request-workers"],
     queryFn: loadOrderRecipients,
@@ -1043,9 +1054,18 @@ export function OrderRequestsPage() {
       {listQuery.isLoading ? <LoadingOverlay /> : null}
       {listQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(listQuery.error)} /> : null}
 
+      <div className="order-kind-switch" role="group" aria-label="依頼書の区分">
+        {([["all", "すべて"], ["formal", "正式のみ"], ["test", "テストのみ"]] as const).map(([value, label]) => (
+          <button key={value} type="button" className={`btn btn-sm${kind === value ? " is-active" : ""}`} aria-pressed={kind === value} onClick={() => { setKind(value); setSentPage(0); setCreatedPage(0); }}>{label}</button>
+        ))}
+      </div>
+
       <section className="order-list-frame is-sent">
         <h3>送信した依頼</h3>
-        <p className="order-list-lead">送付先ごとの返事です。日付は稼働日です。内容を変えるときは「変更を作成」（元の依頼書の受諾・予定を置き換えます）、同じイベントを別の日に行うときは「別日で新規作成」（元の依頼書には影響しません）を使います。</p>
+        <OrderListSize label="送信した依頼の表示件数" value={sentLimit} onChange={(value) => { setSentLimit(value); setSentPage(0); }} />
+        {repliesQuery.isError ? <ErrorState title="送信した依頼を取得できませんでした" description={messageOf(repliesQuery.error)} /> : null}
+        {repliesQuery.isLoading ? <LoadingOverlay /> : null}
+        <p className="order-list-lead">同じ文書番号を1件にまとめ、送付先ごとの受諾・未回答・辞退を表示します。日付は稼働日です。内容を変えるときは「変更を作成」（元の依頼書の受諾・予定を置き換えます）、同じイベントを別の日に行うときは「別日で新規作成」（元の依頼書には影響しません）を使います。</p>
         <div className="order-list-table">
           <table className="data-table">
             <thead>
@@ -1054,14 +1074,13 @@ export function OrderRequestsPage() {
                 <th>案件名</th>
                 <th>カテゴリ</th>
                 <th>日付</th>
-                <th>送付先</th>
-                <th>返事</th>
+                <th>送付先・回答</th>
                 <th>変更</th>
               </tr>
             </thead>
             <tbody>
               {(repliesQuery.data?.items ?? []).map((row) => (
-                <tr key={row.delivery_id}>
+                <tr key={row.document_id}>
                   <td>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(row.version_id)}>
                       {row.document_number}
@@ -1072,13 +1091,21 @@ export function OrderRequestsPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="order-cell-multiline">{siteLabelForList(row.project_name)}</td>
+                  <td className="order-cell-multiline">{row.kind === "test" ? <TestBadge /> : null}{siteLabelForList(row.project_name)}</td>
                   <td className="order-cell-multiline">{categoryLabelForList(row.categories)}</td>
                   <td className="order-cell-multiline">{row.work_date_label}</td>
-                  <td>{row.worker_name}</td>
                   <td>
-                    {REPLY_LABEL[row.ack_status] ?? row.ack_status}
-                    {row.decline_reason ? <div className="order-cell-multiline">{row.decline_reason}</div> : null}
+                    <ul className="order-reply-recipients">
+                      {row.recipients.map((person) => (
+                        <li key={person.delivery_id}>
+                          <span>{person.worker_name}</span>
+                          <span className={`order-reply-status is-${person.ack_status}`}>{REPLY_LABEL[person.ack_status] ?? person.ack_status}</span>
+                          {person.version_no !== row.version_no ? <small>第{person.version_no}版への回答</small> : null}
+                          {person.send_status === "failed" ? <small>送信失敗</small> : null}
+                          {person.decline_reason ? <small>{person.decline_reason}</small> : null}
+                        </li>
+                      ))}
+                    </ul>
                   </td>
                   <td>
                     <div className="order-row-actions">
@@ -1120,23 +1147,17 @@ export function OrderRequestsPage() {
             <EmptyState title="送信済みはありません" description="送付先へ送った依頼がここに出ます。" />
           ) : null}
         </div>
+        <PaginationBar page={sentPage} limit={sentLimit} total={repliesQuery.data?.total ?? 0} onPrevious={() => setSentPage((page) => Math.max(0, page - 1))} onNext={() => setSentPage((page) => page + 1)} />
       </section>
 
       <section className="order-list-frame is-created">
         <h3>作成した依頼書</h3>
         <p className="order-list-lead">下書きと確定した版です。追跡は、返事を追う担当者の名前です。作成済みの依頼書から、「変更を作成」（元の依頼書を置き換える）か「別日で新規作成」（元の依頼書とは別に扱う）で、内容を写した新しい依頼書を作れます。</p>
         <div className="order-list-filters">
-          <label>
-            区分
-            <select value={kind} onChange={(event) => setKind(event.target.value as OrderRequestKind | "all")}>
-              <option value="formal">正式</option>
-              <option value="test">テスト</option>
-              <option value="all">すべて</option>
-            </select>
-          </label>
+          <OrderListSize label="作成した依頼書の表示件数" value={createdLimit} onChange={(value) => { setCreatedLimit(value); setCreatedPage(0); }} />
           <label>
             一覧
-            <select value={queue} onChange={(event) => setQueue(event.target.value as OrderRequestQueue)}>
+            <select value={queue} onChange={(event) => { setQueue(event.target.value as OrderRequestQueue); setCreatedPage(0); }}>
               <option value="all">最新版</option>
               <option value="unsent">未送付</option>
               <option value="unknown">結果不明</option>
@@ -1247,6 +1268,7 @@ export function OrderRequestsPage() {
           <EmptyState title="該当なし" description="この条件の発注依頼書はありません" />
         ) : null}
         </div>
+        <PaginationBar page={createdPage} limit={createdLimit} total={listQuery.data?.total ?? 0} onPrevious={() => setCreatedPage((page) => Math.max(0, page - 1))} onNext={() => setCreatedPage((page) => page + 1)} />
       </section>
 
       {detailQuery.isLoading ? <LoadingOverlay /> : null}
@@ -2173,4 +2195,10 @@ export function OrderRequestsPage() {
       ) : null}
     </section>
   );
+}
+
+function OrderListSize({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return <label className="order-list-size">表示件数 <select aria-label={label} value={value} onChange={(event) => onChange(Number(event.target.value))}>
+    {[10, 20, 50].map((size) => <option key={size} value={size}>{size}件</option>)}
+  </select></label>;
 }

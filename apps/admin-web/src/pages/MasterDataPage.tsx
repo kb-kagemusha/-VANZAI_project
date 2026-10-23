@@ -1,3 +1,4 @@
+import { WorkerName } from "../components/WorkerName";
 import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1339,7 +1340,7 @@ export function MasterDataPage() {
       {view === "workers" ? (
         <DataTable
           columns={[
-            { key: "name", header: "氏名", render: (row) => row.name },
+            { key: "name", header: "氏名", render: (row) => <WorkerName name={row.name} isNewcomer={row.is_newcomer} isDirector={row.is_director} /> },
             { key: "email", header: "メール", render: (row) => row.email ?? "—" },
             { key: "phone", header: "電話", render: (row) => row.phone ?? "—" },
             { key: "supplier", header: "紹介会社", render: (row) => row.introducer_supplier_name ?? "—" },

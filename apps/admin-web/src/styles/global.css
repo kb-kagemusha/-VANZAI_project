@@ -5677,3 +5677,16 @@ html[data-theme="dark"] .calendar-test-toggle .btn.is-active, html[data-theme="d
 
 .calendar-category-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; }
 .calendar-category-legend .ov-swatch { float: none; margin-top: 0; }
+
+/* 文書ごとに回答をまとめ、送付先は文書ページの中で完結させる。 */
+.order-kind-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.order-kind-switch .is-active { background: #334155; border-color: #334155; color: #fff; }
+.order-list-size { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.order-list-size select { min-height: 34px; border: 1px solid var(--line, #cbd5e1); border-radius: 6px; padding: 4px 10px; background: var(--panel, #fff); color: inherit; }
+.order-reply-recipients { display: grid; gap: 6px; list-style: none; padding: 0; margin: 0; min-width: 210px; }
+.order-reply-recipients li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-bottom: 4px; border-bottom: 1px solid var(--line, #e5e7eb); }
+.order-reply-recipients small { flex-basis: 100%; white-space: normal; }
+.order-reply-status { border: 1px solid #94a3b8; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.order-reply-status.is-acked { color: #166534; background: #dcfce7; border-color: #86efac; }
+.order-reply-status.is-unacked { color: #475569; background: #f1f5f9; }
+.order-reply-status.is-declined, .order-reply-status.is-decline_pending { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
