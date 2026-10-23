@@ -5620,3 +5620,6 @@ html[data-theme="dark"] .order-excluded-day.is-out { background: transparent; bo
 .order-incentive-options input { width: auto; margin: 0; padding: 0; }
 .order-incentive-detail { display: grid; gap: .4rem; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 @media (max-width: 640px) { .order-billing-settings-grid { grid-template-columns: minmax(0, 1fr); } }
+.billing-amount-field { --billing-amount-inset: .85rem; }
+.billing-amount-field input { padding-inline: var(--billing-amount-inset); }
+.billing-amount-reading { margin: 0; padding-inline: calc(var(--billing-amount-inset) + 1px); font-size: 1rem; font-weight: 500; line-height: 1.6; color: var(--muted); }

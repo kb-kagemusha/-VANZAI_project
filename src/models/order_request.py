@@ -58,7 +58,7 @@ class OrderRequestTemplate(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     name_key: Mapped[str] = mapped_column(String(200), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
-    source_version_id: Mapped[str] = mapped_column(String(26), ForeignKey("order_request_versions.id"), nullable=False)
+    source_version_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("order_request_versions.id"), nullable=True)
     source_document_number: Mapped[str] = mapped_column(String(40), nullable=False)
     created_by_user_id: Mapped[str] = mapped_column(String(26), ForeignKey("users.id"), nullable=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

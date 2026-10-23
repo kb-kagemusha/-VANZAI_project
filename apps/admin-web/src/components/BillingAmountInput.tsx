@@ -25,7 +25,7 @@ export function BillingAmountInput({ label, value, disabled, onChange }: {
     });
   }
 
-  return <div className="order-field">
+  return <div className="order-field billing-amount-field">
     <label htmlFor={id}>{label}</label>
     <input ref={input} id={id} type="text" inputMode="decimal" autoComplete="off" spellCheck={false}
       value={compositionText ?? groupedBillingAmount(value)} disabled={disabled}
@@ -36,7 +36,7 @@ export function BillingAmountInput({ label, value, disabled, onChange }: {
         if (composing.current) setCompositionText(event.currentTarget.value);
         else commit(event.currentTarget.value, event.currentTarget.selectionStart);
       }} />
-    <p id={`${id}-reading`} className="order-field-hint" aria-live="polite">{billingAmountReading(value) || "\u00a0"}</p>
+    <p id={`${id}-reading`} className="billing-amount-reading" aria-live="polite">{billingAmountReading(value) || "\u00a0"}</p>
     {invalid ? <p id={`${id}-error`} className="form-error">0以上の金額を小数点以下2桁までで入力してください（整数部は13桁まで）。</p> : null}
   </div>;
 }

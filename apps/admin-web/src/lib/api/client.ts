@@ -1730,6 +1730,10 @@ export function saveOrderRequestTemplate(body: { name: string; source_version_id
   return apiFetch<OrderRequestTemplateItem>("/api/order-requests/templates", { method: "POST", body: JSON.stringify(body) });
 }
 
+export function createOrderRequestTemplate(body: { name: string; content: OrderRequestWrite }) {
+  return apiFetch<OrderRequestTemplateItem>("/api/order-requests/templates/create", { method: "POST", body: JSON.stringify(body) });
+}
+
 export function getOrderRequestTemplate(id: string) {
   return apiFetch<OrderRequestTemplateDetail>(`/api/order-requests/templates/${encodeURIComponent(id)}`);
 }

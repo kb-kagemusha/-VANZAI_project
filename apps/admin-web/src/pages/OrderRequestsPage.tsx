@@ -29,6 +29,7 @@ import {
   getOrderRequestVersion,
   getOrderRequestTemplate,
   saveOrderRequestTemplate,
+  createOrderRequestTemplate,
   getWorkers,
   getWorkerTags,
   hideOrderRequest,
@@ -195,6 +196,9 @@ export function OrderRequestsPage() {
   const [saveTemplateFor, setSaveTemplateFor] = useState<{ id: string; label: string } | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateMode, setTemplateMode] = useState(false);
+  const templateBusyRef = useRef(false);
+  templateBusyRef.current = templateSaving;
   const [templateError, setTemplateError] = useState("");
   const [kind, setKind] = useState<OrderRequestKind | "all">("formal");
   const [queue, setQueue] = useState<OrderRequestQueue>("all");
@@ -269,7 +273,7 @@ export function OrderRequestsPage() {
   const absenceWorker = selectedWorkers.find((worker) => worker.id === absenceWorkerId) ?? null;
 
   const detail = creating ? null : detailQuery.data;
-  const editable = creating || detail?.status === "draft";
+  const editable = (creating || detail?.status === "draft") && !(templateMode && templateSaving);
 
   function formFromVersion(version: OrderRequestVersion): OrderRequestWrite {
     return {
@@ -372,7 +376,8 @@ export function OrderRequestsPage() {
       draftRef.current?.focus();
     });
     function onKey(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current) return;
+      if (event.defaultPrevented || event.key !== "Escape" || linePreviewOpenRef.current || pdfReviewRef.current || templateBusyRef.current) return;
+      setTemplateMode(false);
       setCreating(false);
       setBasedOn(null);
       setSelectedId(null);
@@ -460,6 +465,7 @@ export function OrderRequestsPage() {
   }
 
   function showDetail(versionId: string) {
+    setTemplateMode(false);
     if (creating || selectedId !== versionId) loadedForRef.current = null;
     setCreating(false);
     setBasedOn(null);
@@ -472,6 +478,7 @@ export function OrderRequestsPage() {
   }
 
   function startNewDraft() {
+    setTemplateMode(false);
     loadedForRef.current = null;
     formRef.current = EMPTY_FORM;
     const initialSections = { ...EMPTY_ORDER_SECTIONS, workPeriod: { from: "", to: "" }, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
@@ -488,6 +495,24 @@ export function OrderRequestsPage() {
     setReason("");
     setNote("");
     setSavedDraftId(null);
+  }
+
+  function startNewTemplate() {
+    startNewDraft();
+    setTemplateMode(true); setTemplateName("");
+  }
+
+  async function saveNewTemplate() {
+    if (!canWrite || !templateName.trim() || templateBusyRef.current) return;
+    setTemplateSaving(true); templateBusyRef.current = true; setActionError("");
+    try {
+      const saved = await createOrderRequestTemplate({ name: templateName.trim(), content: draftPayload() });
+      await queryClient.invalidateQueries({ queryKey: ["order-request-templates"] });
+      templateBusyRef.current = false;
+      closeCreateModal();
+      setActionMessage(`「${saved.name}」をテンプレートに作成しました。「テンプレートから呼び出す」で利用できます。`);
+    } catch (error) { setActionError(messageOf(error)); }
+    finally { setTemplateSaving(false); templateBusyRef.current = false; }
   }
 
   function openTemplateSave(id: string, label: string) {
@@ -537,6 +562,8 @@ export function OrderRequestsPage() {
   }
 
   function closeCreateModal() {
+    if (templateBusyRef.current) return;
+    setTemplateMode(false);
     setCreating(false);
     setBasedOn(null);
     setSelectedId(null);
@@ -811,7 +838,7 @@ export function OrderRequestsPage() {
     : [detailSourceNote, detail ? STATUS_LABEL[detail.status] : "", detail?.created_by_name].filter(Boolean).join(" · ");
 
   const canSend = Boolean(
-    detail
+    !templateMode && detail
     && detail.status === "confirmed"
     && !detail.dispatch_stopped
     && detail.deliveries.length > 0,
@@ -1006,6 +1033,7 @@ export function OrderRequestsPage() {
             新規の依頼書を作成
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => setTemplatesOpen(true)}>保存済みテンプレート</button>
+          {canWrite ? <button type="button" className="btn create-button" onClick={startNewTemplate}>テンプレートの作成</button> : null}
           </div>
         )}
       />
@@ -1243,6 +1271,7 @@ export function OrderRequestsPage() {
           tabIndex={-1}
           onSubmit={(event) => {
             event.preventDefault();
+            if (templateMode) { void saveNewTemplate(); return; }
             if (editable) {
               setActionError("");
               if (dueMissing()) return;
@@ -1257,7 +1286,7 @@ export function OrderRequestsPage() {
                   ? (basedOn ? `${basedOn.documentNumber} の変更` : "発注依頼書")
                   : detail?.document_number}
               </p>
-              <h3 id="order-draft-title">{creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
+              <h3 id="order-draft-title">{templateMode ? "テンプレートの作成" : creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
               <p className="order-draft-lead">{detailLead}</p>
               {!creating && detail && detail.change_documents.length > 0 ? (
                 <div className="order-row-actions">
@@ -1275,7 +1304,7 @@ export function OrderRequestsPage() {
               ) : null}
             </div>
             <div className="order-draft-head-side">
-              {creating && !basedOn && !savedDraftId && canWrite ? <button type="button" className="btn btn-line-blue" onClick={() => setTemplatesOpen(true)}>テンプレートから呼び出す</button> : null}
+              {creating && !templateMode && !basedOn && !savedDraftId && canWrite ? <button type="button" className="btn btn-line-blue" onClick={() => setTemplatesOpen(true)}>テンプレートから呼び出す</button> : null}
               {createModal ? (
                 <button type="button" className="btn btn-ghost" onClick={closeCreateModal}>
                   閉じる
@@ -1328,6 +1357,10 @@ export function OrderRequestsPage() {
           <div className="order-draft-body">
             {createModal && actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
             {createModal && actionMessage ? <p>{actionMessage}</p> : null}
+            {templateMode ? <section className="order-draft-section">
+              <label className="order-field">テンプレート名（必須）<input value={templateName} maxLength={100} disabled={templateSaving} onChange={(event) => setTemplateName(event.target.value)} /></label>
+              <p className="order-field-hint">案件内容・場所・時刻・単価などを保存します。稼働日・休業日・期限・送付先は、呼び出して依頼書を作成するときに設定します。</p>
+            </section> : null}
             <section className="order-draft-section">
               <div className="order-draft-grid">
                 <div className="order-field order-span-4">
@@ -1447,7 +1480,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, siteStationWalkMinutes: event.target.value.replace(/[^0-9]/g, "").slice(0, 3) })}
                     />
                   </label>
-                  <div className="order-field order-span-6">
+                  {!templateMode && <><div className="order-field order-span-6">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <OrderDatePicker
@@ -1501,6 +1534,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, workDateDetail: withFullwidthTilde(event.target.value) })}
                     />
                   </label>
+                  </>}
                   {sections.schedule ? (
                     <div className="order-field order-span-6 order-partial-accept">
                       <label className="order-check">
@@ -1525,7 +1559,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} disabled={!editable} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} templateMode={templateMode} disabled={!editable || (templateMode && templateSaving)} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
@@ -1601,7 +1635,7 @@ export function OrderRequestsPage() {
               </div>
             </section>
 
-            <section className="order-draft-section">
+            {!templateMode && <><section className="order-draft-section">
               <h4>送付と追跡</h4>
               <div className="order-draft-grid">
                 <label className="order-field order-span-4">
@@ -1782,6 +1816,7 @@ export function OrderRequestsPage() {
               </div>
             </section>
 
+            </>}
             {detail && detail.deliveries.length > 0 ? (
               <section className="order-draft-section">
                 <h4>送付状況</h4>
@@ -1927,7 +1962,7 @@ export function OrderRequestsPage() {
             ) : null}
           </div>
 
-          {editable || detail?.status === "draft" || detail?.has_pdf || canSend ? (
+          {templateMode || editable || detail?.status === "draft" || detail?.has_pdf || canSend ? (
             <>
             {createModal && actionError ? (
               <p className="form-error order-draft-foot-error" role="alert">{actionError}</p>
@@ -1956,6 +1991,7 @@ export function OrderRequestsPage() {
                 ) : null}
               </div>
               <div className="order-draft-foot-end">
+                {templateMode ? <button type="submit" className="btn create-button" disabled={templateSaving || !templateName.trim()}>{templateSaving ? "作成しています…" : "テンプレートを作成"}</button> : <>
                 <button type="button" className="btn btn-ghost" onClick={() => setLinePreviewOpen(true)}>
                   送付内容を確認
                 </button>
@@ -2006,6 +2042,7 @@ export function OrderRequestsPage() {
                     確定してPDFを保存
                   </button>
                 ) : null}
+                </>}
               </div>
             </footer>
             </>

@@ -1551,3 +1551,14 @@
 - Validation: `apps/admin-web/e2e/order-billing-ui.spec.ts`で全角20万円の桁区切り・補助表示・途中編集・APIへのカンマなし送信・インセンティブの小数/0円/空欄と既存操作を確認。両アプリをビルドする。
 - Version: 既存金額入力の表示改善としてZ（0.49.2）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-074/075。
 
+### DEC-077: テンプレートの直接作成と金額補助表示の位置・文字サイズ（2026-10-23）
+- Status: Confirmed（ユーザーの2点の依頼と添付画像による位置指定）
+- Purpose: 依頼書を先に作らず再利用する内容を準備できるようにし、請求額の桁の読み取り補助を見やすくする。
+- Decision: 発注依頼書に「テンプレートの作成」を追加し、既存の入力項目を使うモーダルで名前・案件内容・発注元・場所・時刻・単価・インセンティブ条件・連絡先等を入力する。日付・休業日・稼働日の補足・期限・送付先・追跡は入力せず、保存APIでも既存の再利用用正規化を通して業務状態を除外する。依頼書・文書番号・PDF・送付/受諾記録を作らない。未定項目は呼び出し後に入力でき、テンプレート名だけを必須とする。
+- Data / DDL: `order_request_templates.source_version_id`をNULL許容にする最小migration `20261023e001`（down=`20261023d001`）。直接作成はsource_version_id=NULL、source_document_number=空文字としてUIに「直接作成」を表示。既存の保存元・payload・依頼書は更新しない。直接作成行があるdowngradeは、データの削除/保存元捏造を避けるため明示的に停止する。
+- API / Permission / Audit: `POST /api/order-requests/templates/create`、order_write必須。既存の名前正規化・一意制約・order_readによる閲覧・非破壊一覧除外を共用。発注元・担当者・場所の参照を検証する。保存は`order_request_template_saved`に対象・実行者・役割・名前・source_version_id=NULL・direct_creation=trueを記録する。
+- UI: テンプレート作成中は日付・期限・送付先・送信操作を表示せず、保存中は編集・閉じる・重複送信を防ぐ。既存依頼書からのテンプレート保存と通常依頼書作成は維持する。
+- UI（請求額）: 日本語単位の補助表示を1remに拡大し、入力欄の左右余白＋枠線の幅を補助表示にも適用して数字の開始位置を一致させる。通常額・インセンティブ額の両方に適用。DB/API・計算金額の変更なし。
+- Validation: `tests/test_order_request_templates.py`（直接作成・依頼書/送付を生成しない・業務状態除外・保存内容・重複・権限・参照・DDL/安全なdowngrade）、既存依頼書/インセンティブ回帰、ブラウザで直接作成→呼び出しと既存操作、補助表示の文字左端・16px以上のフォントを検証。操作・配置を画像で確認。
+- Version: 既存のテンプレート保存方法の追加と金額表示の改善としてZ（0.49.3）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-072/075/076。運用: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
+

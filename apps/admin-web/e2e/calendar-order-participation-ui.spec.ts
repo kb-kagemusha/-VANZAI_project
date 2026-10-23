@@ -31,6 +31,12 @@ async function adminMocks(page: Page) {
       days: [{ date: "2026-10-29", events: [{ series_id: "series-1", version_id: version.id, document_number: version.document_number, project_name: "確認用イベント", site_name: "表示不要な集合場所", ok: [{ worker_id: "worker-1", name: "稼働者1" }], changing: [], unanswered: [] }] }],
     });
     if (path.endsWith("/pdf-preview")) return route.fulfill({ contentType: "application/pdf", body: "%PDF-1.4\n%%EOF" });
+    if (path === "/api/order-requests/templates/create") {
+      const body = route.request().postDataJSON(); writes.push({ path, body });
+      template = { id: "template-1", name: body.name, project_name: JSON.parse(body.content.request_conditions).project_name,
+        source_document_number: "", payload: body.content };
+      return respond(template);
+    }
     if (path === "/api/order-requests/templates") {
       if (method === "POST") {
         const body = route.request().postDataJSON();
@@ -61,6 +67,41 @@ async function adminMocks(page: Page) {
   });
   return writes;
 }
+
+test("direct template creation stores reusable content without creating or sending an order", async ({ page }, testInfo) => {
+  const writes = await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "テンプレートの作成", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "テンプレートの作成", exact: true });
+  await editor.getByRole("textbox", { name: "テンプレート名（必須）", exact: true }).fill("毎月の基本テンプレート");
+  await editor.getByRole("textbox", { name: "案件名", exact: true }).fill("毎月の案内イベント");
+  await editor.getByRole("textbox", { name: "稼働場所", exact: true }).fill("検証用会場");
+  await editor.getByLabel("開始時間", { exact: true }).fill("09:00");
+  await editor.getByLabel("終了時間", { exact: true }).fill("17:00");
+  await editor.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true }).fill("15000");
+  await editor.getByRole("radio", { name: "インセンティブあり", exact: true }).check();
+  await editor.getByRole("textbox", { name: "インセンティブの詳細", exact: true }).fill("販売1台につき500円");
+  await expect(editor.getByRole("button", { name: "稼働日の開始", exact: true })).toHaveCount(0);
+  await expect(editor.getByText("送付と追跡", { exact: true })).toHaveCount(0);
+  await expect(editor.getByText("送付先", { exact: true })).toHaveCount(0);
+  await expect(editor.getByRole("button", { name: "下書きを保存", exact: true })).toHaveCount(0);
+  await expect(editor.getByRole("button", { name: "PDFを確認して送付する", exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("direct-template-editor.png") });
+  await editor.getByRole("button", { name: "テンプレートを作成", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  expect(writes[0].path).toBe("/api/order-requests/templates/create");
+  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "保存済みテンプレート", exact: true });
+  await expect(picker.getByText("直接作成", { exact: true })).toBeVisible();
+  await picker.getByRole("button", { name: "このテンプレートで新規作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("textbox", { name: "案件名", exact: true })).toHaveValue("毎月の案内イベント");
+  await expect(draft.getByRole("button", { name: "稼働日の開始", exact: true })).toContainText("日付を選択");
+  await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("15000");
+  await expect(draft.getByRole("textbox", { name: "インセンティブの詳細", exact: true })).toHaveValue("販売1台につき500円");
+  await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
+});
 
 test("new order defaults to no incentive and only yes exposes an empty conditions field", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);

@@ -128,6 +128,12 @@ class TemplateSaveBody(BaseModel):
     source_version_id: str = Field(min_length=1, max_length=26)
 
 
+class TemplateCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=100)
+    content: OrderRequestWrite
+
+
 def _template_out(row: OrderRequestTemplate, *, detail: bool = False) -> dict:
     sections = parse_sections(row.payload.get("request_conditions", "")) or {}
     result = {"id": row.id, "name": row.name, "project_name": sections.get("project_name", ""),
@@ -158,6 +164,15 @@ def save_order_request_template(body: TemplateSaveBody, current_user: User = Dep
     if not has_permission(current_user, Permission.ORDER_WRITE):
         raise HTTPException(status_code=403, detail="テンプレートの保存には発注依頼書の操作権限が必要です")
     row = _call(db, lambda: OrderRequestTemplateService(db).save(name=body.name, source_version_id=body.source_version_id, actor=current_user))
+    return _template_out(row)
+
+
+@router.post("/templates/create")
+def create_order_request_template(body: TemplateCreateBody, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    if not has_permission(current_user, Permission.ORDER_WRITE):
+        raise HTTPException(status_code=403, detail="テンプレートの作成には発注依頼書の操作権限が必要です")
+    row = _call(db, lambda: OrderRequestTemplateService(db).create(name=body.name, content=body.content.model_dump(), actor=current_user))
     return _template_out(row)
 
 

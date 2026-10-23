@@ -42,14 +42,14 @@ export function OrderRequestTemplatesDialog({ onClose, onUse, canWrite }: {
     {query.data ? <>
       {query.data.items.length ? <div className="order-list-table"><table className="data-table"><thead><tr><th>テンプレート名</th><th>案件名</th><th>操作</th></tr></thead><tbody>
         {query.data.items.map((row) => <tr key={row.id}>
-          <td><strong>{row.name}</strong><span className="order-change-note">保存元：{row.source_document_number}</span></td>
+          <td><strong>{row.name}</strong><span className="order-change-note">{row.source_document_number ? `保存元：${row.source_document_number}` : "直接作成"}</span></td>
           <td className="order-cell-multiline">{row.project_name || "—"}</td>
           <td><div className="order-row-actions">
             {canWrite ? <button type="button" className="btn create-button btn-sm" disabled={busy} onClick={() => void useTemplate(row.id)}>このテンプレートで新規作成</button> : null}
             {canWrite ? <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void archive(row.id, row.name)}>一覧から外す</button> : null}
           </div></td>
         </tr>)}
-      </tbody></table></div> : <p>{search ? "一致するテンプレートはありません。" : "保存済みのテンプレートはありません。「作成した依頼書」の「テンプレートとして保存」から登録できます。"}</p>}
+      </tbody></table></div> : <p>{search ? "一致するテンプレートはありません。" : "保存済みのテンプレートはありません。「テンプレートの作成」または作成済み依頼書の「テンプレートとして保存」から登録できます。"}</p>}
       <div className="order-template-pagination">
         <button type="button" className="btn btn-ghost btn-sm" disabled={busy || offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>前へ</button>
         <span>{query.data.total}件{query.data.total ? `中 ${offset + 1}〜${Math.min(offset + 20, query.data.total)}件` : ""}</span>

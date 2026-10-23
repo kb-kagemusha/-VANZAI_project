@@ -113,7 +113,7 @@ function DateInputs({ group, disabled, prefix, periodFrom, periodTo, onChange }:
   </div>;
 }
 
-export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; onChange: (schedule: OrderSchedule) => void }) {
+export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, templateMode = false, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; templateMode?: boolean; onChange: (schedule: OrderSchedule) => void }) {
   const value = syncSchedule(schedule);
   const change = (next: OrderSchedule) => onChange(syncSchedule(next));
 
@@ -148,7 +148,7 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
-        <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />
+        {!templateMode && <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>
@@ -169,8 +169,8 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
     {value.rate_groups.map((group, index) => {
       const update = (patch: Partial<typeof group>) => change({ ...value, rate_groups: value.rate_groups.map((g) => g.id === group.id ? { ...g, ...patch } : g) });
       return <fieldset key={group.id} className="order-schedule-row order-rate-row" disabled={disabled}>
-        <legend>単価 {index + 1}：{dateGroupLabel(group) || "日付未設定"}</legend>
-        {!value.rates_follow_work && <DateInputs group={group} prefix={`単価${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />}
+        <legend>単価 {index + 1}{!templateMode ? `：${dateGroupLabel(group) || "日付未設定"}` : ""}</legend>
+        {!templateMode && !value.rates_follow_work && <DateInputs group={group} prefix={`単価${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
           <label>単価（円・税抜）<input type="number" min="0" step="0.01" readOnly={group.unit === "hour"} value={group.amount} onChange={(e) => update({ amount: e.target.value })} /></label>
           <div className="order-date-mode"><span>単位：{group.unit === "hour" ? "保存済みの旧時給" : "日給"}</span>

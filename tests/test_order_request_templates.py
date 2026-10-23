@@ -129,3 +129,64 @@ def test_template_migration_creates_snapshot_table_and_partial_unique_index():
         index = next(i for i in inspect(connection).get_indexes("order_request_templates") if i["name"] == "uq_order_request_templates_active_name")
         assert index["unique"] == 1 and "archived_at IS NULL" in str(index["dialect_options"]["sqlite_where"])
         assert connection.execute(text("SELECT id FROM order_request_versions")).scalar() == "existing-version"
+
+
+def test_direct_template_creation_does_not_create_orders_and_clears_operational_data(api_client, db_session, ops_user, pdf_root):
+    from src.models.order_request import OrderRequestDelivery
+    worker = _worker(db_session, "テンプレートに含めない送付先")
+    content = _payload([worker.id], schedule=_schedule(1, 5, holidays=[2]), absences={worker.id: []})
+    conditions = json.loads(content["request_conditions"])
+    conditions.update(incentive_enabled=True, incentive="販売1台につき500円")
+    content.update(request_conditions=json.dumps(conditions), phone_first=True, phone_note="保存しない電話メモ")
+    auth = _auth(ops_user.username)
+    response = api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "直接作成の基本", "content": content})
+    assert response.status_code == 200, response.text
+    row = db_session.get(OrderRequestTemplate, response.json()["id"])
+    assert row.source_version_id is None and row.source_document_number == ""
+    assert db_session.query(OrderRequestVersion).count() == 0
+    assert db_session.query(OrderRequestDocument).count() == 0
+    assert db_session.query(OrderRequestDelivery).count() == 0
+    payload = api_client.get(f"/api/order-requests/templates/{row.id}", headers=auth).json()["payload"]
+    assert payload["worker_ids"] == [] and payload["recipient_absences"] == {}
+    assert payload["follow_up_due_on"] is None and payload["phone_first"] is False and payload["phone_note"] == ""
+    reusable = json.loads(payload["request_conditions"])
+    assert reusable["schedule"]["work_groups"][0]["from"] == reusable["schedule"]["work_groups"][0]["to"] == ""
+    assert reusable["schedule"]["work_groups"][0]["excluded_dates"] == []
+    assert reusable["schedule"]["work_groups"][0]["start_time"] == "09:00"
+    assert reusable["schedule"]["rate_groups"][0]["amount"] == "15000"
+    assert reusable["incentive_enabled"] is True and reusable["incentive"] == "販売1台につき500円"
+    assert api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "直接作成の基本", "content": {}}).status_code == 409
+    audit = db_session.query(AuditLog).filter_by(action="order_request_template_saved", target_id=row.id).one()
+    assert audit.after_value["direct_creation"] is True
+    created = api_client.post("/api/order-requests", headers=auth, json={**payload, "follow_up_due_on": content["follow_up_due_on"]})
+    assert created.status_code == 200, created.text
+    assert created.json()["status"] == "draft"
+
+
+def test_direct_template_permission_and_bad_source_are_rejected(api_client, db_session, ops_user):
+    auth = _auth(ops_user.username)
+    assert api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "未設定でも作成可", "content": {}}).status_code == 200
+    assert api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "不正発注元", "content": {"internal_source": {"client_id": "unknown"}}}).status_code == 400
+    assert api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "不正書式", "content": {"request_conditions": json.dumps({"format": "additional-request-v1", "incentive_enabled": "false"})}}).status_code == 400
+    db_session.add(RoleAccessPolicy(role="ops", permissions=["order_read"]))
+    db_session.commit()
+    assert api_client.post("/api/order-requests/templates/create", headers=auth, json={"name": "閲覧だけ", "content": {}}).status_code == 403
+    assert api_client.post("/api/order-requests/templates/create", json={"name": "未認証", "content": {}}).status_code == 401
+
+
+def test_direct_template_migration_preserves_sources_and_refuses_lossy_downgrade():
+    import pytest
+    path = Path(__file__).resolve().parents[1] / "alembic/versions/20261023e001_direct_order_templates.py"
+    spec = importlib.util.spec_from_file_location("direct_template_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE order_request_templates (id VARCHAR PRIMARY KEY, source_version_id VARCHAR(26) NOT NULL, payload TEXT)"))
+        connection.execute(text("INSERT INTO order_request_templates VALUES ('old', 'source', 'unchanged')"))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        assert connection.execute(text("SELECT source_version_id, payload FROM order_request_templates WHERE id='old'")).one() == ("source", "unchanged")
+        connection.execute(text("INSERT INTO order_request_templates VALUES ('new', NULL, 'direct')"))
+        with Operations.context(MigrationContext.configure(connection)), pytest.raises(RuntimeError, match="直接作成"):
+            migration.downgrade()
