@@ -90,3 +90,32 @@ def test_reply_group_uses_latest_sent_version_per_person(api_client, db_session,
     assert len(people) == 2
     assert people[workers[0].name]["ack_status"] == "unacked" and people[workers[0].name]["version_no"] == 2
     assert people[workers[1].name]["ack_status"] == "acked" and people[workers[1].name]["version_no"] == 1
+
+def test_reply_groups_and_detail_use_current_names_without_rewriting_snapshots(api_client, db_session, ops_user, pdf_root, client):
+    workers = [_worker(db_session, f"【テスト】追加スタッフ0{i}") for i in range(1, 4)]
+    result = _create_confirm(api_client, ops_user, [w.id for w in workers], kind="test")
+    version = db_session.get(OrderRequestVersion, result["id"])
+    original_pdf = version.pdf_object_key
+    import copy
+    original_snapshot = copy.deepcopy(version.snapshot_json)
+    old_names = {w.id: w.name for w in workers}
+    current_names = ["渡邊 健太郎", "長谷川 亜香里", "岡田 直人"]
+    for worker, name in zip(workers, current_names):
+        worker.name = name
+    for delivery in db_session.query(OrderRequestDelivery).filter_by(version_id=version.id):
+        delivery.send_status = "unknown"
+    db_session.commit()
+    auth = _auth(ops_user.username)
+    grouped = api_client.get("/api/order-requests/reply-groups", headers=auth)
+    assert grouped.status_code == 200, grouped.text
+    people = grouped.json()["items"][0]["recipients"]
+    assert {p["worker_name"] for p in people} == set(current_names)
+    assert {p["worker_name_snapshot"] for p in people} == set(old_names.values())
+    detail = api_client.get(f"/api/order-requests/versions/{version.id}", headers=auth)
+    assert detail.status_code == 200, detail.text
+    assert {p["worker_name"] for p in detail.json()["deliveries"]} == set(current_names)
+    assert {p["worker_name_snapshot"] for p in detail.json()["deliveries"]} == set(old_names.values())
+    db_session.expire_all()
+    assert db_session.get(OrderRequestVersion, version.id).snapshot_json == original_snapshot
+    assert db_session.get(OrderRequestVersion, version.id).pdf_object_key == original_pdf
+    assert all(d.worker_name_snapshot == old_names[d.worker_id] for d in db_session.query(OrderRequestDelivery).filter_by(version_id=version.id))

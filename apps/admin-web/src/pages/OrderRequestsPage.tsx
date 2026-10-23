@@ -822,7 +822,7 @@ export function OrderRequestsPage() {
     const removed = preview?.removed_dates ?? [];
     const kept = preview?.kept_dates ?? [];
     const lines = [
-      `${row.worker_name_snapshot}さんの、この依頼書での今後の参加を終了します（受諾後の辞退の記録。ほかの送付先は変わりません）。`,
+      `${(row.worker_name ?? row.worker_name_snapshot)}さんの、この依頼書での今後の参加を終了します（受諾後の辞退の記録。ほかの送付先は変わりません）。`,
       removed.length > 0 ? `取り消す日：${compactDateList(removed)}` : "",
       preview?.today_removed_start ? `※本日 ${preview.today_removed_start} 開始の勤務も取り消されます。` : "",
       kept.length > 0 ? `残す日（記録の時点で勤務が始まっている日）：${compactDateList(kept)}` : "",
@@ -873,7 +873,7 @@ export function OrderRequestsPage() {
       try {
         await sendOrderRequestLine(row.id);
       } catch (error) {
-        failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
+        failed.push(`${(row.worker_name ?? row.worker_name_snapshot)}: ${messageOf(error)}`);
       }
     }
     setSendingSelected(false);
@@ -992,7 +992,7 @@ export function OrderRequestsPage() {
         try {
           await sendOrderRequestLine(row.id);
         } catch (error) {
-          failed.push(`${row.worker_name_snapshot}: ${messageOf(error)}`);
+          failed.push(`${(row.worker_name ?? row.worker_name_snapshot)}: ${messageOf(error)}`);
         }
       }
       const sentCount = targets.length - failed.length;
@@ -1159,7 +1159,7 @@ export function OrderRequestsPage() {
           <OrderListSize label="作成した依頼書の表示件数" value={createdLimit} onChange={(value) => { setCreatedLimit(value); setCreatedPage(0); }} />
           <label>
             一覧
-            <select value={queue} onChange={(event) => { setQueue(event.target.value as OrderRequestQueue); setCreatedPage(0); }}>
+            <select aria-label="依頼書の一覧条件" value={queue} onChange={(event) => { setQueue(event.target.value as OrderRequestQueue); setCreatedPage(0); }}>
               <option value="all">最新版</option>
               <option value="unsent">未送付</option>
               <option value="unknown">結果不明</option>
@@ -1868,7 +1868,7 @@ export function OrderRequestsPage() {
                       {detail.deliveries.map((row) => (
                         <tr key={row.id}>
                           <td>
-                            {row.worker_name_snapshot}
+                            {(row.worker_name ?? row.worker_name_snapshot)}
                             {(detail.draft_recipient_absences?.[row.worker_id] ?? []).length > 0 && (
                               <div className="order-field-hint">
                                 不参加日：{(detail.draft_recipient_absences?.[row.worker_id] ?? []).map((day) => dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })).join("、")}
@@ -2219,9 +2219,14 @@ function useOrderListSize(storageKey: string) {
 }
 
 function OrderListDate({ label }: { label: string }) {
-  const range = parseWorkDateRange((label || "").replace(/\s+/g, ""));
-  if (range?.from && range.to && range.from !== range.to) {
-    return <span className="order-list-date-range"><span>{formatWorkDateRange(range.from, "")}から</span><span>{formatWorkDateRange(range.to, "")}まで</span></span>;
+  const normalized = (label || "").replace(/\s+/g, "").replace(/[～~]/g, "〜").replace(/から/g, "〜").replace(/まで$/, "");
+  const range = parseWorkDateRange(normalized);
+  if (range?.from) {
+    const from = formatWorkDateRange(range.from, "");
+    if (range.to && range.from !== range.to) {
+      return <span className="order-list-date-range"><span>{from}〜</span><span>{formatWorkDateRange(range.to, "")}</span></span>;
+    }
+    return <span className="order-list-date-label">{from}</span>;
   }
-  return <span className="order-list-date-label">{label || "—"}</span>;
+  return <span className="order-list-date-label">{(label || "—").replace(/[～~]/g, "〜")}</span>;
 }

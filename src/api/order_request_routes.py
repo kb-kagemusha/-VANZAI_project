@@ -13,7 +13,7 @@ from src.api.deps import get_db
 from src.api.jwt_auth import get_current_active_user
 from src.services.auth import has_permission
 from src.models.enums import Permission, UserRole
-from src.models.master import User
+from src.models.master import User, Worker
 from src.models.order_request import (
     ACK_UNACKED,
     SEND_UNSENT,
@@ -231,17 +231,26 @@ def _user_map(db: Session, user_ids: set[str]) -> dict[str, str]:
     return {row.id: row.display_name or row.username for row in rows}
 
 
+def _worker_name_map(db: Session, worker_ids: set[str]) -> dict[str, str]:
+    """画面の氏名は現在の名簿。確定時の氏名・PDFは書き換えない。"""
+    if not worker_ids:
+        return {}
+    return dict(db.query(Worker.id, Worker.name).filter(Worker.id.in_(worker_ids)).all())
+
+
 def _delivery_out(
     row: OrderRequestDelivery,
     links: dict[str, str | None],
     errors: dict[str, str | None],
     participation: dict[str, dict] | None = None,
+    worker_names: dict[str, str] | None = None,
 ) -> dict:
     info = (participation or {}).get(row.worker_id) or {}
     return {
         "id": row.id,
         "worker_id": row.worker_id,
         "worker_name_snapshot": row.worker_name_snapshot,
+        "worker_name": (worker_names or {}).get(row.worker_id, row.worker_name_snapshot),
         "send_status": row.send_status,
         "ack_status": row.ack_status,
         "acked_at": row.acked_at,
@@ -336,6 +345,7 @@ def _version_out(
     links = active_line_labels(db, {row.worker_id for row in deliveries})
     errors = latest_send_errors(db, {row.id for row in deliveries})
     participation = _participation(db, version, {row.worker_id for row in deliveries})
+    worker_names = _worker_name_map(db, {row.worker_id for row in deliveries})
     sources = _source_labels(db, {version.revision_of_version_id})
     changes = _changes_by_source(db, {version.id})
     return {
@@ -377,7 +387,7 @@ def _version_out(
         "has_pdf": bool(version.pdf_object_key),
         "template_layout_applied": TEMPLATE_LAYOUT_APPLIED,
         "line_send_available": line_settings().configured,
-        "deliveries": [_delivery_out(row, links, errors, participation) for row in deliveries],
+        "deliveries": [_delivery_out(row, links, errors, participation, worker_names) for row in deliveries],
         "notes": [_note_out(row, names) for row in notes],
         "created_at": version.created_at,
         "updated_at": version.updated_at,
@@ -786,7 +796,7 @@ def participation_calendar(
     return result
 
 
-def _reply_item(delivery, document, version, sources, changes):
+def _reply_item(delivery, document, version, sources, changes, worker_names=None):
     return {
         "delivery_id": delivery.id,
         "version_id": version.id,
@@ -798,7 +808,8 @@ def _reply_item(delivery, document, version, sources, changes):
         "categories": _categories(version.request_conditions),
         "site_name": version.site_name,
         "work_date_label": version.work_date_label,
-        "worker_name": delivery.worker_name_snapshot,
+        "worker_name": (worker_names or {}).get(delivery.worker_id, delivery.worker_name_snapshot),
+        "worker_name_snapshot": delivery.worker_name_snapshot,
         "send_status": delivery.send_status,
         "ack_status": delivery.ack_status,
         "decline_reason": delivery.decline_reason,
@@ -842,9 +853,10 @@ def list_order_request_reply_groups(
     sources = _source_labels(db, {version.revision_of_version_id for _, _, version in rows})
     changes = _changes_by_source(db, {version.id for _, _, version in rows})
     items = []
-    person_fields = {"delivery_id", "worker_name", "send_status", "ack_status", "decline_reason", "acked_at", "ack_reminded_at"}
+    worker_names = _worker_name_map(db, {delivery.worker_id for delivery, _, _ in rows})
+    person_fields = {"worker_name_snapshot", "delivery_id", "worker_name", "send_status", "ack_status", "decline_reason", "acked_at", "ack_reminded_at"}
     for group in groups:
-        recipients = [_reply_item(d, doc, v, sources, changes) for d, doc, v in group]
+        recipients = [_reply_item(d, doc, v, sources, changes, worker_names) for d, doc, v in group]
         items.append({**{k: v for k, v in recipients[0].items() if k not in person_fields},
             "document_id": group[0][1].id, "recipients": sorted(recipients, key=lambda p: p["worker_name"])})
     return {"items": items, "total": total, "limit": limit, "offset": offset}

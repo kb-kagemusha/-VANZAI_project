@@ -27,6 +27,8 @@ export interface OrderRequestDelivery {
   id: string;
   worker_id: string;
   worker_name_snapshot: string;
+  /** 現在の名簿の表示名。送付時氏名とは別に扱う。 */
+  worker_name?: string;
   send_status: string;
   ack_status: string;
   acked_at: string | null;

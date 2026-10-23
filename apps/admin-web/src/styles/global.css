@@ -5696,3 +5696,12 @@ html[data-theme="dark"] .calendar-test-toggle .btn.is-active, html[data-theme="d
 .order-list-table .order-list-date { min-width: 10.5rem; width: 11rem; }
 .order-list-date-range > span { display: block; white-space: nowrap; line-height: 1.5; }
 .order-list-date-label { white-space: pre-wrap; }
+
+/* 同じフィルター内のラベルと入力の上端をそろえる。 */
+.order-list-frame .order-list-filters { align-items: flex-start; }
+.order-list-frame .order-list-filters .order-list-size { margin-bottom: 0; }
+/* 送付先ごとではなく、文書1件の行全体を交互色で区切る。 */
+.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #fff; }
+.order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #eef3fa; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(odd) > td { background: #242833; }
+html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbody > tr:nth-child(even) > td { background: #30394a; }

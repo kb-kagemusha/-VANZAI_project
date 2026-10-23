@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 test("sent requests are grouped by document and both lists paginate and show tests", async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "test-token"));
   const all = Array.from({ length: 55 }, (_, i) => ({ document_id: `doc${i}`, version_id: `v${i}`, document_number: `REQ-${String(i).padStart(3, "0")}`,
-    kind: i % 2 ? "formal" : "test", version_no: 1, project_name: `イベント${i}`, categories: ["フェス系"], status: "confirmed", work_date_label: "2026年10月25日～2026年10月27日", created_by_name: "担当者",
-    recipient_count: 3, change_documents: [], recipients: ["acked", "unacked", "declined"].map((ack_status, j) => ({ delivery_id: `d${i}-${j}`, worker_name: ["渡邊 健太郎", "長谷川 亜香里", "山田 太郎"][j], ack_status, send_status: "accepted", version_no: 1 })) }));
+    kind: i % 2 ? "formal" : "test", version_no: 1, project_name: `イベント${i}`, categories: ["フェス系"], status: "confirmed", work_date_label: ["2026年10月25日～2026年10月27日", "2026年10月25日〜\n2026年10月27日", "2026年10月25日から2026年10月27日まで", "2026年10月4日〜2026年10月4日", "2026年10月4日"][i % 5], created_by_name: "担当者",
+    recipient_count: 3, change_documents: [], recipients: ["acked", "unacked", "declined"].map((ack_status, j) => ({ delivery_id: `d${i}-${j}`, worker_name_snapshot: `【テスト】追加スタッフ0${j + 1}`, worker_name: ["渡邊 健太郎", "長谷川 亜香里", "山田 太郎"][j], ack_status, send_status: "accepted", version_no: 1 })) }));
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url()); const path = url.pathname;
     if (!path.startsWith("/api/")) return route.continue();
@@ -28,12 +28,25 @@ test("sent requests are grouped by document and both lists paginate and show tes
     const style = getComputedStyle(el); return [style.width, style.height, style.appearance, style.padding, style.backgroundImage, style.fontSize, style.borderRadius];
   });
   expect(await selectStyle("送信した依頼の表示件数")).toEqual(await selectStyle("作成した依頼書の表示件数"));
+  const sizeTop = await created.getByLabel("作成した依頼書の表示件数").evaluate((el) => el.getBoundingClientRect().y);
+  const queueTop = await created.getByLabel("依頼書の一覧条件").evaluate((el) => el.getBoundingClientRect().y);
+  expect(Math.abs(sizeTop - queueTop)).toBeLessThan(1);
+
   for (const section of [sent, created]) {
     const date = section.locator("tbody > tr").first().locator(".order-list-date");
-    await expect(date).toContainText("2026年10月25日から");
-    await expect(date).toContainText("2026年10月27日まで");
+    await expect(date).toContainText("2026年10月25日〜");
+    await expect(date).toContainText("2026年10月27日");
     const lines = await date.locator(".order-list-date-range > span").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().y));
     expect(lines[1]).toBeGreaterThan(lines[0]);
+    await expect(section.locator("tbody > tr").nth(1).locator(".order-list-date")).toHaveText("2026年10月25日〜2026年10月27日");
+    await expect(section.locator("tbody > tr").nth(2).locator(".order-list-date")).toHaveText("2026年10月25日〜2026年10月27日");
+    await expect(section.locator("tbody > tr").nth(3).locator(".order-list-date")).toHaveText("2026年10月4日");
+    await expect(section.locator("tbody > tr").nth(4).locator(".order-list-date")).toHaveText("2026年10月4日");
+    const rowColors = await section.locator("tbody > tr").evaluateAll((rows) => rows.slice(0, 2).map((row) => [...row.children].map((td) => getComputedStyle(td).backgroundColor)));
+    expect(new Set(rowColors[0]).size).toBe(1);
+    expect(new Set(rowColors[1]).size).toBe(1);
+    expect(rowColors[0][0]).not.toBe(rowColors[1][0]);
+
     expect(await section.locator("tbody > tr").first().locator(".order-project-name").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(288);
   }
 
@@ -42,7 +55,16 @@ test("sent requests are grouped by document and both lists paginate and show tes
   await expect(first.locator(".order-reply-recipients li")).toHaveCount(3);
   await expect(first.locator(".order-reply-status")).toHaveText(["受諾", "未回答", "辞退"]);
   await expect(created.locator("tbody > tr").first().locator(".test-data-badge")).toBeVisible();
+  await expect(sent.getByText(/【テスト】追加スタッフ/)).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("grouped-order-lists.png"), fullPage: true });
+  const originalTheme = await page.locator("html").getAttribute("data-theme");
+  await page.locator("html").evaluate((el) => el.setAttribute("data-theme", "dark"));
+  for (const section of [sent, created]) {
+    const colors = await section.locator("tbody > tr").evaluateAll((rows) => rows.slice(0, 2).map((row) => getComputedStyle(row.children[0]).backgroundColor));
+    expect(colors[0]).not.toBe(colors[1]);
+  }
+  await page.locator("html").evaluate((el, theme) => { if (theme) el.setAttribute("data-theme", theme); else el.removeAttribute("data-theme"); }, originalTheme);
+
   await sent.getByRole("button", { name: "次へ", exact: true }).click();
   await expect(sent.getByRole("button", { name: "REQ-010", exact: true })).toBeVisible();
   await expect(created.getByRole("button", { name: "REQ-000", exact: true })).toBeVisible();

@@ -17,7 +17,7 @@ export function OrderRequestDetailDialog({ versionId, onClose }: { versionId: st
       <pre className="order-detail-body">{detail.body}</pre>
       <h4>送付先・返事</h4>
       <div className="order-draft-table"><table className="data-table"><thead><tr><th>送付先</th><th>返事</th></tr></thead><tbody>
-        {detail.deliveries.map((row) => <tr key={row.id}><td>{row.worker_name_snapshot}</td><td>{({ acked: "受諾", declined: "辞退", decline_pending: "辞退理由待ち", unacked: "未回答" } as Record<string, string>)[row.ack_status] ?? row.ack_status}</td></tr>)}
+        {detail.deliveries.map((row) => <tr key={row.id}><td>{row.worker_name ?? row.worker_name_snapshot}</td><td>{({ acked: "受諾", declined: "辞退", decline_pending: "辞退理由待ち", unacked: "未回答" } as Record<string, string>)[row.ack_status] ?? row.ack_status}</td></tr>)}
       </tbody></table></div>
     </> : null}
   </FormDialog>;
