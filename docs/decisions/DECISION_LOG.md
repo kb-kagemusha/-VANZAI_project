@@ -1821,3 +1821,13 @@
 - Not included: 運営側で「新しい版を確定したが受諾済みの人に未送付」を目立たせる表示は別途（候補）。
 - Validation: tests/test_line_worker_portal.py（送付済みの新しい版で sent、未送付で not_sent・確認が必要な依頼に出ないこと）。全体の試験。ライト・ダークの見た目を画像で確認。
 - Version: 既存画面の表示の追加として Z（0.51.13）。Spec Reference: DEC-084、統合計画 L-26。
+
+## DEC-102: Web確認画面からの返事（統合計画 ③-C）の実装と公開の条件（2026-10-24）
+- Status: Accepted（ユーザー決定 D-09。統合計画 v1.2 で、公開は ③-B との結合試験の後と合意）
+- Decision: LIFF の返事の画面（`?m=reply`）と API `GET/POST /api/line/worker/deliveries/{id}/reply`（`action=accept|decline`、辞退は理由が必須、`Idempotency-Key` 必須）。処理は `LineOrderService.accept_all_from_web`・`decline_from_web` を通し、トークと同じ `_delivery_for_reply`（系列のロック・回答受付版・本人の紐付け・閲覧停止・取消・送付停止の確認）と `accept_delivery`・`decline_delivery` を使う。辞退の記録はトークの理由の送信と共通の `decline_delivery` にまとめた（動きは変えない。actor だけ呼び出し元ごと）。
+- Notice: 受付の通知は commit の後に直接送る（日付を選ぶ画面と同じ）。論理キーは `reply_notice_key(送付行ID, 結果)`（UUID5）で、③-B の送信予定表へ移るときの一意キーにもそのまま使う。通知の失敗で返事は戻さない。
+- Feature: 機能のキー `web_reply`（`rich_menu.py features`）。無効の間は Web確認画面に今までの案内（トークのボタンで返事）を出し、返事のAPIは 403。③-B の「始まった日を残す」修正（取消・送付先から外す・新しい版の辞退）との結合試験が終わるまで有効にしない。
+- Data / Migration: `20261024b001`：`line_worker_submit_keys.action` の CHECK に reply_accept・reply_decline を追加（既存の行は変えない。downgrade は返事の記録があれば止める）。
+- Coordination: `LineOrderService` の辞退の記録を `decline_delivery` に切り出した。③-B（もう一方のAI）の `set_application`／`rebuild` の修正は、この関数から呼ばれる `set_application(..., ended_reason="declined_new_version")` にもそのまま効く。
+- Validation: tests/test_line_worker_reply.py（機能の公開、全日程の受諾でトークと同じ結果・予定、二重送信と別のキーでの再送、内容の違う再送の拒否、辞退の理由の必須と記録、新しい版への返事で予定が切り替わること・旧い版への返事は拒否、他人の依頼、通知のキー）。全体の試験。画面の見た目をライト・ダークの画像で確認。
+- Version: Web画面から依頼に返事をする新しい流れとして Y（0.52.0）。Spec Reference: 統合計画 v1.2 §5 ③-C、DEC-084、L-34・L-26。

@@ -32,7 +32,7 @@ DATA_API = "https://api-data.line.me/v2/bot"
 MAX_IMAGE_BYTES = 1024 * 1024
 MENU_ACTIONS = {"wk_wake", "wk_checkin", "wk_checkout", "wk_sales", "wk_orders", "wk_schedule"}
 # 押せる範囲を持たない業務機能（統合計画 §3、R-02）。Web側のAPIも公開記録のこのキーで判定する。
-FEATURE_ACTIONS = {"pick_dates", "web_home", "web_orders", "change_request"}
+FEATURE_ACTIONS = {"pick_dates", "web_home", "web_orders", "change_request", "web_reply"}
 KNOWN_ACTIONS = MENU_ACTIONS | FEATURE_ACTIONS
 
 

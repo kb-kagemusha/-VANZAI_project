@@ -48,3 +48,10 @@
 .lwp-change-text { margin: 0; font-size: 13px; color: #5c4210; line-height: 1.6; }
 .lwp-change .lwp-actions { margin-top: 8px; }
 .lwp-change-hint { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #fff8e8; color: #7a4d00; font-size: 12px; line-height: 1.6; }
+/* Web画面からの返事（統合計画 ③-C） */
+.lw-secondary.lwp-link-button { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; height: 46px; box-sizing: border-box; color: #333; }
+.lwp-reason { display: grid; gap: 6px; margin-top: 12px; }
+.lwp-reason textarea { width: 100%; box-sizing: border-box; border: 1px solid #c9ccd3; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; }
+.lw-primary.lwp-decline { background: #d14343; }
+.lw-primary.lwp-decline:disabled { background: #e8b4b4; }
+.lw-secondary.lwp-decline-entry { color: #b42318; border-color: #f0b4ae; }

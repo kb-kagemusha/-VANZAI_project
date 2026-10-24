@@ -95,6 +95,8 @@ export type PortalHome = {
   estimate: PortalEstimate;
   confirmations: PortalConfirmation[];
   orders_enabled: boolean;
+  /** Web画面からの返事（③-C）が使えるか */
+  reply_enabled?: boolean;
   fetched_at: string;
 };
 
@@ -116,9 +118,42 @@ export type PortalOrder = {
   pdf_available: boolean;
 };
 
-export type PortalOrders = { today: string; since: string; items: PortalOrder[]; fetched_at: string };
+export type PortalOrders = { today: string; since: string; items: PortalOrder[]; reply_enabled?: boolean; fetched_at: string };
 
 export const getPortalHome = (token: string, month?: string) => workerFetch<PortalHome>(token, "/api/line/worker/home", undefined, month ? { month } : undefined);
 export const getPortalOrders = (token: string) => workerFetch<PortalOrders>(token, "/api/line/worker/orders");
 export const createPortalPdfLink = (token: string, deliveryId: string) =>
   workerFetch<{ url: string; expires_days: number }>(token, `/api/line/worker/deliveries/${encodeURIComponent(deliveryId)}/pdf-link`, { method: "POST" });
+
+/** Web確認画面からの返事（統合計画 ③-C）。日付を選ぶ画面と同じ内容に、返事の可否などを加えたもの */
+export type PortalReplyView = {
+  delivery_id: string;
+  document_number: string;
+  version_no: number;
+  is_test: boolean;
+  project_name: string;
+  site_name: string;
+  meeting_place: string | null;
+  state: "open" | "accepted" | "declined" | "superseded" | "closed";
+  allow_partial_accept: boolean;
+  offered_dates: string[];
+  period: { from: string; to: string } | null;
+  work_days: Array<{ date: string; start_time: string; end_time: string; end_next_day: boolean }>;
+  holidays: string[];
+  accepted_dates: string[];
+  today: string;
+  can_pick: boolean;
+  pdf_available: boolean;
+  decline_pending: boolean;
+};
+
+export type PortalReplyResult = { outcome: string; message: string; accepted_dates: string[] };
+
+export const getPortalReplyView = (token: string, deliveryId: string) =>
+  workerFetch<PortalReplyView>(token, `/api/line/worker/deliveries/${encodeURIComponent(deliveryId)}/reply`);
+export const submitPortalReply = (token: string, deliveryId: string, action: "accept" | "decline", reason: string, idempotencyKey: string) =>
+  workerFetch<PortalReplyResult>(token, `/api/line/worker/deliveries/${encodeURIComponent(deliveryId)}/reply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ action, reason }),
+  });

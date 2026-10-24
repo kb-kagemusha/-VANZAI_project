@@ -21,6 +21,7 @@ from src.domain.line_registration_entry import registration_login_channel_id
 from src.models.base import generate_ulid
 from src.models.line_daily import (
     FEATURE_PICK_DATES,
+    FEATURE_WEB_REPLY,
     LineWorkerSession,
     LineWorkerSubmitKey,
     OrderRequestSeries,
@@ -133,6 +134,10 @@ class LineWorkerService:
     # ---- 日付を選んでの受諾 ------------------------------------------------------------
     def pick_view(self, worker: Worker, delivery_id: str) -> dict:
         self.require_feature(self.session, FEATURE_PICK_DATES)
+        return self._delivery_view(worker, delivery_id)
+
+    def _delivery_view(self, worker: Worker, delivery_id: str) -> dict:
+        """本人宛ての送付行の内容（日付を選ぶ画面・返事の画面で共通）。"""
         delivery = self.session.get(OrderRequestDelivery, delivery_id or "")
         if delivery is None or delivery.worker_id != worker.id:
             raise LineWorkerError(404, "この依頼書は開けません。", "not_found")
@@ -182,6 +187,99 @@ class LineWorkerService:
         if delivery.ack_status in (ACK_UNACKED, ACK_DECLINE_PENDING):
             return "open" if version.allow_partial_accept and delivery.offered_dates else "not_allowed"
         return "closed"
+
+    # ---- Web確認画面からの返事（統合計画 ③-C、D-09） ---------------------------------------
+    def reply_view(self, worker: Worker, delivery_id: str) -> dict:
+        """返事の画面の内容。日付を選べない依頼書でも「全日程で受諾」「辞退」を出せる（state=open）。"""
+        self.require_feature(self.session, FEATURE_WEB_REPLY)
+        view = self._delivery_view(worker, delivery_id)
+        if view["state"] == "not_allowed":
+            view["state"] = "open"
+        delivery = self.session.get(OrderRequestDelivery, view["delivery_id"])
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        view["can_pick"] = bool(
+            view["state"] == "open"
+            and version.allow_partial_accept
+            and len(view["offered_dates"]) >= 2
+            and FEATURE_PICK_DATES in enabled_actions(self.session)
+        )
+        view["pdf_available"] = bool(version.pdf_object_key) and ws.pdf_viewable(self.session, delivery)
+        view["decline_pending"] = delivery.ack_status == ACK_DECLINE_PENDING
+        return view
+
+    def reply(self, session_row: LineWorkerSession, worker: Worker, delivery_id: str, action: str, reason: str, idempotency_key: str) -> dict:
+        """全日程で受諾する・辞退する。トークのボタンと同じ処理（LineOrderService）を通し、冪等キーで二重送信を防ぐ。"""
+        from src.services.line_order import LineOrderService
+
+        self.require_feature(self.session, FEATURE_WEB_REPLY)
+        key = (idempotency_key or "").strip()
+        if not key or len(key) > MAX_KEY_LENGTH:
+            raise LineWorkerError(400, "送信をやり直してください。", "key")
+        if action not in ("accept", "decline"):
+            raise LineWorkerError(400, "返事の種類を選び直してください。", "invalid")
+        reason = " ".join((reason or "").split())[:500] if action == "decline" else ""
+        if action == "decline" and not reason:
+            raise LineWorkerError(400, "辞退の理由を入力してください。", "reason")
+        content = _hash(json.dumps({"action": f"reply_{action}", "delivery": delivery_id, "reason": reason}, ensure_ascii=False))
+        existing = self._submit_key(worker.id, key)
+        if existing is not None:
+            return self._replay(existing, content)
+        service = LineOrderService(self.session)
+        if action == "accept":
+            outcome, message = service.accept_all_from_web(delivery_id, session_row.line_user_id)
+        else:
+            outcome, message = service.decline_from_web(delivery_id, session_row.line_user_id, reason)
+        delivery = self.session.get(OrderRequestDelivery, delivery_id)
+        accepted: list[str] = []
+        if delivery is not None and delivery.ack_status == ACK_ACKED:
+            state = ws.current_state(self.session, delivery)
+            accepted = list(state.dates) if state is not None else []
+        result = {"outcome": outcome, "message": message or "", "accepted_dates": accepted}
+        if outcome in ("acked", "declined") and delivery is not None:
+            # 確定（commit）後にトークへ受付の通知を送る。論理キーは「送付行×返事の結果」（v1.2：送信予定表へ移っても二重に送らない）
+            self.pending_notice = {
+                "to": session_row.line_user_id,
+                "text": self._reply_notice_text(delivery, outcome, accepted, reason),
+                "retry_key": reply_notice_key(delivery.id, outcome),
+            }
+        try:
+            with self.session.begin_nested():
+                self.session.add(
+                    LineWorkerSubmitKey(
+                        id=generate_ulid(),
+                        worker_id=worker.id,
+                        idempotency_key=key,
+                        action=f"reply_{action}",
+                        target_id=(delivery_id or "")[:26],
+                        content_hash=content,
+                        result=result,
+                        created_at=ws.now_utc(),
+                    )
+                )
+                self.session.flush()
+        except IntegrityError:
+            existing = self._submit_key(worker.id, key)
+            if existing is not None:
+                return self._replay(existing, content)
+            raise
+        return result
+
+    def _reply_notice_text(self, delivery: OrderRequestDelivery, outcome: str, dates: list[str], reason: str) -> str:
+        from src.services.line_order import participation_summary
+
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        document = self.session.get(OrderRequestDocument, version.document_id)
+        display = ws.version_display(version)
+        lines = ["【受付】受諾を受け付けました。" if outcome == "acked" else "【受付】辞退を受け付けました。"]
+        if document.kind == KIND_TEST:
+            lines.append("（テストの依頼書です）")
+        lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
+        if outcome == "acked" and dates:
+            lines.append(participation_summary(version, dates))
+            lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
+        if outcome == "declined" and reason:
+            lines.append(f"理由：{reason}")
+        return "\n".join(lines)
 
     def accept_dates(self, session_row: LineWorkerSession, worker: Worker, delivery_id: str, dates: list, idempotency_key: str) -> dict:
         from src.services.line_order import LineOrderService
@@ -275,3 +373,9 @@ class LineWorkerService:
         if row.content_hash != content:
             raise LineWorkerError(409, "前回と違う内容です。画面を開き直してから送ってください。", "key_conflict")
         return dict(row.result)
+
+
+def reply_notice_key(delivery_id: str, outcome: str) -> str:
+    """返事の受付の通知の論理キー（統合計画 v1.2、③-C）。同じ送付行・同じ結果の受付は1回だけ送る。
+    送信予定表（③-B）へ移るときも、この値を一意キーとして使う。LINEの再試行キー（UUID）にもそのまま使える。"""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"vanzai-order-reply:{delivery_id}:{outcome}"))

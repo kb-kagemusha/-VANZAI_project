@@ -329,7 +329,8 @@ class LineWorkerSubmitKey(Base):
     __table_args__ = (
         UniqueConstraint("worker_id", "idempotency_key", name="uq_line_worker_submit_key"),
         CheckConstraint("length(content_hash) = 64", name="ck_line_worker_submit_keys_hash"),
-        CheckConstraint("action IN ('pick_dates')", name="ck_line_worker_submit_keys_action"),
+        # reply_accept・reply_decline は Web確認画面からの返事（統合計画 ③-C、migration 20261024b001）
+        CheckConstraint("action IN ('pick_dates','reply_accept','reply_decline')", name="ck_line_worker_submit_keys_action"),
     )
 
 
@@ -339,4 +340,6 @@ FEATURE_PICK_DATES = "pick_dates"
 FEATURE_WEB_HOME = "web_home"
 FEATURE_WEB_ORDERS = "web_orders"
 FEATURE_CHANGE_REQUEST = "change_request"
-FEATURE_KEYS = (FEATURE_PICK_DATES, FEATURE_WEB_HOME, FEATURE_WEB_ORDERS, FEATURE_CHANGE_REQUEST)
+# Web確認画面からの返事（全日程で受諾・辞退。統合計画 ③-C）。③-B との結合試験までは有効にしない（v1.2）
+FEATURE_WEB_REPLY = "web_reply"
+FEATURE_KEYS = (FEATURE_PICK_DATES, FEATURE_WEB_HOME, FEATURE_WEB_ORDERS, FEATURE_CHANGE_REQUEST, FEATURE_WEB_REPLY)

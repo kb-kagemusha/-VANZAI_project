@@ -57,3 +57,6 @@ html[data-theme="dark"] .line-worker-page .lwp-change { background: #2a2312; bor
 html[data-theme="dark"] .line-worker-page .lwp-change-title { color: #f5d27a; }
 html[data-theme="dark"] .line-worker-page .lwp-change-text { color: #e8d6a8; }
 html[data-theme="dark"] .line-worker-page .lwp-change-hint { background: #2a2312; color: #f5d27a; }
+html[data-theme="dark"] .line-worker-page .lw-secondary.lwp-link-button { color: #e7e9ee; }
+html[data-theme="dark"] .line-worker-page .lwp-reason textarea { background: #1a1d23; color: #e7e9ee; border-color: #3a3f4b; }
+html[data-theme="dark"] .line-worker-page .lwp-decline-entry { color: #f3aaa4; border-color: #6b2a25; }

@@ -96,3 +96,8 @@ set -a; . ./.env; set +a
 
 - 戻すとき：`apply --stage a1 --image scripts/line/rich_menu/a1.png`（A1 の公開記録には `web_home`・`web_orders` がないので、Web確認画面のAPIも止まる。`pick_dates` を使う場合は続けて `features --enable pick_dates`）。
 - Web確認画面だけを止めるとき：`features --disable web_home web_orders`（メニューはA2のまま。⑤⑥を押すと「この機能はまだご利用いただけません」と表示される）。
+
+## Web確認画面からの返事（統合計画 ③-C、機能のキー `web_reply`）
+
+- 「確認が必要な依頼」と◆の予定に「返事をする（受諾・辞退）」が出て、Web画面（`?m=reply&d=送付行ID`）から全日程で受諾・理由を付けて辞退できる。トークの「受諾」「辞退」と同じ処理。
+- **③-B（取消・送付先から外す・新しい版の辞退で、始まった日の予定を残す修正）との結合試験が終わるまで有効にしない**（統合計画 v1.2）。有効にするとき：`.venv/bin/python scripts/line/rich_menu.py features --enable web_reply --by <自分の名前>`。止めるとき：`--disable web_reply`（止めている間は、今までどおりトークのボタンで返事する）。

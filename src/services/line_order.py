@@ -586,6 +586,29 @@ class LineOrderService:
             return outcome or "rejected", reply
         return self.accept_delivery(delivery, None, actor="line-webhook")
 
+    def accept_all_from_web(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
+        """全日程で受諾する（Web確認画面から。統合計画 ③-C）。トークの「受諾」と同じ判定・処理。"""
+        delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+        if delivery is None:
+            return outcome or "rejected", reply
+        return self.accept_delivery(delivery, None, actor="line-web")
+
+    def decline_from_web(self, delivery_id: str, line_user_id: str, reason: str) -> tuple[str, str | None]:
+        """理由を付けて辞退する（Web確認画面から。統合計画 ③-C）。トークの「辞退」→理由の送信と同じ結果にする。"""
+        reason = " ".join((reason or "").split())
+        if not reason:
+            return "decline_reason_required", "辞退の理由を入力してください。"
+        delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+        if delivery is None:
+            return outcome or "rejected", reply
+        if delivery.ack_status == ACK_ACKED:
+            return "already", "受諾は記録済みです。"
+        if delivery.ack_status == ACK_DECLINED:
+            return "already", "辞退は記録済みです。"
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        series_id = ws.ensure_series(self.session, version) if version is not None else None
+        return self.decline_delivery(delivery, series_id, reason, actor="line-web")
+
     def accept_with_dates(self, delivery_id: str, line_user_id: str, dates: list[str]) -> tuple[str, str | None]:
         """日付を選んで受諾する（LIFF画面から。A1+ §3.3）。系列のロックの中で、回答受付版・本人・未回答を確かめる。"""
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
@@ -683,19 +706,23 @@ class LineOrderService:
             if series.answerable_version_id is not None and series.answerable_version_id != delivery.version_id:
                 delivery.ack_status = ACK_UNACKED
                 return "superseded_version", SUPERSEDED_REPLY
+        return self.decline_delivery(delivery, series_id, reason, actor="line-webhook")
+
+    def decline_delivery(self, delivery: OrderRequestDelivery, series_id: str | None, reason: str, *, actor: str) -> tuple[str, str | None]:
+        """辞退を記録する（トークの理由の送信・Web確認画面で共通。統合計画 ③-C）。呼び出し側で系列のロックと回答受付版の確認を済ませておく。"""
         delivery.ack_status = ACK_DECLINED
         delivery.decline_reason = reason[:500]
         delivery.acked_at = _now()
         if series_id is not None:
             application = ws.get_application(self.session, series_id, delivery.worker_id)
             if application is not None and application.applied_delivery_id:
-                ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=None, ended_reason="declined_new_version", actor="line-webhook")
-            ws.rebuild(self.session, series_id, delivery.worker_id, actor="line-webhook")
+                ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=None, ended_reason="declined_new_version", actor=actor)
+            ws.rebuild(self.session, series_id, delivery.worker_id, actor=actor)
         self.audit.log(
             AuditAction.ORDER_REQUEST_DECLINED,
             target_type="order_request_delivery",
             target_id=delivery.id,
-            actor="line-webhook",
+            actor=actor,
             after_value={
                 "worker_id": delivery.worker_id,
                 "ack_status": ACK_DECLINED,

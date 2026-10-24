@@ -24,6 +24,7 @@ from src.models.line_daily import (
     FEATURE_PICK_DATES,
     FEATURE_WEB_HOME,
     FEATURE_WEB_ORDERS,
+    FEATURE_WEB_REPLY,
     OrderRequestSeries,
     WorkerScheduleEntry,
 )
@@ -310,6 +311,8 @@ class LineWorkerPortal:
             "estimate": estimate_for(self.session, month_entries),
             "confirmations": self.confirmations(worker, enabled),
             "orders_enabled": FEATURE_WEB_ORDERS in enabled,
+            # Web確認画面から返事ができるか（③-C。③-B との結合試験までは無効）
+            "reply_enabled": FEATURE_WEB_REPLY in enabled,
             "fetched_at": ws.now_utc().isoformat(),
         }
 
@@ -367,7 +370,7 @@ class LineWorkerPortal:
                 "pdf_available": bool(version.pdf_object_key) and ws.pdf_viewable(self.session, delivery),
             })
         items.sort(key=lambda item: (item["upcoming_days"] == 0, item["first_date"], item["document_number"]))
-        return {"today": today.isoformat(), "since": since.isoformat(), "items": items, "fetched_at": ws.now_utc().isoformat()}
+        return {"today": today.isoformat(), "since": since.isoformat(), "items": items, "reply_enabled": FEATURE_WEB_REPLY in enabled, "fetched_at": ws.now_utc().isoformat()}
 
     # ---- 依頼書（PDF）を開く ---------------------------------------------------------
     def pdf_link(self, worker: Worker, delivery_id: str) -> dict:

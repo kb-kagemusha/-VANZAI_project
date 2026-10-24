@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import registrationLogo from "../assets/registration-logo.png";
 import { MonthCalendar, monthOf } from "../components/MonthCalendar";
 import { LineWorkerPortal } from "../components/LineWorkerPortal";
+import { LineWorkerReply } from "../components/LineWorkerReply";
 import { participationDateLines, participationPeriodLabel } from "../lib/participationDateFormat";
 import {
   ApiError,
@@ -90,7 +91,7 @@ export function PublicLineWorkerPage() {
   const [month, setMonth] = useState("");
   const [sending, setSending] = useState(false);
   const [submitKey, setSubmitKey] = useState(newKey);
-  const [portal, setPortal] = useState<"home" | "orders" | null>(null);
+  const [portal, setPortal] = useState<"home" | "orders" | "reply" | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
   const { mode, delivery } = useMemo(readParams, []);
 
@@ -113,6 +114,12 @@ export function PublicLineWorkerPage() {
         const session = await createLineWorkerSession(idToken);
         if (!active) return;
         setToken(session.token);
+        if (mode === "reply" && delivery) {
+          // Web確認画面からの返事（③-C）。機能が止まっているときは画面の中で案内する
+          setPortal("reply");
+          setPhase("ready");
+          return;
+        }
         if (mode !== "pick") {
           // Web確認画面（②）。機能が止まっているときは画面の中で案内する
           setPortal(mode === "orders" ? "orders" : "home");
@@ -190,7 +197,8 @@ export function PublicLineWorkerPage() {
         </header>
 
         {phase === "checking" ? <p className="lw-status">読み込んでいます…</p> : null}
-        {phase === "ready" && portal && token ? <LineWorkerPortal token={token} initial={portal} features={features} /> : null}
+        {phase === "ready" && portal === "reply" && token ? <LineWorkerReply token={token} deliveryId={delivery} /> : null}
+        {phase === "ready" && (portal === "home" || portal === "orders") && token ? <LineWorkerPortal token={token} initial={portal} features={features} /> : null}
         {phase === "error" ? <div className="lw-card lw-error"><p>{message}</p></div> : null}
 
         {phase === "done" ? (
