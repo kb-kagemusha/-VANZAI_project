@@ -30,6 +30,7 @@ from src.models.line_daily import (
     DeliveryParticipationState,
     OrderRequestSeries,
     OrderRequestWorkerApplication,
+    OrderRequestApplicationEnd,
     WorkerScheduleEntry,
 )
 from src.models.line_order import OrderRequestFileToken
@@ -213,6 +214,22 @@ def set_application(
     new_reason = None if delivery is not None else ended_reason
     if before is not None and before == {"applied_delivery_id": new_delivery, "ended_reason": new_reason}:
         return row
+    if row.applied_delivery_id and delivery is None and ended_reason in (END_DOCUMENT_ENDED, END_REMOVED, END_DECLINED_NEW_VERSION):
+        previous = session.get(OrderRequestDelivery, row.applied_delivery_id)
+        previous_version = session.get(OrderRequestVersion, previous.version_id)
+        state = current_state(session, previous)
+        accepted_dates = sorted(state.dates) if state is not None else []
+        ended_at = now_utc()
+        retained, _ = split_started(previous_version, accepted_dates, now=ended_at)
+        ending = OrderRequestApplicationEnd(id=generate_ulid(), application_id=row.id,
+            series_id=series_id, worker_id=worker_id, source_delivery_id=previous.id,
+            source_version_id=previous_version.id, source_state_id=state.id if state else None,
+            accepted_dates=accepted_dates, retained_dates=retained, ended_at=ended_at,
+            ended_reason=ended_reason, created_by=actor[:64])
+        session.add(ending)
+        AuditService(session).log("order_request_application_ended", target_type="order_request_application_end", target_id=ending.id,
+            actor=actor, reason=ended_reason, after_value={"series_id":series_id,"worker_id":worker_id,
+                "source_delivery_id":previous.id,"retained_dates":retained,"ended_at":ended_at.isoformat()})
     row.applied_delivery_id = new_delivery
     row.applied_version_id = new_version
     row.ended_reason = new_reason
@@ -345,6 +362,35 @@ def day_start_time(version: OrderRequestVersion, day: str) -> str | None:
 
 # ---- 再構築 ------------------------------------------------------------------
 
+def participation_sources(session: Session, series_id: str, worker_id: str) -> list[tuple]:
+    """現在の適用受諾と終了時点で固定した過去分。派生予定や現在時刻は参照しない。"""
+    sources = []
+    frozen_days = set()
+    for ending in session.query(OrderRequestApplicationEnd).filter_by(series_id=series_id, worker_id=worker_id).order_by(OrderRequestApplicationEnd.ended_at, OrderRequestApplicationEnd.id):
+        delivery = session.get(OrderRequestDelivery, ending.source_delivery_id)
+        version = session.get(OrderRequestVersion, ending.source_version_id)
+        document = session.get(OrderRequestDocument, version.document_id)
+        if document.deleted_at is not None:
+            continue
+        dates = set(ending.retained_dates) - frozen_days
+        frozen_days.update(dates)
+        if dates:
+            sources.append((delivery, dates, ENTRY_ACTIVE, ending.source_state_id))
+    app = get_application(session, series_id, worker_id)
+    if app is not None and app.applied_delivery_id:
+        delivery = session.get(OrderRequestDelivery, app.applied_delivery_id)
+        version = session.get(OrderRequestVersion, delivery.version_id)
+        document = session.get(OrderRequestDocument, version.document_id)
+        state = current_state(session, delivery)
+        series = session.get(OrderRequestSeries, series_id)
+        if document.deleted_at is None and state is not None:
+            dates = set(state.dates) - frozen_days
+            status = ENTRY_ACTIVE if series and series.answerable_version_id == version.id else ENTRY_CHANGING
+            if dates:
+                sources.append((delivery, dates, status, state.id))
+    return sources
+
+
 def visible_schedule_entries(session: Session):
     """削除済み依頼の古い派生予定を、LINE・Web・起床確認に出さない。"""
     return session.query(WorkerScheduleEntry).join(
@@ -369,34 +415,22 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
             applied = None
 
     expected: dict[tuple, dict] = {}
-    applied_state = None
-    if applied is not None:
-        version = session.get(OrderRequestVersion, applied.version_id)
+    applied_state = current_state(session, applied) if applied is not None else None
+    for source, participating, status, state_id in participation_sources(session, series_id, worker_id):
+        version = session.get(OrderRequestVersion, source.version_id)
         document = session.get(OrderRequestDocument, version.document_id)
-        applied_state = current_state(session, applied)
-        participating = set(applied_state.dates) if applied_state is not None else set()
-        status = ENTRY_ACTIVE if series is not None and series.answerable_version_id == version.id else ENTRY_CHANGING
         display = version_display(version)
         for day in version_work_days(version):
             if day["work_date"] not in participating:
                 continue
-            key = (applied.id, day["work_group_id"], day["work_date"])
+            key = (source.id, day["work_group_id"], day["work_date"])
             expected[key] = {
-                "series_id": series_id,
-                "document_id": document.id,
-                "version_id": version.id,
-                "delivery_id": applied.id,
-                "worker_id": worker_id,
-                "work_group_id": day["work_group_id"],
-                "work_date": date.fromisoformat(day["work_date"]),
-                "start_time": _time(day["start_time"]),
-                "end_time": _time(day["end_time"]),
-                "end_next_day": day["end_next_day"],
-                "status": status,
-                "status_reason": None,
-                "source_state_id": applied_state.id if applied_state is not None else None,
-                "is_test": document.kind == KIND_TEST,
-                **display,
+                "series_id": series_id, "document_id": document.id, "version_id": version.id,
+                "delivery_id": source.id, "worker_id": worker_id,
+                "work_group_id": day["work_group_id"], "work_date": date.fromisoformat(day["work_date"]),
+                "start_time": _time(day["start_time"]), "end_time": _time(day["end_time"]),
+                "end_next_day": day["end_next_day"], "status": status, "status_reason": None,
+                "source_state_id": state_id, "is_test": document.kind == KIND_TEST, **display,
             }
 
     existing = (
@@ -418,6 +452,7 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
         )
     ]
 
+    ended_reasons = {end.source_delivery_id: end.ended_reason for end in session.query(OrderRequestApplicationEnd).filter_by(series_id=series_id, worker_id=worker_id).order_by(OrderRequestApplicationEnd.ended_at, OrderRequestApplicationEnd.id)}
     changes: list[dict] = []
 
     def apply(row: WorkerScheduleEntry | None, values: dict) -> None:
@@ -442,7 +477,9 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
             continue
         row_version = session.get(OrderRequestVersion, row.version_id)
         newer_acked = any(order > _confirm_order(row_version) for order in acked_orders)
-        if newer_acked and (applied is None or row.delivery_id != applied.id):
+        if row.delivery_id in ended_reasons:
+            status, reason = ENTRY_CANCELLED, ended_reasons[row.delivery_id]
+        elif newer_acked and (applied is None or row.delivery_id != applied.id):
             status, reason = ENTRY_SUPERSEDED, None
         elif applied is None:
             status, reason = ENTRY_CANCELLED, (application.ended_reason if application and application.ended_reason else END_DOCUMENT_ENDED)

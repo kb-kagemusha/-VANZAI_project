@@ -15,7 +15,7 @@ from src.domain.worker_tags import is_newcomer_from_start, tokyo_today, is_direc
 
 from sqlalchemy.orm import Session
 
-from src.models.line_daily import OrderRequestSeries, OrderRequestWorkerApplication
+from src.models.line_daily import OrderRequestSeries, OrderRequestWorkerApplication, OrderRequestApplicationEnd
 from src.models.order_request import (
     ACK_DECLINE_PENDING,
     ACK_DECLINED,
@@ -55,7 +55,7 @@ def registered_workers(session: Session) -> list[dict]:
 
 def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False, test_only: bool = False) -> list[dict]:
     """日付ごとに、イベントの人数と名前を返す。[{date, events: [{series_id, version_id, document_number, project_name, ok, changing, unanswered}]}]"""
-    query = session.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None))
+    query = session.query(OrderRequestSeries)
     if series_id:
         query = query.filter(OrderRequestSeries.id == series_id)
     from src.models.master import Worker
@@ -66,7 +66,13 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
     directors = {w.id: is_director(w.tags) for w in workers}
     days: dict[str, dict[str, dict]] = defaultdict(dict)
     for series in query.all():
-        answerable = session.get(OrderRequestVersion, series.answerable_version_id)
+        if series.answerable_version_id is not None:
+            answerable = session.get(OrderRequestVersion, series.answerable_version_id)
+        else:
+            ending = session.query(OrderRequestApplicationEnd).filter_by(series_id=series.id).order_by(OrderRequestApplicationEnd.ended_at.desc(), OrderRequestApplicationEnd.id.desc()).first()
+            if ending is None:
+                continue
+            answerable = session.get(OrderRequestVersion, ending.source_version_id)
         document = session.get(OrderRequestDocument, answerable.document_id)
         # 月のカレンダーは正式だけ。依頼書ごとの確認（series_id 指定）はテストも表示する
         if test_only and document.kind == KIND_FORMAL:
@@ -75,21 +81,24 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
             continue
         display = ws.version_display(answerable)
         # 稼働者ごとの分類と日付
-        buckets: dict[str, tuple[str, list[str], str]] = {}
+        buckets: list[tuple[str, str, set[str], str]] = []
+        bucket_dates: dict[str, set[str]] = defaultdict(set)
         unavailable: dict[str, tuple[set[str], str]] = {}
-        work_dates = {d["work_date"] for d in ws.version_work_days(answerable)}
+        work_dates = {d["work_date"] for d in ws.version_work_days(answerable)} if series.answerable_version_id else set()
         applications = (
             session.query(OrderRequestWorkerApplication)
             .filter(OrderRequestWorkerApplication.series_id == series.id, OrderRequestWorkerApplication.applied_delivery_id.is_not(None))
             .all()
         )
-        for app in applications:
-            delivery = session.get(OrderRequestDelivery, app.applied_delivery_id)
-            state = ws.current_state(session, delivery)
-            dates = list(state.dates) if state is not None else []
-            kind = OK if delivery.version_id == series.answerable_version_id else CHANGING
-            buckets[app.worker_id] = (kind, dates, worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
-        for delivery in session.query(OrderRequestDelivery).filter(OrderRequestDelivery.version_id == answerable.id).all():
+        applied_workers = {app.worker_id for app in applications}
+        for worker_id in ws.series_workers(session, series.id):
+            for delivery, dates, status, _state_id in ws.participation_sources(session, series.id, worker_id):
+                kind = OK if status == "active" else CHANGING
+                name = worker_names.get(worker_id, delivery.worker_name_snapshot)
+                buckets.append((worker_id, kind, dates, name))
+                bucket_dates[worker_id].update(dates)
+        current_deliveries = session.query(OrderRequestDelivery).filter(OrderRequestDelivery.version_id == answerable.id).all() if series.answerable_version_id else []
+        for delivery in current_deliveries:
             if delivery.view_revoked:
                 continue
             # 個別NG日は共通休業日を除く。未回答をNGと推測しない。
@@ -103,13 +112,15 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                     refused |= offered - set(state.dates)
             if refused:
                 unavailable[delivery.worker_id] = (refused, worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
-            if delivery.worker_id in buckets:
+            if delivery.worker_id in applied_workers:
                 continue
             if delivery.send_status not in (SEND_ACCEPTED, SEND_UNKNOWN) or delivery.ack_status not in (ACK_UNACKED, ACK_DECLINE_PENDING):
                 continue
             if delivery.offered_dates is None:
                 continue
-            buckets[delivery.worker_id] = (UNANSWERED, list(delivery.offered_dates), worker_names.get(delivery.worker_id, delivery.worker_name_snapshot))
+            unanswered_dates = set(delivery.offered_dates) - bucket_dates[delivery.worker_id]
+            buckets.append((delivery.worker_id, UNANSWERED, unanswered_dates, worker_names.get(delivery.worker_id, delivery.worker_name_snapshot)))
+            bucket_dates[delivery.worker_id].update(unanswered_dates)
         def event_of(day: str) -> dict:
             return days[day].setdefault(
                 series.id,
@@ -133,13 +144,13 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
         for day in work_dates:
             if _in_range(day, start, end):
                 event_of(day)
-        for worker_id, (kind, dates, name) in buckets.items():
+        for worker_id, kind, dates, name in buckets:
             for day in set(dates):
                 if not _in_range(day, start, end):
                     continue
                 event_of(day)[kind].append({"worker_id": worker_id, "name": name, "is_newcomer": newcomers.get(worker_id, False), "is_director": directors.get(worker_id, False)})
         for worker_id, (dates, name) in unavailable.items():
-            assigned_dates = set(buckets[worker_id][1]) if worker_id in buckets else set()
+            assigned_dates = bucket_dates.get(worker_id, set())
             for day in dates - assigned_dates:
                 if _in_range(day, start, end):
                     event_of(day)[UNAVAILABLE].append({"worker_id": worker_id, "name": name, "is_newcomer": newcomers.get(worker_id, False), "is_director": directors.get(worker_id, False)})

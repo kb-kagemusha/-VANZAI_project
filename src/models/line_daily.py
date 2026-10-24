@@ -142,6 +142,31 @@ class OrderRequestWorkerApplication(Base):
     )
 
 
+class OrderRequestApplicationEnd(Base):
+    """適用受諾の終了履歴。開始済み日を終了時点で固定し、派生予定から独立して保存。"""
+    __tablename__ = "order_request_application_ends"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    application_id: Mapped[str] = mapped_column(String(26), ForeignKey("order_request_worker_applications.id"), nullable=False)
+    series_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    source_delivery_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    source_version_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    source_state_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    accepted_dates: Mapped[list] = mapped_column(JSON, nullable=False)
+    retained_dates: Mapped[list] = mapped_column(JSON, nullable=False)
+    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["source_delivery_id", "worker_id"], ["order_request_deliveries.id", "order_request_deliveries.worker_id"]),
+        ForeignKeyConstraint(["source_delivery_id", "source_version_id"], ["order_request_deliveries.id", "order_request_deliveries.version_id"]),
+        ForeignKeyConstraint(["source_version_id", "series_id"], ["order_request_versions.id", "order_request_versions.series_id"]),
+        ForeignKeyConstraint(["source_state_id", "source_delivery_id"], ["delivery_participation_states.id", "delivery_participation_states.delivery_id"]),
+        CheckConstraint("ended_reason IN ('document_ended','removed_from_recipients','declined_new_version')", name="ck_order_application_end_reason"),
+        Index("ix_order_application_ends_worker_series", "series_id", "worker_id"),
+    )
+
+
 class WorkerScheduleEntry(Base, TimestampMixin):
     """稼働予定。依頼書からの派生データ。同じキーの行は作り直さず状態を更新する。"""
 

@@ -1,9 +1,7 @@
 """③-B／③-C 結合試験：Web確認画面から「新しい版を辞退」したとき、始まっていた日を残す（統合計画 v1.2、結合試験の段取り §2・§3）。
 
-担当：こちら（③-C の Web 辞退の試験）。③-B の共通修正（終了した時点の受諾版・参加日・終了日時を記録し、その時点で
-始まっていた日を残す。後日の作り直しで「今の時刻」を使わない）を取り込むまで、始まった日を残す試験は失敗する。
-そのため ③-B 待ちの試験には `xfail(strict=True)` を付けている。③-B を取り込んで通るようになったら（XPASS で失敗する）、
-この印を外す。web_reply は試験の中でだけ有効にする（本番は無効のまま）。
+担当：③-C側が用意した試験を③-Bの共通修正で検証。5件のXPASS(strict)を確認後、WAITING_3Bを解除した。
+固定時計を進めても勤務日と期待値が動かないよう、元の基準日を保存している。
 """
 from __future__ import annotations
 
@@ -31,7 +29,14 @@ from tests.test_line_daily import _create_confirm, _day, _entries, _payload, _po
 from tests.test_line_worker_pick import _session, liff_env  # noqa: F401
 from tests.test_line_worker_reply import ALL, _recorder, _reply
 
-WAITING_3B = pytest.mark.xfail(strict=True, reason="③-B（始まった日を残す共通修正）の取り込み待ち。通るようになったらこの印を外す")
+
+
+@pytest.fixture(autouse=True)
+def _fixed_base_day(monkeypatch):
+    # today_jstを動かした後も、元の勤務日と期待値の基準日は動かさない。
+    import sys
+    base = ws.today_jst()
+    monkeypatch.setattr(sys.modules[__name__], "_day", lambda offset: (base + timedelta(days=offset)).isoformat())
 
 
 def _night_schedule(first: int, last: int) -> dict:
@@ -99,9 +104,9 @@ def _assert_end_state(db_session, worker_id, v1_id, kept, ended):
 
 # 結合試験の段取り §2 の表（3勤務日 09:00 開始、2日目に終了）
 CASES = [
-    pytest.param((2, 8, 59), [1], [2, 3], id="2日目の開始1分前", marks=WAITING_3B),
-    pytest.param((2, 9, 0), [1, 2], [3], id="2日目の開始ちょうど", marks=WAITING_3B),
-    pytest.param((2, 18, 0), [1, 2], [3], id="2日目の終業時刻", marks=WAITING_3B),
+    pytest.param((2, 8, 59), [1], [2, 3], id="2日目の開始1分前"),
+    pytest.param((2, 9, 0), [1, 2], [3], id="2日目の開始ちょうど"),
+    pytest.param((2, 18, 0), [1, 2], [3], id="2日目の終業時刻"),
 ]
 
 
@@ -145,7 +150,6 @@ def test_web_decline_of_new_version_keeps_started_days(
     assert not any(e["changing"] for e in shown)
 
 
-@WAITING_3B
 def test_web_decline_during_night_shift_keeps_the_started_shift(
     api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line, monkeypatch
 ):
@@ -167,7 +171,6 @@ def test_web_decline_during_night_shift_keeps_the_started_shift(
     assert _snapshot(db_session, worker.id) == before
 
 
-@WAITING_3B
 def test_talk_decline_gives_the_same_result_as_web(
     api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line, monkeypatch
 ):

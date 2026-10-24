@@ -15,6 +15,7 @@ from src.models import master, transaction  # noqa: F401
 import src.models.order_request  # noqa: F401
 import src.models.order_billing  # noqa: F401
 import src.models.line_order  # noqa: F401
+import src.models.line_daily  # noqa: F401
 import src.models.closing_approval
 import src.models.line_registration  # noqa: F401
 
