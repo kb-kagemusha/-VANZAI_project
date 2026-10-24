@@ -53,3 +53,7 @@ html[data-theme="dark"] .line-worker-page .lwp-confirm-item { border-color: #2d3
 html[data-theme="dark"] .line-worker-page .lwp-entry.is-changing { border-color: #6b5420; background: #2a2312; }
 html[data-theme="dark"] .line-worker-page .lwp-badge.is-changing { background: #3a2e12; color: #f5d27a; }
 html[data-theme="dark"] .line-worker-page .lwp-badge.is-unanswered { background: #3a1b19; color: #f3aaa4; }
+html[data-theme="dark"] .line-worker-page .lwp-change { background: #2a2312; border-color: #6b5420; }
+html[data-theme="dark"] .line-worker-page .lwp-change-title { color: #f5d27a; }
+html[data-theme="dark"] .line-worker-page .lwp-change-text { color: #e8d6a8; }
+html[data-theme="dark"] .line-worker-page .lwp-change-hint { background: #2a2312; color: #f5d27a; }

@@ -95,10 +95,27 @@ def test_revision_shows_changing_and_keeps_old_estimate(api_client, db_session, 
     days = _days_in_month((1, 2), month)
     assert body["estimate"]["amount"] == str(15000 * days)  # 新しい版を受諾するまでは旧い版の単価
     assert all(e["changing"] for d in body["month_days"] for e in d["entries"])
+    change = body["month_days"][0]["entries"][0]["change"]
+    assert change["state"] == "sent" and change["delivery_id"] == v2["deliveries"][0]["id"]
 
     orders = api_client.get("/api/line/worker/orders", headers=headers).json()["items"]
     assert len(orders) == 1 and orders[0]["changing"] is True
     assert orders[0]["newer_delivery_id"] == v2["deliveries"][0]["id"]
+    assert orders[0]["change"]["state"] == "sent"
+
+
+def test_changing_before_new_version_is_sent(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):
+    """運営が新しい版を確定したが、まだ送っていないとき：返事はできないので「届くのを待つ」状態として返す。"""
+    worker = _worker(db_session, "稼働者A")
+    _link(api_client, ops_user, worker.id, "U123")
+    v1 = _create_confirm(api_client, ops_user, [worker.id], schedule=_schedule(1, 2))
+    _send_and_accept(api_client, ops_user, v1["deliveries"][0]["id"])
+    _revise_confirm(api_client, ops_user, v1["id"], site_name="会場B")
+    _release(db_session, actions=ALL)
+    body = api_client.get("/api/line/worker/home", params={"month": _month_of(1)}, headers=_session(api_client)).json()
+    entry = body["month_days"][0]["entries"][0]
+    assert entry["changing"] is True and entry["change"]["state"] == "not_sent" and entry["change"]["delivery_id"] is None
+    assert body["confirmations"] == []
 
 
 def test_test_documents_are_shown_but_not_counted(api_client, db_session, ops_user, pdf_root, line_env, liff_env, fake_line):

@@ -181,7 +181,38 @@ class LineWorkerPortal:
             .all()
         )
 
-    def _entry_out(self, entry: WorkerScheduleEntry, documents: dict[str, OrderRequestDocument]) -> dict:
+    def _change_info(self, entry: WorkerScheduleEntry, enabled: set[str], cache: dict[str, dict]) -> dict | None:
+        """「内容変更の確認待ち」の予定で、本人がすること（0.51.13）。
+
+        - sent：新しい版が本人に届いていて、返事を待っている（新しい依頼書を開く・日付を選んで返事する）
+        - not_sent：運営が新しい版を確定したが、まだ本人に届いていない（届くのを待つ）
+        """
+        if entry.status != ENTRY_CHANGING:
+            return None
+        if entry.series_id in cache:
+            return cache[entry.series_id]
+        info = {"state": "not_sent", "delivery_id": None, "can_pick": False, "pdf_available": False}
+        series = self.session.get(OrderRequestSeries, entry.series_id)
+        newer = ws.delivery_in_version(self.session, series.answerable_version_id, entry.worker_id) if series is not None else None
+        if (
+            newer is not None
+            and newer.id != entry.delivery_id
+            and newer.send_status in (SEND_ACCEPTED, SEND_UNKNOWN)
+            and newer.ack_status in (ACK_UNACKED, ACK_DECLINE_PENDING)
+            and not newer.view_revoked
+        ):
+            version = self.session.get(OrderRequestVersion, newer.version_id)
+            if version is not None and version.status != STATUS_CANCELLED and not version.dispatch_stopped:
+                info = {
+                    "state": "sent",
+                    "delivery_id": newer.id,
+                    "can_pick": bool(version.allow_partial_accept and newer.offered_dates and FEATURE_PICK_DATES in enabled),
+                    "pdf_available": bool(version.pdf_object_key) and ws.pdf_viewable(self.session, newer),
+                }
+        cache[entry.series_id] = info
+        return info
+
+    def _entry_out(self, entry: WorkerScheduleEntry, documents: dict[str, OrderRequestDocument], enabled: set[str] | None = None, changes: dict[str, dict] | None = None) -> dict:
         if entry.document_id not in documents:
             documents[entry.document_id] = self.session.get(OrderRequestDocument, entry.document_id)
         document = documents[entry.document_id]
@@ -196,6 +227,7 @@ class LineWorkerPortal:
             "site_address": entry.site_address or None,
             "meeting_place": entry.meeting_place or None,
             "changing": entry.status == ENTRY_CHANGING,
+            "change": self._change_info(entry, enabled or set(), changes if changes is not None else {}),
             "is_test": bool(entry.is_test),
             "delivery_id": entry.delivery_id,
             "document_number": document.document_number if document is not None else "",
@@ -262,17 +294,18 @@ class LineWorkerPortal:
         last = _month_end(first)
         week_end = today + timedelta(days=WEEK_DAYS - 1)
         documents: dict[str, OrderRequestDocument] = {}
+        changes: dict[str, dict] = {}
         month_entries = self._entries(worker.id, first, last)
         week_entries = self._entries(worker.id, today, week_end)
         return {
             "today": today.isoformat(),
             "worker_name": worker.name,
             "month": first.strftime("%Y-%m"),
-            "month_days": self._by_day([self._entry_out(e, documents) for e in month_entries]),
+            "month_days": self._by_day([self._entry_out(e, documents, enabled, changes) for e in month_entries]),
             "week": {
                 "from": today.isoformat(),
                 "to": week_end.isoformat(),
-                "days": self._by_day([self._entry_out(e, documents) for e in week_entries]),
+                "days": self._by_day([self._entry_out(e, documents, enabled, changes) for e in week_entries]),
             },
             "estimate": estimate_for(self.session, month_entries),
             "confirmations": self.confirmations(worker, enabled),
@@ -282,7 +315,8 @@ class LineWorkerPortal:
 
     # ---- 受託済みの依頼書 ----------------------------------------------------------
     def orders(self, worker: Worker) -> dict:
-        self.require(FEATURE_WEB_ORDERS)
+        enabled = self.require(FEATURE_WEB_ORDERS)
+        changes: dict[str, dict] = {}
         today = ws.today_jst()
         since = today.replace(day=1)  # 今月の初めから（今月すでに働いた分も見られるように。P-08）
         rows = (
@@ -327,6 +361,7 @@ class LineWorkerPortal:
                 "upcoming_days": sum(1 for d in dates if d >= today),
                 "acked_at": delivery.acked_at.isoformat() if delivery.acked_at else None,
                 "changing": changing,
+                "change": next((self._change_info(e, enabled, changes) for e in entries if e.status == ENTRY_CHANGING), None),
                 "newer_delivery_id": newer,
                 "is_test": bool(entries[0].is_test),
                 "pdf_available": bool(version.pdf_object_key) and ws.pdf_viewable(self.session, delivery),

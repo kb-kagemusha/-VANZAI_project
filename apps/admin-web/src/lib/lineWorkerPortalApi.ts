@@ -30,6 +30,14 @@ async function workerFetch<T>(token: string, path: string, init?: RequestInit, p
   return payload as T;
 }
 
+/** 「内容変更の確認待ち」の予定で本人がすること（0.51.13）。sent＝新しい依頼書が届いていて返事待ち、not_sent＝まだ届いていない */
+export type PortalChange = {
+  state: "sent" | "not_sent";
+  delivery_id: string | null;
+  can_pick: boolean;
+  pdf_available: boolean;
+};
+
 export type PortalEntry = {
   id: string;
   date: string;
@@ -41,6 +49,7 @@ export type PortalEntry = {
   site_address: string | null;
   meeting_place: string | null;
   changing: boolean;
+  change?: PortalChange | null;
   is_test: boolean;
   delivery_id: string;
   document_number: string;
@@ -101,6 +110,7 @@ export type PortalOrder = {
   upcoming_days: number;
   acked_at: string | null;
   changing: boolean;
+  change?: PortalChange | null;
   newer_delivery_id: string | null;
   is_test: boolean;
   pdf_available: boolean;

@@ -10,6 +10,7 @@ import {
   createPortalPdfLink,
   getPortalHome,
   getPortalOrders,
+  type PortalChange,
   type PortalConfirmation,
   type PortalDay,
   type PortalEntry,
@@ -58,7 +59,40 @@ function messageOf(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "読み込めませんでした。";
 }
 
-function EntryCard({ entry }: { entry: PortalEntry }) {
+type PdfAction = { onPdf: (deliveryId: string) => void; pdfBusy: string };
+
+/** 「内容変更の確認待ち」で、何が起きていて本人が何をすればよいか（0.51.13） */
+function ChangeNotice({ change, onPdf, pdfBusy }: { change: PortalChange | null | undefined } & PdfAction) {
+  if (change?.state === "sent" && change.delivery_id) {
+    const deliveryId = change.delivery_id;
+    return (
+      <div className="lwp-change">
+        <p className="lwp-change-title">◆ 依頼の内容が変わりました</p>
+        <p className="lwp-change-text">新しい依頼書を確認して、返事をしてください。返事をするまでは、ここに出ている前の内容のままです。</p>
+        <div className="lwp-actions">
+          {change.pdf_available ? (
+            <button type="button" className="lw-secondary" disabled={pdfBusy === deliveryId} onClick={() => onPdf(deliveryId)}>
+              {pdfBusy === deliveryId ? "開いています…" : "新しい依頼書（PDF）を開く"}
+            </button>
+          ) : null}
+          {change.can_pick ? (
+            <a className="lw-primary lwp-link-button" href={`?m=pick&d=${encodeURIComponent(deliveryId)}`}>日付を選んで返事する</a>
+          ) : (
+            <p className="lw-note">返事は、公式LINEのトークに届いた新しい依頼のメッセージの「受諾」「辞退」のボタンで行えます。</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="lwp-change">
+      <p className="lwp-change-title">◆ 運営が依頼の内容を変更しています</p>
+      <p className="lwp-change-text">新しい依頼書がLINEに届いたら、内容を確認して返事をしてください。それまでは、ここに出ている前の内容のままです。</p>
+    </div>
+  );
+}
+
+function EntryCard({ entry, onPdf, pdfBusy }: { entry: PortalEntry } & PdfAction) {
   return (
     <div className={`lwp-entry${entry.changing ? " is-changing" : ""}`}>
       {entry.is_test ? <p className="lw-test">【テスト】正式な発注ではありません</p> : null}
@@ -66,16 +100,16 @@ function EntryCard({ entry }: { entry: PortalEntry }) {
       <p className="lwp-entry-title">{firstLine(entry.project_name) || "（案件名なし）"}</p>
       {entry.site_name ? <p className="lw-meta">稼働場所：{firstLine(entry.site_name)}</p> : null}
       {entry.meeting_place ? <p className="lw-meta">集合場所：{entry.meeting_place}</p> : null}
-      {entry.changing ? <p className="lwp-badge is-changing">◆ 内容変更の確認待ち（返事をするまでは今の内容のまま）</p> : null}
+      {entry.changing ? <ChangeNotice change={entry.change} onPdf={onPdf} pdfBusy={pdfBusy} /> : null}
     </div>
   );
 }
 
-function DayBlock({ day }: { day: PortalDay }) {
+function DayBlock({ day, onPdf, pdfBusy }: { day: PortalDay } & PdfAction) {
   return (
     <div className="lwp-day-block">
       <h3>{dayLabel(day.date)}</h3>
-      {day.entries.map((entry) => <EntryCard key={entry.id} entry={entry} />)}
+      {day.entries.map((entry) => <EntryCard key={entry.id} entry={entry} onPdf={onPdf} pdfBusy={pdfBusy} />)}
     </div>
   );
 }
@@ -241,9 +275,13 @@ function HomeView({ token, onOrders }: { token: string; onOrders: () => void }) 
                 );
               }}
             />
-            <p className="lw-legend"><span className="lwp-legend-mark">●</span>仕事がある日 <span className="lwp-legend-mark is-changing">◆</span>内容変更の確認待ち <span className="lwp-legend-today" aria-hidden="true" />今日</p>
+            <p className="lw-legend"><span className="lwp-legend-mark">●</span>仕事がある日 <span className="lwp-legend-mark is-changing">◆</span>内容が変わった（確認待ち） <span className="lwp-legend-today" aria-hidden="true" />今日</p>
             {loading ? <p className="lw-note">読み込んでいます…</p> : null}
-            {selected ? <DayBlock day={selected} /> : home.month_days.length > 0
+            {pdf.error ? <p className="lw-footer-error">{pdf.error}</p> : null}
+            {home.month_days.some((d) => d.entries.some((e) => e.changing)) ? (
+              <p className="lwp-change-hint">◆の日は、依頼の内容が変わり、あなたの確認を待っている日です。日付を押すと、することが表示されます。</p>
+            ) : null}
+            {selected ? <DayBlock day={selected} onPdf={(id) => void pdf.open(id)} pdfBusy={pdf.busy} /> : home.month_days.length > 0
               ? <p className="lw-note">●の日を押すと、その日の仕事を表示します。</p>
               : <p className="lw-note">この月の予定はありません（受諾した依頼だけが表示されます）。</p>}
           </>
@@ -251,7 +289,7 @@ function HomeView({ token, onOrders }: { token: string; onOrders: () => void }) 
           <>
             <p className="lwp-week-range">{dayLabel(home.week.from)}〜{dayLabel(home.week.to)}</p>
             {home.week.days.length > 0
-              ? home.week.days.map((day) => <DayBlock key={day.date} day={day} />)
+              ? home.week.days.map((day) => <DayBlock key={day.date} day={day} onPdf={(id) => void pdf.open(id)} pdfBusy={pdf.busy} />)
               : <p className="lw-note">この7日間の予定はありません（受諾した依頼だけが表示されます）。</p>}
           </>
         )}
@@ -316,14 +354,14 @@ function OrdersView({ token, onHome, homeEnabled }: { token: string; onHome: () 
           <p className="lwp-entry-title">{firstLine(item.project_name) || "案件"}</p>
           {item.site_name ? <p className="lw-meta">稼働場所：{firstLine(item.site_name)}</p> : null}
           <p className="lw-meta">日程：{periodLabel(item.first_date, item.last_date)}（{item.work_days}日{item.upcoming_days < item.work_days ? `、これから${item.upcoming_days}日` : ""}）</p>
-          {item.changing ? <p className="lwp-badge is-changing">◆ 内容が変わりました（確認待ち）</p> : null}
+          {item.changing ? <ChangeNotice change={item.change} onPdf={(id) => void pdf.open(id)} pdfBusy={pdf.busy} /> : null}
           <div className="lwp-actions">
             {item.pdf_available ? (
               <button type="button" className="lw-secondary" disabled={pdf.busy === item.delivery_id} onClick={() => void pdf.open(item.delivery_id)}>
                 {pdf.busy === item.delivery_id ? "開いています…" : "依頼書（PDF）を開く"}
               </button>
             ) : <p className="lw-note">この依頼書は今は開けません。運営へご確認ください。</p>}
-            {item.newer_delivery_id ? (
+            {item.newer_delivery_id && !item.change ? (
               <button type="button" className="lw-secondary" disabled={pdf.busy === item.newer_delivery_id} onClick={() => void pdf.open(item.newer_delivery_id!)}>新しい依頼書（PDF）を開く</button>
             ) : null}
           </div>
