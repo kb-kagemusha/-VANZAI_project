@@ -4,6 +4,13 @@
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
 - **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
 
+## [0.52.1] - 2026-10-24
+
+- 統合計画③-A: 変更を確定したのに旧版の受諾者へまだ送れていない対象を、発注依頼書画面の警告で表示。現在の正式/テスト区分に連動し、文書別・本人別の一覧から確認付きで変更版を送付できる。
+- 未送信・送信失敗・結果不明・送信中・LINE未連携を区別。結果不明と送信中は警告を残し、この導線から自動再送しない。送付時に系列ロック内で最新状態を再確認し、二度押し・旧版・取消・回答済みへの送信を防ぐ。送信受付と本人の返事は別に扱う。
+- ③-Bの結合試験計画を追加。D-10はユーザーが「確認しました」ボタン＋未確認者一覧を採用。新条件への受諾とは区別する。D-11は未決のまま。web_replyは無効のまま維持。
+- 仕様: DESIGN_SPEC §14.3/16、統合計画③-A、DEC-103。既存DBから導出するためDDLなし。送付監査は既存order_request_line_sent/order_request_line_send_failed。検証: test_order_change_delivery.py、全体pytest（本物の認証ライブラリ、1022合格/専用PostgreSQL環境依存18スキップ）、order-change-delivery-ui.spec.ts、order-lists-ui.spec.ts、管理画面ビルド。
+
 ## [0.52.0] - 2026-10-24
 
 ### Added

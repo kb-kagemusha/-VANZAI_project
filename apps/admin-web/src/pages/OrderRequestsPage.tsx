@@ -13,6 +13,7 @@ import { TestBadge } from "../components/TestBadge";
 import { PageHeader } from "../components/PageHeader";
 import { FormDialog } from "../components/FormDialog";
 import { OrderDatePicker } from "../components/OrderDatePicker";
+import { OrderChangeDeliveryNotice } from "../components/OrderChangeDeliveryNotice";
 import { OrderRequestTemplatesDialog } from "../components/OrderRequestTemplatesDialog";
 import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
@@ -1059,6 +1060,8 @@ export function OrderRequestsPage() {
           <button key={value} type="button" className={`btn btn-sm${kind === value ? " is-active" : ""}`} aria-pressed={kind === value} onClick={() => { setKind(value); setSentPage(0); setCreatedPage(0); }}>{label}</button>
         ))}
       </div>
+
+      <OrderChangeDeliveryNotice kind={kind} canWrite={canWrite} onOpen={showDetail} />
 
       <section className="order-list-frame is-sent">
         <h3>送信した依頼</h3>

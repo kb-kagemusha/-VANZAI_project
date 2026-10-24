@@ -1,0 +1,9 @@
+.order-change-delivery-notice { display:flex; align-items:center; justify-content:space-between; gap:1rem; border:2px solid #a85c00; background:#fff3d6; color:#5e3600; padding:1rem; border-radius:8px; margin-block:1rem; }
+.order-change-delivery-notice p { margin:.4rem 0 0; }
+.order-change-delivery-notice .btn { border:1px solid #a85c00; color:inherit; background:transparent; flex-shrink:0; }
+.order-change-delivery-group { border:1px solid var(--border, #ddd); border-radius:6px; padding:1rem; }
+.order-change-delivery-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }
+.order-change-delivery-group ul { list-style:none; padding:0; margin:.75rem 0 0; }
+.order-change-delivery-group li { display:grid; grid-template-columns:minmax(10em,1fr) minmax(10em,1fr) auto; gap:.75rem; align-items:center; padding:.6rem 0; border-top:1px solid var(--border, #ddd); }
+html[data-theme="dark"] .order-change-delivery-notice { background:#382a13; color:#ffe0a0; border-color:#cf941d; }
+@media(max-width:640px) { .order-change-delivery-notice { align-items:stretch; flex-direction:column; } .order-change-delivery-group li { display:flex; flex-wrap:wrap; } }

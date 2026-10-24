@@ -1004,3 +1004,8 @@ def download_order_request_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": attachment_content_disposition(filename)},
     )
+
+
+# 共通の発注依頼書ルーターで権限管理・URLを維持する。
+from src.api.order_change_delivery_routes import router as change_delivery_router
+router.include_router(change_delivery_router)
