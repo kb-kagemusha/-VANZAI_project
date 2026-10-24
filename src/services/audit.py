@@ -25,17 +25,23 @@ from src.models.enums import AuditAction
 TARGET_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
     "actual": ("actual", "actuals"),
     "assignment": ("assignment", "assignments"),
+    "assignment_selection_set": ("assignment_selection_set", "assignment_selection_sets"),
     "closing": ("closing", "closings"),
     "expense": ("expense", "expenses"),
     "import_batch": ("import_batch", "import_batches"),
     "invoice": ("invoice", "invoices"),
     "payout": ("payout", "payouts"),
+    "payout_delivery": ("payout_delivery", "payout_deliveries"),
     "price_outsource": ("price_outsource",),
     "price_sales": ("price_sales",),
     "price_rule": ("price_rule", "price_rules"),
     "project": ("project", "projects"),
     "shift_slot": ("shift_slot", "shift_slots"),
     "user": ("user", "users"),
+    "ocr_source_image": ("ocr_source_image", "ocr_source_images"),
+    "ocr_parse_job": ("ocr_parse_job", "ocr_parse_jobs"),
+    "ocr_extracted_row": ("ocr_extracted_row", "ocr_extracted_rows"),
+    "ocr_reconciliation_batch": ("ocr_reconciliation_batch", "ocr_reconciliation_batches"),
 }
 
 
@@ -48,6 +54,7 @@ def _resolve_target_type_aliases(target_type: str) -> tuple[str, ...]:
 class AuditLogSearchFilter:
     """監査ログ検索フィルタ"""
     period_key: Optional[str] = None  # YYYYMM形式
+    exclude_admin_billing: bool = False
     project_id: Optional[str] = None
     action_type: Optional[AuditAction | str] = None
     action_group: Optional[str] = None
@@ -296,6 +303,8 @@ class AuditService:
         """
         # 条件構築
         conditions = []
+        if filter.exclude_admin_billing:
+            conditions.append(~AuditLog.action.like("order_billing_%"))
         
         if filter.period_key:
             # period_key は extra_metadata や before_value/after_value に含まれる可能性がある
@@ -351,6 +360,8 @@ class AuditService:
                     AuditAction.PAYOUT_APPROVED.value,
                     AuditAction.PAYOUT_PAID.value,
                     AuditAction.PAYOUT_CORRECTED.value,
+                    AuditAction.PAYOUT_DELIVERY_SENT.value,
+                    AuditAction.PAYOUT_DELIVERY_FAILED.value,
                 ]))
             elif filter.action_group == "import_all":
                 conditions.append(AuditLog.action.in_([
@@ -367,6 +378,8 @@ class AuditService:
                 conditions.append(AuditLog.action.in_([
                     AuditAction.ASSIGNMENT_CANCELED.value,
                     AuditAction.ASSIGNMENT_STATUS_CHANGED.value,
+                    AuditAction.ASSIGNMENT_SELECTION_SET_SAVED.value,
+                    AuditAction.ASSIGNMENT_SELECTION_SET_DELETED.value,
                 ]))
             elif filter.action_group == "price_all":
                 conditions.append(AuditLog.action.in_([

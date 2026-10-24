@@ -1,3 +1,6 @@
+import type { ActualListItem } from "../types/api";
+import { useAuth } from "../lib/auth/auth-context";
+import { hasPermission } from "../lib/auth/permissions";
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -15,6 +18,7 @@ import { currentMonthInput, formatCurrency, formatDate, minutesToHours, toPeriod
 const PAGE_SIZE = 20;
 
 export function ActualsPage() {
+  const { user } = useAuth();
   const [monthValue, setMonthValue] = useState(currentMonthInput());
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
@@ -46,7 +50,7 @@ export function ActualsPage() {
   return (
     <div className="page-stack">
       <PageHeader title="実績一覧" description="実績の参照、要レビュー状態、適用単価を一覧で確認します。" />
-      <FilterBar>
+      <FilterBar className="actuals-filter-bar">
         <label>
           対象月
           <input type="month" value={monthValue} onChange={(event) => { setMonthValue(event.target.value); setPage(0); }} />
@@ -63,16 +67,16 @@ export function ActualsPage() {
 
       <DataTable
         columns={[
-          { key: "date", header: "日付", render: (row) => formatDate(row.work_date) },
-          { key: "project", header: "案件", render: (row) => row.project_name },
-          { key: "worker", header: "稼働者", render: (row) => row.worker_name },
-          { key: "role", header: "役割", render: (row) => row.role_name },
-          { key: "minutes", header: "請求時間", render: (row) => minutesToHours(row.calc_minutes_billable) },
-          { key: "sales", header: "売上単価", render: (row) => formatCurrency(row.applied_price_sales) },
-          { key: "outsource", header: "外注単価", render: (row) => formatCurrency(row.applied_price_outsource) },
-          { key: "status", header: "状態", render: (row) => <StatusBadge value={row.status} /> },
-          { key: "review", header: "レビュー", render: (row) => (row.needs_review ? row.review_reason || "要確認" : "-") },
-        ]}
+          { key: "date", header: "日付", render: (row: ActualListItem) => formatDate(row.work_date) },
+          { key: "project", header: "案件", render: (row: ActualListItem) => row.project_name },
+          { key: "worker", header: "稼働者", render: (row: ActualListItem) => row.worker_name },
+          { key: "role", header: "役割", render: (row: ActualListItem) => row.role_name },
+          { key: "minutes", header: "請求時間", render: (row: ActualListItem) => minutesToHours(row.calc_minutes_billable) },
+          { key: "sales", header: "売上単価", render: (row: ActualListItem) => formatCurrency(row.applied_price_sales) },
+          { key: "outsource", header: "外注単価", render: (row: ActualListItem) => formatCurrency(row.applied_price_outsource) },
+          { key: "status", header: "状態", render: (row: ActualListItem) => <StatusBadge value={row.status} /> },
+          { key: "review", header: "レビュー", render: (row: ActualListItem) => (row.needs_review ? row.review_reason || "要確認" : "-") },
+        ].filter(column => !["sales", "outsource"].includes(column.key) || hasPermission(user, "price_read"))}
         rows={actualsQuery.data.items}
         getRowKey={(row) => row.id}
         emptyTitle="実績はありません"

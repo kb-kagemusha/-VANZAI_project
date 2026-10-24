@@ -1,0 +1,19 @@
+{
+  "stage": "a1",
+  "enabled_actions": ["wk_wake", "wk_orders", "wk_schedule"],
+  "rich_menu": {
+    "size": {"width": 2500, "height": 1686},
+    "selected": true,
+    "name": "VANZAI 稼働者メニュー A1",
+    "chatBarText": "メニュー",
+    "areas": [
+      {"bounds": {"x": 0, "y": 0, "width": 833, "height": 843},
+       "action": {"type": "postback", "data": "wk_wake", "displayText": "起床報告"}},
+      {"bounds": {"x": 834, "y": 843, "width": 833, "height": 843},
+       "action": {"type": "postback", "data": "wk_orders", "displayText": "受託済みの発注依頼書"}},
+      {"bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
+       "action": {"type": "postback", "data": "wk_schedule", "displayText": "スケジュール確認"}}
+    ]
+  },
+  "layout_note": "6分割（上段：①起床報告 ②出勤報告 ③退勤報告、下段：④販売報告 ⑤受託済みの発注依頼書 ⑥スケジュール確認）。A1で押せるのは①⑤⑥だけ。②③④は画像で「準備中」と表示し、押せる範囲を定義しない。"
+}

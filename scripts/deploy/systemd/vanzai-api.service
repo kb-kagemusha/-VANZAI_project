@@ -1,0 +1,35 @@
+[Unit]
+Description=VANZAI API Server (FastAPI/uvicorn)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=vanzai
+Group=vanzai
+WorkingDirectory=/var/www/vanzai
+EnvironmentFile=/var/www/vanzai/.env
+
+ExecStart=/var/www/vanzai/.venv/bin/uvicorn \
+    src.api.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --log-level info \
+    --access-log
+
+# 再起動設定
+Restart=always
+RestartSec=5
+StartLimitBurst=3
+StartLimitInterval=60
+
+# セキュリティ強化
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=append:/var/www/vanzai/logs/api.log
+StandardError=append:/var/www/vanzai/logs/api-error.log
+
+[Install]
+WantedBy=multi-user.target

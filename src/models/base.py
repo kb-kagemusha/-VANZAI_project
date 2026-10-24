@@ -2,7 +2,7 @@
 SQLAlchemy Base and common utilities
 仕様参照: DESIGN_SPEC_v0.3 セクション6
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import DateTime, String, func
@@ -25,16 +25,18 @@ class Base(DeclarativeBase):
 
 class TimestampMixin:
     """Mixin for created_at and updated_at timestamps."""
-    
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 

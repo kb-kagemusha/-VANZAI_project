@@ -25,6 +25,8 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from src.exceptions import ValidationException
+from src.services.financial_guards import ensure_import_mutable
 from src.models.base import generate_ulid
 from src.models.enums import (
     ActualStatus,
@@ -136,6 +138,7 @@ class CsvImportService:
         Returns:
             ImportResult
         """
+        ensure_import_mutable(self.session, project_id, period_key)
         # ファイルハッシュ計算
         if isinstance(file_content, str):
             file_bytes = file_content.encode('utf-8')
@@ -176,6 +179,9 @@ class CsvImportService:
                 )],
             )
         
+        rows, parse_errors = self._parse_csv(file_bytes, project_id)
+        if any(row.work_date.strftime("%Y%m") != period_key for row in rows):
+            raise ValidationException("CSVの稼働日と対象月が一致しません。締め済みの月を別の対象月で更新できません。")
         # ImportBatch作成
         batch = ImportBatch(
             id=generate_ulid(),
@@ -202,8 +208,7 @@ class CsvImportService:
             actor=submitted_by,
         )
         
-        # CSVパース
-        rows, parse_errors = self._parse_csv(file_bytes, project_id)
+        # 上で検証したCSV行を使用する
         
         result = ImportResult(
             batch_id=batch.id,

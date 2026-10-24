@@ -1,33 +1,23 @@
 import { Outlet } from "react-router-dom";
-
+import { useState } from "react";
 import { SideNav } from "./SideNav";
-import { useAuth } from "../lib/auth/auth-context";
-import { formatRole } from "../lib/formatters";
+
+const NAV_COLLAPSED_KEY = "vanzai.admin.navCollapsed";
 
 export function AppShell() {
-  const { user, logout } = useAuth();
+  const [navCollapsed, setNavCollapsed] = useState(() => window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
+  function toggleNavCollapsed() {
+    setNavCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(NAV_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   return (
-    <div className="app-shell">
-      <SideNav />
-      <main className="app-main">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">VANZAI 管理画面</p>
-            <h1 className="topbar-title">案件・シフト・実績 一元管理</h1>
-          </div>
-          <div className="topbar-actions">
-            <div className="identity-card">
-              <span className="identity-name">{user?.username}</span>
-              <span className="identity-role">{formatRole(user?.role)}</span>
-            </div>
-            <button type="button" className="ghost-button" onClick={logout}>
-              ログアウト
-            </button>
-          </div>
-        </header>
-        <Outlet />
-      </main>
+    <div className={`app-shell${navCollapsed ? " app-shell--nav-collapsed" : ""}`}>
+      <SideNav collapsed={navCollapsed} onToggleCollapsed={toggleNavCollapsed} />
+      <main className="app-main"><Outlet /></main>
     </div>
   );
 }

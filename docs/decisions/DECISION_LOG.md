@@ -141,6 +141,31 @@
 
 ---
 
+### DEC-005: アサイン選択セットの共有範囲
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: アサイン一覧の保存済み選択セットはサーバー保存を正本とし、個人セットは ASSIGNMENT_READ 権限者、共有セットは ASSIGNMENT_WRITE 権限者のみ作成可能とする
+- Context:
+  - 一括状態更新で月次の対象集合を再利用したい
+  - ローカル保存のみでは端末依存になり、引き継ぎや複数端末運用に弱い
+  - site_manager / accounting まで無制限に共有作成を許可すると、運用セットが増え過ぎる懸念がある
+- Options:
+  - A: すべてローカル保存のままにする
+  - B: 全 ASSIGNMENT_READ 権限者が共有セットを作成できる
+  - C: 個人セットは広く許可し、共有セットは ASSIGNMENT_WRITE 権限者に限定する
+- Chosen: C
+- Why: 端末依存を解消しつつ、共有セットの増殖は運用担当に寄せて抑制できるため
+- Impact:
+  - Data model: assignment_selection_sets を追加し、period_key / created_by_user_id / is_shared / assignment_ids を保持
+  - UI/UX: アサイン一覧から保存済み選択セットの読み込み・削除ができ、共有チェックは admin / ops のみ有効
+  - Ops/Runbook: 月次確定候補の引き継ぎをブラウザローカルではなく API 保存に統一
+  - Migration: assignment_selection_sets テーブル追加が必要
+- Follow-ups:
+  - 共有セットの名称ルールと棚卸し手順を運用メモへ追記
+  - 将来は project 単位の命名規約やアーカイブ基準を検討
+
+---
+
 ### DEC-005: 税計算方式の確定
 - Date: 2026-01-28
 - Status: Confirmed
@@ -317,6 +342,55 @@
 
 ---
 
+### DEC-015: 請求書・支払明細 PDF の暫定保存先
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: 請求書と支払明細の PDF は、Cloudflare R2 切替までの暫定運用として storage/pdfs 配下へ保存し、DB には相対 object key を保持する
+- Context:
+  - React 管理画面から PDF 保存先キーを参照できる状態を先に揃えたい
+  - 既存コードには object key を保持する項目が一部あるが、保存処理は統一されていない
+  - R2 連携を待つ間も、版付き PDF の再取得先を安定させる必要がある
+- Options:
+  - A: R2 実装まで都度生成のみで運用する
+  - B: 絶対ファイルパスを DB に保存する
+  - C: ローカル storage/pdfs に保存し、DB には相対 object key を保持する
+- Chosen: C
+- Why: 将来の R2 切替時に DB の参照形式を変えずに済み、管理画面上も保存先キーを先に可視化できるため
+- Impact:
+  - Data model: payouts.pdf_object_key を追加し、invoice/payout の両方で相対 object key を保持
+  - UI/UX: 請求一覧・支払一覧で保存済み PDF の storage key を表示
+  - Ops/Runbook: ローカル開発では storage/pdfs を生成物置き場として扱い、Git 管理から除外
+  - Migration: payouts に pdf_object_key 追加が必要
+- Follow-ups:
+  - Cloudflare R2 / バックアップ先への切替実装
+  - 再発行・訂正版の保管ポリシーと cleanup ルール整理
+
+---
+
+### DEC-016: 支払明細送信の記録単位
+- Date: 2026-03-31
+- Status: Confirmed
+- Decision: 支払明細メール送信は payout 単位で送信試行ごとの履歴を payout_deliveries に追記し、支払一覧には最新1件のみを反映する
+- Context:
+  - 稼働者や下請けへの支払明細送付は再送が発生しうる
+  - 送信可否の監査と運用確認は必要だが、一覧画面に全履歴を直接展開すると月次運用の視認性が落ちる
+  - 既存の監査ログだけでは送信先メールアドレスや添付PDFキーの参照に手数がかかる
+- Options:
+  - A: 監査ログのみで送信履歴を管理する
+  - B: payout に送信状態を上書き保存して最後の結果だけ持つ
+  - C: payout_deliveries に試行履歴を保存し、一覧では最新1件だけを表示する
+- Chosen: C
+- Why: 再送履歴を失わずに運用一覧の可読性も維持でき、将来の専用履歴 UI や配信分析へ拡張しやすいため
+- Impact:
+  - Data model: payout_deliveries を追加し、recipient_email、status、provider、pdf_object_key_snapshot、sent_at を保持
+  - UI/UX: 支払一覧は最新送信結果のみ表示し、再送操作は一覧から実行する
+  - Ops/Runbook: 送信失敗時も履歴と監査ログを確認しながら再送判断できる
+  - Migration: payout_deliveries テーブル追加が必要
+- Follow-ups:
+  - 宛先上書き送信時の運用ルールを RUNBOOK に明記
+
+---
+
 ### DEC-011: site_manager の担当案件紐付け正本
 - Date: 2026-03-31
 - Status: Proposal
@@ -424,3 +498,1379 @@
   - 完全一致が前提で困る例外ケースの有無を確認
   - 性能目標値と対応ブラウザを別途確定
 
+---
+
+### DEC-017: 2026-04-07 追加要件のデータモデル確定
+- Date: 2026-04-07
+- Status: Confirmed
+- Decision: 追加要件のデータモデル方針として、Supplier 区分を追加し、Worker の銀行口座管理を Phase 1 で履歴モデルとして導入し、Project に `vanzai_manager_id` を追加して VANZAI 職員を参照する
+- Context:
+  - Kintone で先行運用している追加機能を Web 側へ移行するにあたり、Supplier 区分、Worker 振込情報、Project と VANZAI 職員の関係が未確定だった
+  - notes への埋め込みや暫定流用のまま進めると、公開登録フォーム、支払処理、権限制御、管理画面表示で手戻りが大きい
+- Options:
+  - A: Supplier 区分を持たず notes で吸収し、Worker 銀行口座情報は後回し、Project 管理者も既存 workers 参照のままにする
+  - B: Supplier 区分をカラム追加し、Worker 銀行口座管理を Phase 1 で追加し、Project に `vanzai_manager_id` を持たせる
+  - C: VANZAI 職員を workers に統合して、Project 管理者も workers のみで扱う
+- Chosen: B
+- Why:
+  - Supplier の「紹介者 / 下請け」と「個人 / 法人」は登録フォーム分岐、支払明細、集計の正本情報になるため、notes では不十分
+  - Worker の銀行口座管理は既存の支払処理と今回の公開登録フォームの両方で必須であり、後回しにすると移行順が破綻する
+  - VANZAI 職員は workers と別概念であり、Project 側から独立 FK で参照した方が責務分離と将来の権限制御が明確になる
+- Impact:
+  - Data model:
+    - `suppliers.supplier_type` を追加
+    - `suppliers.entity_type` を追加
+    - Worker の銀行口座管理モデルを Phase 1 で追加
+    - `projects.vanzai_manager_id` を追加して `vanzai_staff.id` を参照
+  - UI/UX:
+    - 公開登録フォームで契約経路に応じた分岐が可能になる
+    - 管理画面で Supplier 区分、Worker 振込情報、案件担当 VANZAI 職員を明示表示できる
+  - Ops/Runbook:
+    - 採用フロー、支払前確認、案件担当確認の運用を新構成に合わせて更新する必要がある
+  - Migration:
+    - `suppliers`, `workers`, `projects` の追加マイグレーションが必要
+- Follow-ups:
+  - Worker の振込情報のマスキング表示ルールを確定する
+  - `vanzai_manager_id` と既存 `primary_manager_id` / `secondary_manager_id` の役割分担を API / UI で明文化する
+  - Supplier 区分ごとのフォーム分岐と帳票分岐を受入条件に落とし込む
+  - `supplier_type` を supplier 自体の属性で固定できるか、案件関係属性へ切り出す必要があるかを Phase 0 で検証する
+  - supplier への継続支払がある場合の口座管理モデルを Phase 0 で確定する
+  - payout の recipient 移行戦略と受取人スナップショットの保持方法を Phase 0 で確定する
+
+---
+
+### DEC-018: Phase 0 初期回答の確定（2026-04-07）
+- Date: 2026-04-07
+- Status: Confirmed
+- Decision: Phase 0 のうち supplier role、dedupe キー、承認競合時の挙動、旧 request の扱い、DB 制約の強度について初期回答を確定する
+- Context:
+  - 追加要件計画の Phase 0 を進めるため、最初に運用前提を確定する必要があった
+  - 特に supplier role の所属先、重複候補判定、申請承認の二重実行時挙動、DB 制約の強度は migration 前に固める必要がある
+- Options:
+  - A: これらを未決事項のまま Phase 0 に残す
+  - B: 現時点の実運用前提で一次確定し、残差は Phase 0 の残タスクとして扱う
+- Chosen: B
+- Why:
+  - supplier role と dedupe 方針を早めに固定しないと request / master 設計が進まない
+  - approve の競合挙動を決めないと承認トランザクション設計が止まる
+  - DB 制約の強度を先に決めた方が migration 設計がぶれない
+- Impact:
+  - Data model:
+    - `supplier_type` は Phase 1 では supplier 自体の単一属性として扱う
+    - worker dedupe 候補キーは `電話番号`, `氏名 + ふりがな`
+    - supplier dedupe 候補キーは `法人名 / 屋号`, `電話番号`
+    - superseded / rejected request は再承認不可とする
+  - UI/UX:
+    - 同一 request を別管理者が先に承認済みなら「別の管理者が承認済み」と表示する
+    - 重複候補は差分確認 UI へ送る
+  - Ops/Runbook:
+    - 管理者は worker / supplier 重複候補を指定キーで確認する
+    - 旧 request の再利用運用は行わない
+  - Migration:
+    - DB 制約は厳しめに入れる前提で設計する
+- Follow-ups:
+  - supplier role を将来関係モデルへ拡張する条件を文書化する
+  - `source_type` / `sales_reports` / payout recipient / auth 紐付けの追加確定事項は DEC-019 を参照する
+
+---
+
+### DEC-019: Phase 0 設計凍結 追加確定（2026-04-07）
+- Date: 2026-04-07
+- Status: Confirmed
+- Decision: `vanzai_staff` と `users` の紐付け方針、payout recipient 抽象化、`source_type`、`sales_reports` の現行正本判定を確定する
+- Context:
+  - 既存実装は `users.worker_id` と `payouts.worker_id` / `supplier_id` を前提にしている
+  - 追加要件では VANZAI 職員ログイン、支払先の汎化、公開受付の起点区分、販売報告の immutable 訂正運用を設計段階で固める必要があった
+- Options:
+  - A: Phase 1 実装時まで保留し、その場で migration を決める
+  - B: 既存モデル方針に寄せて今ここで確定する
+- Chosen: B
+- Why:
+  - auth 主体の参照方向を users 側へ統一した方が既存 `users.worker_id` と整合する
+  - payout recipient の正本を先に決めないと API / 帳票 / migration がすべてぶれる
+  - `source_type` と sales report の現行判定を先に固定しないと承認フローと集計条件が不安定になる
+- Impact:
+  - Data model:
+    - `users.vanzai_staff_id` を追加し、`vanzai_staff` 側には auth FK を持たない
+    - payout は `recipient_type` / `recipient_id` を正本とし、既存 `worker_id` / `supplier_id` から backfill する
+    - `registration_requests.source_type` は `public_form`, `admin_proxy`, `api_import`, `internal_create` に固定する
+    - `sales_reports` に `replaces_report_id` を持たせ、現行正本は `superseded_by_id IS NULL AND status='approved'` とする
+  - UI/UX:
+    - VANZAI 職員ログイン時の担当案件判定は `current_user.vanzai_staff_id` を使う
+    - payout 一覧 / 帳票は recipient ベースで統一する
+    - 訂正申請中でも旧 approved 販売報告を画面上の現行値として維持する
+  - Ops/Runbook:
+    - 管理者は request の作成起点を `source_type` で判別する
+    - 販売報告の訂正は再提出後、承認時点でのみ現行値が切り替わる
+  - Migration:
+    - `users.vanzai_staff_id` の追加と排他制約が必要
+    - payout backfill と移行期間中の legacy 列互換が必要
+    - sales report の partial unique と supersede 更新 transaction が必要
+- Follow-ups:
+  - `users.worker_id` と `users.vanzai_staff_id` の排他制約の実装方式を migration レベルで確定する
+  - payout legacy 列の廃止タイミングを Phase 7 完了条件に組み込む
+  - sales report 訂正の pending 件数制御を API 仕様へ落とす
+
+---
+
+### DEC-020: Phase 0 分析・公開リンク・受付詳細の確定（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: 簡易 PL の確定値 / 予測値、個人成績の遅刻閾値、公開リンク運用、身分証保持、request detail の原文保存方針、`registration_request_files.document_type` を確定する
+- Context:
+  - Phase 0 の残論点のうち、分析定義と公開受付まわりを先に固めないと migration の列定義と API 仕様が止まる
+  - 既存 aggregation は Assignment / Actual ベースで動いているが、月次 PL の確定値は帳票との整合が必要だった
+  - 身分証アップロードは retention と document type を決めないと file lifecycle が定義できない
+- Options:
+  - A: 実装時まで保留し、画面や API を作りながら調整する
+  - B: 先に運用ルールまで確定し、計画書へ落とす
+- Chosen: B
+- Why:
+  - PL の確定値と予測値を分けることで、月次帳票整合と進行中の見込み管理を両立できる
+  - 遅刻閾値、リンク有効期限、ロック回数、保持期間は DB / API / UI の共通前提になる
+  - request detail を原文保存に寄せた方が Google Form 由来の入力差異や監査に強い
+- Impact:
+  - Data model:
+    - 簡易 PL は確定値と予測値を分けて返す
+    - 個人成績の遅刻は 15 分超過を基準に集計する
+    - 公開リンクは 7 日有効、PIN は 5 回失敗でロックする
+    - 身分証ファイルは承認 / 却下後 180 日保持し、accounting を削除責任者とする
+    - request detail は原文保存を優先し、`registration_request_files.document_type` は `driver_license`, `my_number_card`, `residence_card`, `passport`, `other` を使う
+    - 同一書類の表裏を区別するため `document_part` を持つ
+  - UI/UX:
+    - PL 画面は確定値と予測値を併記する
+    - 公開フォームはリンク期限と PIN ロック状態を利用者に明示できる
+    - 管理画面では request 詳細で原文入力と正規化結果を比較できる
+  - Ops/Runbook:
+    - accounting が身分証ファイルの削除責任を持つ
+    - 管理者は same URL の reset と新 URL 再発行を使い分ける
+  - Migration:
+    - request detail 列と `document_part` を含む file テーブル定義が必要
+    - 分析 API は確定値 / 予測値の両系統を返せる設計にする
+- Follow-ups:
+  - `document_part` を partial unique や必須条件でどう拘束するかを migration レベルで確定する
+  - retained file の自動削除ジョブと監査ログ粒度を RUNBOOK へ落とす
+  - PL 画面で確定値 / 予測値をどう並べるかを UI 要件へ落とす
+
+---
+
+### DEC-021: Phase 0 残論点の確定（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: supplier 口座管理、project_type 3 階層移行、admin-notices の未処理キュー範囲を確定する
+- Context:
+  - payout recipient は汎化方針が決まったが、supplier 口座をどのモデルで持つかは未確定だった
+  - project_type は既存実装がフラット前提で、3 階層化時の移行方針を先に決める必要があった
+  - admin-notices も staff_notices とは別概念として、どこまで未処理キュー化するかを固める必要があった
+- Options:
+  - A: 3 点とも Phase 1 実装時に都度決める
+  - B: Phase 0 で運用前提まで確定する
+- Chosen: B
+- Why:
+  - supplier 口座は過去支払の再現性要件があるため、履歴管理前提を先に固定すべき
+  - project_type の付与階層を決めないと migration と UI が確定しない
+  - admin-notices の対象範囲を決めないと API / dashboard / 運用責任が曖昧になる
+- Impact:
+  - Data model:
+    - supplier 口座は Phase 1 で `supplier_bank_accounts` を追加し、履歴管理する
+    - project_type は leaf（minor）のみ案件へ付与する
+    - 既存 flat project_type は migration で major 化し、各 major 直下に minor を新設して既存 project を backfill する
+    - admin-notices は `target_url`, `is_read`, `is_resolved` を持つ未処理キューとして扱う
+  - UI/UX:
+    - project 作成 / 編集画面は leaf のみ選択可能にする
+    - dashboard の admin-notices は request 未審査、身分証未確認、sales_reports 未承認、期限超過 project_tasks、payout エラーを入口にする
+  - Ops/Runbook:
+    - supplier 口座変更後も過去支払の再現性を維持する
+    - project_type 移行時は既存 project の再分類を migration で吸収する
+    - admin-notices は summary ではなく処理完了まで追える運用にする
+  - Migration:
+    - `supplier_bank_accounts` 追加が必要
+    - project_type major / minor の再編と project の backfill が必要
+    - admin-notices 用テーブルまたは同等の永続状態管理が必要
+- Follow-ups:
+  - admin-notices の永続化方式を既存 dashboard summary 拡張と別テーブルのどちらにするか、実装時に具体化する
+
+---
+
+### DEC-022: project_type 自動生成 minor 命名規則の確定（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: 既存 flat project_type を major 化する migration で自動生成する minor の表示名と code 規則を確定する
+- Context:
+  - DEC-021 で project_type は leaf（minor）のみ案件へ付与し、既存 flat 種別は major 化して直下に minor を新設する方針を確定した
+  - その時点では自動生成 minor の命名規則だけが未決だった
+- Options:
+  - A: `major名 + （標準）`, `major_code + -DEFAULT`
+  - B: major と同名、code のみ差別化
+  - C: `major名 + （既存）` など移行由来を前面に出す
+- Chosen: A
+- Why:
+  - UI 上で既定の選択肢だと直感的に分かる
+  - code も機械的に生成しやすく、migration の backfill が単純になる
+  - 既存 major と minor を同名にしないため、管理画面で混乱しにくい
+- Impact:
+  - Data model:
+    - 自動生成 minor の表示名は `major名 + （標準）`
+    - 自動生成 minor の code は `既存 major code + -DEFAULT`
+  - UI/UX:
+    - project_type ツリー上で既定の末端種別が識別しやすい
+  - Ops/Runbook:
+    - 移行後に人手で名称調整が必要な場合でも、初期配置ルールが統一される
+  - Migration:
+    - project_type backfill 時の生成ロジックを一意に書ける
+- Follow-ups:
+  - major_code が NULL の既存 project_type に対する code 生成 fallback を migration 設計で決める
+
+---
+
+### DEC-023: VANZAI担当者支払の初回実装範囲と本人稼働分の正本（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: VANZAI担当者支払の初回実装は 全体統括責任者 と 事務 を対象にし、全体統括責任者の本人稼働分は `vanzai_staff.linked_worker_id` で worker 実績へ明示的に紐付けて VANZAI担当者支払へ集約する
+- Context:
+  - Kintone 運用では 全体責任者は drv社売上の8% に加えて自身の稼働分も支払対象だった
+  - 一方、現行 DB では `vanzai_staff` と `workers` が直接つながっておらず、本人稼働分を自動判定すると誤計上リスクがある
+  - 事務は 固定 43,200円 + 月内暦日 × 2,160円 の共通ルールで運用している
+  - プレイングマネージャーは 人工 × 1,000円 と固定10万円の個別差があり、初回実装では未確定
+- Options:
+  - A: VANZAI担当者支払は role ごとの確定分だけ先行し、本人稼働分は `linked_worker_id` で明示紐付けする
+  - B: 氏名一致で worker を自動判定する
+  - C: 本人稼働分は一旦除外し、8% のみ実装する
+- Chosen: A
+- Why:
+  - 氏名一致は誤紐付けの事故リスクが高く、推測実装になる
+  - `linked_worker_id` を持たせれば本人稼働分の由来が監査可能になる
+  - 初回対象を 全体統括責任者 と 事務 に絞ることで、未確定のプレイングマネージャー報酬を混ぜずに導入できる
+- Impact:
+  - Data model:
+    - `vanzai_staff.linked_worker_id` を追加し、必要時のみ worker を明示紐付けする
+  - UI/UX:
+    - VANZAI担当者マスタで役職と対応 worker を設定できるようにする
+    - 支払生成 UI で `recipient_type=vanzai_staff` を生成可能にする
+  - Ops/Runbook:
+    - 全体統括責任者の linked worker には通常の worker 支払を出さず、VANZAI担当者支払へ集約する
+    - drv案件の 8% 集計対象は `client.name = 'drv社'` の請求書とする
+    - 事務は role=事務 の全員へ 共通式を適用する
+  - Migration:
+    - `vanzai_staff.linked_worker_id` の追加が必要
+- Follow-ups:
+  - プレイングマネージャーの 個別固定 / 人工連動 の切替方式を別 decision として確定する
+  - VANZAI担当者の振込口座マスタ化を後続フェーズで追加する
+
+---
+
+### DEC-024: プレイングマネージャー支払の計算方式と運営協力費の扱い（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: プレイングマネージャー支払は基本を `配下人工 × 1,000円` としつつ、個人別に `固定額` へ切り替え可能にする。運営協力費は月ごとの手入力額を別行で加算する
+- Context:
+  - Kintone 参考実装では プレイングマネージャーに area 単位の管理費と 運営協力費 を別行で計上していた
+  - 一方で現運用には 個人別に月額固定で扱っている担当者も存在し、人工連動か固定かを一律には決められない
+- Options:
+  - A: 全員を 配下人工 × 1,000円 に統一する
+  - B: 全員を 固定額に統一する
+  - C: 個人ごとに `配下人工 × 1,000円` と `固定額` を切り替えられるようにし、運営協力費は月次手入力の別加算にする
+- Chosen: C
+- Why:
+  - 現運用に固定額の例外が存在するため、単一ルールへ即時統一すると運用差分を吸収できない
+  - 配下人工 × 1,000円 は既存 decision と整合し、固定額は個別設定で安全に扱える
+  - 運営協力費は対象月ごとの変動入力が必要であり、マスタ固定ではなく生成時入力の方が実態に合う
+- Impact:
+  - Data model:
+    - `vanzai_staff.playing_manager_fee_type` を追加
+    - `vanzai_staff.playing_manager_fixed_fee` を追加
+  - UI/UX:
+    - VANZAI担当者マスタでプレイングマネージャーの計算方式と固定額を設定できるようにする
+    - 支払生成画面でプレイングマネージャー選択時のみ運営協力費を入力できるようにする
+  - Ops/Runbook:
+    - 配下人工は managed project の valid actual を `(worker_id, work_date, project_id)` で数える
+    - 固定額方式の担当者は、固定額未設定なら支払生成をエラーにする
+    - 運営協力費は対象月ごとに手入力し、支払明細へ別行で残す
+  - Migration:
+    - `vanzai_staff` への追加カラム migration が必要
+- Follow-ups:
+  - プレイングマネージャー本人の稼働分を管理報酬に含めるかは、運用ルールとして別途確定する
+  - VANZAI担当者向け振込口座マスタ化の後続設計を行う
+
+---
+
+### DEC-025: プレイングマネージャー本人の稼働分を管理報酬の人工に含める（2026-04-08）
+- Date: 2026-04-08
+- Status: Confirmed
+- Decision: プレイングマネージャー本人が自分の管理案件で稼働した valid actual も、現場管理報酬の配下人工に含める
+- Context:
+  - DEC-024 では計算方式の切替と運営協力費の扱いを確定したが、本人稼働の扱いだけ未決だった
+  - Kintone 参考実装では、管理者ごとの集計時に本人稼働を除外する分岐がなく、管理案件の実績をそのまま束ねていた
+  - 現行実装の `_count_vanzai_manager_man_days` も `Project.vanzai_manager_id = 対象担当者` の valid actual を `(worker_id, work_date, project_id)` 単位で数えており、本人稼働を別扱いにしていない
+- Options:
+  - A: 本人稼働も配下人工に含める
+  - B: 本人稼働は配下人工から除外する
+  - C: 担当者ごとに含む/含まないを切り替えられるようにする
+- Chosen: A
+- Why:
+  - 旧運用と現行実装が同じ挙動でそろっており、ここで除外へ変える根拠がない
+  - 除外ルールを後付けすると、過去資料との突合が崩れやすく、再現性が落ちる
+  - 個別切替を入れるほどの運用根拠は現時点で確認できていない
+- Impact:
+  - Data model:
+    - 追加なし
+  - UI/UX:
+    - プレイングマネージャー本人稼働を除外する設定 UI は設けない
+  - Ops/Runbook:
+    - 管理案件での本人稼働日は、他の配下メンバーと同様に現場管理報酬の人工へ算入する
+    - 本人の実作業分を支払明細へ載せるかどうかは `linked_worker_id` による worker 紐付けで別管理する
+  - Migration:
+    - 追加なし
+- Follow-ups:
+  - プレイングマネージャー候補の `linked_worker_id` 整備を進め、本人作業分の明細化可否を運用で確定する
+  - 将来、本人稼働の除外要件が出た場合は別 decision として toggle 追加要否を再検討する
+
+---
+
+### DEC-026: PAYGATE精算レシート OCR・在庫照合機能の確定事項（2026-07-02）
+- Date: 2026-07-02
+- Status: Confirmed（一部 Follow-up あり）
+- Decision: `PAYGATE精算レシート OCR・在庫照合 計画書（改訂版 v4）`のレビュー③④で提起された論点のうち、`reconciliation_eligible` の既定値、在庫調整の自己申告制、`branch_id` の必須化タイミング、`credit_sales`/`pos_sales` の移行方針、同一端末・同日複数精算の扱いを実装方針として確定する
+- Context:
+  - 精算レシートOCRの在庫照合機能を実装するにあたり、複数回のレビュー（合計4件）で指摘された設計上の分岐点を実装前に確定する必要があった
+  - 未確定のまま実装すると、DB制約・API・UIのいずれかで手戻りが発生するリスクが高い
+- Options（主要論点ごと）:
+  - `reconciliation_eligible` 既定値: A. `false`（opt-in） / B. `true`（opt-out）
+  - 在庫調整の承認: A. 第三者承認フロー実装 / B. 自己申告制＋月次レビュー（システム改修なし）
+  - `branch_id`: A. Phase 0結果待ちで追加 / B. 最初から照合キーに含める
+  - `credit_sales`/`pos_sales`移行: A. 過去データ移行しない / B. マイグレーションで一括移行 / C. API吸収
+  - 同一端末・同日複数精算: A. 発生しない前提でキー一意制約のみ / B. 発生しうる前提でOCR行は複数許容、在庫照合対象のみ一意制約
+- Chosen:
+  - `reconciliation_eligible` 既定値: **B（true, opt-out方式）**
+  - 在庫調整: **B（自己申告制。`confirmed_by`は`entered_by`と同一人物で可。月次で事務局責任者が目視レビュー）**
+  - `branch_id`: **B（最初から照合キー`(branch_id, terminal_short_id, work_date)`に含める）**
+  - `credit_sales`/`pos_sales`移行: **A（過去データの遡及移行は行わない。新規解析分のみ`pos_sales`使用）**
+  - 同一端末・同日複数精算: **B（OCR確定行は複数許容。`reconciliation_eligible=true`の行のみ部分ユニーク制約で1件に制限）**
+- Why:
+  - opt-out方式は「大半の確定行はそのまま在庫照合に使う」という実態の運用負荷に合致するため。ただし複数行が誤って同時に対象化される事故を防ぐため、部分ユニーク制約をPhase 2の必須要件とした
+  - 在庫調整の第三者承認は事務局体制上のコストが高く、月次の事後レビューで不正・隠蔽リスクを許容水準まで軽減できると判断
+  - `branch_id`はレシートの端末識別番号が支社横断で一意である保証がなく、早期に含めるほうが安全
+  - `credit_sales`/`pos_sales`は過去データに新ラベル（PAYGATE POS）自体が抽出されていないため、遡及移行は事実上不可能
+  - 同一端末・同日複数精算は「発生しない」と断定する根拠がなく、現場運用（途中精算・レシート再発行等）を考慮すると発生しうる前提で安全側に倒すべき
+- Impact:
+  - Data model:
+    - `ocr_extracted_rows` に `terminal_short_id`, `pos_sales`, `other_payment`, `cash_unit_count`, `pos_unit_count`, `work_date`, `unit_breakdown_status`, `unit_breakdown_json`, `amount_ones_digit_ok`, `blocking_errors`, `warnings`, `duplicate_receipt_candidate`, `reconciliation_eligible`(DEFAULT true), `excluded_reason`, `voided_at`, `voided_by`, `void_reason`, `branch_id`, `staff_id` を追加
+    - `uq_ocr_settlement_reconciliation_target` 部分ユニークインデックスを追加（`branch_id, terminal_short_id, work_date` × `reconciliation_eligible=true` × `status=confirmed` × `voided_at IS NULL`）
+    - `inventory_snapshots` / `inventory_reconciliation_batches` / `inventory_reconciliation_results` を新規追加
+  - UI/UX: `ReceiptOcrPage.tsx` に精算レシート専用列・編集モーダル・無効化／照合対象除外操作・実在庫入力セクション・在庫照合実行セクションを追加
+  - Ops/Runbook: `docs/ops/OCR_INVENTORY_RUNBOOK.md`（旧`OCR_RECEIPT_RUNBOOK.md`）に月次`adjustment_reason`レビュー手順、実在庫入力手順、確定条件を追記。正式ルールは `docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md` に記載
+  - Migration: `alembic/versions/20260702a001_add_inventory_reconciliation.py`
+- Follow-ups:
+  - **JTとの契約上、決済・在庫関連データをVANZAI（社外DB）に保存してよいか**は未検討。契約内容の確認は本システム設計とは別タスクとして管理する（設計のブロッカーとしない）
+  - パイロット運用（`docs/ops/OCR_INVENTORY_PILOT_TEMPLATE.md`）の結果、「通常取引数＝販売台数」の前提が成立しないケースが多数見つかった場合は、在庫照合の主指標の見直しを別 decision として記録する
+  - `branch_id`の運用上の未入力が継続する場合、NOT NULL制約化を再検討する
+- Spec Reference: `PAYGATE精算レシート OCR・在庫照合 計画書（改訂版 v4）`、`docs/spec/OCR_INVENTORY_RECONCILIATION_SPEC.md`
+
+---
+
+### DEC-027: 発注依頼書は確定版を正本にし、公式LINE送信は別単位にする（2026-10-02）
+- Date: 2026-10-02
+- Status: Confirmed（書式とLINEチャネルは未入手）
+- Decision: 発注依頼書の初期実装は、共通の入力内容を版として確定し、版×稼働者の送付行と共有一覧までとする。確定後の本文・PDF・送付時の氏名は上書きしない。公式LINEへの push、本人紐付け、受領Webhookは、利用企業の公式アカウント権限と弁護士確認済み書式が揃ってから接続する。
+- Context:
+  - 計画は「発注依頼書の作成・公式LINE送付・受領履歴」。目的は、誰が誰に何を送り、誰が受領操作をしたかを担当者間で共有すること
+  - リポジトリに弁護士確認済み書式は無く、LINEチャネルの秘密情報も無い
+  - 受領は本人の「受け取りました」であり、PDFを開いたことや電話連絡では成立しない
+- Options:
+  - A: 書式とチャネルが揃うまでコードを置かない
+  - B: 保存・版・送付行・一覧を先に作り、PDFは入力の保存用とし、送信は未接続のままにする
+  - C: 仮の法的書式とLINE送信まで一度に作る
+- Chosen: B
+- Why:
+  - 送付履歴が残ることが課題の中心であり、送信成功を待ってから記録する形にはしない
+  - 未入手の書式を法的レイアウトとして固定せず、入手後に差し替える余地を残す
+  - チャネル権限が無い状態で push を実装しても受入できない
+- Impact:
+  - Data model: `order_request_documents` / `order_request_versions` / `order_request_deliveries` / `order_request_notes`
+  - UI/UX: 管理画面「発注依頼書」（admin / ops）。テスト区分は既定の一覧に出さない
+  - Ops/Runbook: 導入手順は `docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+  - Migration: `alembic/versions/20261002a001_add_order_requests.py`
+- Follow-ups:
+  - 弁護士確認済み書式と受託者名の記載方法を入手し、PDFレイアウトを合わせる
+  - 公式アカウントの管理権限を得てから、本人紐付け、1人ずつの送信、受領Webhookを接続する（テスト用アカウントの接続は DEC-028）
+  - PDF閲覧期間、未受領の業務期限、パスワード再発行手順は試行前に運用側で決める
+- Spec Reference: 発注依頼書LINE送付 初期版計画（2026-10-01）、`docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+
+---
+
+### DEC-028: テスト用公式LINEではテスト区分だけを1人ずつ送る（2026-10-06）
+- Date: 2026-10-06
+- Status: Confirmed（書式は未入手。PDF閲覧期間とコード期限は暫定）
+- Decision: テスト用公式アカウントが使える状態になったので、本人紐付け、1人ずつの push、受領Webhookを接続する。送れるのはテスト区分だけとする。正式区分は弁護士確認済み書式が適用されるまで送らない。紐付けは、管理画面が発行した一次性コードを本人のLINEから公式アカウントへ送ったときだけ成立させる。受領は「受け取りました」の postback だけを記録し、PDFを開いたことでは記録しない。解除した紐付けへの送信は止める。
+- Context:
+  - DEC-027 はチャネル権限が無い間、送信を未接続にしていた
+  - テスト用公式アカウントの Messaging API と長期チャネルアクセストークン、友だち追加が揃った
+  - 弁護士確認済み書式はまだ無い
+  - PDF閲覧期間、未受領の業務期限、パスワード再発行手順は未決
+- Options:
+  - A: 書式が揃うまで送信コードを置かない
+  - B: テスト区分だけ送り、正式区分と書式レイアウトは止めたままにする
+  - C: 正式区分も同じPDFで送る
+- Chosen: B
+- Why:
+  - 送信経路と受領記録は、書式の欄位置と独立して確認できる
+  - 未確認の書式を正式な発注として送ると、テストと正式の区別が崩れる
+- Impact:
+  - Data model: `line_worker_links` / `line_link_codes` / `line_webhook_events` / `order_request_send_attempts` / `order_request_file_tokens`
+  - UI/UX: 発注依頼書画面に紐付けと「この1人にテスト送信」
+  - Ops/Runbook: チャネル値はサーバー環境変数。Webhook URL は `https://api.vanzai-portal.com/api/line/webhook`
+  - Migration: `alembic/versions/20261006a001_add_line_order_links.py`
+- Follow-ups:
+  - PDFを開ける期間（暫定7日）と紐付けコードの期限（暫定30分）を運用側が確定する
+  - 弁護士確認済み書式の適用後に、正式区分の送信可否を別決定にする
+  - 未受領の業務期限とパスワード再発行手順は試行前に決める
+- Spec Reference: DEC-027、`docs/ops/LINE_ORDER_REQUEST_ROLLOUT_2026-10-01.md`
+
+---
+
+### DEC-029: 稼働者タグは定義済みの4種だけにする（2026-10-06）
+- Date: 2026-10-06
+- Status: Confirmed（タグの種類は名簿と配置の呼び方から暫定。追加は定義の更新で行う）
+- Decision: 稼働者に複数タグを付けられるようにする。タグは自由入力せず、定義済みの「常勤」「スポット」「リーダー可」「新人」だけを選ぶ。
+- Context:
+  - 稼働者を一覧と出勤カレンダーで見分けたい
+  - スタッフ名簿の区分は「常勤 or スポット」で、配置の役割にはリーダーがある
+  - タグの種類を画面から増やす運用は、今回の範囲に入っていない
+- Options:
+  - A: 任意の文字列をタグとして保存する
+  - B: 定義済みコードだけを保存し、画面は選択式にする
+  - C: タグ用のマスタ画面を作り、運用中に追加できるようにする
+- Chosen: B
+- Why:
+  - 表記ゆれを防ぐ
+  - タグの追加はコード上の定義を1か所変えるだけで足りる
+- Impact:
+  - Data model: `workers.tags`（JSON配列。コードのみ）
+  - UI/UX: 稼働者登録・一覧とマスタデータでチェック選択。一覧はタグで絞り込める。出勤カレンダーの名前の下にも出す
+  - Ops/Runbook: 新しいタグが必要になったら `src/domain/worker_tags.py` の定義を増やす
+  - Migration: `alembic/versions/20261006d001_add_worker_tags.py`
+- Follow-ups:
+  - 現場で不足するタグが出たら、定義へ追加する
+- Spec Reference: DESIGN_SPEC_v0.3 セクション6.1
+
+---
+
+### DEC-030: 稼働者タグを現場区分の7種にし、新人は3ヶ月で外す（2026-10-08）
+- Date: 2026-10-08
+- Status: Confirmed（DEC-029 のタグ種類を置き換える）
+- Decision: 稼働者タグは「新人」「飲食D」「商業D」「渋喫D」「小型イベD」「中型イベD」「大型イベD」だけにする。新人は付けた日から3ヶ月後に外れる。以前の「常勤」「スポット」「リーダー可」は選ばない。
+- Context:
+  - タグは勤務形態ではなく、回れる現場の種類で見分けたい
+  - 新人は期間が来たら外す運用にしたい
+- Options:
+  - A: 画面の説明だけ変えて、外す操作は手作業のままにする
+  - B: 付けた日を起点に3ヶ月後の日付を保存し、期限が来たらタグを外す
+- Chosen: B
+- Why:
+  - 一覧を開いたときに期限切れの新人が残らない
+  - 同じ新人タグを付け直したときは、その日から改めて3ヶ月にする
+- Impact:
+  - Data model: `workers.tags` のコードを差し替え。`workers.newcomer_until` を追加
+  - UI/UX: 稼働者登録の入力欄を同じ高さに揃える。状態は「有効 / 無効」が読めるチェックにする。各タグに説明を出す
+  - Ops/Runbook: 旧タグは一覧に出ない。すでに付いている新人は、付けた日が残っていないため、この変更を入れた日から3ヶ月で外す。新人の自動解除は監査ログを残さない。手での付け外しは従来どおり残す
+  - Migration: `alembic/versions/20261008b001_worker_newcomer_until.py`
+- Follow-ups:
+  - なし
+- Spec Reference: DESIGN_SPEC_v0.3 セクション6.1、DEC-029
+
+---
+
+### DEC-031: イベント規模のタグは1つだけ（2026-10-08）
+- Date: 2026-10-08
+- Status: Confirmed
+- Decision: 小型イベD・中型イベD・大型イベDはタグ欄の2行目に並べ、同時に1つだけ付ける。新しく選んだ規模が残り、それまでの規模は外れる。どれも付けないことはできる。
+- Context:
+  - イベントの規模は重ならない
+- Options:
+  - A: 3つとも同時に付けられる
+  - B: 3つのうち1つだけ残す
+- Chosen: B
+- Why:
+  - 現場の人数帯は1人の稼働者に1つで足りる
+- Impact:
+  - Data model: 保存時も3つのうち後から指定した1つだけを残す
+  - UI/UX: 2行目の3枠
+  - Ops/Runbook: なし
+  - Migration: なし
+- Follow-ups:
+  - なし
+- Spec Reference: DEC-030
+
+---
+
+### DEC-032: 公式LINEの稼働者登録はLIFF送信後に申請し、既存者は有効紐付けを必須にする（2026-10-11）
+- Date: 2026-10-11
+- Status: Confirmed（Q05の利用目的・保持期間、Q06の本番入口有効化は未決）
+- Decision: 公式LINEの「登録」には全員共通のLIFFボタンだけを返す。申請は、サーバーがLINEのIDトークンを検証したあとのフォーム送信時に作る。有効なLINE紐付けは成立経路を問わず次回から再利用する。未紐付けの既存Workerへの初回反映には、一次性コードによる有効紐付けを必須にする。新規Workerを作る承認だけが、同じ取引で紐付けを作る。
+- Context:
+  - 本人入力と管理者承認を分け、別人への反映と二重登録を防ぎたい
+  - 既存の公開登録は期限付きリンクとPINであり、`source_type` は DEC-019 の4種類に固定されている
+  - DEC-028 の紐付けは、管理画面が発行した一次性コードを本人が送ったときに成立する
+  - Webhookの共有セッションを途中で確定すると、同じ受信に含まれる受諾・辞退まで確定し得る
+- Options:
+  - A: 「登録」の受信時に個人別の受付を作り、既存の未紐付け者も管理者照合だけで更新・紐付けする
+  - B: 共通LIFFボタンとし、申請は送信時に作る。有効紐付けは再利用し、未紐付けの既存者にはコードを必須にする
+- Chosen: B
+- Why:
+  - ボタン返信の成否に申請の存在を依存させず、再送と取引境界を既存Webhookに追加しない
+  - 自己申告の氏名や電話だけでは、既存稼働者へ他人の情報とLINEを結び得る
+  - 新規承認で作った紐付けを、次回の補完でも有効紐付けとして再利用できる
+- Impact:
+  - Data model:
+    - `worker_registration_request_details.birth_date` を DATE NULL で追加する。Worker の `name`（100）、`furigana`（200）、`birth_date`、`postal_code`、`address` は既存列を使う
+    - `line_registration_sessions`：セッションIDハッシュは一意。検証済みLINE主体、期限、開始時の紐付けIDとWorker IDを持つ。住所と生年月日は持たない。期限は60分、延長なし
+    - `line_registration_contexts`：申請IDは一意。検証済みLINE主体、送信時の紐付けIDとWorker ID、継続中フラグを持つ。継続中の主体は部分ユニークで1件。返信結果と発行時の更新日時は持たない
+    - `line_registration_submit_keys`：主体と冪等キーの組は一意。申請IDと正規化内容のハッシュを持つ。1申請に複数キーを結び付けられる
+    - `line_registration_review_snapshots`：申請、選択Worker、期待する紐付け、審査者、影響項目のサーバー取得値、期限を持つ。期限は60分。恒久保存しない
+    - `registration_requests.source_type` は `public_form` のままにする。LIFF申請にはPINと公開tokenを発行しない
+  - UI/UX:
+    - 「登録」は共通LIFFボタン。フォームは送信時に確認待ちの申請になる
+    - 有効紐付け済みは部分入力。未紐付けは基本項目を必須にする
+    - 氏名は「姓＋半角スペース＋名」、ふりがなも同様。住所は都道府県と住所1を連結し、住所2があれば改行を挟む
+  - Ops/Runbook:
+    - 入口フラグの初期値は無効。本番有効化はQ05、PostgreSQL競合試験、実機確認、チャネルのPublished確認の後
+    - 競合時は当該取引だけを巻き戻す。他の取引が確定した状態は戻さない
+    - 成功監査は業務更新と同じ取引で確定する。失敗記録は巻き戻し後の別取引で、申請ID、実行者、理由分類だけを残す
+  - Migration: 上記の表と列。ファイルの追加と適用は機能実装時に行う
+- Follow-ups:
+  - Q05：利用目的、取得項目、保持期間、削除または匿名化。確定前は架空情報だけ
+  - Q06：本番入口の有効化。今回は公開状態も入口フラグも変えない
+  - 通知（Q04）と書類アップロードは今回含めない
+  - DEC-033は2026-10-11に採用済み。審査スナップショット表は作らない。このConfirmedの基本方針は置き換えない
+- Spec Reference: DEC-019、DEC-020、DEC-028、`docs/ops/LINE_WORKER_REGISTRATION_PLAN_2026-10-11.md`
+
+---
+
+### DEC-033: LINE稼働者登録の認証・比較票・編集ガードを改める（2026-10-11）
+- Date: 2026-10-11
+- Status: Confirmed（2026-10-11に採用。DEC-032の基本方針は維持する）
+- Decision: 登録専用認証はメモリ上のBearerにする。審査用の現在値をDBへ複製せず、サーバーが発行する期限付きの署名付き比較票を使う。通常のWorker更新にも、本機能が変える7項目の比較ガードを足す。再送キーの対応表は残し、送信内容は平文のハッシュではなく認証付きハッシュで対応づける。
+- Context:
+  - DEC-032は共通LIFF、送信時の申請作成、有効紐付けの再利用、未紐付け既存者への一次性コード必須を確定している
+  - 画面とAPIは別オリジンで、既存APIもBearerである
+  - 現行のWorker更新はプロフィールを一括保存し、古い編集画面が承認後の値を戻し得る
+  - 再送キーを捨てると、承認後の遅延再送で申請が増える
+- Options:
+  - A: DEC-032の4表、Cookie認証、審査スナップショット表のまま実装する
+  - B: セッション表、申請context、再送キー対応の3表にし、比較は署名付き票、認証はメモリBearer、通常編集にも逆方向のガードを置く
+- Chosen: B
+- Why:
+  - 個人情報の複製と期限切れ行を減らし、承認と通常編集で同じ比較の考え方を使える
+  - CookieとCSRFを新設せず、既存のBearer方式に寄せられる
+  - 再送キー対応を残すと、確認中に保存しなかった別キーの遅延再送で申請を増やさない
+- Impact:
+  - Data model:
+    - 新設は `line_registration_sessions`、`line_registration_contexts`、`line_registration_submit_keys` の3表。DEC-032の `line_registration_review_snapshots` は作らない
+    - `worker_registration_request_details.birth_date` は DATE NULL のまま。新しい変換と生年月日・住所の承認反映はLINE起点だけに適用する
+    - 継続中は `status=pending` かつ `deleted_at IS NULL` のLINE申請に限る
+  - UI/UX:
+    - 登録Bearerはメモリだけに置き、Cookie、localStorage、sessionStorage、URLへ保存しない。管理者APIへ転用しない
+    - 確認中の別キーは、今回の入力を本文に保存していないことを案内する
+    - Worker編集は開始時の最新値と比較票から始め、7項目の不一致は409で再読込を案内する
+  - Ops/Runbook:
+    - PostgreSQLの独立接続試験を、送信・審査の取引実装より前に用意する。入力変換などの準備実装はそれまで止めない
+    - 期限切れセッションの削除担当、頻度、失敗時の再実行をRUNBOOKに書く
+    - 入口は無効のまま。Q05確定前は架空情報だけ
+  - Migration: `alembic/versions/20261011a001_line_registration_tables.py`。3表、制約、`birth_date`。本番DBへは未適用。入口は有効にしない
+- Follow-ups:
+  - 試験用PostgreSQLの基盤準備と、実装後のLINE承認競合試験合格は別である。後者は未実施
+  - Q05に送信キー対応の保持と、再送を識別できる期間を含める
+  - 試験用PostgreSQLでは本番DBとsecretsを使わない
+- Spec Reference: DEC-032、`docs/ops/LINE_WORKER_REGISTRATION_PLAN_2026-10-11.md`
+
+
+
+
+### 2026-10-12: DEC-032/033の検証入口設定
+- 利用者の公式LINEは既存のMessaging APIチャネルを継続し、同じプロバイダーのLINEログインチャネルをLIFFに使用する。
+- ユーザーは今回に限り、追加設定、起動処理の変更、再起動と作業用コピー作成を許可した。今後の変更は毎回確認する。
+- 既存の秘密情報ファイルを読まず・上書きせず、git管理外の `line-registration-config.json` に登録入口の3項目だけを置き、API lifespanで読み込む。業務DBと承認ルールは変更しない。
+- 検証入口のみ有効化する。LINEログインチャネルは開発中で、実機確認とQ05の確定は未完了。一般公開・実在者情報の取得の完了とは扱わない。
+
+
+### DEC-034: LINE登録の入力画面と任意のアクセス項目（2026-10-12）
+- Status: Confirmed（ユーザーがロゴ使用、最寄り駅・徒歩時間の追加、利用目的の明示と実装を許可）
+- Decision: 既存の本人確認・再送・管理者承認方式を維持し、スマートフォン向けの入力・確認・受付画面へ改める。提供ロゴを使用する。
+- Data: Workerの既存nearest_station・station_walk_minutesを使い、申請詳細に同名のNULL可2列を追加。駅100文字、徒歩時間0〜300分。任意入力・空欄保持・0分保持。通常編集とLINE審査の比較対象を7項目から9項目へ拡張。旧申請は新項目が空欄なら元の本文ハッシュを維持する。
+- Purpose: 入力前に「ご入力いただいた個人情報は、当社の稼働者情報の登録・更新、お仕事のご案内および業務連絡のために利用し、これらの目的以外には利用しません。」を表示する。利用目的の具体化と取得前の明示は個人情報保護委員会の通則編を参照（https://www.ppc.go.jp/personalinfo/legal/guidelines_tsusoku/）。
+- Scope: 利用目的の短文のみ今回確定。Q05の保持期間、削除・匿名化、事業者の正式なポリシーは未確定で、法令対応全体の完了とは扱わない。クライアント用公式LINEは別。検証用チャネルを公開済みにしたのはユーザー操作である。
+- Tests/Audit: 申請保存、承認反映、空欄保持、0分、競合拒否、旧申請の再送と本人変更を試験する。既存の申請・承認監査に2項目を含める。ログへ認証情報を出さない。
+
+### DEC-035: 新規LINE登録の必須項目・緊急連絡先・住所補完（2026-10-12）
+- Status: Confirmed（ユーザーが実装を指示し、新規だけ必須・更新は変更項目だけ・建物名は任意、Web対象は稼働者一覧の新規登録と回答）
+- Decision: DEC-034の任意入力を新規LINE登録について変更する。建物名以外の全入力を必須にする。既存LINE更新は空欄保持を継続し、緊急連絡先の電話番号・氏名・関係は1組で変更する。稼働者一覧の新規登録も緊急連絡先3項目を必須にし、従来の最小マスタ作成経路は変更しない。
+- Why: 新規登録の不足情報を減らし、緊急時に連絡する相手と関係を確認できるようにする。既存更新では無関係な情報の再入力を求めない。
+- Data: 既存の緊急連絡先電話列を再利用。Workerと申請詳細に緊急連絡先氏名・関係のNULL可列を追加。既存の氏名カナ列は保持し、氏名と混同しない。申請詳細にサーバーが設定するフォーム版を追加し、新規送信は2、旧申請はNULLとする。新必須条件は新規送信と版2以降の新規承認に適用し、旧申請の審査と本文ハッシュを維持する。
+- Comparison: 通常編集・LINE承認の比較対象を9項目から12項目へ拡張する。APIで省略された緊急連絡先は変更しない。
+- Address: 既存Web版と同じZipcloudへ郵便番号だけを送る。全角数字・ハイフンを整え、7桁で検索。複数候補は利用者が選び、手入力の競合・古い検索結果・建物名の上書きを防ぐ。10秒で検索を打ち切り手入力へ進める。番地は補完対象外。
+- Purpose: 利用目的の明示に「緊急時の連絡」を追加する。保持期間・正式ポリシーなど未決の法令対応全体は今回確定しない。
+- Tests/Audit: 新規必須、更新空欄保持、3項目保存・承認、旧申請再送・承認、Web新規、住所補完の競合・失敗・候補選択、PostgreSQL承認競合を確認する。既存の稼働者更新監査に緊急連絡先を含め、認証情報はログに出さない。
+- Spec Reference: DESIGN_SPEC_v0.3 セクション6.1、DEC-034
+
+### DEC-036: 登録済みLINE情報の表示と未登録項目の必須化（2026-10-12）
+- Status: Confirmed（ユーザーが更新画面に保存済み情報を表示し、情報がない項目を必須入力とするよう指示）
+- Decision: 本人確認済みLINEに有効な稼働者紐付けがある場合、フォーム取得APIが現在の稼働者情報を返して各欄へ初期表示する。値がある欄は「登録済み」、値がない欄は建物名を除いて「必須」と表示する。更新は変更分だけ送る。
+- Names: Worker.name/furigana は全文字列保存のため、空白区切りがある値だけ姓・名へ分ける。区切りがない場合は姓欄に全文を表示し、残りは本人が確認して入力する。自動推測で文字を分割・欠落させない。
+- Address: 保存済み住所から認識できる都道府県と改行後の建物名を表示する。番地等を自動推測しない。
+- Security: フォーム応答にCache-Control: no-storeを設定。稼働者の12比較項目から用途付きHMAC比較票を生成し、送信時に再読込した現値と照合する。不一致時は409で受付を作らず、画面から開き直すよう案内する。同じ送信キーの保存済み再送は従来どおり照合より前に結果を返す。入力値はローカル永続ストレージへ保存しない。
+- Web: 稼働者一覧の新規登録は姓・名・姓ふりがな・名ふりがな、都道府県・市区町村番地・建物名の欄に分ける。既存値は編集時に可能な範囲で分解し、元の氏名/ふりがなを保持する。
+- Spec Reference: DEC-034、DEC-035
+
+### DEC-037: 全体レビューの会計保護・二者承認・登録復帰の修正（2026-10-13）
+- Status: Confirmed（ユーザーがレビュー指摘の修正とMD・CHANGELOGへの記録を指示）
+- Financial: 時間単価の数量をcalc_minutes_billableへ揃え、既存の発行済み金額は変更しない。締め済みまたは確定済み明細に実績を持つ月へのCSV洗い替えと、確定済み実績の新規再計上を拒否する。CSVの稼働日と対象月を一致させる。
+- Serialization: CSV・締め・金額生成・発行／承認はProjectの既存行をID順にロックする。集約生成は既存案件をまとめてロックする安全側の実装。性能最適化は負荷測定後に判断する。
+- Drafts: ヘッダだけを物理削除せず、旧下書き・明細を保持して論理削除と監査を残す。再発行・訂正は明細全列と宛先／受取人スナップショットを複製する。
+- Closing approval: 本締め・仮締め解除・本締め解除は申請と別の認証済み権限者の承認に分ける。両者に対象操作の現行権限を要求する。24時間期限、同一案件×月×操作の確認待ち1件、本人不可、状態・解除回数比較、再承認不可、取消／却下を採用する。
+- Minimal model: closing_approval_requestsに申請者・承認者のUser FK、対象・操作・理由、申請時の状態／解除回数、期限、処理状態／承認日時を保存する。本人承認不可・承認済みの必須情報・pending部分一意をDB制約にする。既存データの書き換えはしない。DDLは20261013a001。
+- LINE: 再認証後は別本人でもフォームを取得する。同じ本人・反映先は本人の編集だけを新取得値へ重ねる。別本人／反映先変更は旧入力を引き継がない。保存済み再送を先に返す規則を維持する。
+- OCR: 手入力の端末番号を厳密検証し、OCR候補の文字補正は別関数にする。全文連結による日付の混入を止める。旧試験の期待を削除して合格にはせず、抽出経路と試験のエンジン呼び出しを修正する。
+- Scope: 訂正／追加請求の新しい運用、営業日カレンダー、実機操作の完了はこの修正で確定しない。正本の作業先をMDに明記し、旧ワークスペースの未コミット変更は保全する。
+- Audit/Tests: 下書き置換・締め申請／別本人承認／却下を記録する。再現した金額差・再計上・締め後CSV・親削除・明細欠落・本人変更を回帰試験で確認する。
+- Spec Reference: DESIGN_SPEC_v0.3 セクション6.3・7・8・9・11・12、WORKSPACE_CODE_REVIEW_2026-10-13.md
+
+### DEC-038: LINE確認待ちを稼働者一覧へ表示し、同じ画面で承認する（2026-10-13）
+- Status: Confirmed（ユーザーが公式LINE登録データを稼働者一覧へ置いて反映するよう指示）
+- Decision: 稼働者一覧の上部にLINE起点のpending申請を表示し、既存の専用審査パネルから管理者が反映先・差分を確認して承認する。30秒ごとの再取得と手動更新を備える。承認後に確認待ち・稼働者・LINE紐付けを再取得する。
+- Why: 送信済みの申請が別の「登録申請」画面にしか出ず、登録の受付とマスタ反映の違いが一覧で分からなかった。自動承認ではなく申請と次の操作を同じ画面へ置く。
+- Boundaries: DEC-032/033の本人照合・一次性コード・承認・比較票ルールと権限を維持する。adminが承認、opsは確認待ち一覧の参照のみ。登録は契約完了・稼働開始許可を意味しない。
+- Minimal model/DDL: 既存5表と申請詳細を利用し、新設列・表・migrationなし。登録申請一覧のline_onlyはline_registration_contextsの存在で判定する。source_typeはpublic_formのまま。
+- Audit/Tests: 既存の専用審査の成功・拒否監査を維持する。LINEと従来フォームの分離、ページング、未承認はWorkerなし、承認後の一覧反映、未認証拒否、画面の即時更新・競合拒否・運用権限・取得失敗を確認する。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1、DEC-032/033、docs/ops/LINE_WORKER_INBOX_RUNBOOK.md
+
+### DEC-039: LINE登録受付の本人通知とポップアップ審査（2026-10-13）
+- Status: Confirmed（ユーザーが本人への「登録を受付けました」の送信と内容確認のポップアップ化を指示）
+- Trigger: 新しいLINE申請がDBへcommitされた後、認証済みLINE主体へ受付通知を送る。マスタ反映・契約完了の通知とは区別し、管理者承認方式を維持する。今回内容が保存されていない別キー入力、保存失敗、入力エラーへは新しい受付通知を作らない。保存済み再送は既存の送信状態を使う。
+- Minimal model/DDL: line_registration_receiptsを追加。申請IDをPK/FKとし、UUIDリトライキー一意、本文、pending/sent/failed、試行回数、次回試行、受理日時、HTTP状態、作成/更新日時を保存する。既存contextのLINE主体を宛先とし、個人情報を複製しない。DDLは20261013b001。既存申請へ通知行を補完しない。
+- Delivery: commit後のバックグラウンド処理と60秒間隔の専用ジョブが同じキューを処理する。PostgreSQLの通知行ロックとskip_lockedで同時送信を避け、API受理後のDB保存失敗にも同じキー・宛先・本文で再試行する。最大5回、指数的待機、作成から23時間で打ち切る。2xxと受理済みID付き409だけ受理済みとし、4xxは終了、接続障害/5xxは再試行する。sentはLINEのAPI受理を表し、本人の既読やブロック解除を意味しない。
+- UI: 稼働者一覧の内容確認は既存のorder-create-backdrop/worker-profile-modalと同じ枠で表示する。内部スクロール、背景スクロール抑止、Tabのフォーカス維持、Escape/閉じるで元操作へ戻る。審査の反映先・比較票・権限は維持する。
+- Audit/Tests: line_registration_receipt_sent/failedに申請ID・受理状態・試行回数・HTTP状態・区分のみを記録する。本文・LINE ID・電話・住所・トークンはログへ出さない。保存後通知、再送・未保存・ロールバック、失敗再試行、24時間超過防止、受理後DB巻戻し、409判定、migration非遡及、既存発注経路、ポップアップの承認/競合/キーボード操作を試験する。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/038、LINE_WORKER_INBOX_RUNBOOK.md。LINE再試行の公式仕様: https://developers.line.biz/ja/docs/messaging-api/retrying-api-request/
+
+### DEC-040: 既存LINE登録フローの修正・変更は右側の版を上げる（2026-10-13）
+- Status: Confirmed（ユーザーがXは大きなアップデート、Yは機能追加、Zは修正・変更と明示し、前回はZだと指摘）
+- Decision: 前回の受付通知と内容確認ポップアップは既存登録フローの修正・変更として扱い、正しい版を0.44.0から0.44.1へ更新する。誤って公開した0.45.0は0.44.1へ訂正する。0.44.0以前の版履歴は今回の訂正対象にしない。
+- Why: 修正の実装に通知処理やDB表を追加したことを、利用者向けの新しい業務機能の追加と混同した。判定は利用者にとっての変更内容を基準とする。
+- Impact: admin-web/staff-mobileを同一の0.44.1へ訂正し、CHANGELOGとRUNBOOKを更新する。AGENTS.md §9とrelease-workflow.mdcをX/Y/Zの定義で揃える。DB/model/DDLの追加変更なし、業務監査の追加なし。
+- Verification: 両package.json・CHANGELOGの版一致、両アプリのビルド、公開version.jsonとAPI再起動後のhealthを確認する。画面の更新検知はビルドIDの不一致を使うため、今回の版番号訂正も検知する。
+- Spec Reference: AGENTS.md §9、.cursor/rules/release-workflow.mdc、DEC-039
+
+### DEC-041: LINE新規承認で表示名を保存し、未取得の既存紐付けを補完する（2026-10-13）
+- Status: Confirmed（ユーザーが前回登録者の「表示名なし」を指摘し、LINEで取得できる表示名を一覧へ反映するよう要請）
+- Cause: コード紐付けではMessaging APIプロフィールを取得していたが、LINE新規登録の承認ではline_display_nameを保存していなかった。未取得を「表示名なし」と表示していた。
+- Decision: 新規承認時に検証済みLINE主体のプロフィール表示名を保存する。既存紐付けはadmin/opsの認証済み更新APIから補完できる。保存済みLINE主体を宛先に使い、応答のuserIdを照合する。表示名をWorker.nameや本人識別の正本にせず、クライアント申告の名前で代用しない。
+- Guard: 取得失敗は既存表示名を保持し、新規登録承認そのものは止めない。未取得は「未取得」と表示する。更新は取得後に稼働者と紐付けをロック・再読込し、解除/差し替えがあれば保存を拒否する。
+- Minimal model/DDL: 既存line_worker_links.line_display_nameのみを利用。DB/model/DDL追加なし。既存情報補完と表示修正なので0.44.1から0.44.2へZを上げる（DEC-040）。
+- Audit/Tests: line_profile_refreshedに紐付けID、実行者、Worker ID、取得・変更フラグを保存する。LINE ID・認証情報・表示名全文は監査へ複製しない。新規保存、既存補完、失敗時の保持、解除/差し替え拒否、権限、プロフィール応答主体照合、画面の未取得/取得成功/失敗を試験する。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・16、DEC-032/033/040。プロフィール取得の公式仕様: https://developers.line.biz/ja/docs/basics/user-profile/
+
+### DEC-042: 日付別発注条件・運営スタッフ連絡先と所在地基盤（2026-10-13）
+- Status: Partial Confirmed / Pending（勤務日別・期間別の時間・単価、費用込みの初期値、更新成功通知、運営スタッフ登録・LINE紐付けはユーザー指定。起床自動化の今回範囲、5ロールの権限、Google API設定と取得住所の保存方法は回答・確認待ち）
+- Decision: 発注条件は既存request_conditionsのadditional-request-v1 JSONにschedule(version=1)を追加し、勤務/単価グループの不変ID、単日/期間、開始/終了・翌日、任意集合時間、備考、単価・単位、昼食/交通費込みと備考を保存する。連動時は勤務グループIDに単価を対応付ける。日付・時刻・金額の検証をサーバー側で行い、確定時に未入力と単価カバーを拒否する。既存自由文から条件を推測しない。旧文面は切替確認後も参考データとして保存する。給与/請求単価の正本へ転記しない。
+- Minimal model/DDL: 依頼書は既存版Text/JSONを利用しDDL不要。VanzaiStaffにcan_drive、smoking_area_ok、緊急連絡先3項目、management_roles、profile_revisionを追加する。別のLineStaffLink/Codeを追加し、運営1人とLINE1主体の有効紐付けを部分ユニーク索引で担保する。migration 20261013c001。既存の報酬用role・linked_worker・金額設定を上書きしない。稼働者/ログインユーザーの自動生成なし。
+- LINE Guard: OPS-付き一次コードを個別トークの署名付きWebhookで照合する。期限30分、平文不保存、再発行で旧コード失効、行ロック・LINE主体のadvisory lock・ユニーク制約、使用済み/無効/削除済みを拒否する。解除履歴を残し、友だち解除を反映する。運営の紐付けと稼働者の紐付けは本人確認を別々に行う。
+- Pending roles: 5名称は暫定的に担当業務ラベルとして複数記録する。実際のログイン/操作権限の変更は実施しない。特に収益管理・基礎管理の操作範囲と複数権限の方針を質問済み。管理画面/APIは既存admin限定とする。回答後に権限設計を別途確定する。
+- Location: 主催者が提供した住所をsite_addressと本文/PDFへ保存する。Google PlacesのPOI取得住所を永続保存せず、検索結果は参照表示、place_idだけ保存する。会場名変更で地点紐付けを解除する。公式APIのGOOGLE_MAPS_API_KEYはサーバー環境で利用する準備のみで、既存.envの閲覧・変更なし。API利用・課金設定、公開の利用規約等と取得住所の保存方式は確認待ち。起床ボタン・経路計算・期限判定・実リマインド/エスカレーションの自動ジョブは未追加。集合基準・準備余裕・取得失敗・取消停止・通知対象を次段階で確定する。
+- Audit: operator_staff_created/updated、operator_line_code_issued/linked/revoked。ID・担当ロール・状態/版と解除理由を残し、連絡先・LINE ID・平文コードを複製しない。依頼書の既存確定/改訂監査・PDFスナップショットを継続する。
+- Verification: 日付重複/逆転、夜跨ぎ、単価連動とカバー、別途費用備考、確定版保護、既存自由文、運営CRUD/競合/権限、署名・期限/再使用・友だち解除、Google未設定/失敗時の秘密不表示、成功/競合/再読込失敗時のポップアップとスマートフォン表示を試験する。
+- Version: 運営スタッフ専用ページと日付別勤務条件は利用者向けの機能追加のためYを上げ、0.44.2から0.45.0とする。今回の更新成功通知単体はZ相当。前回の修正をYにした誤りの訂正（DEC-040）とは判定が異なる。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1・7・16、AGENTS.md §9、DEC-040、ORDER_CONDITIONS_OPERATOR_STAFF_RUNBOOK.md。Google公式資料: https://developers.google.com/maps/documentation/places/web-service/policies 、 https://developers.google.com/maps/documentation/routes/transit-route
+
+### DEC-043: Google Maps共有URLで会場を登録し、起床自動化と権限制御は次段階とする（2026-10-13）
+- Status: Confirmed（ユーザーが今回の範囲を住所・LINE連携の準備まで、ロールは現在付与だけでよいと回答。所在地は検索してGoogleのアドレスを登録する案とAPI料金への懸念を提示）
+- Decision: Googleのアドレスを共有URLと解釈し、その前提をユーザーへ明示してMaps URL方式を採用する。検索リンクでGoogle Mapsを開き、ユーザーが会場の共有リンクを登録する。APIキーや有料のAPI呼び出しは不要。URLをrequest_conditions.maps_urlと本文/PDFの確定版へ保存する。登録住所は主催者提供の住所を別途保存できる。共有リンクから住所や所要時間を自動取得する処理は追加しない。
+- Guard: Google MapsのHTTPS URLをホストとパスで検証し、認証情報付き・非HTTPS・非Google/Mapsホスト・異常ポート・空白/逆スラッシュを拒否する。短縮URLはサーバーで開かない。会場変更で古い共有URL/地点IDを解除する。Maps URLの文字列を表示用チルダ変換で改変しない。
+- Scope: 5ロールを付与・保存し、後々の表示項目・操作制御に使用する。今回は実権限の付与・ログインユーザー生成を行わない。起床報告・公共交通の移動時間・リマインド/運営エスカレーションは今回対象外と確定する。DEC-042のこれらの回答待ち状態を解消する。API検索は未設定時に表示せず、将来の所有者による設定時だけ使用できる準備を保持する。
+- Minimal model/DDL: 依頼書の既存JSONのみ利用し、追加DDLなし。住所/共有URLの確定・改訂は既存版管理と監査を使う。新しい個人情報送信や通知の送付はなし。
+- Verification: Googleの共有URLの保存・再読込・本文出力、改変しないURL、非Google・非HTTPS・偽ホストなどの拒否を試験する。URL登録はAPI未設定でも操作できること、単価/備考・運営登録の既存操作を画面試験する。
+- Version: 0.45.0で追加した所在地登録方式をユーザー回答に合わせて変更するため、Zを上げて0.45.1とする。
+- Sources: https://developers.google.com/maps/documentation/urls/get-started （Maps URLはAPIキー不要）、 https://developers.google.com/maps/billing-and-pricing/pricing （APIは月間無料枠と従量課金、2026-10-13確認）
+
+### DEC-044: 発注依頼書の入力境界・二択操作・送付先選択の修正（2026-10-13）
+- Status: Confirmed（ユーザー指定: ボタン/境界を明確に、勤務条件を稼働日の詳細へ、集合時間不要、二択をボタンへ、費用欄2列、送付先40人・商業Dなどで絞り込み）
+- Decision: 日付別行を「稼働日の詳細 N」とし、既存の全体自由文は「稼働日の補足（全体）」として区別する。単日/期間および日給/時給は選択状態付きのボタンへ変更する。期間入力の表示切替で編集中の終了日を失わない。集合時間の新しい入力欄は撤去するが、旧gathering_timeと確定版は上書き/削除しない。旧項目が存在する場合のみ参考として展開できる。
+- Overnight: 翌日指定は22時開始・翌朝6時終了など、日をまたぐ時間を区別するために必要。常時表示せず、終了が開始以下、または保存済み翌日指定の場合だけ説明付き確認を表示する。時刻の入力間違いを自動的に翌日扱いにせず、本人の明示指定を保存する。
+- Layout: 日付別行/単価行を枠と背景で区別し、追加は緑の有色ボタン、削除は赤い枠と背景のボタンにする。昼食代/交通費は単価入力の次の行に2列で並べ、各備考も同じ2列の下に配置する。スマートフォンでもこの2列を保つ。
+- Recipients: 上限40人をUI・保存・確定で統一する。商業Dなどは既存workers.tags/worker_tags定義（DEC-029）を正本とし、運営スタッフの5ロールと混同しない。登録済みタグの絞り込みと氏名/タグ表示名の検索を併用し、選択済みIDを保持する。候補は200件ずつ全ページ取得し、41人目の選択を止める。LINE送信は従来通り1送付行ごとで、勝手な追加送付や再送は行わない。
+- Minimal model/DDL: 既存schedule JSON、workers.tags、MAX_RECIPIENTSのみ利用し、DB/DDL変更なし。既存の確定・改訂・送付監査を継続し、表示の変更だけで新たな業務監査イベントを作らない。
+- Verification: 単日/期間切替と期間保持、翌日確認、集合入力の不存在、費用備考の横並び、氏名/タグ絞り込みと選択保持、200件以降の候補、40人保存/確定・41人拒否を検証する。既存依頼書とLINE経路、画面をテストし、両アプリをビルドする。
+- Memory/Version: 二択はボタン、境界と操作を明確にする方針をAGENTS.md §12へ記録する。既存登録画面と選択操作の修正・変更としてZを上げ、0.45.1から0.45.2とする。
+- Spec Reference: DESIGN_SPEC_v0.3 §3・6.1・16、DEC-029/040/042/043、AGENTS.md §9/12。
+
+### DEC-045: 発注依頼書の半幅入力・日給統一・ロール複数選択（2026-10-13）
+- Status: Confirmed（ユーザー指定: 稼働場所と稼働日の補足を案件名と同じ半幅、時給削除、すべての付与ロールから複数選択）
+- Decision: 稼働場所/稼働日の補足を12列中6列へ変更する。新規単価の単位は日給のみで選択操作をなくす。保存済みの旧時給は表示・保存時に保持し、金額を読み取り専用とする。本人が確認して日給へ変更した場合のみunit=day、amount空欄にし、新しい日給額の入力を求める。時給から日給の推測換算や確定版/給与マスタの書換えは行わない。
+- Recipients: workers.tagsの定義済み全ロールを複数のチェックボックスで表示する。複数選択時はOR（いずれかのロールを持つ人）とする前提を作業開始時にユーザーへ明示した。無選択は全員、氏名/ロール名検索はAND。候補のフィルタ変更で選択済み送付先は解除しない。送付上限40人は継続する。
+- Minimal model/DDL: 既存schedule JSON・workers.tagsとフロントの選択状態だけで実装し、追加DB/DDLなし。旧hour値の読込と版管理の互換性を保持する。監査は既存下書き保存/確定/改訂を使用し、表示操作だけで業務監査を増やさない。
+- Verification: 半幅と案件名の同幅、日給のみの新規入力・保存、旧時給保持/変更キャンセル/日給変更後の再入力、複数ロールのOR・氏名併用・送付先保持・全解除、200人以降の候補、40人制限を画面試験する。両アプリをビルドする。
+- Version: 既存入力画面と絞り込み操作の修正としてZを上げ、0.45.2から0.45.3とする。
+- Spec Reference: DESIGN_SPEC_v0.3 §3・6.1・16、DEC-029/044、AGENTS.md §9/12。
+
+### DEC-046: イベントDの規模包含・全体稼働期間・共同管理（2026-10-14）
+- Status: Confirmed（ユーザー指定とMapsの手入力維持の回答）
+- Decision: イベントDは担当可能な最大規模。小型のフィルタは小型/中型/大型、中型は中型/大型、大型は大型を許容する。複数選択のORと他のロールの完全一致は維持。登録済みタグを増やす移行や書換えは不要。フィルタ注釈と定義の説明へ包含関係を記録する。
+- Period: 初日/最終日の「稼働日」を全体補足の隣に復活し、詳細は「稼働時間の詳細」とする。既存request_conditions JSONへoptional work_period={from,to}を追加する。詳細編集で全体期間を変えない。下書きは片方未入力を許容し、確定時は両方必須。逆転/不正日付/全体期間外の稼働詳細をAPIで拒否する。休業日や予備日を含む期間を許容し、毎日の勤務を推測して生成しない。旧work_periodなしは従来の処理と確定版を保持し、入力時だけ明示期間を採用する。
+- Ownership: 個別の追跡担当チェックと一覧欄を撤去。作成者と管理ロールが送付/回答を確認する運用とする。UI保存でassign_tracker_self/tracker_user_idを送信しないため、過去の担当者を編集者へ自動付替えしない。旧DBの担当情報は履歴として保持し、現行のadmin/opsアクセス権と運営5ロールの将来制御（DEC-043）は変更しない。
+- Maps: 今回は住所/施設名を手入力のまま維持する（ユーザー回答）。API課金やキー設定は行わない。料金・設定・保存条件はGOOGLE_MAPS_API_SETUP_AND_COSTS.mdへGoogle公式資料を根拠に記録する。
+- Minimal model/DDL: 既存のJSON/worker tags/UIで対応し、新規DB/DDLなし。確定時はwork_periodと本文を既存スナップショットに保存し、改訂版へ引き継ぐ。旧確定スナップショットを上書きしない。監査は既存下書き保存/確定/改訂の出力点を継続する。
+- Verification: 階層の小型/中型/大型と複数ロールOR、注釈、全体期間と補足の横並び、詳細編集時の期間保持、追跡フィールド送信停止、期間の保存/確定/改訂と元版固定、逆転/期間外/未完成の確定拒否、旧JSON/LINE経路をテストする。
+- Version: 既存の検索意味・入力画面・保存処理の修正としてZを上げ、0.45.3から0.45.4へ。
+- Spec Reference: DESIGN_SPEC_v0.3 §3・5・6.1・16、DEC-029/043/044/045、AGENTS.md §9/12。
+
+### DEC-047: マスタ追加ポップアップとクライアント連絡先・内部発注元（2026-10-14）
+- Status: Confirmed（ユーザー指定: 一覧優先/新規追加ポップアップ、会社電話・複数担当者電話、切替の縁色、クライアント/担当者の連動選択、内部情報をPDFに含めない）
+- Masters: 全7種の一覧から常設の追加フォームを撤去し、共通ProfileDialogで新規追加と既存編集を行う。入力項目/権限は従来を保持する。切替の縁を7色にし、選択状態を下線・強調・aria-pressedでも示す。
+- Clients: 会社のphoneを追加し、担当者は既存client_staffを正本にする。クライアント新規追加では複数担当者を同じDBトランザクションで作成する。既存会社電話の編集はphone専用PATCHとする。旧contact_name/contact_emailは削除せず、同名担当者がいなければ追加移行する。既存担当者の電話などは上書きしない。担当者一覧のpage/offset不整合をoffset/limitへ修正する。
+- Internal source: OrderRequestVersionにinternal_client_id/client_staff_id（FK）とinternal_source_snapshot（JSON）を追加する。選択の所属関係・有効/未削除をAPIで検証する。会社変更で担当者選択を解除する。選択済みの同じ参照は確認済みスナップショットを保持し、改訂/変更へコピーする。別の参照へ変えた場合は現行マスタから取得し直す。内部項目の確定後変更は拒否する。
+- Privacy: 内部情報をrequest_conditions/body/公開snapshot_jsonに入れない。PDF/LINEの生成引数と稼働者向け経路に渡さない。管理画面のadmin/ops APIだけが返す。既存のcontact_nameは運営側の連絡担当者（公開帳票用）であり、内部のクライアント担当者を自動転記しない。UIで名称を明確にする。電話は業務監査の値へ複製しない。
+- Minimal model/DDL: clients.phone、依頼版の2FK/内部JSON、担当者選択には会社選択が必要というCHECKを20261014a001で追加する。既存client_staffテーブルを再利用する。旧本文・確定スナップショット・金額は移行で変えない。
+- Audit: client_created/client_staff_created、client_updated（電話フィールド名のみ）、client_staff_updated（フィールド名と所属ID）、order_request_internal_source_updated（参照IDと実行者）を出力する。既存確定/改訂の監査も継続する。
+- Verification: 全7一覧の入力非表示/ポップアップ/縁色、複数担当者電話の一括保存、既存電話の編集、発注元/担当者の連動と解除、内部情報の公開本文/PDF生成/LINE非表示、所属検証・権限・確定後固定・改訂引継ぎ、旧データを保持する移行を検証する。
+- Version: 当初、会社電話と内部発注元連携を新機能と誤分類し0.46.0で公開した。この判断はユーザー指摘により撤回。既存機能の項目追加・変更として0.45.5が正しい（DEC-049が優先）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3・5・6.1・16、AGENTS.md §9/11/12。
+
+### DEC-048: マスタポップアップの入力スタイルを適用（2026-10-14）
+- Status: Confirmed（同じユーザー依頼の本番見た目確認で、移動した入力にページ内スタイルが届かないことを検出）
+- Decision: 追加・編集・クライアント管理の各ポップアップにmaster-formを付け、入力欄の枠/余白/幅/高さと暗色テーマを適用する。担当者追加ボタンの配色・操作サイズを明確にする。値・API・DBは変えない。
+- Verification: 全7マスタのポップアップで名称入力の高さ44px以上・ラベル枠内の幅を確認し、既存の画面19件と両アプリのビルドを行う。
+- Version: 当時は誤った基準番号を引き継いで0.46.1で公開した。訂正後は0.45.5から0.45.6とする（DEC-049が優先）。
+- Spec Reference: AGENTS.md §9/12、DEC-047。
+
+### DEC-049: 項目追加を新機能と誤分類した版番号の訂正・再発防止（2026-10-14）
+- Status: Confirmed（ユーザーが今回の変更は既存機能の修正と項目追加でありYの増加は誤りと指摘し、作業ルール・CHANGELOGを含む訂正を指示）
+- Decision: 会社電話番号、既存の複数担当者管理の入力方法、発注元/担当者の連動選択はZ。新しいAPI・DB列や実装量を理由にYへ分類しない。Yは利用者が新しく独立して行える業務・機能を具体的に説明できる場合に限る。AGENTS.md §9とリリースルールへ今回の具体例を記録する。
+- Correction: 0.45.4に続くマスタ/項目変更は0.45.5、続くポップアップ表示修正は0.45.6。旧公開番号0.46.0/0.46.1の誤りと対応をCHANGELOGへ残し、見出し・両package.json・運用資料を訂正する。DEC-047/048の版判断を置き換える。今回の訂正は新しい業務変更ではなく版の是正なので0.45.7は発行しない。
+- Guard: アプリの機能・データ・DB移行・確定版は変更しない。Git履歴を改変せず、訂正コミットを追加して通常のデプロイスクリプトで反映する。共有作業ディレクトリのAGENTS.mdとリリースルールにもこの判断だけを追記し、既存の未コミット変更を保持する。
+- Verification: 両アプリをビルドし、埋込/公開バージョンが0.45.6で一致すること、CHANGELOGの訂正対応とルール、APIの稼働を確認する。業務ロジック未変更のため業務テストを再実行/新設しない。
+- Spec Reference: AGENTS.md §9/11、DEC-047/048、.cursor/rules/release-workflow.mdc。
+
+
+### DEC-050: 稼働者の最寄り駅を任意で複数登録する（2026-10-15）
+- Status: Confirmed（ユーザーが2駅以上の任意登録を指示。駅ごとの徒歩時間は既存項目との整合を優先する実装方針）
+- Purpose: 複数の駅を利用できる稼働者のアクセス情報を、別項目や備考へ分散せず登録・参照できるようにする。
+- Decision: 管理画面の稼働者登録・編集とLINE登録で「最寄り駅を追加」を用意する。1駅目は既存列、2駅目以降は `workers.additional_stations` のJSON配列とする。駅名は100文字以内、徒歩分数は0〜300の整数または未入力。追加した完全空欄の行は送らず、徒歩だけ入力した追加行はエラーにする。駅数を2に固定しない。
+- Compatibility: 既存の1駅目と徒歩分数は移行で書き換えない。追加列はnullable。旧クライアントの未送信・nullは既存の追加駅を保持し、空配列を明示した場合のみ追加駅を消す。1駅目の必須条件は既存ルールを維持する。
+- LINE: `worker_registration_request_details.additional_stations` に申請値を保存する。既存の文字列フォーム・差分送信と再認証時の入力保持に合わせ、LINEのAPI入力/画面比較値はJSON文字列、正規化・DBは配列とする。未送信では従来の内容ハッシュを維持し、追加・削除は再送内容の同一性判定に含める。承認前に稼働者へ反映しない。
+- Guard/Audit: 追加駅を通常編集・LINE承認・本人用フォームの比較票に含める。`worker_created` / `worker_updated` のprofile、LINE承認のbefore/afterへ保存する。通常更新ではprofileの変更前も記録する。
+- Migration: `20261015a001_worker_additional_stations.py`。workersと申請詳細へJSON列を1つずつ追加するだけとし、既存レコード・列を変更しない。
+- Verification: 複数駅の保存/再表示、旧データ読取、未送信保持、明示削除、入力制約、申請・承認・再送、追加駅のみの同時変更拒否、移行の旧行保持、モバイルでの追加/削除/確認/送信、締め・再計算の既存テスト、両アプリのビルド。
+- Version: 既存の稼働者登録項目の拡張なのでZ。0.45.6 → 0.45.7。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1、AGENTS.md §9/11/12、DEC-049。
+
+
+### DEC-051: クライアント登録の役職・郵便番号・社内メモ（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: クライアントの担当者情報・社内情報を揃え、住所入力と追加操作の負担を減らす。
+- Decision: 役職は既存の `client_staff.role` に担当者単位で保存し、会社の社内メモは既存の `clients.notes` を使う。いずれも任意。郵便番号はnullableな7桁の `clients.postal_code` を追加し、既存のZipCloud補完を使う。複数候補は選択し、手入力済み住所は自動上書きしない。番地・建物名は手入力。
+- Migration: `20261020a001_client_postal_code.py`。既存住所・レコードを書き換えない。金額・時間・締めには影響しない。
+- Audit: 既存 `client_created` に郵便番号・メモを含める。役職は既存 `client_staff_created` / `client_staff_updated` の経路で保存する。
+- Version: 既存登録画面の項目・表示変更なのでZ。0.45.7 → 0.45.8。
+- Spec Reference: DESIGN_SPEC_v0.3 §6.1、§16、AGENTS.md §9/11/12。
+
+
+### DEC-052: クライアント一覧から企業情報を編集する（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: 登録済みの企業情報を一覧から修正できるようにする。
+- Decision: クライアント一覧の各行に管理者向けの「編集」を追加し、企業名・コード・会社電話番号・郵便番号・住所・社内メモを編集する。担当者は既存の「担当者管理」で氏名・役職・電話・メールを修正する。
+- Model/Migration: 既存のclients列のみを使い、DB変更なし。変更項目のみPATCHで送る。未送信列・担当者・過去の帳票スナップショットを変更しない。
+- Guard/Audit: MASTER_WRITEをAPIで検証し、削除済み企業の更新・空の企業名・不正郵便番号・コード重複を拒否する。client_updatedに変更項目のbefore/afterと実行者を保存する。
+- UI: 保存後は編集画面に成功表示を出し、クライアント一覧・案件選択・発注元選択を再取得する。住所補完は初期表示では実行せず、郵便番号を変更した場合に取得する。既存住所は明示的な候補選択で置き換え、番地・建物名を確認する。
+- Version: 既存マスタの修正導線なのでZ。0.45.8 → 0.45.9。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5/6.1/11/16、DEC-051。
+
+### DEC-053: 確定帳票の実績は強制指定でも再計算しない（2026-10-20）
+- Status: Confirmed（DESIGN_SPEC_v0.3 §6.3/7.4の不変条件への復帰）
+- Purpose: 発行済み請求・承認済み支払と、保存実績・再計算プレビューの不一致を防ぐ。
+- Decision: force引数は呼び出し互換のため保持するが、発行済み・closed請求、approved/paid/closed支払に含まれる実績は再計算しない。変更は既存の訂正・再発行手順で扱う。プレビューも同じ実績を対象件数・差額から除外する。
+- Reason: 従来のforce=True処理とテスト期待値は、正本仕様の確定実績除外に反していた。単なる呼び出しフラグを会計確定の解除権限として扱わない。
+- Model/Migration: 既存モデルを使用。DDL変更なし。過去の実績・帳票は一括更新しない。
+- Concurrency/Audit: 帳票・締めと共通の案件ロックを取得後に実績を読み直す。既存の再計算監査にforce_requestedと処理・除外件数、差額を記録する。
+- Tests: 発行済み/closed請求、approved/paid/closed支払の5条件で、force指定時の実績・金額保持とプレビュー除外を検証。旧forceテストを仕様に整合させる。
+- Version: 既存処理の修正としてZ（0.45.9 → 0.45.10）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/6.3/7.4/11/12/16、docs/ops/CODE_REVIEW_2026-10-20.md。
+
+
+### DEC-054: クライアントの企業情報と担当者を一画面・一保存に統合する（2026-10-20）
+- Status: Confirmed（ユーザーが入口分割の撤回・統合を指定。DEC-052の担当者別入口を置き換える）
+- Purpose: 企業情報と担当者の修正に必要な操作・判断を減らす。
+- Decision: 一覧から管理者は「編集」、参照者は「詳細」の一つの入口で企業情報と担当者を開く。全担当者は氏名・役職・電話・メールの入力欄で直接修正でき、追加行も同じ画面に出す。最後の「保存する」で企業情報・担当者変更・担当者追加を同時に確定する。担当者ごとの編集・保存や会社電話だけの保存ボタンは表示しない。
+- Model/Migration: 既存のclients/client_staff列を使用し、DB変更なし。企業PATCHに変更した担当者IDと項目・新規担当者を含め、所属・存在・重複IDを検証後に同一トランザクションで保存する。未送信担当者を削除せず、既存の有効状態・メモ・IDを保持する。削除できるのは未保存の追加行だけ。
+- Compatibility: 旧APIは互換維持。旧代表担当者名と一意に一致する既存担当者の改名・メール変更はclients.contact_name/contact_emailにも同期する。担当者行のない旧データは既存の担当者名・メールを入力行として提示し、保存時に担当者行へ移す。旧代表名が複数行と一致する場合は推測して代表を切り替えない。
+- Guard/Audit: MASTER_WRITEをAPIで検証。読み込み完了前や失敗中は保存不可。入力・所属検証の失敗時は企業情報も保存しない。client_updated/client_staff_updatedに変更前後、client_staff_createdに追加内容と実行者を記録する。
+- Version: 既存マスタの編集画面の統合なのでZ。0.45.10 → 0.45.11。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5/6.1/16、DEC-051/052。
+
+
+### DEC-055: 複数担当者の一覧表示と郵便番号・住所入力の統一（2026-10-20）
+- Status: Confirmed（ユーザー指摘への修正）
+- Purpose: 編集画面を開かなくても登録した全担当者を確認でき、新規・編集のどちらでも郵便番号による住所補完を見つけられるようにする。
+- Decision: クライアント一覧APIにページ内企業の全担当者をまとめて取得したcontacts配列を追加する。一覧の「担当者・連絡先」に氏名・役職・電話・メールを担当者単位で表示する。削除済みは除外し、無効な担当者は「無効」を表示する。担当者行のない旧データは既存contact_name/contact_emailを表示する。
+- UI: 新規登録・編集で同じ住所入力コンポーネントを使い、見出し「住所情報」の中に郵便番号・補完案内・住所を続けて配置する。既存の補完、全角・ハイフン正規化、番地の手入力、入力済み住所の保護は維持する。
+- Model/Migration: 既存clients/client_staffを読むだけでDB変更なし。企業件数・ページ分割を変えず、担当者はページ内企業IDで一括取得する。
+- Audit: 読み取り・表示の変更なので新規の監査イベントなし。編集時の既存client_updated/client_staff_updated/client_staff_createdを維持する。
+- Version: 既存一覧・住所入力の修正としてZ。0.45.11 → 0.45.12。
+- Spec Reference: DESIGN_SPEC_v0.3 §5/6.1/16、DEC-051/054。
+
+
+### DEC-056: 管理者によるログインID・役割別権限の管理（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: IDごとに役割を割り当て、閲覧範囲を管理者自身で変更できるようにする。
+- Decision: admin/ops/accounting/site_managerの4役割を使う。現場管理者は担当に関係なく全案件を閲覧でき、請求・支払・単価は初期設定で非表示。CSV提出は従来の担当案件制限を維持する。
+- IDの作成・役割の付与/変更・無効化と役割別の閲覧/操作権限セットの変更はadminだけに許可する。同じ役割の全IDに適用し、個人別例外と役割の自由追加は対象外。
+- Guard: adminは全権限固定、自分自身の降格/無効化を拒否。ID変更時に実行者と対象を固定順でロックし、変更後の実行者権限を再確認する。画面/直接URL/APIを制御し、現行トークンでも次回リクエストから新権限を適用する。画面は30秒ごと/再フォーカスで同期する。
+- Model/Migration: usersを保持し、role_access_policies（role主キー、permissions JSON、タイムスタンプ）だけ追加。既存ID・パスワードを書き換えない。
+- APIの金額漏えい対策: 売上/外注費集計に認証を追加。権限のないダッシュボード集計項目、実績/配置一覧の単価は返さず、銀行口座APIを支払閲覧権限で保護する。
+- Audit: USER_CREATED、USER_ACCESS_CHANGED、ROLE_PERMISSIONS_CHANGED。理由と変更前後を残し、パスワードを記録しない。
+- Validation: tests/test_access_management.py、認証/案件/配置/実績/シフト/ダッシュボード等の回帰、管理者と現場管理者のブラウザテスト。
+- Version: IDの作成・役割付与・役割別権限設定という独立した管理業務を追加するためY（0.45.12 → 0.46.0）。既存画面の項目追加を理由としたY判定ではない。
+- Spec Reference: DESIGN_SPEC_v0.3 §5/16、RUNBOOK: docs/ops/ACCESS_MANAGEMENT_RUNBOOK.md。
+
+### DEC-057: 独自役割の作成と作成・編集フォームのポップアップ統一（2026-10-20）
+- Status: Confirmed（ユーザー指定。DEC-056の「役割の自由追加は対象外」を変更）
+- Purpose: 管理者が業務に合う役割を設定でき、作成欄が一覧を占有しない操作方法へ統一する。
+- Decision: 全体管理者だけが独自役割の名前・権限・理由を指定して作成する。役割識別子はシステム発行、初期権限はなし。新しい役割はID作成・付与時の選択肢に追加し、表示名を画面に表示する。
+- Guard: 標準役割名・予約名・重複名は拒否する。独自役割に全業務権限を付けてもID・役割管理はadminだけに限定し、adminの固定権限と自己降格/無効化の禁止を維持する。workerの本人範囲とCSV提出の担当範囲を変更しない。
+- Model/Migration: role_access_policiesにdisplay_name（100文字・一意・既存標準役割はNULL）を追加する。users.roleは既存の文字列列を使用し、既存ID・パスワード・役割を書き換えない。標準役割と独自役割を権限解決で扱い、未定義の役割は権限なしとする。
+- UI: ID作成/変更・役割作成/権限変更、案件/シフト枠/配置の作成/編集、請求/支払生成、単価、通知、登録リンクと配置の選択/一括変更はボタンからポップアップで開く。既存の稼働者・運営スタッフ・マスタ・発注依頼書のポップアップを維持する。検索フィルタは一覧上に残す。Esc/閉じるとフォーカス復帰、送信中の閉じる防止を共通化する。
+- Audit: ROLE_CREATEDに役割名・識別子・権限・理由・実行者を保存し、USER_CREATED/USER_ACCESS_CHANGED/ROLE_PERMISSIONS_CHANGEDも維持する。
+- Validation: 独自役割の作成・重複/予約名拒否・IDへの付与・ログイン・画面/API拒否、既存ロールの回帰、一覧上にフォームが常設されないことと各ポップアップのブラウザ操作を検証する。
+- Version: 既存のID・権限管理と入力方法の拡張・変更なのでZ（0.46.0 → 0.46.1）。API/DB追加を理由にYとはしない。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.1/5.2/16、AGENTS.md §12、docs/ops/ACCESS_MANAGEMENT_RUNBOOK.md。
+
+### DEC-058: 作成ボタンのブルー統一（2026-10-20）
+- Status: Confirmed（ユーザー指定）
+- Purpose: 表示切替と新規作成の操作を色で判別できるようにする。
+- Decision: 作成・新規登録・生成の入口とポップアップ内の作成確定に共通のcreate-buttonを適用し、背景をブルー（#2563eb、ホバー#1d4ed8）、文字を白に統一する。表示切替と既存データの更新は既存の色を維持する。今回の変更は配置を変えない。
+- Model/Migration/Audit: 表示スタイルだけの変更のためDB変更・新規監査イベントなし。既存の作成処理と監査を維持する。
+- Validation: 管理画面ビルド、作成ポップアップの既存ブラウザ回帰、表示切替と作成ボタンの実際の色・フォーカス・ダークモードを確認する。
+- Version: 既存画面の表示改善なのでZ（0.46.1 → 0.46.2）。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.1/5.2、AGENTS.md §12。
+
+### DEC-059: 管理者による役割の名称変更（2026-10-21）
+- Status: Confirmed（役割の名称変更というユーザー指定を反映）
+- Purpose: 役割を作り直したりIDを付け替えたりせず、業務に合った名称へ変更できるようにする。
+- Decision: 管理者が役割一覧の「名称を変更」から専用ポップアップで名称・理由を保存する。対象は管理画面の標準役割（adminを含む）と独自役割。workerは従来どおり対象外。表示名だけを変え、役割識別子・ID割り当て・権限は維持する。全体管理者の固定権限も維持する。
+- Guard: 空白名・100文字超・重複名・内部の予約識別子・他の標準役割の既定名称は拒否する。重複時は入力を保持する。同一名称での再保存は監査を増やさない。
+- Model/Migration: 既存role_access_policies.display_nameと一意制約を再利用するためDDL変更なし。標準役割の行を初めて保存するときは現在の既定権限を保持する。既存行は表示名だけを更新する。
+- Audit: ROLE_NAME_CHANGEDに変更前後の名称・理由・実行者・役割識別子を記録する。
+- Validation: 標準4役割と独自役割の名称変更、既存トークンとID一覧への反映、権限不変・管理者固定権限、重複/予約名/未認可の拒否、ポップアップ操作と重複エラー時の入力保持を検証する。
+- Version: 既存の役割管理の変更なのでZ（0.46.2 → 0.46.3）。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.1/5.2/16、docs/ops/ACCESS_MANAGEMENT_RUNBOOK.md。
+
+### DEC-060: 役割名変更の理由入力廃止とフォーム余白の縮小（2026-10-21）
+- Status: Confirmed（ユーザー指定。DEC-059の名称変更時の理由必須を変更）
+- Purpose: 少数項目の変更で不要な入力や大きな空白を発生させず、名称だけですぐ保存できるようにする。
+- Decision: 名称変更画面から理由欄を削除し、APIの理由も任意にする。変更前後の名称・実行者・日時は既存のROLE_NAME_CHANGEDへ自動記録し、未入力の理由はNULLとする。権限変更など他の操作の理由入力は維持する。
+- UI: 共通FormDialogは内容に合わせた高さへ変更し、画面高さに合わせたグリッドの引き伸ばしを解消する。長いフォームの高さ上限・内部スクロールは維持する。名称変更のみ幅560px以下のコンパクト表示とし、スマートフォンでも枠内に収める。
+- Model/Migration: 既存モデル・NULL可の監査理由を使用するためDB変更なし。
+- Validation: 理由を省略した標準・独自役割の名称保存と監査、権限保持、PC/スマートフォンのポップアップサイズと保存、重複エラー時の入力保持、既存フォームの回帰。
+- Version: 既存入力画面の改善なのでZ（0.46.3 → 0.46.4）。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.1/5.2/16、AGENTS.md §12。
+
+### DEC-061: 監査履歴の日本語表示（2026-10-21）
+- Status: Confirmed（ユーザー指定）
+- Purpose: 操作コードを知らなくても監査内容を把握できるようにする。
+- Decision: 操作名・対象種別・詳細要約の項目名を日本語辞書で表示し、既存履歴にも適用する。大文字の権限操作コードも対応する。検索には元のコードを使用し、未知のコードは情報を隠さず原文を表示する。
+- Model/Migration/Audit: 既存audit_logを利用し、DDL・新規監査イベント・既存記録の書換えなし。実行者IDや自由記述は翻訳しない。監査検索・関連業務の識別子互換性を保つ。
+- Validation: 画像で指摘された操作・対象種別、全AuditActionと静的な監査記録箇所の日本語対応、未知コード維持、管理・スタッフ画面ビルドを確認する。
+- Version: 既存監査画面の改善なのでZ（0.46.5 → 0.46.6）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/16。
+
+### DEC-062: 発注依頼書の任意の集合場所（2026-10-21）
+- Status: Confirmed（ユーザー指定）
+- Purpose: 稼働場所と集合場所が異なる場合にも、依頼書の専用欄で案内できるようにする。
+- Decision: 既存の作成・編集ポップアップの稼働場所の下に「集合場所（任意）」を複数行の自由入力欄として追加する。入力時は本文・PDFの稼働場所の次に独立した「集合場所」を表示し、空欄の場合は帳票の項目を省略する。
+- Model/Migration: 既存order_request_versions.request_conditionsのJSONにmeeting_placeを保存し、bodyと確定時snapshot_jsonへ反映する。旧データの項目欠落は空欄として読み込み、DDL・マイグレーション・既存データの書換えは不要。
+- Guard/Audit: 確定済み本文・PDFの編集拒否と変更版作成を維持する。既存ORDER_REQUEST_CONFIRMED / ORDER_REQUEST_REVISED監査を利用し、新規イベントは追加しない。
+- Validation: 旧データからの追加、複数行保存・再取得・空欄への変更、任意のままの確定、PDF用項目解析、スナップショット保存、確定後編集拒否とPDF不変を検証する。
+- Version: 既存依頼書への項目追加なのでZ（0.46.6 → 0.46.7）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/16、AGENTS.md §12。
+
+### DEC-063: 稼働者向け予定の正本を発注依頼書由来の稼働予定に統一する（2026-10-22）
+- Status: Confirmed（ユーザー回答 2026-10-21〜22）／A1実装済み（0.47.0）。計画書 `docs/ops/LINE_WORKER_DAILY_OPERATIONS_PLAN_2026-10-21.md`（v0.9）§5・§7.1〜7.5、レビュー `LINE_WORKER_DAILY_OPERATIONS_REVIEW*_2026-10-21.md`
+- Purpose: 運用開始前に、予定の入力起点を発注依頼書へ一本化し、案件登録と依頼書の二重入力・予定の二重管理をなくす。
+- Decision: 発注依頼書をすべての予定の起点とする。依頼書を作らない限り、予定・起床監視に載らない。正式区分（formal）で確定した版を本人が受諾したときに、新設の稼働予定（worker_schedule_entries）を作る。test区分は対象外（2026-10-22補記：test区分でも、動作確認のために is_test の印を付けた稼働予定を作る。本人のLINEには「【テスト】」付きで表示し、運営の起床状況一覧・起床の監視・案件と請求の生成からは除外する。ユーザー回答）。稼働予定は依頼書からの派生データで直接編集を禁止し、訂正は修正版の依頼書（確定と受諾）で行う。勤務日はschedule.work_groupsだけから展開し、work_periodからは作らない（DEC-046と整合）。運用開始前のため、遡及生成・移行はしない。
+- Versions/Cancel: 確定・送付した依頼書の「取消」は発注そのものの中止とし、修正は修正版の発行で行う（ユーザー確定）。依頼書ごとに回答受付版を1つ持ち、取消で旧版へ自動で戻さない。新版確定時、旧版で受諾済みの人の予定は「変更確認中」として旧い内容を表示し続け、新版の受諾で切り替える（ユーザー確定）。受諾後の辞退は本人から運営へ連絡し、運営が理由付きで記録する（ユーザー確定）。旧版のボタンによる返答は拒否する。操作ごとの影響と具体例E1〜E7は計画書§7.4。
+- Accounting boundary: 稼働予定は金額を持たない。現行の支払・請求は単価×時間（payout_service.py / invoice_service.py）で日給の計上単位がないため、依頼書からの案件・シフト枠・アサイン生成（B2）と出勤・退勤からの実績作成（B3）は、日給の計上モデル（B1）の決定後に着手する。DEC-042の「依頼書の単価を給与・請求単価の正本へ転記しない」はTrack Aでは変更しない。DESIGN_SPEC §4の予定（planned）＝アサインという会計用の集計は、B2まで変更しない。
+- Supersedes: `LINE_INTEGRATION_IMPLEMENTATION_PLAN_2026-09-30.md` のうち、集合時刻をgathering_timeで持つ方針（DEC-044と本DECにより開始時刻＝集合時刻）、移動時間を自宅住所→現場住所で求める方針（最寄り駅↔最寄り駅へ変更）、起床対象を集合9時前に限る方針（DEC-066へ）、遅刻を責任者修正→承認で反映する方針（現場リーダーから運営へ直接報告。システム機能は作らない）、案件を先に登録してから依頼書を作る運用。打刻と実績の関係（9/30計画P01）とGPS判定はB3の前に別途決定する。
+- Guard: 同じ依頼書の確定・受諾・辞退・取消は依頼書単位のロックで直列化し、ロック後に回答受付版と状態を読み直す。Webhookはイベントごとのトランザクションで、commit後に返信する。イベントIDの一意制約違反だけを処理済みとし、それ以外の制約違反は握り潰さない。個別トーク（source.type=user）以外は処理しない。staff-mobileの予定画面（アサインを読む）は、稼働者向けに公開しない（導線と直接URL）。
+- Correction paths（2026-10-22補記）: 稼働予定の訂正経路は2つだけとする。依頼書の共通の条件（勤務日・時刻・場所・共通の除外日など）は修正版の確定と受諾で、特定の人の参加日はDEC-065の本人申請を運営が承認した記録で変更する。後者は修正版を要しない。どちらも稼働予定を直接書き換えない。
+- Model/Migration（予定）: worker_schedule_entries、order_request_documents.answerable_version_id、送付行の提示日、追記型の参加日の状態 ほか。計画書§9。DDLは詳細設計で確定する。
+- Audit: 稼働予定の生成・状態変更、受諾後の辞退の記録。LINEユーザーIDは複製しない。
+- Implementation（2026-10-22、0.47.0）: 稼働予定（worker_schedule_entries）、追記型の参加日の状態、適用送付行、回答受付版を migration 20261022a002 で追加し、確定・受諾・辞退・取消・受諾後の辞退の記録のたびに（系列 × 稼働者）の稼働予定を元データだけから作り直す。**回答受付版とロックは「依頼書」ではなく「系列」単位**とした：「変更を作成」で作った依頼書は元の依頼書と同じ系列に入り、新しい依頼書の確定で元の依頼書の予定は「変更確認中」、新しい依頼書の受諾で切り替わる（2026-10-22 ユーザー指示「推奨のものを反映」。詳細設計 §4.4）。上の Versions/Cancel・Guard の「依頼書ごと／依頼書単位」は系列単位と読み替える。既存データは依頼書ごとに系列を作り、A1以前の「変更を作成」は別系列のまま。
+- Version: 起床報告・予定確認とあわせ、独立した新しい業務の提供としてY（A1）。
+- Spec Reference: AGENTS.md §2/§9、DESIGN_SPEC_v0.3 §4/§6、DEC-027/028/037/042/044/046/053/062/065。
+
+### DEC-064: 公式LINEのリッチメニュー6パネルと、A1で公開する日次操作（2026-10-22）
+- Status: Confirmed（ユーザー回答）／A1実装済み（0.47.0。リッチメニューの適用は画像の受領後）。計画書§7.6〜7.9
+- Decision: リッチメニューは全員共通の6パネル：①起床報告 ②出勤報告 ③退勤報告 ④販売報告 ⑤受託済みの発注依頼書 ⑥スケジュール確認。運用前のパネルは押せない状態にする（ボタン領域を定義しない）。画像は運営が公開段階ごとに用意し、画像と領域の定義をまとめて差し替える。メニューを全員に適用するのはA1の公開時とし、A1では①⑤⑥を有効にする。古いメニューから有効でない機能のポストバックが届いた場合は「まだご利用いただけません」と返す。
+- ①起床報告: 本人の当日の予定（案件名・時刻・稼働場所・集合場所）を添えた挨拶を返し、（稼働者, 報告日）で記録する。報告日はLINEイベント発生時刻の日本時間の日付。二重押しは「報告済みです（HH:MM）」。予定なしの日も報告は記録する。
+- ⑥スケジュール確認: 本人の有効・変更確認中の予定を今日から7日分、トーク内で返す。超過分は短命トークンによる「続きを見る」。
+- ⑤受託済みの発注依頼書: 受諾した適用版の依頼書を一覧で返し、本人確認後に新しい期限付きPDFトークンを発行して開かせる（既存の受諾・送信状態は変えない）。本人が送付先の現在の回答受付版は、未受諾でも開ける。
+- 未連携・連携解除・無効・削除済みの稼働者には「連携が確認できません。運営までお問い合わせください」と返す。
+- Ops: 運営向けに当日の起床状況一覧を設ける。閲覧は新しい権限として、DEC-056/057の権限セットに追加する。
+- Spec Reference: DEC-063、DEC-027/028、DEC-056/057。
+- Implementation（2026-10-22、0.47.0）: ①⑤⑥のポストバック（wk_wake / wk_orders / wk_schedule、子の wk_next・wk_open は親の機能で判定）、起床報告（wake_reports、イベント発生から30分以上遅れて届いたものは受信遅れの印）、短命トークン（line_action_tokens、30分）、PDFの再発行（7日）、当日の起床状況一覧（管理画面「起床状況」、権限 wake_status_read を運用担当に既定付与）を実装。有効な機能はリッチメニューの公開記録（line_rich_menu_releases）の最新の enabled_actions を正本とし、公開記録がない間はすべて「まだご利用いただけません」と返す。公開は `scripts/line/rich_menu.py apply`（RUNBOOK `docs/runbook/LINE_RICH_MENU_RUNBOOK.md`）。staff-mobile の「今日」「予定」はメニューから外し、旧URLは公式LINEへの案内を出す。
+
+### DEC-065: 期間の除外日と、送付先ごとの参加日（日付指定の受諾・受諾後の変更依頼）（2026-10-22）
+- Status: Confirmed（ユーザー回答）／一部実装（除外日・作成時の不参加日 0.46.8、受諾後の辞退の記録 0.47.0）。計画書§7.3
+- Decision（除外日）: 依頼書の稼働日の「期間」に、除外日（休業日）の入力欄を追加する。予備日（実施未定の日）は運用しない（実施が決まるまで依頼書を発行しない）。
+- Decision（送付先ごとの参加日）: 個人ごとの不参加日、日付を指定した受諾、受諾後の参加日の変更を、「送付先ごとの参加日」という1つのデータで扱う。経路は次の3つ。
+  1. 運営が依頼書の作成時に、個人の不参加日を入力する。
+  2. 日付を指定した受諾：依頼書の作成時にチェックボックスで許可・不許可を選ぶ（全日程に通しで参加が必要な案件があるため）。許可された依頼書では、本人が参加日を選んで受諾した時点で確定する。運営は日ごとの充足状況（必要人数に対する参加人数）で確認する。
+  3. 受諾後の変更依頼：本人がLINE（⑤受託済みの発注依頼書）から日付を選んで、いつでも依頼できる。日を減らす依頼・増やす依頼の両方を受け付け、承認するかどうかは運営が判断する。結果は本人へLINEで通知する。
+- Data（2026-10-22補記）: 提示した日（実勤務日−個人不参加日。確定時に送付行へ固定）、合意した日（受諾時に固定。追記型の参加日の状態）、変更申請（申請時の状態・増減・理由・受信日時・審査状態）を区別して保存する。実勤務日は勤務グループから共通の除外日を除いた日。許可のない依頼書の受諾は提示日の全部への同意とする。
+- Decision（2026-10-22補記、ユーザー説明による）: 当日・翌日分の変更申請は運営の通知先へ即時に知らせ、至急扱いにする。承認されるまでは確定済みの勤務・充足人数・起床監視を維持し、本人には「依頼を受け付けました。運営が承認するまでは、予定どおりの勤務です」と返す（増加を含む場合は、追加希望日は承認まで確定でない旨を添える）。本人が申請した増加は、運営が承認すれば、その依頼書の実勤務日の範囲内に限り修正版なしで反映する。共通の条件の変更は修正版で行う（DEC-063）。
+- Guard: 申請の承認は依頼書単位のロック下で、対象版が本人の適用版のままか、参加日の状態が申請時と同じかを確認し、異なれば自動で反映せず失効（stale）とする。承認・却下・取り下げは冪等にし、状態・稼働予定・監査・結果通知の送信予定を同一トランザクションで保存して、通知はcommit後に送る。通知の送信成功を運営の確認済みとみなさない（received / seen / approved / rejected / withdrawn / stale）。過去の勤務日は変更しない。
+- Pending: 運営の側から個人の参加日の追加を提案する場合の本人同意の方式（決まるまでは修正版で対応）、必要人数の保存場所の詳細（勤務グループまたは日ごと）、日付選択のLIFF画面、直前の申請の確認担当・代行・電話確認の時間（RUNBOOK）。
+- Display: 個人の参加日は依頼書のPDF（版ごとに全員共通）には載せず、本人へのLINEの文面とスケジュール確認・⑤で示す。
+- Implementation（2026-10-22、0.46.8）: A0として、期間の除外日（schedule.work_groups[].excluded_dates）と、送付先ごとの個人不参加日（order_request_versions.draft_recipient_absences、migration 20261022a001）を実装。個人不参加日は本文の元データ（request_conditions）ではなく専用の列に持つ（詳細設計§3.2）。
+- Implementation（2026-10-22、0.47.0）: 確定時に送付行の提示日（offered_dates）を固定し、受諾で提示日の全部を参加日とする。受諾後の辞退は、運営が送付状況の表の「受諾後の辞退を記録」から理由付きで記録する（参加日0日の状態を追記し、その人の稼働予定を取り消す。ほかの送付先は変えない）。日付指定の受諾と変更依頼は A1+。
+- Fix（2026-10-22、0.47.8、ユーザー決定 D-05）: 0.47.0 の「受諾後の辞退を記録」は参加日を0日にしていたため、過去の日の稼働予定まで取消になっていた。「今後の参加を終了」に改め、記録した時点で勤務が始まっている日（勤務の開始日時≦記録日時、日本時間。前日開始の夜勤を含む）は参加日として残し、始まっていない日だけ外した状態を追記する。外す日がなければ記録しない。当日の開始前の記録で当日を取り消す場合は、確認画面に当日の開始時刻を表示する。
+- Implementation（2026-10-23、0.48.0、統合計画 ①）: 日付を選んでの受諾（依頼書ごとの許可 allow_partial_accept、送付メッセージの3ボタン、LIFFのカレンダー画面 `/public/line-worker?m=pick&d=送付行`、partial_accept の参加日の状態）と、運営の参加カレンダー（参加OK／変更確認待ち／未回答、系列×日付×稼働者で重複なし）を実装。LIFF は登録用と同じ LINE Login チャネルに稼働者向けを追加（LIFF ID 2011980694-YAd1Kdaq）。本人確認は登録の受付判定から分離し、稼働者セッション（30分）・冪等キー・機能ごとの公開（公開記録の pick_dates）を共通部分として作成。公開は本番の PostgreSQL での同時操作試験（scripts/test/concurrency_a1.py）の合格後に pick_dates を有効にする。計画にあった本文・PDFへの「受諾の方法」表示は今回入れていない（LINEのボタンと画面で案内）。
+- Decision（2026-10-22補記、A1+計画 v0.3 `docs/ops/LINE_WORKER_A1PLUS_PLAN_2026-10-22.md`、ユーザー回答）: 日付を選ぶ画面は、依頼書の期間のカレンダーをタップして選ぶ形とし、既存のLINE Loginチャネルに追加するLIFFで作る。**必要人数は保存せず比較もしない**（上の「運営は日ごとの充足状況（必要人数に対する参加人数）で確認する」を置き換える）。運営は「参加カレンダー」で、イベント（系列）ごとに日ごとの参加OKの人数（系列×日付×稼働者で重複を除く）と未回答の人数を見る。運営の側から参加日の追加を頼むときは、公式LINEのトーク等で本人に直接頼み、本人が変更依頼（増やす）を出す（上の Pending のうち「本人同意の方式」を解消）。変更依頼の閲覧は order_read、承認・却下は order_write、LINEでの知らせは権限「参加日の変更依頼の連絡受け取り」を持つ人へ送る（受け取り権限だけでは操作できない）。過去の日（日本時間）は増減できない。今日以降の参加日が0日になる依頼は「辞退として承認」で辞退の記録と同じ処理にする。本人への結果通知などのプッシュ送信は、送信予定表に保存してから送り、失敗は再送する。版は、日付指定の受諾と参加カレンダーを 0.48.0、変更依頼もY（順番と版は統合計画 `docs/ops/LINE_WORKER_ROADMAP_2026-10-22.md` で管理）。
+- Version: 除外日と作成時の不参加日の入力は既存の依頼書への項目追加なのでZ（A0）。日付指定の受諾と変更依頼は、新しい業務フローとしてY（0.48.0・予定 0.50.0）。
+- Spec Reference: DEC-044/046/063。
+
+### DEC-066: 起床の監視・催促・運営への通知の方針（2026-10-22）
+- Status: Partial Confirmed（業務方針はユーザー回答）／Pending（乗換API・駅の選択方法・複数駅の扱い）／未実装（A2・A3）。計画書§7.10
+- Decision: 期限＝基準の勤務の開始（＝集合時刻）− 移動時間 − 余裕時間（初期値60分、設定で変更可）。期限までに起床報告がなければ5分おきに3回本人へ催促し、それでもなければ運営へ通知する。運営への通知後に報告があれば追加で通知し、報告時点で催促を止める。起床の対象は初期値を全勤務とし、設定で「開始がHH:MMより前の勤務だけ」などに変更できる。運営への通知の受け取り可否は、ID・権限管理で人ごとに設定する（0人ならLINE紐付け済みのadmin全員へ送る案）。通数増は有料プランで許容する。
+- Design: 変更確認中の予定も旧い条件で監視する。開始0:00〜4:59の勤務と、期限が稼働日の前日になる勤務は自動の対象外とし、運営の確認に回す（同じ日の通常勤務の監視は続ける）。移動時間はA2では運営の手動設定で始め、未設定なら自動で催促しない。乗換APIによる自動計算はA3で選定・費用判断する（DEC-043は当時の工程での判断で、恒久的な禁止ではない）。通知は論理通知として保存してから送り、再試行キーを使う。acceptedは到達を意味しない。
+- Spec Reference: DEC-042/043/050/056/063。
+- Decision（2026-10-22補記、ユーザー回答）: 締切＝勤務開始日時（＝集合時刻）− 両端の徒歩時間（自宅→最寄り駅、会場の最寄り駅→会場）− 駅間の概算時間 − 移動の余裕時間（15分）− 出発前の準備時間（起床報告から出発まで60分）。稼働者に最寄り駅が複数あるときは、徒歩を含む合計が最短の経路を使う。上の「余裕時間（初期値60分）」の式はこれで置き換える。
+- Decision（2026-10-22補記、ユーザー回答）: 駅間の時間は駅すぱあと API で自動取得する方針（買い切りを検討中。先方サイトのメンテナンス明けに条件を確認するまで保留）。API導入までは乗車時間を手入力しないため、自動の催促はAPI導入後に開始する。結果は駅の組ごとに保存して使い回す。
+- Decision（2026-10-22補記、ユーザー回答）: 運営への通知は、ID・権限管理の役割ごとに付与する権限「起床報告が無い場合の連絡受け取り」（wake_alert_receive）を持ち、公式LINEと連携済みの人へ送る。管理者は全権限を持つため既定で対象。公式LINEはライトプラン（月5,000通。上限到達後はその月は送信不可）へ移行予定のため、月の消費通数を監視して8割で運営へ知らせる。返信（応答メッセージ）は通数に含まれない。
+- Implementation（2026-10-22、0.47.4）: 依頼書に「会場の最寄り駅（任意）」と「駅から徒歩（分、0〜120）」を追加し、本文・PDFに「■最寄り駅」として表示。権限 wake_alert_receive を追加（A2で使用）。
+
+### DEC-067: 正式の発注依頼書も公式LINEで送付する（DEC-028の上書き）（2026-10-22）
+- Status: Confirmed（ユーザー回答 2026-10-22「すべて公式LINEで送付します」）
+- Context: DEC-028（2026-10-06）は、公式LINEで送れるのはテスト区分の依頼書だけとし、正式区分は弁護士確認済みの書式が適用されるまで送らないとしていた。一方、同日のコミット 3724948（send confirmed orders on LINE）以降、コードは正式区分も送付できる状態になっており、その判断がこのログに記録されていなかった。
+- Decision: 発注依頼書は、正式・テストの区分にかかわらず、すべて公式LINEで送付する。DEC-028の「テスト区分だけ」を上書きする。正式区分の受諾は、DEC-063の稼働予定の起点になる。
+- Follow-ups: `src/services/line_order.py` の冒頭コメント（「正式区分は送らない」）を実装時に直す。弁護士確認済み書式（TEMPLATE_LAYOUT_APPLIED）の適用は、この決定とは別の事項として扱う。
+- Spec Reference: DEC-027/028/063。
+
+### DEC-068: 送付先ごとの「閲覧を停止」ボタンを撤去する（2026-10-22）
+- Status: Confirmed（ユーザー提案。作成者も同意）／実装済み（0.46.8・0.47.0）。詳細設計 `docs/ops/LINE_WORKER_DAILY_OPERATIONS_DESIGN_A0_A1_2026-10-22.md` §12-C1
+- Context: 発注依頼書の画面の「送付状況」の表に、送付先ごとの「閲覧を停止」ボタン（view_revoked）がある。押すとその人のPDFリンク・送付・受諾/辞退が止まるが、役割が分かりにくく、認知負荷が大きい。依頼書の作成後に必要な操作は「送付先を選んで送付する」だけである。
+- Decision: 「閲覧を停止」のボタンとAPI（/api/order-requests/deliveries/{id}/revoke-view）を撤去する。送付先から外す・依頼をやめる場合は、修正版の発行（DEC-063）または取消（発注の中止。L-34）で行う。修正版を確定したとき、送付先から外れた人に旧い版で発行した期限内のPDFリンクを自動で無効にする。既存の view_revoked の列とデータは残し、撤去前に停止された送付行は、送付先から外れた扱いとする。
+- Implementation（2026-10-22、0.46.8）: 画面のボタンと revoke-view API を撤去。修正版で外れた人の旧いPDFリンクの自動無効化はA1で実装する。
+- Implementation（2026-10-22、0.47.0）: 修正版の確定時、送付先から外れた人の系列内の期限内PDFリンクを無効にし、稼働予定を取り消す（removed_from_recipients）。
+- Version: 既存画面の操作の削除・変更なのでZ。
+- Spec Reference: DEC-027/063/065。
+
+### DEC-069: 発注依頼書の送付操作の改善（0.47.1〜0.47.3）（2026-10-22）
+- Status: Confirmed（ユーザー指摘・依頼）／実装済み
+- Context: A1公開後の確認で、(1) 稼働時間を文章で入力した依頼書は受諾しても稼働予定ができないことが操作者から分からない、(2) 公式LINEでの受諾が画面を開き直すまで「未回答」と表示される、(3) 送付前の入力漏れのメッセージが画面上端にしか出ず「押しても何も起きない」ように見える、(4) 「担当者」が運営側の連絡担当者を指すことが分からず送付できない、が分かった。
+- Decision: (1) 日付・期間ごとの入力がない依頼書の確定・送付時に「稼働予定が作られない」ことを確認する（確定は止めない。正式運用前に止めるかは別途判断）。(2) 送信した依頼の一覧を30秒ごと・画面復帰時に読み直す。(3) エラーをボタンの上にも表示し、全体の稼働日が空なら稼働時間の詳細の最初と最後の日で補う。日付・期間の追加時の時刻の初期値を 9:00〜17:00 にする。送信後に「画面を閉じますか？」を確認する。(4) 運営側の連絡担当者を任意にし、空欄は「なし」として本文・PDFに表示する。発注元の担当者の空の選択肢を「なし」と表示する。
+- Decision（2026-10-22、ユーザー判断）: (1) を改め、日付・期間ごとの入力がない依頼書は確定できないようにする（サーバーでも拒否）。ただし旧形式の依頼書を基にした「変更を作成」「別日で新規作成」・下書きの保存は止めない（作成時に日付・期間ごとの入力へ自動で切り替え、元の文面は参考として残す）。確定済みの旧形式の依頼書はそのまま。実装 0.47.7。
+- Decision（2026-10-22、ユーザー依頼）: 同じイベントを別日に行うときのため「別日で新規作成」を追加する。元の依頼書とは別の系列として作り、日付と期限は空にする。「変更を作成」（同じ系列で置き換える）と使い分ける。実装 0.47.6。
+- Version: いずれも既存画面の修正なのでZ（0.47.1・0.47.2・0.47.3・0.47.6・0.47.7）。
+- Spec Reference: DEC-063、CHANGELOG 0.47.1〜0.47.3。
+
+### DEC-070: 稼働者向けLINE Web確認画面の構想とレビュー計画（2026-10-22）
+- Status: Requirements Confirmed / Design Pending（計画書作成の依頼。実装・公開は未依頼）
+- Purpose: 稼働者が「いつ働くか」「いくらになりそうか」「何を確認すべきか」をひと目で把握できるようにする。
+- Confirmed requirements: 月間は予定のある日が分かる簡単な印でよい。月間と直近1週間の札表示を切り替える。受諾済みの仕事からインセンティブを除いた月間報酬見込みを目安で表示する。交通費・昼食代は多くが込みであり、概算画面で細分化する必要はない。上記3点を優先し、現行6分割リッチメニューを踏まえた他AIレビュー用の計画書を作る。
+- Proposal / Pending: LIFFの共通Web画面、⑤⑥のURI化、確認事項の分類、日付詳細、費用別途の例外、概算算式・税・端数・日給計上単位・時給休憩・再現用履歴、認証と公開制御は提案または未決。計画書に記載した推奨を承認済み仕様にしない。
+- Boundary: DEC-063の予定正本とDEC-042/063の会計境界を維持する。Web概算の追加を理由に支払・請求・締め済み結果を書き換えない。DEC-064のトーク方式からの拡張は実装決定時に仕様へ反映する。
+- Artifacts: `docs/ops/LINE_WORKER_WEB_PORTAL_PLAN_2026-10-22.md` v0.1、`docs/ops/LINE_WORKER_WEB_PORTAL_REVIEW_REQUEST_2026-10-22.md`。
+- Implementation: 今回は文書のみ。コード・DB・本番メニューの変更なし。アプリのバージョン変更とデプロイは対象外。
+- Decision（2026-10-22補記、ユーザー回答）: 報酬見込みの日給の数え方は、依頼書に記載した1日あたりの日給を、本人が参加する日ごとに1回数える。多少の時間のずれは日給に含まれ、大幅に延びた場合は現場管理者から運営へ連絡が入る（システムでは扱わない）。1つの依頼書の中では勤務グループの日付が重ならないため同じ日に2回数えることはなく、別々の依頼書で同じ日に働く場合はそれぞれ数える。これにより計画書の P-03 は解消し、報酬見込みは会計B1の決定を待たずにWeb確認画面の段階で作れる。支払・請求の計算規則はB1で別途決める（DEC-063 Accounting boundary を維持）。
+- Roadmap（2026-10-22、ユーザー決定）: 順番・共通部分は統合計画 `docs/ops/LINE_WORKER_ROADMAP_2026-10-22.md`（v0.5）で管理する。順番は ⓪0.47.8 → ①日付指定の受諾・参加カレンダー → ②Web確認画面（報酬見込みを含む）→ ③変更依頼 → ④起床の監視。報酬見込みは、時給の依頼書を対象外として件数表示、税は加減しない、日をまたぐ勤務は開始日の月、過去の表示額の証明は不要。参加カレンダーは「参加OK／参加OK・変更確認待ち／未回答」。試験運用は運用側と協力して3〜4人で行い、正式運用は11月中の開始を目標とする。①の公開は PostgreSQL の同時操作試験の合格を条件とする。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5/6/7/8/11/12、DEC-042/063/064/065/068/069。
+
+### DEC-071: カレンダー・依頼書確認とLINE参加日の表示改善（2026-10-23）
+- Status: Confirmed（ユーザー依頼）
+- Purpose: 横長のカレンダーで日付を見失わず、送付前の誤りを同じ下書きで修正し、本人が期間・休業日・参加日を区別できるようにする。
+- Decision: イベントごと・稼働者ごとの表は内部で縦横スクロールし、日付と名前を固定する。右上の説明を消し、イベント名の下は文書番号だけにして詳細ポップアップを開く。作成した依頼書の区分列を消し、カテゴリと送付先の見出しが折り返しにくい余白にする。稼働日・勤務詳細・単価詳細の日付選択は月曜始まりの共通カレンダーにする。PDFの確認画面から「修正する」で入力に戻り、保存済みの下書きを更新する。
+- Decision: LINEの選択画面で「すべて選択する」を追加し、現在の月に限らず本人が選択可能な全日を選ぶ。確認画面・受付通知・受諾返信に期間、期間中の休業日、参加する日、参加しない日を示す。連続する2日以上だけを開始日〜終了日の1行にし、それ以外は1日1行。全員共通の休業日は参加しない日から除く。個人に設定した不参加日は、全員共通の休業日として扱わず参加しない日に含める。日程グループの間で実勤務のない日も休業日として扱い、期間の初日・最終日が休業日でも全体の期間を維持する。
+- Data / Audit: DB・モデル・DDLの変更なし。確定・受諾・参加予定・会計の正本は変更しない。既存の確定（ORDER_REQUEST_CONFIRMED）・LINE送付（ORDER_REQUEST_LINE_SENT）・受諾（ORDER_REQUEST_ACKED）と参加予定の監査点を維持し、表示の操作では業務状態を変更しない。
+- Validation: `tests/test_line_worker_pick.py`（休業日と個人不参加日の分離・期間の端・受付通知）、`apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（日付固定・詳細・月曜始まり・PDF再修正・月をまたぐ全日選択）。
+- Version: 既存画面・返信の修正としてZ（0.48.11）。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/16、DEC-063/065/069。
+
+### DEC-072: 発注依頼書の名前付きテンプレートと参加日選択の初期値（2026-10-23）
+- Status: Confirmed（テンプレート保存・新規作成時の呼び出し、LINEの初期全選択はユーザー依頼）
+- Purpose: 月例・季節・年次・不定期のイベントで過去の依頼書を探す作業を省き、LINEでは行けない日だけ外して返答できるようにする。
+- Decision: 作成済み依頼書から名前付きテンプレートを保存し、新規作成時に保存済み一覧を検索して呼び出す。テンプレートは保存元の版を参照するだけでなく内容を独立して保持する。元の依頼書の変更・非表示や、呼び出し後の編集に連動して変更しない。呼び出しだけでは依頼書の保存・確定・送付を行わない。
+- Implementation defaults: 担当者間で共用する保存済み一覧とし、内容・場所・発注元・連絡担当・カテゴリ・時刻・単価などを保持する。誤送付・古い日付の再利用を防ぐため、日付・休業日・稼働日の補足・期限・送付先・個人不参加日・電話済み情報・追跡担当・送付/受諾状態は引き継がない。自由文中の日付は推測して消さず、利用時に確認する。旧形式の依頼書も文章を参照として保持し、呼び出し時は日付・期間ごとの入力に切り替える。
+- Data: `order_request_templates`（id、name、name_key、payload JSON、source_version_id、source_document_number、created_by_user_id、created_at/updated_at、archived_at/archived_by_user_id）。有効なname_keyはNFKC・大文字小文字の正規化後の部分一意インデックスで重複を拒否する。既存依頼書の移行・上書きは不要。migration `20261023b001`（追加のみ）。
+- Lifecycle / Permission / Audit: 保存・一覧除外はorder_write、一覧・内容閲覧はorder_read。不要なものは一覧から外し、物理削除しない。内容を変えるときは別名で保存、同名を使うときは旧テンプレートを一覧除外してから保存する。`order_request_template_saved` / `order_request_template_archived`に実行者・役割・対象・保存元版または除外操作を記録する。
+- Decision（ユーザーの追加訂正）: DEC-071の「すべて選択する」ボタンは撤去し、LINE画面を開いた時点で本人が選択可能な全日を選択済みにする。本人は参加できない日だけ外す。休業日・個人に設定した不参加日は選ばない。受諾済みの場合は既存参加日だけを表示し、再受諾・予定変更はしない。確認画面で送信した時だけ記録し、0日なら送信できない。
+- Version: 既存の依頼書作成で内容を再利用する方法の追加と、既存の参加日入力方法の変更としてZ（0.48.12）。DB追加自体をYの理由にしない。
+- Validation: `tests/test_order_request_templates.py`（内容の独立・安全な初期値・権限・重複・非破壊除外・検索・DDL）、関連依頼書/LINEテスト、`apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（保存・検索・呼出し・除外・初期全選択と月をまたぐ解除）。運用手順: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/6/14.4/16、DEC-063/065/069/071。
+
+### DEC-073: 依頼書の稼働日選択範囲とフォーム配置（2026-10-23）
+- Status: Confirmed（ユーザーの6点の依頼と背景位置の追加指定）
+- Purpose: 全体の稼働期間から外れた日付の入力を防ぎ、入力欄・注釈・必要時だけのメモを見分けやすくする。
+- Decision: 詳細の開始日・終了日を全体の稼働期間内に制限し、月送りも同じ範囲にする。単価を別日付で設定する場合も同じ基準にする。全体の期間が空・不正なら日付選択を無効にする。期間を後から変更して範囲外になった詳細は勝手に消さず選び直しを案内する。APIの既存の範囲検証を維持する。
+- Decision: テンプレート呼出しの縁を青にする。背景は半幅にし稼働場所の右へ置く。取引相手メモは連絡担当者の右から行末まで広げ、見出し右の注釈を「PDFには記載しません」だけにする。期限の案内の右に「（必須）」を置き、注釈を「期限内に返事がない相手へ案内を送ります」にする。電話メモは電話先行チェック時だけその右に表示する。チェック解除はメモ削除の指示ではないため入力値を保持する。
+- Data / Audit: DB・モデル・DDLの変更なし。既存の保存・確定・送付・監査処理を維持し、入力表示の切替で業務状態を変更しない。
+- Validation: `apps/admin-web/e2e/calendar-order-participation-ui.spec.ts`（期間上下限・月移動・全体期間変更時の再選択・配置・電話メモ切替）、`tests/test_api_order_requests.py`（既存APIの期間検証と保存）。
+- Version: 既存フォームの修正としてZ（0.48.13）。
+- Spec Reference: DESIGN_SPEC_v0.3 §5.2/14.5、DEC-069/071/072。
+
+### DEC-074: 依頼書の請求総額確定と依頼元別月次請求（2026-10-23）
+- Status: Confirmed（全体管理者専用・未入力バッジ・月次請求はユーザー依頼。金額単位、対象、請求月、税計算は個別回答で確定）
+- Purpose: 依頼を受けたクライアントへの請求額の記入漏れを見えるようにし、月末の依頼元別請求を再現可能にする。
+- Decision: 金額は依頼書1件の請求総額・税抜。正式・確定済みの最新依頼書だけを対象とし、下書き・テスト・取消・削除・置換済み旧版を除く。0円は記入済み。月をまたぐ場合も金額確定時に請求月を指定し、その月に全額計上する。税は依頼元別月次税抜小計の10%、円未満切捨て。
+- Data / Migration: `order_billing_tax_rules`（10%・floor_yenの初期マスタ）、`order_billing_issuer`（発行元設定・revision）、`order_billing_amounts`（版別追記履歴・楽観的revision）、`order_billing_invoices`（版・親・請求先/発行元/税ルールsnapshot・PDF参照）、`order_billing_invoice_lines`（明細正本・系列単位の一意割当）。既存テーブルを変えない追加migration `20261023c001`。金額はDecimal/Numeric、合計は明細から集計。
+- Lifecycle: 依頼書の改訂版へ旧金額を自動継承しない。下書き生成は再試行で同じ下書きを返す。下書き作成後の依頼改訂・取消・追加金額を検出して発行を止める。下書き取消は理由を必須にし、旧版・明細・PDFを残して割当を解放する。発行時は別PDFキーに保管し、以後の金額・明細・PDFを上書きしない。保管PDFがない場合は再生成せず404。
+- Implementation guard: 既存の実績ベース請求との明細対応を推測しない。同一請求先・請求月の両経路併用を生成時に相互拒否する（見積は除く）。同時実行はクライアント→依頼系列の順にロックし、系列の重複計上と同一請求先/月の有効帳票はDB制約でも防止する。既存の支払・実績集計を更新しない。
+- Permission / Audit: メニュー・画面・全API・PDF・件数をadmin限定。カスタム経理権限でも許可しない。一般担当者の監査検索から`order_billing_*`を除外。`order_billing_amount_confirmed` / `order_billing_invoice_created` / `order_billing_invoice_issued` / `order_billing_invoice_draft_cancelled`に実行者・対象・金額/月/版・理由を記録。
+- Additional Decision（ユーザー追加回答）: 発行元情報は今後の変更に対応する設定方式とする。初期値は株式会社VANZAI／〒116-0002 東京都荒川区荒川1丁目39-11 東京アルバタワー1703。全体管理者が正式名称・郵便番号・住所・登録番号・振込先・支払期限/条件を編集する。未指定の任意項目は空欄でPDFに出さず、支払条件は自由文。作成済み帳票には設定revisionと内容を保持し、設定変更を遡及しない。`order_billing_issuer_updated`へ変更前後と実行者を監査記録する。
+- Boundary: 発行済み訂正/追加請求の伝票運用は別途定義する。発行済み依頼が改訂されても二重請求や上書きはせず、既存請求を確認する。既存の実績請求一覧とは独立する。
+- Version: 依頼書ごとのクライアント請求額の確定から、依頼元別月次請求書の作成・発行までを独立して行える新業務のためY（0.49.0）。
+- Validation: `tests/test_order_billing.py`（権限・監査秘匿・履歴・請求月・小計課税切捨て・版固定・重複防止・migration）、既存請求/締め回帰テスト、`apps/admin-web/e2e/order-billing-ui.spec.ts`（バッジ即時更新・請求月必須・金額保存・発行・競合・経理権限拒否）。PDFの1ページ/3ページを画像化して視覚確認。運用は `docs/ops/ORDER_BILLING_RUNBOOK.md`。
+- Spec Reference: DESIGN_SPEC_v0.3 §11.1/11.3/11.4/16、DEC-005/015。
+
+### DEC-075: 案件クライアントへの請求先固定とインセンティブの後日確定（2026-10-23）
+- Status: Confirmed（請求先固定・依頼書のなし/あり・条件メモ表示はユーザー指定。実績後の金額入力と通常額への加算も個別回答で確定）
+- Purpose: 請求先の選択誤りを防ぎ、販売実績が後日判明するインセンティブを依頼条件と結び付けて請求漏れを防ぐ。
+- Decision: 請求先は依頼書の`internal_client_id`（案件の発注元クライアント）からAPIで決定し、金額フォームは名称を読み取り専用表示する。旧クライアント指定を含むリクエストも異なるIDなら拒否。発注元未設定/無効なら金額保存を止める。旧記録の請求先不一致は自動改変せず未処理とし、生成・発行を止めて再確認する。
+- Decision: 依頼書の`incentive_enabled`はなし/ありの明示選択。初期なしは`インセンティブなし`を自動記載し、ありへ切替時は空欄にして自由入力、詳細なしでの確定は拒否。テンプレートは選択・条件メモを保持。旧データの空欄/明確な否定だけをなし、その他の条件文はありとして互換表示する。
+- Decision: 通常請求額（税抜、インセンティブ除外）と後日入力のインセンティブ額（税抜）を分ける。条件メモは依頼書の版から読み取り専用で表示・snapshot保存。なしなら金額欄を出さず、APIも額指定を拒否する。ありはNULLで先行保存可能、NULLは未確定で0円とは異なり、バッジ/未入力一覧に残して同じ請求先/月の請求生成・発行を止める。実績0円は明示入力して確定する。
+- Data / Migration: `order_billing_amounts.incentive_amount`、`order_billing_invoice_lines.incentive_amount/incentive_note`をNULL許容で追加（`20261023d001`、down=`20261023c001`）。既存値を更新しない。履歴のsnapshotへ条件・有無を保存。請求明細のamountは通常額＋インセンティブ額の税抜合計、ヘッダーは明細集計で10%小計課税/円未満切捨てを継続。負額・明細額より大きいインセンティブはDB制約でも拒否する。
+- History / Permission / Audit: 金額・後日実績・条件は既存の追記履歴に保存し、変更理由・実行者を`order_billing_amount_confirmed`へ記録。admin限定・監査秘匿・発行後固定・系列の二重請求防止を維持する。旧記録を自動で通常額/インセンティブに再配分せず、ありは再確認を必要とする。発行済みは上書きせず、訂正運用はDEC-074の境界を維持する。
+- Version: 既存の依頼書と金額確定・請求画面の項目追加/選択方法変更としてZ（0.49.1）。DB/API追加を理由にYへ上げない。
+- Validation: `tests/test_order_billing.py`（請求先改ざん/旧不一致・未確定/0円・税抜加算・明細/PDF固定・追加DDL・長文改ページ）、`tests/test_order_incentive_sections.py`（旧文言互換・明示なし/あり・条件必須・本文/テンプレート保持）、依頼書/LINE/請求/締め回帰、ブラウザの切替・固定請求先・後日0円確定とバッジ。インセンティブ内訳を含む1/2ページと100行条件の3ページPDFを画像で確認。依頼書/請求書の枠内改ページを可能にし、長文を省略しない。
+- Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4/16、DEC-074。運用: `docs/ops/ORDER_BILLING_RUNBOOK.md`。
+
+### DEC-076: 請求金額入力の桁区切りと日本語単位による補助表示（2026-10-23）
+- Status: Confirmed（ユーザー指定の`200000`→`200,000`、欄の下に`20万円`）
+- Purpose: 金額入力時の桁の読み違えを防ぐ。
+- Decision: 「依頼書の請求金額を確定」の通常請求額とインセンティブ額へ共通適用する。入力中から半角数字・3桁カンマ区切りとし、直下に万・億・兆の単位を付けた補助を表示する。全角数字/小数点・カンマ付き貼り付けを正規化し、IME変換中は書き換えない。途中の桁の編集時も入力位置を維持する。
+- Integrity: 保存値と表示を分け、APIへはカンマなしの十進文字列を送る。表示のために浮動小数へ変換・丸めを行わない。0円、小数2桁、未入力の区別を保持し、不正文字・負額・超過桁数は保存できない。保存済み整数の`.00`は編集開始時の表示から省くが数値は変えない。
+- Data / Audit: DB/モデル/API/DDLの変更なし。既存の金額確定・履歴・監査点を継続し、表示変更だけで保存・発行を行わない。
+- Validation: `apps/admin-web/e2e/order-billing-ui.spec.ts`で全角20万円の桁区切り・補助表示・途中編集・APIへのカンマなし送信・インセンティブの小数/0円/空欄と既存操作を確認。両アプリをビルドする。
+- Version: 既存金額入力の表示改善としてZ（0.49.2）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-074/075。
+
+### DEC-077: テンプレートの直接作成と金額補助表示の位置・文字サイズ（2026-10-23）
+- Status: Confirmed（ユーザーの2点の依頼と添付画像による位置指定）
+- Purpose: 依頼書を先に作らず再利用する内容を準備できるようにし、請求額の桁の読み取り補助を見やすくする。
+- Decision: 発注依頼書に「テンプレートの作成」を追加し、既存の入力項目を使うモーダルで名前・案件内容・発注元・場所・時刻・単価・インセンティブ条件・連絡先等を入力する。日付・休業日・稼働日の補足・期限・送付先・追跡は入力せず、保存APIでも既存の再利用用正規化を通して業務状態を除外する。依頼書・文書番号・PDF・送付/受諾記録を作らない。未定項目は呼び出し後に入力でき、テンプレート名だけを必須とする。
+- Data / DDL: `order_request_templates.source_version_id`をNULL許容にする最小migration `20261023e001`（down=`20261023d001`）。直接作成はsource_version_id=NULL、source_document_number=空文字としてUIに「直接作成」を表示。既存の保存元・payload・依頼書は更新しない。直接作成行があるdowngradeは、データの削除/保存元捏造を避けるため明示的に停止する。
+- API / Permission / Audit: `POST /api/order-requests/templates/create`、order_write必須。既存の名前正規化・一意制約・order_readによる閲覧・非破壊一覧除外を共用。発注元・担当者・場所の参照を検証する。保存は`order_request_template_saved`に対象・実行者・役割・名前・source_version_id=NULL・direct_creation=trueを記録する。
+- UI: テンプレート作成中は日付・期限・送付先・送信操作を表示せず、保存中は編集・閉じる・重複送信を防ぐ。既存依頼書からのテンプレート保存と通常依頼書作成は維持する。
+- UI（請求額）: 日本語単位の補助表示を1remに拡大し、入力欄の左右余白＋枠線の幅を補助表示にも適用して数字の開始位置を一致させる。通常額・インセンティブ額の両方に適用。DB/API・計算金額の変更なし。
+- Validation: `tests/test_order_request_templates.py`（直接作成・依頼書/送付を生成しない・業務状態除外・保存内容・重複・権限・参照・DDL/安全なdowngrade）、既存依頼書/インセンティブ回帰、ブラウザで直接作成→呼び出しと既存操作、補助表示の文字左端・16px以上のフォントを検証。操作・配置を画像で確認。
+- Version: 既存のテンプレート保存方法の追加と金額表示の改善としてZ（0.49.3）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-072/075/076。運用: `docs/ops/ORDER_REQUEST_TEMPLATE_RUNBOOK.md`。
+
+
+## DEC-078: 発注依頼書の案件名・参考URL分離と稼働場所の住所補完（2026-10-23）
+- Status: Accepted（ユーザー指定）
+- Purpose: 案件名にURL、会場名に住所が混在するのを防ぎ、現在の2列のバランスを維持して入力しやすくする。
+- Model: 既存request_conditions JSONに任意のreference_urlを追加。URL文字列のチルダを全角化せずhttp/https・長さ・制御文字等を検証する。住所は郵便番号を含めて既存site_addressへ保存する。テーブル/カラム/DDL変更なし。
+- UI: 左半分の同じカードに案件名（通常依頼書の確定時必須）と参考URL（任意）を配置し、右のカテゴリ、下の稼働場所と背景の2列は維持する。直接テンプレート作成の案件名はDEC-077どおり省略可能。稼働場所のplaceholderは会場名のみ。住所の名称を「稼働場所の住所」へ変更する。
+- Postal: 取引先登録のlookupPostalAddress/normalizePostalCodeを共用する。郵便番号7桁で都道府県・市区町村・町域を補完し、番地・建物名は手入力。350msの待機と中止制御を行い、入力済み住所や検索待ち中の追記を上書きしない。複数候補/手入力済みの場合は候補選択、失敗時は手入力を案内する。
+- Compatibility: 参考URLは本文・PDF・テンプレート保存と呼出しに引き継ぐ。従来の案件名に含まれるURLや住所は一括移動せず、旧版・発行済みPDF・金額を変更しない。既存の依頼書/テンプレート保存監査と権限を継続する。
+- Validation: tests/test_order_reference_url.py（任意URL・不正URL拒否・保存/テンプレート保持・案件名必須・旧名称保持）、依頼書/インセンティブ/テンプレート回帰、ブラウザの2列寸法・住所補完・検索中手入力保護・URL再読込、PDFを画像化して表示確認。
+- Version: 既存フォームの項目追加・表示変更としてZ（0.49.4）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2、DEC-072/077。
+
+## DEC-079: 同じ画面の異なる操作をボタン色で区別する（2026-10-23）
+- Status: Accepted（ユーザー指定）
+- Purpose: 発注依頼書で新規依頼書の作成とテンプレート作成が同じ青の塗りボタンに見え、操作を見分けにくい問題を解消する。
+- Decision: 同じ画面の異なる操作を同じボタン色にしない。主の新規作成は従来の青を維持し、保存済みテンプレートを茶系、テンプレートの作成を紫系の枠線・同系文字に変更する。枠線は2px、hoverとfocus-visibleとダークモードにも対応する。以前の作成ボタンを一律青とするルールに対するユーザー訂正としてAGENTS.md §12に明記する。
+- Scope: 今回の変更は指定された発注依頼書の上部3ボタン。操作内容・権限・保存・DB/APIは変更せず、DB/DDL変更なし。既存のモーダル内の主作成確定は青を維持する。他画面は今後の変更時に同方針を適用する。
+- Validation: 管理画面の型チェック・本番ビルド、ブラウザでライト/ダークの実際の配色・配置と既存のテンプレート作成・一覧・呼出し操作を確認する。
+- Version: 既存画面の表示調整としてZ（0.49.5）。Spec Reference: DESIGN_SPEC_v0.3 §5.2、DEC-057/077。
+
+## DEC-080: 管理画面の帯を撤去し設定・プロフィールへ表示設定を集約（2026-10-23）
+- Status: Accepted（ユーザー指定）
+- Purpose: 画面上部の常設帯と不要な注釈による占有をなくし、アカウント設定の横長の入力欄を適切な幅にする。
+- Decision: AppShellの共通上部帯を削除。ユーザー名から開くプロフィールを「設定・プロフィール」に改称し、ライト/ダークの両方を示す切替を配置する。既存のテーマ保存キーと反映処理を利用して、遷移・再読込後も設定を維持する。公開・ログイン用の独立画面と見た目プレビューの独自レイアウトは対象外。
+- Access: 上部帯にあった「登録画面のURL確認」は機能を失わないよう同画面へ移動し、従来のregistration_read権限判定・URL生成・コピー・公開リンク発行への導線をそのまま保持する。
+- Layout: 設定画面は最大720px、各フォームの送信ボタンは内容に合う幅とする。スマートフォン幅でも横方向へはみ出さない。表示名・パスワード変更・シール色・管理者向け一覧・ログアウトは維持する。
+- Order: 郵便番号の補完注釈を見出しの右側にまとめ、狭い画面では折返しを許可する。発注依頼書上部の書式適用状況/LINE案内の常設注釈を削除する。送信可否のlineReady判定は残す。
+- Model: 表示と導線の調整のみ。DB/DDL/API・監査出力点の追加変更なし。既存データ・金額・発行済みPDFは変更しない。
+- Validation: ブラウザで共通帯/案内文の撤去・郵便番号注釈の位置・設定へのユーザー名導線・720px以下の幅・モード保存と遷移/再読込・登録画面URLダイアログ・モバイルの横幅・既存依頼書操作を検証。管理画面の型チェック/本番ビルドを実行。
+- Version: 既存画面の整理・導線変更としてZ（0.49.6）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2、DEC-057/078/079。
+
+## DEC-081: 金額確定時の案件情報補足と集合場所周辺の整列（2026-10-23）
+- Status: Accepted（ユーザー指定）
+- Purpose: 文書番号・案件名だけでは対象の期間や業務種類が判別しにくい問題と、発注依頼書の集合場所・駅・徒歩分数が別行へずれる問題を解消する。
+- Billing: 金額確定ポップアップに文書番号・版、案件名、稼働期間、カテゴリを読み取り専用でまとめる。一覧にもカテゴリを表示する。期間は対象確定版のwork_date_label、カテゴリは既存request_conditions JSONのcategoriesを参照する。カテゴリなしは「未設定」。研修を併用する場合も両方表示する。
+- Layout: 集合場所（6列）・最寄り駅（4列）・徒歩分数（2列）を独立した12列の1行にまとめ、次の稼働日の行は左端から開始する。既存の狭い画面の12列幅ルールを利用して縦に積む。
+- Model: 請求一覧APIの読み取りレスポンスにcategoriesを追加するのみ。DB/DDL・金額保存・税計算・請求書明細や発行済みPDF・監査出力点の変更なし。対象は既存の全体管理者専用画面のまま。
+- Validation: tests/test_order_billing.pyで確定版の期間・複数カテゴリの参照と金額未入力の維持、既存請求の回帰。ブラウザで入力ポップアップの期間・カテゴリ、集合場所/駅/徒歩の同一行・次行左端を寸法検証し、画像でも確認する。
+- Version: 既存画面の情報追加と表示改善としてZ（0.49.7）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11.4、DEC-074/078。
+
+## DEC-082: 会社情報の画面と請求書への連携、起床の目視確認の補助（2026-10-23）
+- Status: Accepted（ユーザー指定：サイドメニューの「その他」に「会社情報」を作り、電話番号・住所などを入力して請求書に連携する。起床の目視確認の補助 W-1〜W-3 を試験運用の前に入れる）
+- Purpose: 会社の情報を1か所で管理し、請求書の発行元に同じ内容を載せる。起床の自動監視（統合計画④）ができるまでの目視確認で、電話番号を探す手間・連絡結果の書き写し・時刻の計算と見落としを減らす。
+- Company profile: 保存先は既存の請求書の発行元設定（`order_billing_issuer` の1行。DEC-074）を使い、表を増やさない。電話番号・メールアドレス・代表者名の列を追加。編集はサイドメニュー「会社情報」（`/settings/company`、全体管理者だけ。API `/api/company-profile`）。依頼書の金額確定画面の発行元設定のポップアップは撤去し、会社情報へのリンクにした（編集の場所を1つにする）。`/api/order-billing/issuer` は互換のため残す。
+- Invoices: 依頼元別の月次請求書は従来どおり作成時点の内容を `issuer_snapshot` に保存（電話番号・メール・代表者も含む）。実績からの請求書・見積書（`invoices`）にも `issuer_snapshot` を追加し、**発行時と再発行時に今の会社情報を保存**してPDFの発行元の欄に載せる。下書きのPDFは今の会社情報を載せる。0.49.8 より前に発行した請求書は NULL のままで、保存済みのPDFも変えない（発行済みは変えない原則。DESIGN_SPEC §11）。支払明細・発注依頼書のPDFは対象外（発注依頼書の会社名は従来どおり固定）。
+- Wake check: 起床状況に電話番号（W-1）、連絡の結果の記録（W-2。`wake_contact_logs`、追記のみ、結果は「LINEで連絡した／電話で起床を確認／電話がつながらない／現場へ連絡した／欠勤」、監査 `wake_contact_recorded`）、今すること（W-3。手順書の時刻＝最初の開始の120分前にLINE・90分前に電話・60分前に現場へ連絡。報告あり・電話で起床を確認・欠勤は対応済み）を追加し、今連絡すべき人を上に並べる。記録できるのは起床状況を見られる人（`wake_status_read`）。時刻は手順書の案のまま固定値で、変更はコード（`WAKE_STEP_*`）。
+- Not included: 「欠勤」を記録しても予定は変わらない（予定を取り消すのは発注依頼書の「今後の参加を終了」）。
+- Data / Migration: `20261023f001`（発行元に3列追加・`invoices.issuer_snapshot` 追加・`wake_contact_logs` 作成）。既存の行は変えない。downgrade は記録・保存済みの発行元があるときは止める。
+- Validation: `tests/test_company_profile_and_wake_contacts.py`（今することの段階と順番、電話番号・連絡の記録・権限・監査、会社情報の権限・競合・発行元設定との一致、発行時点の会社情報の保存と再発行、PDF生成）。全体の試験。
+- Version: 既存の設定の移し替えと既存画面への情報・記録の追加として Z（0.49.8）。Spec Reference: DESIGN_SPEC_v0.3 §3/5.2/11、DEC-066/074/075、統合計画 §7.1、`docs/runbook/WAKE_VISUAL_CHECK_RUNBOOK.md`。
+
+
+## DEC-083: カレンダーのテスト表示・カテゴリー配色・金額入力の体験（2026-10-23）
+
+- 目的: クライアントが架空データでカレンダーと金額確定を確認する。必要人数・不足判定は今回保留（ユーザーが確認予定）。
+- ユーザー指定: 4種類のカレンダーすべてでテスト依頼を含むか選択する。テスト表示の選択と月は表示を切り替えても保持する。出勤可能日は既存の配置・可否と独立した依頼書イベントを追加し、order_read権限も確認する。
+- 色はカテゴリー順に固定。研修のみは研修色、他業務＋研修は業務色。未設定は別色。カテゴリー文字とテストラベルで色以外でも識別する。
+- 金額確定でテストも含むか選択し、同じ金額履歴・監査を利用できる。正式請求生成・サイドメニューの既定件数は正式のみを維持する。テスト請求書の生成・発行は対象外。
+- 既存の確定後区分固定ルールに対する今回限りのユーザー指定例外: 名前にサンプル/テスト/sample/dummy/デモを含む既存サンプル依頼をテストへ変更する。通常の編集APIは拡大しない。請求書明細で利用済みなら変更を止める。前後を監査し、旧PDFは保持、テスト表示PDFを別キーで保存する。
+- ダミー投入: 2026年10月・11月各15件、単日・連日・月跨ぎ、参加OK/未回答/変更確認待ち。既存のLINE未連携ダミー稼働者と依頼元を使う。送信API・LINE紐付け・実績・請求・支払は作らない。既存タグ/可否は上書きせず空欄のみ補完。再実行はデータセットキーとDBロックで重複を防ぐ。
+- DB最小セットは既存OrderRequestDocument/Version/Delivery/Series/WorkerApplication/DeliveryParticipationState、Worker/WorkerAvailability、OrderBillingAmount、AuditLog。スキーマ変更・DDLなし。
+- VPSでは既存のデプロイ環境を利用し、通常デプロイからデータ投入を分離した明示オプションのみで実行する。秘密情報ファイルの値を取得・表示・変更しない。手順はdocs/ops/CALENDAR_DEMO_RUNBOOK.md。
+- 既存画面の表示と入力対象の変更なのでZ: 0.49.8 → 0.49.9。
+
+## DEC-084: 稼働者向けのWeb確認画面（統合計画 ②）とリッチメニューA2（2026-10-23）
+- Status: Accepted（ユーザー指定：1か月の予定などを公式LINEから確認できるようにする。計画どおり (b)＝予定・確認事項・報酬見込みをまとめて作り、⑤⑥からWeb画面を直接開く）
+- Purpose: 稼働者がトークをたどらずに「いつ働くか・いくらになりそうか・何を確認すべきか」を把握する（Web確認画面計画 v0.2 §1）。DEC-064 の「トーク内で完結」を、⑤⑥についてはWeb画面（LIFF）へ広げる正式な変更。
+- Screen: 既存の稼働者向けLIFF（`/public/line-worker`、日付を選んで受諾と同じLIFFアプリ）に、ホーム（`?m=home`）と受託済みの依頼書（`?m=orders`）を追加。ホームは、確認が必要な依頼の件数→その月の報酬見込みと稼働日数→［月間］［直近7日］の切り替え（月間は仕事のある日に●、内容変更の確認待ちは◆、日付を押すとその日の仕事）→確認が必要な依頼の一覧（依頼書PDFを開く・日付を選べる依頼書は日付を選ぶ画面へ）→受託済みの依頼書へ。閲覧専用で、受諾・辞退・既読などの状態を変えない（PDFリンクの発行だけ従来の⑤と同じく監査に残す。actor=line-worker-web）。
+- Estimate: 統合計画 F-01・F-02・D-02・D-06・D-08 のとおり。予定（受諾した版）ごとに依頼書の日給を1回、別々の依頼書の同じ日はそれぞれ、稼働日数は日付の数。時給・単価不明は対象外の件数、テストは含めない、変更確認中は旧い版の単価、インセンティブ・税は加減しない、合計は小数のまま足して表示時に円未満切り捨て。表は増やさず毎回再計算（計算式の版 `daily-v1`）。交通費・昼食代が「別途」の日があれば注記。
+- Confirmations: 運営の参加カレンダー（D-07）と同じ判定。回答受付版に本人宛ての送付済み・返事なしの送付行がある系列を、受諾がなければ「未回答」、旧い版の受諾があれば「変更確認待ち」として系列ごとに1件。取消・送付停止・閲覧停止・削除は出さない。
+- Orders: 今月1日以降に予定（有効・変更確認中）がある受託済みの依頼書（P-08）。変更確認中は新しい版のPDFも開ける。
+- API: `GET /api/line/worker/home?month=YYYY-MM`（`web_home`、今月から前後24か月）、`GET /api/line/worker/orders`（`web_orders`）、`POST /api/line/worker/deliveries/{id}/pdf-link`（どちらか公開中）。稼働者セッション（Bearer）で毎回、連携・稼働者・機能の公開状態を確かめる。応答は no-store。
+- Rich menu: A2（`scripts/line/rich_menu/a2.json`・`a2.png`）。⑤⑥を LIFF のURLに、①は従来の postback。`legacy_actions` で A1 のトークのボタン（wk_orders・wk_schedule）を移行用に残す。`rich_menu.py` の検証は、URIの範囲があるのに web_home・web_orders がない定義を止める。
+- Not included: 未回答の依頼への返事（受諾・辞退）はWebでは行わない（日付を選べる依頼書を除く）。統合計画 ③ で、この画面の上に返事・参加日の変更依頼を置く候補。
+- Data / Migration: なし。
+- Validation: `tests/test_line_worker_pick.py` の本人確認の仕組みを使った `tests/test_line_worker_portal.py`（機能の公開、月・7日・見込み・未回答、修正版の変更確認待ちと旧い単価、テストの扱い、他人の依頼書のPDF、月の指定、時給・単価不明・端数）。全体の試験。実機（LINEアプリ）での確認は公開後に行う。
+- Version: 予定・確認事項・見込みを一画面で確認する新しい流れとして Y（0.50.0）。Spec Reference: DESIGN_SPEC_v0.3 §3/5、DEC-042/063/064/065/070、統合計画 ②、Web確認画面計画 v0.2。
+
+
+## DEC-085: 連続日の外枠・参加不可の表示・カレンダーデモ増量（2026-10-23）
+
+- ユーザー指定の目的: 人数のばらつきがあっても期間が一目で分かる枠にし、実際に近い件数でカレンダーを確認する。
+- イベントごとは連続勤務日の全体を1つの枠にする。内部を日付列のgridとし、最も人数が多い日を基準に伸ばす。稼働者ごとも同じ系列の連続参加日を1本の枠にして日数を表示し、重なるイベントは期間内で上下位置を固定する。空白・不参加日を跨いで参加枠をつながない。
+- 参加不可は最新の確定依頼の個別不参加日、辞退の提示日、日付を選んだ受諾の提示日から選択日を引いた日を表示する。共通休業日を除外し、現在有効な参加/変更確認待ち/未回答と同じ人を同じ系列・日で重複計上しない。未回答をNGと推測しない。既存の参加状態・会計・LINEへの返答処理は変更しない。
+- API応答にunavailable配列を追加し、4カレンダーと参加人数詳細で「× 参加不可」を表示。人数の正本は従来どおり参加OK配列で、NGを参加人数に加えない。
+- デモの目標は各月45件（旧15件の3倍）。既存のデータセットキーを保持し、index15〜44のみ追加する。過去の依頼を上書きしない。元の同内容「サンプルイベント」(+番号)のみ、テスト区分を確認して1件残し、残りをdeleted_atで一覧除外する。旧PDF・版・回答は保持し、利用済み請求書があれば停止する。
+- 指定稼働者は「テストアカウント」と「坂井 貴博」（ユーザー訂正済み）。空白を除いて照合する。この2名はLINE連携済みでも対象に含める。他のLINE連携済み稼働者を勝手に対象に増やさない。送信処理・LINE紐付けは変更しない。
+- DB最小セットは既存の依頼書・系列・送付行・参加状態・稼働者・可否・監査。テーブル/DDLの追加なし。今回も既存.envは値を取得/表示/変更せず、前回承認済みのデプロイスクリプトによる実行設定の内部読み込みだけを使用する。
+- 既存画面の修正なのでZ: 0.50.0 → 0.50.1。監査はcalendar_demo_duplicate_archived、既存calendar_demo_created/seeded。手順はCALENDAR_DEMO_RUNBOOK。
+
+
+## DEC-086: 長期・月跨ぎ・同日重複なしのデモとカレンダーの排他表示（2026-10-23）
+
+- 目的: 長期/月跨ぎ予定を本番に近い見た目・配置数で確認する（ユーザー指定）。
+- 10月開始と11月開始に各3件を追加。各月5〜14日の10日間、10〜29日の20日間、24日開始の20日間（10/24〜11/12、11/24〜12/13）。共通休業日なし。
+- 追加指示: 同じ時間帯のダミーは1人1日1件にそろえる。ユーザー許可の範囲でダミー稼働者4名を追加し、短期1〜3名・長期3名を目安に配置する。未回答/参加不可も含めて同日に別のイベントを出さない。全勤務日が空いている人だけを選び、長期は1本の枠を保つ。指定2名には重ならない長期を予約し、全イベント全日参加の案は採用しない。
+- データセットv1の96件を元に、日付・カテゴリ・条件を維持してv2の別依頼96件を作成。v1は監査付きで一覧除外し、旧PDF/版/回答/金額履歴を上書きしない。利用済み請求明細があれば停止する。旧サンプル1件を含め有効97件。v2キーとDBロックで再実行を二重化しない。
+- カレンダー4種類は正式のみ/テストのみの排他表示へ変更。テストの表示ラベルをカレンダー本体から撤去し、イベント名の【テスト】は保持。金額確定・依頼書画面の識別は変更しない。既存APIのinclude_testは互換・内部確認用に残すが、画面はtest_onlyを送信する。テスト専用の出勤可能日にはテスト区分を持たない既存配置を混在させない。
+- DB最小セットは既存の依頼書/版/送付行/参加状態/稼働者/可否/監査。DDLなし。LINE送信・LINE紐付け変更・会計データは作らない。12/13まで未登録の可否だけ補完する。
+- 監査: calendar_demo_created/seeded、calendar_demo_worker_created/rebalanced/rebalance_completed（同日最大件数と指定2名の予定日数を保存）。実行設定の内部読み込みのみ既存の承認済み単独運用モードを利用し、値の取得/表示/変更はしない。
+- 既存画面とデモの調整としてZ: 0.50.1 → 0.50.2。検証: tests/test_calendar_demo.py、calendar-demo-ui.spec.ts。
+
+
+## DEC-087: 自然なダミー氏名・未定の表示・4〜8人の参加例（2026-10-24）
+
+- 目的: 全員ダミーであるというユーザー指定を踏まえ、本番に近い表示と人数のばらつきでカレンダーを確認する。
+- 追加4名の【テスト】名を渡邊健太郎/長谷川亜香里/岡田直人/松本彩乃へ、テストアカウントの稼働者名を高橋直樹へ変更する。稼働者IDと紐付けは保持する。過去PDF・版・送付時氏名は上書きせず、カレンダーだけ現在のマスタ氏名で表示する。
+- undecidedは「未定」と表示する。デモ由来notesの可否だけを補正し、参加日を出勤可へ、未定の空き日は◯/△/不可/要相談に補完する。前後を監査する。一般の入力には触れない。
+- 日付列を92→116pxに拡幅し、カード余白も調整する。イベント/稼働者表示で幅をそろえ、×を加えた氏名を表示できるようにする。
+- データセットv3として4・5・6・8人の4件を追記する。8人は3日間で8→7→6人となる例を優先。空き期間のスタッフだけを選び、未回答/不可も含む同日1件を維持する。既存長期・月跨ぎ・旧版は保持。v3キーとDBロックで再実行を二重化しない。
+- 実行は既存デプロイスクリプトの--calendar-demo-tune。サービス再起動せず、承認済みの実行設定内部読み込みだけを利用する。値の取得/表示/変更、LINE送信、LINE紐付け変更、会計データ生成はしない。
+- DB最小セットは既存Worker/WorkerAvailability/依頼書/送付行/参加状態/AuditLog。DDL不要。既存画面とデモの修正としてZ: 0.50.2 → 0.50.3。
+- 監査: calendar_demo_worker_renamed/availability_updated/group_created/tuned。検証: tests/test_calendar_demo.pyとcalendar-demo-ui.spec.ts。
+
+
+## DEC-088: 稼働開始日基準の若葉マークと同一イベントの日別人数差（2026-10-24）
+
+- 目的: 経験の浅い稼働者を氏名で識別し、同じイベント内で参加人数が異なる配置を検証する（ユーザー指定と訂正）。単にイベントごとに4/5/6/8人を割り当てるだけでは検証目的を満たさない。
+- 既存Worker.available_start_date（稼働開始日）が正本。日本時間の現在日が開始日以上・3暦月後未満なら氏名の後ろに🔰。3か月後の同日から非表示。該当日がない月は月末に丸める（1/31→4/30）。未来・未設定は非表示。表示中のカレンダー月ではなく現在の新人期間で判定する。既存の手動newcomerタグと保存期限は変更しない。
+- 名前そのものや請求/PDFの氏名スナップショットに記号を保存しない。一覧と4カレンダー・参加詳細でAPI判定を利用。追加DB/DDLなし。出勤可否の固定列と日付列を拡げ、NG付きの長い氏名＋アイコンを表示する。
+- 新人5名は石川美月/宮本悠真/大西結菜/小野寺陽介/久保田沙織。開始日は初回実行日の25/37/49/61/73日前、既存の未設定日は365日以上前に補完する。既に入力されている開始日は保持する。再実行は同一データセットで二重追加せず、同名別データがあれば停止する。
+- 10/10〜29、11/10〜29の20日間イベント各1本を既存3名＋追加5名で置換。日別OK人数は8,4,6,3,7,5,8,4,5,7を2回繰り返し、非選択日は参加不可。基本3名の連続勤務も維持する。テスト区分・長期日程・条件・元3名は保持、旧依頼は監査付きの論理削除でPDF/回答を保存。請求使用済みなら停止。同日の別イベントは不可を含め重複禁止。
+- 実行は承認済み内部設定読み込みを使う既存デプロイスクリプトの--calendar-demo-enrich。通常デプロイではデータを変更しない。LINE送信・紐付け変更・会計生成は行わない。結果に各イベント20日の日別OK人数、同日最大件数を出して検証する。
+- 監査: calendar_demo_newcomer_created、calendar_demo_start_date_filled、calendar_demo_daily_variation_replaced、calendar_demo_newcomers_completed。既存画面の表示修正としてZ: 0.50.3→0.50.4。
+
+
+## DEC-089: 本人テストアカウントの復元とディレクター可能マーク（2026-10-24）
+
+- 目的: 本人が使うテストアカウントを識別できる氏名へ戻し、現場監督を担当できる稼働者を一覧・カレンダーで区別する（ユーザー訂正・追加指示）。
+- DEC-087で本人の「テスト アカウント」まで高橋直樹へ変更した判断を撤回する。デモ改名の監査ログから対象IDと元の氏名/ふりがなを限定照合して復元。監査の対象が一意でない、現在の氏名が改名後の値から変わっている場合は停止する。ID、ログイン、LINE、予定、過去PDF・氏名スナップショットは変更しない。tuneの改名対象から本人アカウントを外し、再実行でも維持する。
+- タグコードdirector、表示「ディレクター可能」、意味「現場の監督・進行管理を担当できる」。既存Worker.tagsのJSONを使いDDLなし。規模別・業態別のDタグとは独立してチェック可能。自動付与や期間満了は設けず、チェックがある間だけ氏名後ろに青地・白文字のDマークを表示する。カーソル表示・アクセシブル名はディレクター可能。新人期間と能力は別のため🔰と青地・白文字のDマークを両方表示できる。既存の稼働者へ一括付与しない。
+- 一覧、出勤可能日、イベントごと、稼働者ごと、参加カレンダー/参加詳細は同じAPI判定を使用する。NG・長い氏名・両マークが収まるよう日付列は160pxとする。氏名文字列そのものには記号を保存しない。
+- 復元は承認済み内部設定読み込みを使う既存デプロイスクリプト--restore-test-account-name。新しいLINE送信や会計処理はない。監査test_account_name_restoredと、タグ編集時の既存worker_created/updatedを使用する。
+- 既存画面の項目追加としてZ: 0.50.4→0.50.5。検証: tests/test_worker_director.py、test_api_master_lists.py、test_worker_newcomer.py、test_calendar_demo.py、calendar-demo-ui.spec.ts、ビルド。
+
+
+## DEC-090: 遅刻・キャンセル報告の記録と月次支払の注意表示（2026-10-24）
+
+- 目的: 現場責任者（ディレクター）からの報告を運営が記録し、本人の月次支払確認で見落とさない。
+- ユーザー確定: 担当区分の呼称はディレクター。専用日給・早出設営1回の固定報酬は都度指定。受諾時点で保証し、台風などによる中止でも両方満額。本人都合の病気・怪我等による勤務キャンセルは支払わず、早出だけの本人都合キャンセルはその早出分を支払わない。クライアント請求額は別途確定し、自動加算しない。
+- 今回の実装: 「運用」に遅刻・キャンセル記録を追加。イベント系列→稼働日→受諾済み予定者を選び、遅刻（分）／キャンセル・中止、理由区分・理由・報告者をモーダルで登録。登録者・日時を保存。取消理由付きの非破壊取消と新規登録で訂正する。
+- 支払確認: 本人・対象稼働月の注意事項を支払一覧の合計額より前、注意事項のポップアップと支払生成時に表示。イベント・日・本人・遅刻時間・キャンセル理由、天候中止の満額保証を区別。月次上部には明細未生成の人も含む全記録を表示。クライアント向け請求確認には表示しない（ユーザー回答）。
+- 会計境界: 金額・予定・実績・請求・PDF・締めは自動変更しない。遅刻の減額ルールは未決。実績由来の案件別支払と依頼書由来イベントの対応を名前で推測せず、本人・月の全イベントとして明示する。支払明細の月次合算・早出だけの専用範囲指定・条件別依頼書は今回対象外。
+- 最小モデル/DDL: attendance_notesを追加（migration 20261024a001、parent 20261023f001）。予定ID・系列・本人・日・氏名/案件名・テスト区分のsnapshotと報告内容・取消履歴。系列×本人×日×種別の有効記録を部分一意制約で保護し、種別/時間/理由/取消情報にCHECK。記録がある場合のdowngradeは拒否。
+- 権限: 新規attendance_note_read/write。標準未設定opsは読み書き、accountingは閲覧。既存の保存済み権限は自動拡張しない。支払閲覧者は支払用注意事項を読める。workerは拒否。正式/テストは分離。
+- 監査: attendance_note_recorded、attendance_note_voided（対象・理由・報告者・実行者）。報告は後着し得るため締め後も記録可だが金額/PDFは不変。
+- DEC-063の「遅刻報告機能は作らない」を、運営が受けた報告の記録について変更する。LINEからの報告受付は今回は作らない。
+- 版: 独立して「現場報告の登録・取消・月次支払時の照合」を行える業務を追加するためY: 0.50.5→0.51.0。DB/API追加の量を理由にしない。
+- 検証: tests/test_attendance_notes.py、既存支払/権限/日次予定テスト、attendance-notes-ui.spec.ts、両アプリビルド。仕様参照DESIGN_SPEC §3/5/6/11/12/16。手順ATTENDANCE_NOTES_RUNBOOK.md。
+
+- DEC-090補記（2026-10-24、ユーザー指定）: 遅刻・キャンセル記録は運用グループの先頭ではなく、起床状況の直下に配置する。起床確認から報告記録へ進む順番を明確にするため。メニュー順だけの変更でDB/DDL・権限・会計・監査出力点の追加なし。Z: 0.51.0→0.51.1。検証: メニュー順確認、両アプリビルド。
+
+
+## DEC-091: 名簿のマーク統一と依頼書の文書単位回答・ページ表示（2026-10-24）
+
+- 目的: 名簿間の表示漏れをなくし、同じ文書が送付人数分重複して並ぶ一覧を文書と回答者の対応が分かる長さにする（ユーザー指定）。
+- マスター一覧の稼働者氏名にWorkerNameを適用し、稼働者登録一覧と同じAPIのis_newcomer/is_directorを使用。開始日や能力を推測して自動判定基準を増やさない。表示例として既存ダミーの山田太郎/渡邊健太郎/長谷川亜香里へdirectorだけ追記し、他のタグ・開始日・本人のテストアカウントは変更しない。監査と再実行防止あり。
+- 新しい読取API /order-requests/reply-groupsは文書ID（文書番号は一意）ごとにまとめ、文書単位のtotal/limit/offsetを返す。先に文書をページ化し、該当文書の全送付先を取得するため、同じ文書の途中でページを切らない。200送付先の旧上限を新画面へ持ち込まない。旧/repliesは互換用に残す。
+- 未送信と論理削除文書を除外。同じ文書・同じ人への複数版は最新の送付済み版1件を返す。グループの最新送付版と回答版が違えば第N版への回答と明記する。未回答を受諾に読み替えず、旧受諾・現行予定・送付時氏名/PDFは変更しない。受諾/未回答/辞退理由待ち/辞退・送信失敗を区別する。
+- 両一覧に10/20/50件（初期10件）と前/次。送信と作成のページは別々に保持し、区分・件数・キュー変更時は先頭へ戻る。削除等でページ数が減れば有効な最終ページへ補正。正式/テスト/すべての共通選択を常時見せ、初期値をすべてに変更して作成済みのテストも見えるようにする。テストラベルは保持し、カレンダーの正式/テスト排他や請求の正式既定値は変えない。
+- 最小モデルは既存Worker/OrderRequestDocument/Version/Delivery/AuditLog。DDL不要。新規送信・受諾・予定・金額・PDF・締めは触れない。デモ付与は承認済み実行設定の内部読み込みのみ既存deployの--calendar-demo-directorsで行う。監査calendar_demo_director_tagged。
+- 既存一覧の修正としてZ: 0.51.1→0.51.2。検証: test_order_reply_groups.py、test_api_order_requests.py、test_worker_director.py、order-lists-ui.spec.ts、既存カレンダーUI、ビルド。
+
+
+## DEC-092: 件数欄の統一・記憶、一覧日付の改行、旧サンプルの全受諾解除（2026-10-24）
+
+- 目的: 同じ操作の見た目と再訪時の状態を統一し、長い案件名と期間を読みやすくする。以前の正式版の試作サンプルを、非表示だけでなく運用上の受諾・予定からもなくす（ユーザー指定）。
+- OrderListSizeの親を両方ともorder-list-filtersにそろえ、片方だけ受けていたCSS差をなくす。10/20/50件をログインusername・一覧別のlocalStorageへ保存する。同じブラウザーで移動・再読込後も復元。不正値やストレージ不可は10件、保存不可でも画面は使える。ページ位置や区分の永続化は今回対象外。
+- 一覧の定型期間だけを開始年月日から/終了年月日までの2行に変換する。単日・自由文は推測して日付を補わず保持。案件名列は最小18remへ拡張。入力用の日付クラスと衝突しない専用クラスを使う。依頼書保存値・PDF・送信文は変更しない。
+- DEC-085の「旧サンプル1件を残す」を今回の指示で撤回。対象は旧「サンプルイベント」＋数字（NFKC正規化、必要ならテスト接頭辞）の全件・全版・正式/テスト両方・論理削除済みも含む。最新版だけでなく全版の名前とデモデータセットではないことを照合する。似た名前や本番と共有する系列は停止する。
+- 初回は--legacy-samples-previewで文書番号・案件名・区分の3項目だけを照合し、--legacy-samples-removeで適用する。請求明細で使用済み、または有効な勤怠報告があれば自動削除しない。対象外の有効依頼や適用受諾を巻き込む場合も全体ロールバックする。
+- 対象の各版は取消・送付停止。現行参加日があれば空配列の新状態を追記（ops_recorded_decline、理由は試作削除）し、適用受諾・回答受付を解除する。再構築で過去日を含め全active/changing予定が0になることを検証。閲覧と発行済みトークンを無効化し、一覧除外する。原PDF・元の回答・旧参加状態・監査は保持し、履歴を改ざんしない。後日再実行でも追加取消を二重化しない。新しいカレンダーデモは対象外。
+- 最小モデルは既存依頼書/版/送付行/系列/参加状態/適用受諾/予定/閲覧トークン/監査。DDLなし。通常デプロイはデータ変更なし。承認済みの既存実行設定の内部読み込みだけを既存02_app_deploy.shの明示モードで利用する。LINE送信・会計生成なし。
+- 監査: legacy_sample_version_cancelled、legacy_sample_removed、delivery_participation_recorded、order_request_application_changed、worker_schedule_entries_rebuilt。既存画面の修正としてZ: 0.51.2→0.51.3。検証: test_remove_legacy_samples.py、test_line_daily.py、order-lists-ui.spec.ts、ビルド。
+
+
+## DEC-093: 一覧入力の上端・文書交互色・波ダッシュ日付と現在氏名（2026-10-24）
+
+- 目的: 添付画像で指摘された入力位置の差、文書の区切りの分かりづらさ、日付表記と旧ダミー名の混在を解消する（ユーザー指定）。
+- 両一覧の件数欄は維持し、下余白だけを0へ、フィルターは上寄せとしてキューと上端をそろえる。文書のtr全体に交互色を付け、送付先の回答ごとに色を変えない。ライトは白/薄い青、ダークは濃淡を変える。ページ件数・記憶は維持。
+- DEC-092の一覧「から/まで」はユーザー訂正により、開始年月日〜/終了年月日の2行へ変更。全角チルダ/波ダッシュ・改行・定型から/までを正規化する。同じ日付の範囲と単日は年月日1回、定型に解釈できない自由文は勝手に日付を補わず保持する。入力・PDF・保存値は変更しない。
+- 旧ダミー名の原因は送付時snapshotの表示。名簿は既に日本名へ変更済みのため、追加のDB改名はしない。送信一覧と依頼書詳細は対象稼働者IDの現在名を一括取得しworker_nameへ返す。worker_name_snapshotは別に保持し、元PDF/確定snapshotには手を加えない。名簿に該当IDがない場合はsnapshotへフォールバック。旧/repliesの表示名契約は変更せず、画面で使用する/reply-groupsが現在名を使う。
+- 共通OrderRequestDetailDialogと、依頼書画面の送付状況・操作確認/エラー表示は現在名を優先。会計・受諾・予定・権限・LINE送信を変更しない。最小モデルは既存Worker/依頼書/送付行のみ、DDLなし。読取・表示のみなので新規監査点なし。
+- 既存画面の修正としてZ: 0.51.3→0.51.4。検証: test_order_reply_groups.py（現在名/元snapshot/PDF不変）、test_api_order_requests.py、order-lists-ui.spec.ts（入力の上端・両テーマの文書交互色・表記揺れ・単日・件数保持）、ビルド。
+
+## DEC-094: Web確認画面でテストの依頼書の見込みを【テスト】として別に表示（2026-10-24）
+- Status: Accepted（ユーザー指定：テストの依頼を送ってクライアントに画面を見てもらうため、報酬見込み・稼働日数が0円・0日にならないようにする。テストの表記を付けてよい）
+- Decision: 報酬見込みの計算（DEC-084）は同じ式のまま、テストの依頼書の予定を `estimate.test` として別に返す。正式の合計・日数には混ぜない（DEC-084 の「テストは含めない」は正式の値について維持）。画面は、正式の予定がない月はテストの値を【テスト】の帯付きで主表示し、正式もある月は正式の下にテストの分を別の行で出す。
+- UI: 「日付を選んで返事する」のリンクを、lineWorker.css の .lw-primary（display:block）より強い指定で中央寄せにした（読み込み順で上書きされていた）。
+- Validation: tests/test_line_worker_portal.py（テストの分が別に返ること・切り捨て）。全体の試験。ボタンと見込みの表示は画像で確認。
+- Version: 既存画面の表示の修正として Z（0.51.5）。Spec Reference: DEC-084、Web確認画面計画 §6.2（テスト予定は通常合計へ混ぜない）。
+
+
+## DEC-095: 文書の外枠・余白と参加人数確認の幅・1人1行表示（2026-10-24）
+
+- 目的: 淡い交互色がページ背景に近く文書境界を追いにくい問題と、人数確認で氏名が読点続き・狭い列に折り返す問題を解消する（添付画像によるユーザー指定）。
+- 交互色の差を強めることに加え、文書ごとの行に外枠・左4pxの境界線・上下8pxの間隔を付ける。送付先別ではなく文書全体をひとまとまりとし、ライト/ダークで背景と区切りを区別する。文書の件数やページ操作は維持する。
+- 参加人数確認だけFormDialogをwide（最大1120px）へ変更する。他のcompactフォームは変更しない。表は日付列を確保し、回答区分の見出しと人数は折り返さない。列幅が不足する小さい画面では表の中を横スクロールさせる。
+- VersionParticipationSummaryは各区分の人数の下へul/liで1人1行の氏名を表示する。氏名を読点で連結しない。新人/ディレクターの印、参加OK/変更確認待ち/未回答/参加不可の分類と0人表示を保持する。依頼書詳細に埋め込まれた同じ一覧にも適用する。
+- 最小モデルは既存の参加カレンダーAPI応答のみ。DB/DDL・API・会計・受諾・PDFの変更なし。読取表示だけのため新規監査点なし。
+- 既存画面の修正としてZ。0.51.5は並行作業で使用中のため、重複しない0.51.6を本修正に割り当てる。検証: order-lists-ui.spec.ts（文書の余白と枠、両テーマ、幅1000px以上、8人・長い氏名、4区分、1人1行、0人、スマートフォン幅、閉じる、既存件数/ページ/マーク）、ビルド。
+
+
+## DEC-096: 文書一覧は元の表形式と薄いグレーの交互背景へ戻す（2026-10-24）
+
+- 目的: DEC-095の装飾を増やした表示が不格好で見づらいというユーザー訂正を反映する。
+- 文書ごとの外枠・左の太い境界線・角丸・上下8pxの間隔・表の追加背景を撤去する。元のborder-collapse:collapseの表形式と既存の細い区切り線へ戻す。送信・作成済み両一覧で白と薄いグレー（#f2f2f2）を交互に使用し、ダークテーマの交互色も青ではなくグレー（#303030）とする。
+- 参加人数確認ポップアップの幅と1人1行表示はユーザー指定により維持。件数記憶・日付・現在氏名・人数分類・会計も変更しない。追加DB/DDL・API・監査点なし。
+- 既存画面の表示修正としてZ: 0.51.6→0.51.7。検証: order-lists-ui.spec.ts（通常の表・外枠撤去・白/薄いグレー・人数確認・既存操作）、ビルド。
+
+## DEC-097: 稼働者向けLINE画面のダークモードと「今日」の表示（2026-10-24）
+- Status: Accepted（ユーザー指定：予定の画面でダークモードのボタンを押しても変わらないのでダークモードになるようにする。月のカレンダーで本日を色付きの枠で分かるようにする）
+- Decision: 稼働者向けLIFF（`/public/line-worker`）は管理画面と同じダークモードのボタン（App.tsx の ThemeToggle、html[data-theme="dark"]）を表示しているが、画面の色が固定だった。`styles/lineWorkerDark.css` を追加し、html[data-theme="dark"] のときの配色を定義（日付を選ぶ画面とWeb確認画面の両方）。登録画面（/public/line-registration）はボタンを出していないので対象外。
+- Today: Web確認画面の月のカレンダーで今日の日付をオレンジの枠（ダークは明るいオレンジ）で囲み、凡例に追加。選択中の日は従来の青い枠。
+- Validation: 画面の型チェック、ライト・ダークの見た目を画像で確認。全体の試験。
+- Version: 既存画面の表示の修正として Z（0.51.8）。Spec Reference: DEC-084。
+
+
+## DEC-098: より薄い交互背景・金額確定の操作整列とインセンティブ8件（2026-10-24）
+
+- 目的: 一覧のグレーをもう少し薄くし、金額確定の操作列をそろえる。インセンティブなしだけのデモに、ありの金額入力例を8件用意する（ユーザー指定）。
+- 白の交互行はそのまま、薄いグレーを#f2f2f2から#f7f7f7へ変更。枠や間隔は増やさない。金額確定のフィルターは専用クラスでチェック・表示・検索・更新を入力下端/高さ2.5remへそろえ、狭い画面は折り返す。
+- 若葉については質問に対し「色々見ていたら見えました」とユーザーが回答。開始日から3暦月の判定・カレンダーの表示を維持し、不用意なタグ/開始日の変更を行わない。
+- デモの操作は--demo-incentives-previewで対象の文書番号/案件名/区分を照合し、--demo-incentives-applyで実行する。既存calendar-demo由来の有効なテスト確定版だけを対象に、原則10月4件・11月4件へ配分。既に有効なインセンティブありの例があれば8件に足りない分のみ追加する。
+- 金額入力履歴あり・請求明細使用済み・上位の入力途中版あり・実送信や閲覧取消済みの送付行がある依頼は対象外。候補が不足すれば変更を開始しない。元の確定本文・snapshot・PDFを上書きせず、同じ文書の新しい版をservice.revise/confirmで作る。
+- インセンティブ条件は「成果に応じた追加報酬あり（テスト用）。確定したインセンティブ額を通常請求額と分けて入力してください。」、金額は未入力。回答・参加日・不参加・未回答・変更確認待ちを再現し、系列ごとの日付×状態×本人が変更前と一致しなければ全体をロールバックする。入力済み金額と正式請求・正式見込みは変更しない。LINE実送信なし。
+- 再実行で8件以上なら追加改訂なし。監査はcalendar_demo_incentive_revisedと既存order_request_revised/confirmed、参加状態/適用受諾/予定再構築。既存02_app_deploy.shの明示モードで、承認済みの実行設定内部読み込みのみを使用する。
+- 確定日時は既存仕様どおりUTC。SQLiteの再読込でtzinfoが外れた値と保存直後のaware値が予定再構築で比較されるため、_confirm_orderでUTCへ正規化してから比較する。DB保存値や過去の確定日時を変更しない。
+- 最小モデルは既存依頼書/版/送付行/参加状態/適用受諾/予定/金額/請求明細/監査。DDL不要。既存画面・データ例の修正としてZ: 0.51.8→0.51.9。検証: test_demo_incentives.py、test_order_billing.py、test_line_daily.py、calendar-demo-ui.spec.ts、order-lists-ui.spec.ts、ビルド。
+
+
+## DEC-099: 置換済みダミーのLINE残存予定を解除する（2026-10-24）
+
+- 目的: 本人のテストアカウントで受託した依頼がすべて変更確認待ちに見える原因を確認し、一覧除外した旧ダミーをLINE/Webに出さない。
+- 実データ確認: 本人の今後の予定は3文書8日、すべてchanging。OR-20261023-100A/120Aの2文書6日はv1デモをv2へ置換した際にdeleted_atだけを付け、派生予定が残った。OR-20261023-179Aの2日はv2デモの意図的な変更確認待ち（2026-10-23 23:51 JST）。改名は翌0:12、氏名復元は0:36で、どちらもWorker氏名/ふりがなだけの更新。最新インセンティブ改訂も元からの確認待ちを保持している。高橋健二は別worker IDで改名履歴なし。
+- LINEトークの日次予定/受託済み、Web確認画面の月/週予定・見込み/受託済み、起床確認は同じvisible_schedule_entriesを使い、削除済み文書を除外する。確認必要一覧には既に同じ除外がある。旧PDFの新規リンクも停止するが、ファイルは保持する。
+- 再構築は削除済み文書の適用受諾から予定を再生成しない。既存予定はcancelledまたはsupersededとし、原受諾/参加状態/送付時氏名/PDF/会計は変更しない。新たな依頼書の改訂・本人の確認の代行はしない。今後のデモ置換時にも旧系列を再構築する。
+- 既存補正は--archived-demo-schedules-preview/--archived-demo-schedules-repair。置換の監査記録があり、全版がcalendar-demo由来かつ一覧除外済みテスト文書だけを選ぶ。系列ロック下で再構築し残存active/changingがあればロールバック。既存auditとarchived_demo_schedules_repairedへ記録、再実行の変更0。実行設定は既承認の内部読み込みのみ。実際のLINEメッセージは送信しない。
+- 最小モデルは既存の文書/版/送付行/参加状態/適用受諾/派生予定/監査。DDL不要。既存機能の不具合修正としてZ: 0.51.9→0.51.10。検証はCHANGELOG参照。
+
+- DEC-099補足（0.51.11）: 本番のaudit_logs.target_idはVARCHAR(26)。集約監査IDをarchived-demo-repair-v1へ短縮し、同じ制約を回帰試験で確認する。初回の解除はcommit時にロールバックされ、部分更新なし。
+
+
+## DEC-100: ダミー参加日とLINE用予定の生成漏れを修正（2026-10-24）
+
+- 目的: 本人の受託済み依頼がカレンダーにはあるのにLINEに出ない原因を確定し、全ダミーの参加日とLINE用予定を一致させる。
+- 調査結果: seed/rebalance/tune/enrichは参加状態と適用受諾を作った後、予定の再構築を実施していなかった。改訂のある一部だけconfirmの再構築によってLINEに現れていた。本人の有効な9依頼中7依頼（11月20日間の飲食店巡回を含む）が未生成、全ダミーでは参加OKの639人日が不足。DEC-099ではLINE用派生予定のみで検証し、元参加日との突き合わせが不足した。
+- 正本は既存の参加状態と適用受諾。カレンダー表示を消したり、受諾を作り直すのではなく、既存worker_schedule.rebuildで派生予定を復元する。全ダミー投入経路で参加状態と適用受諾の保存直後に再構築する。通常のLINE受諾は既に再構築しており変更なし。
+- --demo-schedule-gaps-previewで有効なcalendar-demo由来のテスト系列について、カレンダーとLINE用予定の系列×稼働者×日付×状態の不足/余剰を集計する。--demo-schedule-gaps-repairは系列ロックの下で予定だけ再構築し、元のカレンダーが不変かつ予定集合と完全一致することを検証する。一致しなければ全体ロールバック。再実行時の差分0も確認。
+- 正式/削除済み依頼、原受諾/参加日/適用版/確定本文/送付時氏名/PDF/請求/金額は変更しない。変更確認待ちを自動承認しない。実送信なし。既承認の実行設定内部読み込みのみを使用し、値は表示/変更しない。
+- 監査は既存worker_schedule_entries_rebuiltとdemo_schedule_gaps_repaired。集約target_idは26文字以内。最小モデルは既存文書/版/参加状態/適用受諾/派生予定/監査でDDL不要。既存機能の不具合修正としてZ: 0.51.11→0.51.12。
+- 検証: 20日・部分参加・変更確認待ちを復元し、元回答と版を保持、正式/削除済みを除外する回帰テスト。全デモ作成経路のカレンダーとLINE用予定の集合一致、月跨ぎ/長期/人数変動/冪等性を確認。
+
+## DEC-101: Web確認画面の「内容変更の確認待ち」に状態とすることを表示（2026-10-24）
+- Status: Accepted（ユーザー指定：◆の意味と次にやることを画面に書く）
+- Background: ◆は、本人が受諾した版と、系列の最新の確定版（回答受付版）が違うときに付く（統合計画 L-26。新しい版の確定時に予定を消さず、前の内容のまま「確認待ち」にする）。運営が新しい版を確定した時点で付くため、まだ送っていない間は本人は返事ができない。
+- Decision: 予定（`/api/line/worker/home` の各予定）と受託済みの依頼書（`/orders`）に `change` を追加。`state=sent`（回答受付版の本人の送付行が送付済み・返事なし・閲覧停止なし・取消なし）は新しい依頼書の送付行ID・日付選択の可否・PDFの可否を返し、画面は「新しい依頼書を確認して返事」と、PDF・日付を選ぶ画面への導線を出す。それ以外は `state=not_sent` として「新しい依頼書が届いたら返事」を出す。
+- Not included: 運営側で「新しい版を確定したが受諾済みの人に未送付」を目立たせる表示は別途（候補）。
+- Validation: tests/test_line_worker_portal.py（送付済みの新しい版で sent、未送付で not_sent・確認が必要な依頼に出ないこと）。全体の試験。ライト・ダークの見た目を画像で確認。
+- Version: 既存画面の表示の追加として Z（0.51.13）。Spec Reference: DEC-084、統合計画 L-26。
+
+## DEC-102: Web確認画面からの返事（統合計画 ③-C）の実装と公開の条件（2026-10-24）
+- Status: Accepted（ユーザー決定 D-09。統合計画 v1.2 で、公開は ③-B との結合試験の後と合意）
+- Decision: LIFF の返事の画面（`?m=reply`）と API `GET/POST /api/line/worker/deliveries/{id}/reply`（`action=accept|decline`、辞退は理由が必須、`Idempotency-Key` 必須）。処理は `LineOrderService.accept_all_from_web`・`decline_from_web` を通し、トークと同じ `_delivery_for_reply`（系列のロック・回答受付版・本人の紐付け・閲覧停止・取消・送付停止の確認）と `accept_delivery`・`decline_delivery` を使う。辞退の記録はトークの理由の送信と共通の `decline_delivery` にまとめた（動きは変えない。actor だけ呼び出し元ごと）。
+- Notice: 受付の通知は commit の後に直接送る（日付を選ぶ画面と同じ）。論理キーは `reply_notice_key(送付行ID, 結果)`（UUID5）で、③-B の送信予定表へ移るときの一意キーにもそのまま使う。通知の失敗で返事は戻さない。
+- Feature: 機能のキー `web_reply`（`rich_menu.py features`）。無効の間は Web確認画面に今までの案内（トークのボタンで返事）を出し、返事のAPIは 403。③-B の「始まった日を残す」修正（取消・送付先から外す・新しい版の辞退）との結合試験が終わるまで有効にしない。
+- Data / Migration: `20261024b001`：`line_worker_submit_keys.action` の CHECK に reply_accept・reply_decline を追加（既存の行は変えない。downgrade は返事の記録があれば止める）。
+- Coordination: `LineOrderService` の辞退の記録を `decline_delivery` に切り出した。③-B（もう一方のAI）の `set_application`／`rebuild` の修正は、この関数から呼ばれる `set_application(..., ended_reason="declined_new_version")` にもそのまま効く。
+- Validation: tests/test_line_worker_reply.py（機能の公開、全日程の受諾でトークと同じ結果・予定、二重送信と別のキーでの再送、内容の違う再送の拒否、辞退の理由の必須と記録、新しい版への返事で予定が切り替わること・旧い版への返事は拒否、他人の依頼、通知のキー）。全体の試験。画面の見た目をライト・ダークの画像で確認。
+- Version: Web画面から依頼に返事をする新しい流れとして Y（0.52.0）。Spec Reference: 統合計画 v1.2 §5 ③-C、DEC-084、L-34・L-26。
+
+
+## DEC-103: 変更版の送付待ちを運営画面で表示・送付する（2026-10-24）
+
+- 目的: 運営が変更版を確定したまま送り忘れ、旧版を受諾した本人が返事できない状態を見落とさない（統合計画③-A）。
+- 有効な回答受付版の送付先で、適用受諾が別の旧版かつ参加日がある本人を対象とする。回答済み・送信受付済み・取消・送付停止・閲覧停止・非表示文書は除外。新規依頼の未送信と区別する。正式/テスト/すべての既存切替に連動する。
+- 未送信・送信失敗・結果不明・送信中を警告で表示。LINE未連携も明記。文書10件単位の対象一覧で1人1行。送付操作は確認後に、系列ロック内で状態を再検証して既存LineOrderService.send_oneを呼ぶ。結果不明・送信中はこの導線から再送しない。送信受付後に対象から外れ、本人の回答は未回答のまま。
+- 受諾・辞退・予定・確定PDFは変更しない。0.52.0のLineOrderService.decline_delivery分離とweb_reply無効状態を保持。相手の作成したAPIルーター/依頼書画面には新しい専用API・画面部品の登録だけを追加し、既存の動作を変えない。
+- 最小モデルは既存系列/版/送付行/適用受諾/参加状態/稼働者/LINE連携。DDL不要。権限: 取得order_read、専用送付order_write。監査は既存送付監査。既存機能の改善としてZ: 0.52.0→0.52.1。
+- ③-BのD-10は2026-10-24ユーザーが採用: 中止・終了通知に「確認しました」を設け、未確認者を運営に表示。新条件への受諾とは別。D-11は未決。結合試験はLINE_WORKER_B_INTEGRATION_TEST_PLAN_2026-10-24.mdへ記録。
+
+
+## DEC-104: 3種類の終了で、終了時点の開始済み日を保存する（2026-10-24）
+
+- 目的: 取消・送付先からの除外・新版の辞退で、開始済みの日まで派生予定から消える不具合を修正する（統合計画③-B、Y-05）。
+- 最小モデル: order_request_application_endsを追記のみで追加。適用受諾ID・系列/本人・終了直前の送付行/版/参加状態・受諾日のコピー・残す日のコピー・終了日時・理由・実行者を保存。既存参加状態と確定版/PDFを変更しない。FKで元送付行/本人/版/系列/参加状態の所属を保証する。DDLは20261024c001、旧データの書換えなし。
+- set_applicationで非NULLの適用受諾を3理由のいずれかで終了するときだけ履歴を作る。勤務開始時刻<=終了日時の参加日をsplit_startedで固定。applicationはNULL＋終了理由のまま。LineOrderService.decline_deliveryは変更せず、Web/トークの同じ呼出しから適用する。
+- rebuildは終了履歴と現在の適用受諾だけから再生成する。残す日を今の時刻で増やさない。過去分は旧版active・◆なし、未来分はcancelled＋終了理由。再参加しても、既に固定した同日を二重計上せず旧版を維持する。終了履歴がある元送付行の取消理由は後続受諾でも維持する。
+- 運営カレンダーも共通participation_sourcesを使い、取消で回答受付が終了した系列にも残す日の参加者だけを表示する。非表示文書は既存通り除外。未回答と過去参加が同じ日に重複しない。
+- ③-Cのテスト01953e4について、5件のXPASS(strict)を確認して印を外す。相手の試験の修正理由: _dayはtoday_jstに依存するため、時計差替え後に期待日も移動していた。元の基準日をfixtureで保存する形にし、同じ勤務日で判定する。
+- 検証: 開始前/開始ちょうど/開始後/夜勤、新版のWeb辞退/トーク辞退、取消/除外、二重押し/同一/別キー、後日再構築、派生行がない場合の再生成、再参加時の重複防止、カレンダー一致、DDL。監査order_request_application_endedと既存適用受諾/再構築。
+- 既存機能の不具合修正としてZ: 0.52.1→0.52.2。中止/除外の通知とoutbox/D-10確認ボタンは次の変更で実装するため、本変更に含めない。D-11は未決、web_replyは有効にしない。
+
+
+## DEC-105: 中止/除外通知の確認期限と、一部日程中止の分離（2026-10-24）
+
+- 根拠: ユーザー決定D-10/D-11、統合計画v1.4 §5③-B/§8。通知登録契約をv0.2へ更新する。資料のみの変更で、アプリ版・本番設定は変更しない。
+- D-10: 確認ボタンは中止/送付先除外のみ。送信期限expires_atと別にack_due_atを持ち、確認対象は必須。共通処理で通常2時間/夜間の朝10時・勤務開始前への短縮を扱い、運営が期限を変えた人/日時/前後/理由を監査する。変更版・受付通知には確認ボタンを付けず、確認が受諾/参加日変更を起こさない。
+- 期限超過は画面を赤くし、同じoutboxから運営へ通知。論理キーは元通知ID×期限版×期限超過、送信前に元の未確認状態と期限版を再検証して二重通知や古い通知を防ぐ。本人への自動的な繰り返し催促はしない。未送信と本人の未確認を区別する。
+- D-11は決定済み。即時の中止日除外、残日の条件が変わらなければ再受諾不要、48時間制限/責任者の了承記録、運営都合のキャンセル記録を独立段階で実装する。責任者（D-12）は10/27決定待ちで、未設定の例外権限を勝手に与えない。
+- 実装前の追加確認: 期限の基準を登録時/初回送信受付時のどちらにするか、深夜帯の朝10時の解釈、開始前に短縮する分数。48時間制限を発注全体取消/送付先除外にも適用するかはD-11実装前に確認する。決定済みのD-10/D-11を未決へ戻す意味ではなく、時刻/適用範囲の具体化として分離する。
+- 契約の関数名はenqueue_worker_noticeを維持し、ack_policy/ack_due_atを追加。③-Cのreply_notice_keyを引き続き使い、実装されて呼出可能になった時点で共有する。詳細はLINE_PUSH_OUTBOX_CONTRACT_2026-10-24.md。
+
+
+## DEC-106: 確認期限の登録時固定・朝帯の猶予確保・48時間未満の直接連絡（2026-10-24、v1.5で訂正）
+
+- 根拠: ユーザーが統合計画v1.5 §5③-B/§8 D-10で時刻計算を決め直した。旧契約v0.3/570f095の「朝帯は一律10時」「開始30分前への固定短縮」は本訂正で撤回する。登録時に期限を計算して固定する決定は維持。
+- 通常の自動期限は登録時刻+2時間。日本時間0:00〜9:59はmax(登録時刻+2時間, 同日10:00)、21:00〜23:59は翌日10:00。例: 6:00→10:00、9:30→11:30、9:59→11:59。初回送信時に再計算せず、送信遅延/再送によって延長しない。
+- 中止・送付先除外の操作時に対象勤務の開始まで48時間未満なら、確認期限を待たず登録時点で「直接連絡が必要」として運営へ表示する。48時間ちょうどは即時判定に含めない。開始直前の期限を置くだけでは、出発済みの本人を止められないため。
+- 48時間未満の通知にも確認期限を保存し、期限と直接連絡の要否を分離する。本人が「確認しました」を押せば確認を記録して運営の対応待ち表示を解消する。受諾/参加日や中止の結果は変えず、元の緊急判定・送信履歴・監査は保持する。
+- 48時間以上前の通知で期限が対象勤務の開始にかかる場合は、開始前に早めて希望期限/実際の期限/理由を表示・保存する。固定30分の短縮幅を再導入しない。時間が残らない場合も直接連絡が必要と表示する。
+- 運営の明示的な期限変更は可能で、変更者・日時・前後・指定方法を記録。送信/再送では延長せず、本人への自動的な繰り返し催促をしない。
+- 契約資料をv0.4へ更新。資料のみでアプリ版/コード/本番設定は変更しない。D-11の別段階実装とD-12未決は維持。通知に直接連絡を表示する規則は、48時間未満の操作権限を許可する規則とは別であり、D-12の権限を勝手に付与しない。

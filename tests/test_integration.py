@@ -163,13 +163,11 @@ def test_full_monthly_workflow(session):
     assert payout.total_amount > 0
     
     # ========== 7. Hard Close ==========
-    hard_close_result = hard_close(
-        session=session,
-        project_id=project.id,
-        period_key="202601",
-        user_id=accounting_user.id,
-        approver_id=ops_user.id
-    )
+    from src.services.closing_approval import request_operation, approve_operation
+    second = User(username="integration_second", email="integration_second@example.com", role="admin", is_active=True)
+    session.add(second); session.flush()
+    request = request_operation(session, project.id, "202601", "hard_close", accounting_user, "monthly close")
+    hard_close_result = approve_operation(session, request.id, second)
     session.commit()
     
     assert hard_close_result.is_hard_closed is True

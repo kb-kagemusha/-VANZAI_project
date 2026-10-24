@@ -1,0 +1,12 @@
+# 試験専用。本番DBには接続しない。データはコンテナの一時領域に置き、停止で消える。
+services:
+  conflict-postgres:
+    image: postgres:16
+    ports:
+      - "127.0.0.1:54329:5432"
+    environment:
+      POSTGRES_USER: vanzai_conflict
+      POSTGRES_PASSWORD: vanzai_conflict
+      POSTGRES_DB: vanzai_conflict
+    tmpfs:
+      - /var/lib/postgresql/data

@@ -1,0 +1,1532 @@
+"""OCR parser and validation unit tests."""
+from datetime import date
+from decimal import Decimal
+
+from src.services.ocr.dedupe import dedupe_paygate_screenshot_rows
+from src.services.ocr.paddle_engine import run_ocr_from_text
+from src.services.ocr.parsers.paygate_screenshot import PaygateScreenshotParser
+from src.services.ocr.parsers.paygate_settlement import PaygateSettlementParser
+from src.services.ocr.models import ParsedOcrRow
+from src.services.ocr.settlement_processing import apply_settlement_derived_fields
+from src.services.ocr.validation import is_paygate_row_saveable, validate_parsed_row
+
+
+PAYGATE_SCREENSHOT_TEXT = """
+2026/05/08 22:21:07
+¥980
+取引番号 1154100
+レシート番号 7782464677325
+決済方法 現金
+2026/05/08 22:20:36
+¥980
+取引番号 1154098
+レシート番号 7782464367325
+決済方法 現金
+"""
+
+SETTLEMENT_TEXT = """
+日本たばこ産業株式会社
+精算
+2026/06/13 19:10:23
+端末番号: 98f0ec2f-fc54-4e00-a503-2ecb6659c7be
+端末識別番号: f353
+小計 ¥8,820
+合計 ¥8,820
+現金売上 ¥6,860
+-PAYGATE POS ¥1,960
+通常取引数 9
+消費税 ¥802
+内税額 ¥802
+"""
+
+
+def test_paygate_screenshot_parser_skips_incomplete_rows():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/10
+123054
+1010912457325
+2026/06/10 19:48:28
+980
+1230501
+7810885087325
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].transaction_no == "1230501"
+    assert rows[0].receipt_no == "7810885087325"
+
+
+def test_paygate_screenshot_parser_extracts_seven_complete_rows():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/10 21:30:33
+980
+1230567
+7810946337325
+2026/06/10 20:52:59
+980
+1230557
+7810923797325
+2026/06/10 20:34:05
+980
+1230543
+7810912457325
+2026/06/10 20:33:06
+980
+1230542
+7810911867325
+2026/06/10 19:48:28
+980
+1230501
+7810885087325
+2026/06/10 19:02:05
+980
+1230447
+7810857257325
+2026/06/10 19:01:20
+980
+1230445
+7810856807325
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 7
+    assert {row.transaction_no for row in rows} == {
+        "1230567",
+        "1230557",
+        "1230543",
+        "1230542",
+        "1230501",
+        "1230447",
+        "1230445",
+    }
+
+
+def test_is_paygate_row_saveable_requires_core_fields():
+    complete = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 6, 10),
+        transaction_no="1230501",
+        receipt_no="7810885087325",
+    )
+    incomplete = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 6, 10),
+        transaction_no="123054",
+        receipt_no="1010912457325",
+    )
+    assert is_paygate_row_saveable(complete) is True
+    assert is_paygate_row_saveable(incomplete) is False
+
+    corrected_receipt = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 6, 10),
+        transaction_no="1230543",
+        receipt_no="7810912457325",
+    )
+    assert is_paygate_row_saveable(corrected_receipt) is True
+
+
+def test_paygate_screenshot_parser_extracts_rows_without_labels():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/10 19:48:28
+1980
+1230501
+7810885087325
+2026/06/10 19:02:05
+1480
+1230447
+7810857257325
+2026/06/10 19:01:20
+980
+1230445
+7810856807325
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 3
+    by_txn = {row.transaction_no: row for row in rows}
+    assert by_txn["1230501"].amount == Decimal("980")
+    assert by_txn["1230447"].amount == Decimal("1480")
+    assert by_txn["1230445"].amount == Decimal("980")
+
+
+def test_paygate_screenshot_parser_extracts_rows_without_yen_symbol():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/10
+20:38:51
+980
+取引番号
+1230545
+レシート番号
+7810915317330
+決済方法
+現金
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal("980")
+    assert rows[0].transaction_no == "1230545"
+    assert rows[0].receipt_no == "7810915317330"
+
+
+def test_paygate_screenshot_parser_extracts_production_like_blocks():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/10
+19:02:46
+4980
+取引番号
+1230449
+レシート番号
+7810857657330
+決済方法
+ORコード
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal("980")
+    assert rows[0].transaction_no == "1230449"
+
+
+def test_paygate_screenshot_parser_extracts_rows():
+    parser = PaygateScreenshotParser()
+    rows = parser.parse(run_ocr_from_text(PAYGATE_SCREENSHOT_TEXT))
+    assert len(rows) == 2
+    assert rows[0].transaction_no == "1154100"
+    assert rows[0].receipt_no == "7782464677325"
+    assert rows[0].amount == Decimal("980")
+    assert rows[0].period_key == "202605"
+
+
+def test_paygate_screenshot_parser_accepts_782_receipt_prefix():
+    """782始まりのレシート番号（取引一覧スクショ）を保存可能とする。"""
+    parser = PaygateScreenshotParser()
+    text = """
+2026/06/27 22:06:09
+980
+取引番号 1272464
+レシート番号 7825655697319
+2026/06/27 22:05:46
+980
+取引番号 1272463
+レシート番号 7825655467319
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 2
+    assert rows[0].transaction_no == "1272464"
+    assert rows[0].receipt_no == "7825655697319"
+    assert rows[0].record_date == date(2026, 6, 27)
+    assert rows[0].record_time == "22:06:09"
+    assert rows[0].amount == Decimal("980")
+    assert is_paygate_row_saveable(rows[0]) is True
+    assert rows[0].raw_payload.get("field_confidence", {}).get("amount", 0) > 0
+    assert rows[0].raw_payload.get("field_confidence", {}).get("transaction_no", 0) > 0
+
+
+def test_paygate_settlement_parser_extracts_summary():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(SETTLEMENT_TEXT))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "f353"
+    assert row.record_date == date(2026, 6, 13)
+    assert row.record_time == "19:10:23"
+    assert row.terminal_id.startswith("98f0")
+    assert row.subtotal == Decimal("8820")
+    assert row.amount == Decimal("8820")
+    assert row.cash_sales == Decimal("6860")
+    assert row.pos_sales == Decimal("1960")
+    assert row.transaction_count == 9
+
+
+def test_paygate_settlement_parser_extracts_labeled_settlement_datetime():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+精算日 2026/06/14
+精算時間 05:30:00
+端末識別番号: f999
+合計 ¥980
+現金売上 ¥980
+通常取引数 1
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].record_date == date(2026, 6, 14)
+    assert rows[0].record_time == "05:30:00"
+
+
+def test_paygate_settlement_parser_corrects_yen_misread_amounts():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+精算
+2026/07/02 23:05:23
+登録番号
+T4-0104-0102-3000
+端末識別番号:0ed7
+端末番号:
+0ed777ad-eba8-46df-babd-d131c08d6e76
+小計 15,880
+合計 15,880
+現金売上 15,880
+PAYGATE POS 0
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.subtotal == Decimal("5880")
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+    assert row.raw_payload.get("amount_corrections")
+
+
+def test_paygate_settlement_parser_handles_split_terminal_uuid_and_loose_labels():
+    """実レシート相当: UUID改行折返し・登録番号断片3000の誤検知防止・通常取引数の余白。"""
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+端末識別番号:0ed7
+精算
+2026/07/02 23:05:23
+端末番号:
+0ed777ad-eba8-46df-babd-
+d131c08d6e76
+小計 5,880
+合計 5,880
+現金売上 5,880
+ -PAYGATE POS 0
+通常取引数        6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_rejects_registration_segment_as_short_id():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+2026/07/02 23:05:23
+登録番号
+3000
+小計 5,880
+合計 5,880
+現金売上 5,880
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id is None
+
+
+def test_paygate_settlement_parser_recovers_short_id_from_terminal_uuid_when_label_missing():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+精算
+2026/07/02 23:03:46
+端末番号
+e9c01785
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
+def test_paygate_settlement_parser_recovers_short_id_from_line_before_settlement():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+e9cO
+精算
+2026/07/02 23:03:46
+端末番号
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
+def test_paygate_settlement_parser_handles_noisy_short_id_label():
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+登録番号
+T4-0104-0102-3000
+端未認別番号:e9cO
+精算
+2026/07/02 23:03:46
+小計 5,880
+合計 5,880
+現金売上 3,920
+PAYGATE POS 1,960
+通常取引数 6
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].terminal_short_id == "e9c0"
+
+
+PRODUCTION_OCR_TEXT_260703_18 = """
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/07/02
+23:05:23
+Ged777ad-eba8-
+babd-
+-46df-
+端末番号
+- babd-
+d131c08d6e76
+小計
+15,880
+合計
+15,880
+現金売上
+15,880
+クレヅット売上
+0
+その他支払い
+-PAYGATE
+POS
+0
+-その他
+10
+消費税
+534
+-内税額
+534
+-外税額
+返品計
+取消計
+20
+通常取引数
+0
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_19 = """
+日本たはこ産業株式会社
+登録番号.
+14-0104-0102-
+3000
+端末識別番号2C0e
+精算
+2026/07/0223:09:37
+端末番号
+1c0e8213-6cd5-
+-4f9á-bc6a-
+e0b50bfe1671
+小計
+15/880
+合計
+15880
+現金売上
+15880
+通常取引数
+6
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_16 = """
+日本たばこ産業株式会社
+端末識別番号:84e2
+精算
+2026/07/02
+23:02:48
+端末番号
+84e2772F
+ed32-428c-9ce2-5bb57333a24
+90
+小計
+7,840
+合計
+7,840
+現金売上
+16,860
+クレジット売上
+その他支払い
+-PAYGATE
+POS
+1980
+消費税
+712
+返品計
+0
+取消計
+通常取引数
+-
+精算現金
+1万円札
+(0枚)
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_17 = """
+端末識別番号e9c0
+精算
+2026/07/02
+23:03:46
+端末番号
+e9c01
+785
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計
+5,880
+合計
+5,880
+3,920
+現金売上
+0
+クレジット売上
+その他支払い
+1,960
+-PAYGATE POS
+0
+-その他
+534
+消費税
+534
+返品計
+0
+取消計
+通常取引数
+精算現金
+1万円札
+(0枚)
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_10 = """
+端末識別番号:e9c0
+精算
+2026/07/01 23:04:46
+端末番号
+e9c01785-7f8d-4b74-aa67-dc21e2b79fbf
+小計
+4,900
+合計
+4,900
+現金売上
+2,940
+クレジット売上
+1,960
+-PAYGATE POS
+445
+消費税
+通常取引数
+5
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_10_DASH_PREFIX = """
+端末識別番号:e9c0
+精算
+2026/07/01 23:04:46
+端末番号
+-7f8d-4b74-aa67-
+dc21e2b79fbf
+小計
+4,900
+"""
+
+
+def test_paygate_settlement_parser_recovers_terminal_id_from_dash_prefix_lines():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_10_DASH_PREFIX))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    if row.terminal_id:
+        assert row.terminal_id.startswith("e9c0")
+        assert row.terminal_id.endswith("dc21e2b79fbf")
+    else:
+        segments = row.raw_payload.get("terminal_id_segments") or {}
+        assert segments.get("twelve") == "dc21e2b79fbf"
+        assert segments.get("four_1") == "7f8d"
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_10_single_line_terminal_id():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_10))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    assert row.terminal_id == "e9c01785-7f8d-4b74-aa67-dc21e2b79fbf"
+    assert not row.raw_payload.get("terminal_id_partial")
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_17():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_17))
+    assert len(rows) == 1
+    row = rows[0]
+    apply_settlement_derived_fields(row)
+    assert row.terminal_short_id == "e9c0"
+    assert row.terminal_id == "e9c01785-7f8d-4b74-aa67-dc21e2b79fbf"
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("3920")
+    assert row.pos_sales == Decimal("1960")
+    assert row.transaction_count == 6
+    assert "amount_breakdown_mismatch" not in (row.blocking_errors or [])
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_16():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_16))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb57333a249"
+    assert row.transaction_count == 8
+    assert row.amount == Decimal("7840")
+    assert row.cash_sales == Decimal("6860")
+    assert row.pos_sales == Decimal("980")
+
+
+PRODUCTION_OCR_TEXT_260703_4 = """
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/06/29
+23:00:30
+端末番号
+-af4C
+f22d625c6a7
+小計
+15,880
+合計
+15,880
+現金売上
+5,880
+クレヅット売上
+0
+その他支払い
+-PAYGATE POS
+10
+-その他
+消費税
+1534
+通常取引数
+精算現金
+(0枚)
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_4():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_4))
+    assert len(rows) == 1
+    row = rows[0]
+    # -af4C は UUID 中腹断片であり端末識別番号ではない
+    assert row.terminal_short_id != "af4c"
+    assert row.terminal_id is None
+    assert row.raw_payload.get("terminal_id_partial") is True
+
+
+PRODUCTION_OCR_TEXT_260629_B0D6_SPLIT_TERMINAL = """
+日本たばこ産業株式会社
+登録番号: T4-0104-0102-3000
+端末識別番号: b0d6
+精算
+2026/06/29 23:00:30
+端末番号
+b0d6cc26-a0c1-49be-af4c-
+ff22d625c6a7
+小計 5,880
+合計 5,880
+現金売上 5,880
+通常取引数 6
+"""
+
+
+PRODUCTION_OCR_TEXT_260629_B0D6_GARBLED_TERMINAL = """
+日本たばこ産業株式会社
+登録番号: T4-0104-0102-3000
+端末識別番号: b0d6
+精算
+2026/06/29 23:00:30
+端末番号
+-af4C
+f22d625c6a7
+小計 5,880
+合計 5,880
+現金売上 5,880
+通常取引数 6
+"""
+
+
+def test_paygate_settlement_parser_handles_b0d6_split_terminal_uuid():
+    """実レシート相当: 端末番号が 8-4-4-4- / 12 桁で折り返し。"""
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260629_B0D6_SPLIT_TERMINAL))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert not row.raw_payload.get("terminal_id_partial")
+
+
+def test_paygate_settlement_parser_recovers_b0d6_terminal_from_af4c_tail_fragments():
+    """OCR が UUID 先頭行を落とし -af4C / f22d625c6a7 だけ残った場合の復元。"""
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260629_B0D6_GARBLED_TERMINAL))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert not row.raw_payload.get("terminal_id_partial")
+
+
+PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND = """
+天番号
+Oed?rTad-ebas.
+Dabd-
+-E6df.
+1105-6927
+登録番号
+3000
+14-0104-0102-
+精算
+2026/07/02
+23:05:23
+端末番号
+- babd-
+d131c08d6e76
+小計
+15,880
+合計
+15,880
+現金売上
+15,880
+通常取引数
+0
+"""
+
+
+def test_paygate_settlement_parser_handles_noisy_band_ocr_text_260703_18():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18_NOISY_BAND))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.amount == Decimal("5880")
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_18():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_18))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0ed7"
+    assert row.terminal_id == "0ed777ad-eba8-46df-babd-d131c08d6e76"
+    assert row.amount == Decimal("5880")
+    assert row.subtotal == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:05:23"
+
+
+PRODUCTION_OCR_TEXT_260703_8 = """
+端末識別番号:6bfá
+精算
+2026/06/29
+23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-
+\u01119ecf7f5cb39
+小計
+3,920
+合計
+3,920
+現金売上
+3,920
+通常取引数
+4
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_8():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_8))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "6bfa"
+    assert row.terminal_id == "6bfac729-2983-40e1-8785-d9ecf7f5cb39"
+    assert row.amount == Decimal("3920")
+    assert row.transaction_count == 4
+    assert row.record_date == date(2026, 6, 29)
+    assert row.record_time == "23:06:21"
+
+
+PRODUCTION_OCR_TEXT_260703_8_MISREAD_YEAR = """
+端末識別番号:6bfa
+精算
+2025/06/29 23:06:21
+端末番号:
+6bfac729-2983-40e1-8785-
+d9ecf7f5cb39
+小計
+3,920
+合計
+3,920
+現金売上
+3,920
+通常取引数
+4
+"""
+
+
+def test_paygate_settlement_parser_corrects_year_five_to_six_for_260703_8():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_8_MISREAD_YEAR))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 6, 29)
+    assert row.record_time == "23:06:21"
+    assert row.datetime_source == "fuzzy"
+    assert row.raw_payload.get("datetime_corrected_from") == "2025-06-29"
+
+
+PRODUCTION_OCR_TEXT_260703_11 = """
+末護別番号:8402
+2026/07/01
+23:02:59
+澤末番号
+84e2772F
+3d32-428C-9ce2
+5bb5733a24
+06
+小計
+04900
+会計
+24900
+現会売上
+14900
+通常取引数
+10
+日本たはに産要代口会社
+登録番号
+14-0104-0102
+3000
+澤末証別番号.84e2
+2026/07/01
+23:02:59
+矯末番号
+84e2772F
+2d32-428C-9ce?
+5じb5733日24
+90
+小計
+44900
+会計
+YA900
+現会売上
+006ヤR
+クレンット元上
+0袋
+その他支払い
+PAYGATE POS
+0
+消責税
+445
+通常取引数
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_11():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_11))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb5733a2490"
+    assert row.amount == Decimal("4900")
+    assert row.cash_sales == Decimal("4900")
+    assert row.transaction_count == 5
+    assert row.record_date == date(2026, 7, 1)
+    assert row.record_time == "23:02:59"
+
+
+PRODUCTION_OCR_TEXT_260703_11_STORED = """
+市末番号
+84e2772F-
+Sbos7rsa?-
+Pus?-47Be-9ce.
+06
+携末護別番号84E2
+2026/07/01
+23:02:59
+末番号
+84e2772F
+ed32-428C-9Ce2
+Sbb5733á24
+90
+小訁E4900
+今訁E14900
+現金売丁E34900
+クレジット売上
+20
+通常取引数
+10
+末藤別番号84E2
+2026/07/01
+23:02:59
+末番号
+84e2772F
+2d32-428C-9ce?
+5じb5733日24
+90
+小訁E4900
+今訁E4900
+現金売上
+4900
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_11_stored_jpg():
+    """本番 storage JPG 由来の劣化OCR（LINE圧縮・文字化け）向け。"""
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_11_STORED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb5733a2490"
+    assert row.amount == Decimal("4900")
+    assert row.cash_sales == Decimal("4900")
+    assert row.transaction_count == 5
+    assert row.record_date == date(2026, 7, 1)
+    assert row.record_time == "23:02:59"
+
+
+PRODUCTION_OCR_TEXT_260703_15_GARBLED = """
+1番号:0b21
+202607/02
+23:01:45
+岡末番号
+0b21ee3e-0e48
+475b-8246-7fd3b19741ea
+小計
+8,820
+合計
+8,820
+現金売上
+7,840
+-PAYGATE POS
+980
+通常取引数
+9
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.terminal_id == "0b21ee3e-0e48-475b-8246-7fd3b19741ea"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:45"
+    assert row.amount == Decimal("8820")
+
+
+PRODUCTION_OCR_TEXT_260703_15_LIVE_GARBLED = """
+境識別番号:0も21
+2370145
+鍋端末番号
+-750-
+8246-?
+Ob21ee3e-0e48-
+端末話別番号:0621
+精弾
+2026/01八02
+23:01:45
+備端末番号
+475日-
+8246-7
+Ob21ee3e-0e48-
+7fd3b19741ea
+小計
+8,820
+合計
+8,820
+現金売上
+7,840
+PAYGATE POS
+980
+通常取引数
+9
+"""
+
+
+PRODUCTION_OCR_TEXT_260703_14_LIVE_GARBLED = """
+F 105-6927
+登録番号:
+精算
+2026/07102
+23:01:21
+端端末番号
+DOd6cc?6.a0c1-
+49be-af4c-
+íf22d625c6a7
+小計
+4,900
+合計
+4,900
+現金売上
+4,900
+通常取引数
+5
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_14_live_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_14_LIVE_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "b0d6"
+    assert row.terminal_id == "b0d6cc26-a0c1-49be-af4c-ff22d625c6a7"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:21"
+    assert row.amount == Decimal("4900")
+    assert row.transaction_count == 5
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_live_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_LIVE_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.terminal_id == "0b21ee3e-0e48-475b-8246-7fd3b19741ea"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:45"
+    assert row.amount == Decimal("8820")
+
+
+PRODUCTION_OCR_TEXT_260703_15_VPS_GARBLED = """
+境識別番号:0b21
+2370145
+鍋端末番号
+-750-
+8246-?
+0hLet3e-0e48-
+端端末番号
+0h?1ee3e Ce48
+Y7,840
+`980
+MAY0ATE P0S
+備端末番号
+475b-
+8246-7
+0b21ee3e-0e48-
+15019741年b
+18820
+小計
+18820
+合計
+現金上
+17840
+PAY0ATE P0S
+1980
+通常取引数
+9
+精弾
+2026/01八02
+23:01:45
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_15_vps_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_15_VPS_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.terminal_id == "0b21ee3e-0e48-475b-8246-7fd3b19741ea"
+    assert row.record_date == date(2026, 7, 2)
+    assert row.record_time == "23:01:45"
+    assert row.amount == Decimal("8820")
+    assert row.cash_sales == Decimal("7840")
+    assert row.pos_sales == Decimal("980")
+    assert row.transaction_count == 9
+
+
+PRODUCTION_OCR_TEXT_260703_2_VPS_GARBLED = """
+端末識別番号:2c0e
+精算
+2026/06/27
+23:09:31
+端末番号:
+2c0e8213-6cd5-4f9a-
+=0b50bfe167]
+小計
+16B60
+合計
+16,860
+端末識別番号:2c0e
+精算
+2026/06/27 23:09:31
+端末番号
+2c0e8213-6cd5-
+-4f9a-bc6a
+20b50bfe1671
+小計
+16,860
+合計
+16,860
+現金売上
+16,860
+通常取引数
+7
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_2_vps_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_2_VPS_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "2c0e"
+    assert row.terminal_id == "2c0e8213-6cd5-4f9a-bc6a-e0b50bfe1671"
+    assert row.record_date == date(2026, 6, 27)
+    assert row.record_time == "23:09:31"
+    assert row.subtotal == Decimal("6860")
+    assert row.amount == Decimal("6860")
+    assert row.cash_sales == Decimal("6860")
+    assert row.transaction_count == 7
+
+
+PRODUCTION_OCR_TEXT_260703_1_STORED = """
+端末識別番号:84e2
+絹箁E2026/06/2723:04:46
+端末番号
+84e2772F
+2d32-428c-9ce2-
+5bb5733a24
+06
+小餅
+15,880
+今計
+15.880
+現金売上
+15880
+クレジット売上
+20
+その他支払い
+-PAYGATE POS
+0
+消費税
+534
+内税額
+534
+通常取引数
+6
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_1_stored_jpg():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_1_STORED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 6, 27)
+    assert row.record_time == "23:04:46"
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb5733a2490"
+    assert row.amount == Decimal("5880")
+    assert row.cash_sales == Decimal("5880")
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260703_19():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260703_19))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "2c0e"
+    assert row.terminal_id == "2c0e8213-6cd5-4f9a-bc6a-e0b50bfe1671"
+    assert row.amount == Decimal("5880")
+    assert row.subtotal == Decimal("5880")
+    assert row.transaction_count == 6
+
+
+def test_paygate_settlement_parser_handles_receipt_260703_16_layout():
+    """精算現金の空欄直前の数字が通常取引数（実レシート 84e2 / 取引数8）。"""
+    parser = PaygateSettlementParser()
+    text = """
+日本たばこ産業株式会社
+端末識別番号 84e2
+精算
+2026/07/02 23:02:48
+端末番号 84e2772f-ed32-428c-9ce2-5bb57333a249
+小計 ¥7,840
+合計 ¥7,840
+現金売上 ¥6,860
+クレジット売上 ¥0
+-PAYGATE POS ¥980
+消費税 ¥712
+-内税額 ¥712
+-外税額 ¥0
+返品計 ¥0
+取消計 ¥0
+通常取引数 8
+精算現金
+-1万円札 (0枚) ¥0
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "84e2"
+    assert row.terminal_id == "84e2772f-ed32-428c-9ce2-5bb57333a249"
+    assert row.transaction_count == 8
+    assert row.amount == Decimal("7840")
+
+
+def test_paygate_settlement_parser_ignores_zero_transaction_count_when_sales_exist():
+    parser = PaygateSettlementParser()
+    text = """
+精算
+精算日 2026/07/02
+精算時間 23:05:23
+合計 15,880
+小計 15,880
+現金売上 15,880
+PAYGATE POS 0
+通常取引数 0
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal("5880")
+    assert rows[0].transaction_count == 6
+    assert "unit_breakdown_invalid" not in (rows[0].warnings or [])
+
+
+def test_validate_parsed_row_flags_missing_date():
+    row = ParsedOcrRow(source_type="paygate_screenshot", amount=Decimal("980"))
+    errors = validate_parsed_row(row)
+    assert "record_date is missing" in errors
+
+
+def test_paygate_screenshot_dedupe_keeps_complete_row():
+    parser = PaygateScreenshotParser()
+    text = """
+2026/05/08 22:21:07
+¥980
+取引番号 1154100
+2026/05/08 22:21:07
+¥980
+取引番号 1154100
+レシート番号 7782464677325
+決済方法 現金
+"""
+    rows = parser.parse(run_ocr_from_text(text))
+    assert len(rows) == 1
+    assert rows[0].transaction_no == "1154100"
+    assert rows[0].receipt_no == "7782464677325"
+    assert rows[0].payment_method == "現金"
+
+
+def test_paygate_screenshot_dedupe_by_receipt_no():
+    partial = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 5, 8),
+        record_time="22:21:07",
+        amount=Decimal("980"),
+        transaction_no="1154099",
+        raw_payload={"block": "partial"},
+    )
+    complete = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 5, 8),
+        record_time="22:21:07",
+        amount=Decimal("980"),
+        transaction_no="1154100",
+        receipt_no="7782464677325",
+        payment_method="現金",
+        raw_payload={"block": "complete row with receipt and payment method"},
+    )
+    duplicate = ParsedOcrRow(
+        source_type="paygate_screenshot",
+        record_date=date(2026, 5, 8),
+        record_time="22:21:07",
+        amount=Decimal("980"),
+        transaction_no="1154100",
+        receipt_no="7782464677325",
+        raw_payload={"block": "duplicate"},
+    )
+    deduped, skipped = dedupe_paygate_screenshot_rows([partial, complete, duplicate])
+    assert skipped == 1
+    assert len(deduped) == 2
+    kept = next(row for row in deduped if row.transaction_no == "1154100")
+    assert kept.receipt_no == "7782464677325"
+    assert kept.payment_method == "現金"
+
+
+PRODUCTION_OCR_TEXT_244637_GARBLED = """
+日本たはこ産業株式会社
+端末識別番号: 98f0
+精算
+2026/06/10 23:01:01
+端末番号
+98f0eC2f-fC54-4e00-
+1501登ec66659古D2
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+9810e22目ぞ54監4E04
+1810e22目fc54監4E01
+20260610
+23:01:01
+"""
+
+
+def test_paygate_settlement_parser_handles_garbled_98f0_production_ocr():
+    parser = PaygateSettlementParser()
+    ocr = run_ocr_from_text(PRODUCTION_OCR_TEXT_244637_GARBLED)
+    rows = parser.parse(ocr)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_id == "98f0ec2f-fc54-4e00-a503-2ecb6659c7be"
+    assert row.terminal_short_id == "98f0"
+    assert row.raw_payload.get("field_confidence", {}).get("terminal_id", 0) > 0
+
+
+PRODUCTION_OCR_TEXT_260706_98F0_GARBLED = """
+1105-6927
+登録耆号
+1410104-0102-3000
+瑞末症別番一9810
+岩末城別番=980
+清算
+2310434
+202607104
+瑞末普号
+2026/07104
+9810e2信e4-4e00
+3502-ec566592762
+23:0434
+焼末普号
+9810ec+e54-4e00
+98f0ectes4-4e001
+17840
+末織別会号S10
+清尊
+2026/0710-23:0-:3-
+9sf0ec2ffe54-4e00-
+a503-2ecb6659c7be
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_garbled():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_GARBLED))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "98f0"
+    assert row.terminal_id == "98f0ec2f-fc54-4e00-a503-2ecb6659c7be"
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.amount == Decimal("7840")
+    assert row.transaction_count == 8
+
+
+PRODUCTION_OCR_TEXT_260706_98F0_COMPACT = """
+端末識別番号: 98f0
+精算
+202607104
+2310434
+端末番号:
+98f0ec2f-fc54-4e00-
+a503-2ecb6659c7be
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_compact_datetime():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_COMPACT))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.terminal_short_id == "98f0"
+
+
+PRODUCTION_OCR_TEXT_260706_98F0_LINE_ALBUM = """
+端末識別番号:9S10
+精算
+2026/070423:04:34
+端末号
+9sf0ec2f-fc54-4e00-
+a503-2ecb6659c7be
+清算
+23:04:34
+2026107104
+23:043日
+2026107104
+小計
+7,840
+合計
+7,840
+現金売上
+7,840
+通常取引数
+8
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_98f0_line_album():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_98F0_LINE_ALBUM))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.record_date == date(2026, 7, 4)
+    assert row.record_time == "23:04:34"
+    assert row.terminal_short_id == "98f0"
+
+
+PRODUCTION_OCR_TEXT_260706_0B21_15680 = """
+端末識別番号0b21
+精算
+2026/07/0422:57:57
+端末番号
+0b21ee3e-0e48-475b-8246-7
+fd3b19741ea
+15,680
+小計
+15,680
+合計
+15/880
+現金売上
+クレヅット売上
+その他支払い
+-PAYGATE
+POS
+9/800
+-その他
+10
+消費税
+1,424
+通常取引数
+16
+15,680
+小計
+115,680
+今計
+45,880
+現金売上
+"""
+
+
+def test_paygate_settlement_parser_handles_production_ocr_text_260706_0b21_subtotal_exceeds_total():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260706_0B21_15680))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.subtotal == Decimal("15680")
+    assert row.amount == Decimal("15680")
+    assert row.cash_sales == Decimal("5880")
+    assert row.pos_sales == Decimal("9800")
+    assert row.transaction_count == 16
+
+
+PRODUCTION_OCR_TEXT_260704_0B21_SPLIT_PAYGATE = """
+端末識別番号
+0b21
+精算
+2026/07/04 22:57:57
+端末番号
+0b21ee3e-0e48-475b-8246-7fd3b19741ea
+小計
+15,680
+合計
+15,680
+現金売上
+クレジット売上
+0
+その他支払い
+-PAYGATE
+POS
+9/800
+-その他
+0
+通常取引数
+16
+"""
+
+
+def test_paygate_settlement_parser_handles_split_paygate_pos_line_260704_0b21():
+    parser = PaygateSettlementParser()
+    rows = parser.parse(run_ocr_from_text(PRODUCTION_OCR_TEXT_260704_0B21_SPLIT_PAYGATE))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.terminal_short_id == "0b21"
+    assert row.amount == Decimal("15680")
+    assert row.cash_sales == Decimal("5880")
+    assert row.pos_sales == Decimal("9800")
+    assert row.transaction_count == 16
+

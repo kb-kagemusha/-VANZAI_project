@@ -1,36 +1,99 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
+import { CalendarHubPage } from "../pages/CalendarHubPage";
+import { OrderBillingPage } from "../pages/OrderBillingPage";
+import { CompanyProfilePage } from "../pages/CompanyProfilePage";
 import { AppShell } from "../components/AppShell";
+import { AccessManagementPage } from "../pages/AccessManagementPage";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { AppDialogHost } from "../lib/appDialog";
 import { DASHBOARD_ROLES } from "../lib/auth/permissions";
 import { CsvImportPage } from "../pages/CsvImportPage";
 import { ActualsPage } from "../pages/ActualsPage";
+import { AssignmentResponsesPage } from "../pages/AssignmentResponsesPage";
 import { AuditLogsPage } from "../pages/AuditLogsPage";
 import { AssignmentsPage } from "../pages/AssignmentsPage";
-import { DashboardPage } from "../pages/DashboardPage";
+import { RoleDashboardPage } from "../pages/RoleDashboardPage";
+import { DashboardPreviewPage } from "../pages/DashboardPreviewPage";
 import { ExpensesPage } from "../pages/ExpensesPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { InvoicesPage } from "../pages/InvoicesPage";
 import { LoginPage } from "../pages/LoginPage";
+import { MasterDataPage } from "../pages/MasterDataPage";
 import { PayoutsPage } from "../pages/PayoutsPage";
+import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
+import { WorkersPage } from "../pages/WorkersPage";
+import { OperatorStaffPage } from "../pages/OperatorStaffPage";
+import { AccountProfilePage } from "../pages/AccountProfilePage";
+import { ChangePasswordPage } from "../pages/ChangePasswordPage";
+import { NoticesPage } from "../pages/NoticesPage";
+import { DeletedOrderRequestsPage } from "../pages/DeletedOrderRequestsPage";
+import { OrderRequestsPage } from "../pages/OrderRequestsPage";
+import { WakeStatusPage } from "../pages/WakeStatusPage";
+import { AttendanceNotesPage } from "../pages/AttendanceNotesPage";
+import { PublicRegistrationPage } from "../pages/PublicRegistrationPage";
+import { PublicLineRegistrationPage } from "../pages/PublicLineRegistrationPage";
+import { PublicLineWorkerPage } from "../pages/PublicLineWorkerPage";
+import { PublicOcrUploadPage } from "../pages/PublicOcrUploadPage";
+import { RegistrationRequestsPage } from "../pages/RegistrationRequestsPage";
+import { OcrPage } from "../pages/ReceiptOcrPage";
 import { PermissionRoute } from "../routes/PermissionRoute";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
+function StandaloneFrame() {
+  const location = useLocation();
+  return (
+    <>
+      {location.pathname !== "/public/line-registration" ? <ThemeToggle placement="fixed" /> : null}
+      <Outlet />
+    </>
+  );
+}
+
 export function App() {
   return (
+    <>
+    <AppDialogHost />
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route element={<StandaloneFrame />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/public/registrations/:formType" element={<PublicRegistrationPage />} />
+        <Route path="/public/line-registration" element={<PublicLineRegistrationPage />} />
+        <Route path="/public/line-worker" element={<PublicLineWorkerPage />} />
+        <Route path="/public/ocr-upload" element={<PublicOcrUploadPage />} />
+      </Route>
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/403" element={<ForbiddenPage />} />
+        <Route element={<StandaloneFrame />}>
+          <Route path="/403" element={<ForbiddenPage />} />
+        </Route>
+        <Route
+          path="/dashboard/preview"
+          element={
+            <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
+              <DashboardPreviewPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="/dashboard/preview/profile"
+          element={
+            <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
+              <DashboardPreviewPage />
+            </PermissionRoute>
+          }
+        />
         <Route element={<AppShell />}>
+          <Route path="/settings/access" element={<PermissionRoute allowedRoles={["admin"]}><AccessManagementPage /></PermissionRoute>} />
+          <Route path="/settings/company" element={<PermissionRoute allowedRoles={["admin"]}><CompanyProfilePage /></PermissionRoute>} />
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"
             element={
               <PermissionRoute allowedRoles={DASHBOARD_ROLES}>
-                <DashboardPage />
+                <RoleDashboardPage />
               </PermissionRoute>
             }
           />
@@ -42,6 +105,32 @@ export function App() {
               </PermissionRoute>
             }
           />
+          <Route
+            path="/operations/ocr"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <OcrPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/ocr-paygate"
+            element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />}
+          />
+          <Route
+            path="/operations/ocr-settlement"
+            element={<Navigate to="/operations/ocr?source=paygate_settlement" replace />}
+          />
+          <Route path="/operations/ocr-receipt" element={<Navigate to="/operations/ocr?source=paygate_screenshot" replace />} />
+          <Route
+            path="/operations/calendar"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <CalendarHubPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/operations/availability-calendar" element={<Navigate to="/operations/calendar?view=availability" replace />} />
           <Route
             path="/operations/actuals"
             element={
@@ -55,6 +144,14 @@ export function App() {
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
                 <AssignmentsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/assignment-responses"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <AssignmentResponsesPage />
               </PermissionRoute>
             }
           />
@@ -99,10 +196,81 @@ export function App() {
             }
           />
           <Route
+            path="/masters/prices"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <PriceManagementPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/workers"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <WorkersPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/masters/data"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting", "site_manager"]}>
+                <MasterDataPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/masters/operator-staff" element={<PermissionRoute allowedRoles={["admin"]}><OperatorStaffPage /></PermissionRoute>} />
+          <Route
             path="/audit-logs"
             element={
               <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
                 <AuditLogsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/account/profile" element={<AccountProfilePage />} />
+          <Route path="/operations/attendance-notes" element={<PermissionRoute allowedRoles={["admin", "ops", "accounting"]}><AttendanceNotesPage /></PermissionRoute>} />
+          <Route path="/billing/order-amounts" element={<PermissionRoute allowedRoles={["admin"]}><OrderBillingPage /></PermissionRoute>} />
+          <Route path="/account/change-password" element={<ChangePasswordPage />} />
+          <Route
+            path="/operations/order-requests"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <OrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route path="/operations/order-overview" element={<Navigate to="/operations/calendar?view=event" replace />} />
+          <Route path="/operations/participation-calendar" element={<Navigate to="/operations/calendar?view=participation" replace />} />
+          <Route
+            path="/operations/wake-status"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <WakeStatusPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/order-requests/deleted"
+            element={
+              <PermissionRoute allowedRoles={["admin"]}>
+                <DeletedOrderRequestsPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/notices"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops"]}>
+                <NoticesPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/operations/registration-requests"
+            element={
+              <PermissionRoute allowedRoles={["admin", "ops", "accounting"]}>
+                <RegistrationRequestsPage />
               </PermissionRoute>
             }
           />
@@ -111,5 +279,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </>
   );
 }

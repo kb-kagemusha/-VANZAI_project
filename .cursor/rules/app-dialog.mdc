@@ -1,0 +1,28 @@
+---
+description: 管理画面とスタッフ画面では window.alert / confirm / prompt を使わず、APEX の共通ダイアログを使う
+alwaysApply: true
+---
+
+# 確認は APEX の共通ダイアログ
+
+管理画面（`apps/admin-web`）とスタッフ画面（`apps/staff-mobile`）では `window.alert` / `window.confirm` / `window.prompt`、および `alert(` / `confirm(` / `prompt(` の直接呼び出しを使わない。
+
+各アプリの `src/lib/appDialog.tsx` を使う。API は同じ。共通パッケージは作らない。
+
+- `await confirmApp({ title, message, confirmLabel, cancelLabel, tone })`
+- `await alertApp({ title, message })`
+- `await promptApp({ title, message, defaultValue })` はキャンセルで `null`
+
+標題は画面の文脈にする。ブラウザの「サイトの内容」は出さない。
+見た目は APEX（墨 `#1d2731`、補助 `#667085`、線 `#e6e8ee`、緑 `#16a34a`、背景 `#f4f6f8`、角丸カード）。主ボタンは緑、キャンセルはゴースト。データを消す削除確認だけ `tone: "danger"`（`#dc2626`）。一覧から外す確認は緑のまま。
+`AppDialogHost` は各アプリの `App` に置いてある。
+登録URLや作成ポップアップなど、入力フォーム付きの既存モーダルは置き換えない。
+
+```tsx
+const confirmed = await confirmApp({
+  title: "依頼書を一覧から外す",
+  message: "この依頼書を一覧から外します。データは残し、管理者の削除済み案件一覧にだけ表示します。",
+  confirmLabel: "一覧から外す",
+});
+if (!confirmed) return;
+```
