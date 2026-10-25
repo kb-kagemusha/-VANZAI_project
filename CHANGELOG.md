@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 文書更新 - 2026-10-26
+
+- 10月27日のクライアント会議資料を単一HTMLとして配布。Meiryo、章の開閉、開始条件の確認チェックリスト、印刷用表示を含む。公開対象はHTMLのみで、元資料・編集メモは配信しない。
+- 資料の配置先とSHA-256は `docs/meetings/2026-10-27/publication.json` に記録。文書の公開のみのためアプリ版数は変更しない。
+
 バージョン管理ルール（AGENTS.md セクション9 参照）
 - **正本**: `apps/admin-web/package.json` と `apps/staff-mobile/package.json` の `version` フィールド
 - **CHANGELOG の版見出し**は、上記 package.json を実際に更新した版のみ付与する（開発メモを版番号として記載しない）。
