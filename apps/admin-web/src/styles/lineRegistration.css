@@ -50,7 +50,8 @@
 .lr-field input::placeholder { color: #acadb7; font-size: 13px; }
 .lr-field input[aria-invalid="true"], .lr-field select[aria-invalid="true"] { border-color: #d52b25; background: #fff9f8; }
 .lr-field input[readonly], .lr-field select:disabled { background: #f0f1f4; color: #626570; }
-.lr-field input[type="date"] { display: block; min-width: 100%; -webkit-appearance: none; }
+.lr-birth-date { display: grid; grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lr-birth-date select { padding-left: 8px; padding-right: 4px; }
 .lr-walk-input { display: flex; align-items: center; gap: 12px; color: var(--lr-muted); }
 .lr-walk-input input { max-width: 120px; text-align: center; }
 .lr-hint { font-size: 11px; color: var(--lr-muted); margin: 0; line-height: 1.7; }

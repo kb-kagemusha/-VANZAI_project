@@ -87,7 +87,14 @@ test("validate then confirm before sending optional station information", async 
   await expect(page.getByText("電話番号を入力してください", { exact: true })).toBeVisible();
   expect(submitted).toHaveLength(0);
   for (const [key, value] of Object.entries({ last_name: "山田", first_name: "太郎", last_name_furigana: "やまだ", first_name_furigana: "たろう", phone: "09000001111", email: "worker@example.com", birth_date: "1990-01-02", postal_code: "1000001", address1: "千代田区1-1", nearest_station: "新宿駅", station_walk_minutes: "0", emergency_contact_phone: "09000002222", emergency_contact_name: "山田 花子", emergency_contact_relationship: "実母" })) {
-    await page.locator(`#lr-${key}`).fill(value);
+    if (key === "birth_date") {
+      const [year, month, day] = value.split("-");
+      await page.getByRole("combobox", { name: "生年月日（年）", exact: true }).selectOption(year);
+      await page.getByRole("combobox", { name: "生年月日（月）", exact: true }).selectOption(month);
+      await page.getByRole("combobox", { name: "生年月日（日）", exact: true }).selectOption(day);
+    } else {
+      await page.locator(`#lr-${key}`).fill(value);
+    }
   }
   await page.locator("#lr-prefecture").selectOption("東京都");
   await page.getByRole("button", { name: "入力内容を確認する" }).click();
@@ -278,4 +285,30 @@ test("closing panel disables self approval and confirms another person's request
   await buttons.nth(1).click();
   await page.getByRole("dialog").getByRole("button", { name: "承認する", exact: true }).click();
   await expect.poll(() => approved).toBe("other");
+});
+
+test("birth date selects year month day, handles leap years and retains input after confirmation", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  const submitted = await setup(page, { linked: true });
+  const year = page.getByRole("combobox", { name: "生年月日（年）", exact: true });
+  const month = page.getByRole("combobox", { name: "生年月日（月）", exact: true });
+  const day = page.getByRole("combobox", { name: "生年月日（日）", exact: true });
+  await expect(year).toHaveValue("");
+  await year.selectOption("2000"); await month.selectOption("02"); await day.selectOption("29");
+  await year.selectOption("1990");
+  await expect(day).toHaveValue("");
+  await expect(day.locator('option[value="29"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "入力内容を確認する" }).click();
+  await expect(page.getByText("今日以前の実在する日付を選んでください", { exact: true })).toBeVisible();
+  expect(submitted).toHaveLength(0);
+  await month.selectOption("01"); await day.selectOption("31"); await month.selectOption("04");
+  await expect(day).toHaveValue("");
+  await month.selectOption("01"); await day.selectOption("20");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "../../artifacts/line-birth-date-mobile.png" });
+  await page.getByRole("button", { name: "入力内容を確認する" }).click();
+  await expect(page.getByText("1990-01-20", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "この内容で申請する" }).click();
+  await expect(page.getByRole("heading", { name: "申請を受け付けました" })).toBeVisible();
+  expect(submitted[0].body.birth_date).toBe("1990-01-20");
 });

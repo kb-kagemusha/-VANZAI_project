@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, MapPin, Phone, ShieldCheck, UserRound } from "lucide-react";
 import { AdditionalStationFields } from "../components/AdditionalStationFields";
+import { BirthDateFields } from "../components/BirthDateFields";
 import { showAdditionalStations } from "../lib/additionalStations";
 import registrationLogo from "../assets/registration-logo.png";
 import "../styles/lineRegistration.css";
@@ -43,7 +44,7 @@ const fields: Array<{ key: keyof LineRegistrationInput; label: string; type?: st
   { key: "first_name_furigana", label: "名ふりがな" },
   { key: "phone", label: "電話" },
   { key: "email", label: "メール" },
-  { key: "birth_date", label: "生年月日", type: "date" },
+  { key: "birth_date", label: "生年月日" },
   { key: "postal_code", label: "郵便番号" },
   { key: "prefecture", label: "都道府県" },
   { key: "address1", label: "市区町村・番地" },
@@ -381,14 +382,13 @@ export function PublicLineRegistrationPage() {
     };
     return <div className="lr-field" key={key}>
       <label htmlFor={`lr-${key}`}><span>{field.label}</span><span className={`lr-badge ${required ? "lr-badge-required" : ""}`}>{required ? "必須" : screen.baseline?.[key].trim() ? "登録済み" : "任意"}</span></label>
-      {key === "prefecture" ? <select {...properties} disabled={holdingSubmission} onChange={(event) => change(event.target.value)}>
+      {key === "birth_date" ? <BirthDateFields value={screen.input.birth_date} onChange={change} required={required} disabled={holdingSubmission} error={error} today={todayInJapan()} /> : key === "prefecture" ? <select {...properties} disabled={holdingSubmission} onChange={(event) => change(event.target.value)}>
         <option value="">選択してください</option>{PREFECTURES.map((prefecture) => <option key={prefecture}>{prefecture}</option>)}
       </select> : <div className={key === "station_walk_minutes" ? "lr-walk-input" : "lr-input-wrap"}>
         {key === "station_walk_minutes" ? <span aria-hidden="true">徒歩</span> : null}
         <input {...properties} readOnly={holdingSubmission}
           type={["phone", "emergency_contact_phone"].includes(key) ? "tel" : key === "email" ? "email" : field.type ?? "text"}
           inputMode={["phone", "postal_code", "station_walk_minutes", "emergency_contact_phone"].includes(key) ? "numeric" : key === "email" ? "email" : "text"}
-          max={key === "birth_date" ? todayInJapan() : undefined}
           maxLength={key === "postal_code" ? 8 : key === "station_walk_minutes" ? 3 : key === "nearest_station" ? 100 : key === "emergency_contact_name" ? 200 : key === "emergency_contact_relationship" ? 50 : key === "emergency_contact_phone" ? 20 : undefined}
           placeholder={placeholders[key]} onChange={(event) => change(event.target.value)} />
         {key === "station_walk_minutes" ? <span aria-hidden="true">分</span> : null}
