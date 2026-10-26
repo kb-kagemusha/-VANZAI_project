@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-republish|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
+    ""|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-republish|--wake-monitor|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
@@ -42,6 +42,9 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" sync
     elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-publish" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" publish
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--wake-monitor" ]; then
+        # 0.54.0（DEC-126）：起床の監視（毎分）。本人への催促・運営への知らせ
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/wake_monitor.py"
     elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-republish" ]; then
         # 0.53.8（DEC-125）：公開中の個人別メニューを新しい6分割へ差し替える。全員の既定メニューは変えない
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" republish
@@ -387,6 +390,10 @@ REMIND_CRON="${REMIND_MARKER} 15 * * * * cd ${APP_DIR} && ${VENV_DIR}/bin/python
 
 # Operator menus are personal only. The global worker menu is never changed.
 "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" publish
+WAKE_MONITOR_MARKER="# vanzai-wake-monitor"
+WAKE_MONITOR_CRON="* * * * * bash ${APP_DIR}/scripts/deploy/02_app_deploy.sh --wake-monitor >> ${APP_DIR}/logs/wake-monitor.log 2>&1 ${WAKE_MONITOR_MARKER}"
+(crontab -l 2>/dev/null | grep -v "${WAKE_MONITOR_MARKER}" || true
+ echo "${WAKE_MONITOR_CRON}") | crontab -
 OPERATOR_MENU_MARKER="# vanzai-operator-menu-sync"
 OPERATOR_MENU_CRON="* * * * * bash ${APP_DIR}/scripts/deploy/02_app_deploy.sh --operator-menu-sync >> ${APP_DIR}/logs/operator-menu-sync.log 2>&1 ${OPERATOR_MENU_MARKER}"
 (crontab -l 2>/dev/null | grep -v "${OPERATOR_MENU_MARKER}" || true

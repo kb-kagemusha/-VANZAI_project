@@ -100,8 +100,14 @@ class LineOperatorService:
         value = build_wake_status(self.db, day, include_test=include_test)
         # Explicit allowlist: no phone/contact notes/addresses here. The phone is returned only by claim().
         keys = ("worker_id", "worker_name", "first_start", "wake_reported_at", "overlap_warning")
+        from src.models.line_daily import WakeMonitorSend
+        from src.services.wake_monitor import deadline_for
+        sends = {}
+        for send in self.db.query(WakeMonitorSend).filter(WakeMonitorSend.work_date == day, WakeMonitorSend.status == "sent").all():
+            sends.setdefault(send.worker_id, set()).add(send.kind)
         items = []
         for row in value["items"]:
+            times = deadline_for(day, row["first_start"])
             contacts = [c for c in row["contacts"] if c["result"] != WAKE_CONTACT_CLAIM]
             items.append({
                 **{key: row[key] for key in keys},
@@ -110,6 +116,10 @@ class LineOperatorService:
                 "last_result": ({"label": contacts[-1]["result_label"], "actor_name": contacts[-1]["actor_name"], "at": contacts[-1]["created_at"]} if contacts else None),
                 "entries": [{key: entry[key] for key in ("project_name", "site_name", "start_time", "end_time", "end_next_day", "status", "is_test")} for entry in row["entries"]],
                 "is_test": all(entry["is_test"] for entry in row["entries"]),
+                # 起床の監視（0.54.0、DEC-126）：期限、本人への催促・運営への知らせを送ったか
+                "deadline": times[0].strftime("%H:%M") if times else None,
+                "reminded": "worker_reminder" in sends.get(row["worker_id"], set()),
+                "alerted": "operator_alert" in sends.get(row["worker_id"], set()),
             })
         # Same order as the admin screen: whoever needs action now comes first.
         items.sort(key=lambda r: (r["next_action"]["priority"], r["first_start"] or "99:99", r["worker_name"]))
@@ -136,7 +146,8 @@ class LineOperatorService:
         handler = _handler(row["contacts"])
         if handler and handler["actor_user_id"] != user.id and not takeover:
             raise OperatorError(409, f"{handler['actor_name']}さんが対応中です。")
-        if not handler or handler["actor_user_id"] != user.id:
+        created = not handler or handler["actor_user_id"] != user.id
+        if created:
             log = WakeContactLog(worker_id=worker_id, contact_date=day, result=WAKE_CONTACT_CLAIM, note=None,
                                  actor_user_id=user.id, actor_name=staff.name[:100], created_at=ws.now_utc())
             self.db.add(log)
@@ -144,7 +155,7 @@ class LineOperatorService:
             AuditService(self.db).log("wake_contact_claimed", target_type="wake_contact_log", target_id=log.id, actor=user.id, actor_role=user.role,
                                       after_value={"worker_id": worker_id, "date": day.isoformat(), "takeover_from": handler["actor_name"] if handler else None})
         worker = self.db.get(Worker, worker_id)
-        return {"worker_id": worker_id, "worker_name": row["worker_name"], "phone": (worker.phone or None) if worker else None, "handler_name": staff.name}
+        return {"worker_id": worker_id, "worker_name": row["worker_name"], "phone": (worker.phone or None) if worker else None, "handler_name": staff.name, "new_claim": created}
 
     def record(self, staff, user, day: date, worker_id: str, result: str, note: str):
         """電話などの結果を記録する。管理画面の起床状況と同じ記録（追記のみ）。"""

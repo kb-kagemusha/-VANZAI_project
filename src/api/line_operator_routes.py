@@ -16,21 +16,6 @@ def no_store(response: Response):
 router = APIRouter(prefix="/api/line/operator", tags=["LINE operator"], dependencies=[Depends(no_store)])
 
 
-class ClaimBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    day: date
-    worker_id: str = Field(min_length=1, max_length=26)
-    takeover: bool = False
-
-
-class ContactBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    day: date
-    worker_id: str = Field(min_length=1, max_length=26)
-    result: str = Field(min_length=1, max_length=20)
-    note: str = Field(default="", max_length=500)
-
-
 class SessionBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id_token: str = Field(min_length=1, max_length=10000)
@@ -101,19 +86,6 @@ def _write(db, action):
     except OperatorError as exc:
         db.rollback()
         raise HTTPException(exc.status, exc.message) from None
-
-
-@router.post("/wake-contacts/claim")
-def claim(body: ClaimBody, context=Depends(access)):
-    """「私が連絡します」。引き受けた人にだけ電話番号を返す（0.53.8、DEC-125）。"""
-    db, staff, user = context
-    return _write(db, lambda: LineOperatorService(db).claim(staff, user, body.day, body.worker_id, body.takeover))
-
-
-@router.post("/wake-contacts")
-def record_contact(body: ContactBody, context=Depends(access)):
-    db, staff, user = context
-    return _write(db, lambda: LineOperatorService(db).record(staff, user, body.day, body.worker_id, body.result, body.note))
 
 
 @router.get("/orders")

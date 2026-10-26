@@ -371,3 +371,34 @@ FEATURE_CHANGE_REQUEST = "change_request"
 # Web確認画面からの返事（全日程で受諾・辞退。統合計画 ③-C）。③-B との結合試験までは有効にしない（v1.2）
 FEATURE_WEB_REPLY = "web_reply"
 FEATURE_KEYS = (FEATURE_PICK_DATES, FEATURE_WEB_HOME, FEATURE_WEB_ORDERS, FEATURE_CHANGE_REQUEST, FEATURE_WEB_REPLY)
+
+
+# ---- 起床の監視（④ A2、0.54.0、DEC-126） -------------------------------------------------
+# 期限＝その日最初の勤務の開始 − WAKE_DEADLINE_HOURS。期限に本人へ催促、さらに WAKE_ALERT_DELAY_MINUTES 後も報告が無ければ運営へ。
+# 誰も「私が連絡します」を押さなければ WAKE_RENOTIFY_MINUTES ごとに運営へ再通知。開始時刻を過ぎたら送らない。
+WAKE_DEADLINE_HOURS = 3
+WAKE_ALERT_DELAY_MINUTES = 15
+WAKE_RENOTIFY_MINUTES = 10
+WAKE_SEND_KINDS = ("worker_reminder", "operator_alert", "operator_claimed", "operator_reported")
+
+
+class WakeMonitorSend(Base):
+    """起床の監視で送ったLINE（送る前に記録し、一意制約で同じ知らせを2回送らない）。追記のみ。"""
+
+    __tablename__ = "wake_monitor_sends"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    worker_id: Mapped[str] = mapped_column(String(26), ForeignKey("workers.id"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    round: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recipient: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("worker_id", "work_date", "kind", "round", "recipient", name="uq_wake_monitor_sends_key"),
+        CheckConstraint("kind IN ('worker_reminder','operator_alert','operator_claimed','operator_reported')", name="ck_wake_monitor_sends_kind"),
+        CheckConstraint("status IN ('pending','sent','failed','skipped')", name="ck_wake_monitor_sends_status"),
+        Index("ix_wake_monitor_sends_date_worker", "work_date", "worker_id"),
+    )

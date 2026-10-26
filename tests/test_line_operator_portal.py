@@ -294,46 +294,6 @@ def _second_operator(api_client, db_session, monkeypatch, role="ops"):
     return headers
 
 
-def test_claim_shows_phone_only_to_the_claimer_and_blocks_double_calls(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line, monkeypatch):
-    from src.models.line_daily import WakeContactLog
-    worker, _ = _accepted_today(api_client, db_session, ops_user)
-    worker.phone = "09099998888"; db_session.commit()
-    mine = session(api_client)
-    other = _second_operator(api_client, db_session, monkeypatch)
-    day = ws.today_jst().isoformat()
-    claimed = api_client.post("/api/line/operator/wake-contacts/claim", headers=mine, json={"day": day, "worker_id": worker.id})
-    assert claimed.status_code == 200, claimed.text
-    assert claimed.json()["phone"] == "09099998888"
-    # Pressing again by the same person does not add a second record.
-    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=mine, json={"day": day, "worker_id": worker.id}).status_code == 200
-    assert db_session.query(WakeContactLog).filter_by(result="claimed").count() == 1
-    row = api_client.get("/api/line/operator/wake-status", headers=other).json()["items"][0]
-    assert row["handler"] == {"actor_name": "運営本人", "at": row["handler"]["at"], "is_me": False}
-    blocked = api_client.post("/api/line/operator/wake-contacts/claim", headers=other, json={"day": day, "worker_id": worker.id})
-    assert blocked.status_code == 409 and "運営本人さんが対応中" in blocked.json()["detail"]
-    taken = api_client.post("/api/line/operator/wake-contacts/claim", headers=other, json={"day": day, "worker_id": worker.id, "takeover": True})
-    assert taken.status_code == 200 and taken.json()["phone"] == "09099998888"
-    assert api_client.post("/api/line/operator/wake-contacts", headers=other, json={"day": day, "worker_id": worker.id, "result": "claimed"}).status_code == 400
-    done = api_client.post("/api/line/operator/wake-contacts", headers=other, json={"day": day, "worker_id": worker.id, "result": "confirmed_awake", "note": "起きていた"})
-    assert done.status_code == 200, done.text
-    row = api_client.get("/api/line/operator/wake-status", headers=mine).json()["items"][0]
-    assert row["handler"] is None and row["last_result"]["label"] == "電話で起床を確認" and row["next_action"]["step"] == "resolved"
-    # The admin screen sees the same append-only record, and the claim does not change its next action.
-    admin = api_client.get("/api/line-daily/wake-status", headers={"Authorization": "Bearer " + create_access_token({"sub": ops_user.username})}).json()
-    assert [c["result"] for c in admin["items"][0]["contacts"]] == ["claimed", "claimed", "confirmed_awake"]
-    assert admin["items"][0]["next_action"]["step"] == "resolved"
-
-
-def test_claim_rules_and_permissions(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
-    worker, _ = _accepted_today(api_client, db_session, ops_user)
-    headers = session(api_client)
-    yesterday = (ws.today_jst() - timedelta(days=1)).isoformat()
-    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": yesterday, "worker_id": worker.id}).status_code == 409
-    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": ws.today_jst().isoformat(), "worker_id": "not-scheduled"}).status_code == 404
-    db_session.add(RoleAccessPolicy(role="ops", display_name="運営", permissions=["order_read"])); db_session.commit()
-    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": ws.today_jst().isoformat(), "worker_id": worker.id}).status_code == 403
-
-
 def test_orders_list_receipt_status_and_operator_pdf_link(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
     from src.models.line_operator import LineOperatorFileToken
     from src.models.order_request import OrderRequestDelivery
@@ -423,7 +383,8 @@ def test_test_orders_are_shown_only_when_asked_and_marked(api_client, db_session
     # The admin screen still shows formal orders only.
     admin = api_client.get("/api/line-daily/wake-status", headers={"Authorization": "Bearer " + create_access_token({"sub": ops_user.username})}).json()
     assert admin["total"] == 0
-    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": day.isoformat(), "worker_id": worker.id}).status_code == 200
+    # The list itself has no claim/phone endpoints any more; claiming happens from the LINE alert.
+    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": day.isoformat(), "worker_id": worker.id}).status_code in (404, 405)
     plain = api_client.get(f"/api/line/operator/calendar?start={day}&end={day}&kind=orders", headers=headers).json()
     assert all(not e.get("is_test") for d in plain["days"] for e in d["events"])
     marked = api_client.get(f"/api/line/operator/calendar?start={day}&end={day}&kind=orders&include_test=true", headers=headers).json()
@@ -432,3 +393,93 @@ def test_test_orders_are_shown_only_when_asked_and_marked(api_client, db_session
     assert all(i["version_id"] != version["id"] for i in api_client.get(query, headers=headers).json()["items"])
     item = next(i for i in api_client.get(query + "&include_test=true", headers=headers).json()["items"] if i["version_id"] == version["id"])
     assert item["is_test"] is True and [r["worker_id"] for r in item["acked"]] == [worker.id]
+
+
+# ---- 起床の監視（0.54.0、DEC-126） ---------------------------------------------------------------
+
+def _texts(messages):
+    import json
+    return json.dumps(messages, ensure_ascii=False)
+
+
+def test_wake_monitor_reminds_worker_then_alerts_operators_and_renotifies(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line, monkeypatch):
+    from datetime import datetime, time
+    from src.models.line_daily import WakeMonitorSend
+    from src.services.wake_monitor import WakeMonitorService
+    from tests.test_line_daily import _postback
+    worker, _ = _accepted_today(api_client, db_session, ops_user)  # 09:00 start, worker LINE U123
+    worker.phone = "09099998888"; db_session.commit()
+    second = _second_operator(api_client, db_session, monkeypatch)
+    del second
+    day = ws.today_jst()
+    at = lambda h, m: datetime.combine(day, time(h, m))
+    fake_line.pushes.clear()
+    service = WakeMonitorService(db_session, fake_line)
+    assert service.run(at(5, 59))["worker_reminder"] == 0
+    assert service.run(at(6, 0))["worker_reminder"] == 1; db_session.commit()
+    assert fake_line.pushes[-1][0] == "U123" and "wk_wake" in _texts(fake_line.pushes[-1][1])
+    assert service.run(at(6, 5)) == {"worker_reminder": 0, "operator_alert": 0, "operator_reported": 0}
+    assert service.run(at(6, 15))["operator_alert"] == 2; db_session.commit()
+    alert = [p for p in fake_line.pushes if p[0] in ("Uoperator", "Uoperator2")]
+    assert {p[0] for p in alert} == {"Uoperator", "Uoperator2"}
+    body = _texts(alert[0][1])
+    assert "起床報告がまだ" in body and "駅前イベント" in body and f"wa_claim:{worker.id}:{day.isoformat()}" in body
+    assert "09099998888" not in body  # the phone appears only after claiming
+    assert service.run(at(6, 20))["operator_alert"] == 0
+    assert service.run(at(6, 25))["operator_alert"] == 2; db_session.commit()
+    assert "2回目" in _texts(fake_line.pushes[-1][1])
+    # Claim from the LINE alert: phone + result buttons to the claimer, a notice to the other operator.
+    fake_line.pushes.clear(); fake_line.messages.clear()
+    assert _postback(api_client, f"wa_claim:{worker.id}:{day.isoformat()}", "Uoperator").status_code == 200
+    reply = _texts(fake_line.messages[-1][1])
+    assert "tel:09099998888" in reply and "wa_res:" in reply
+    assert [p[0] for p in fake_line.pushes] == ["Uoperator2"] and "運営本人さんが連絡します" in _texts(fake_line.pushes[0][1])
+    # The other operator is told it is being handled and may take over.
+    assert _postback(api_client, f"wa_claim:{worker.id}:{day.isoformat()}", "Uoperator2").status_code == 200
+    assert "対応中" in _texts(fake_line.messages[-1][1]) and "wa_take:" in _texts(fake_line.messages[-1][1])
+    db_session.expire_all()
+    assert WakeMonitorService(db_session, fake_line).run(at(6, 35))["operator_alert"] == 0  # claimed: no more re-notify
+    assert _postback(api_client, f"wa_res:{worker.id}:{day.isoformat()}:confirmed_awake", "Uoperator").status_code == 200
+    assert "記録しました：電話で起床を確認" in _texts(fake_line.messages[-1][1])
+    headers = session(api_client)
+    row = api_client.get("/api/line/operator/wake-status", headers=headers).json()["items"][0]
+    assert row["alerted"] is True and row["reminded"] is True and row["deadline"] == "06:00" and row["next_action"]["step"] == "resolved"
+    assert db_session.query(WakeMonitorSend).filter_by(kind="worker_reminder").count() == 1
+
+
+def test_wake_monitor_tells_operators_when_report_arrives_and_stops_at_start(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
+    from datetime import datetime, time
+    from src.services.wake_monitor import WakeMonitorService
+    from tests.test_line_daily import _postback, _release
+    worker, _ = _accepted_today(api_client, db_session, ops_user)
+    day = ws.today_jst()
+    at = lambda h, m: datetime.combine(day, time(h, m))
+    service = WakeMonitorService(db_session, fake_line)
+    service.run(at(6, 15)); db_session.commit()  # late first run: reminder and alert together
+    _release(db_session)
+    assert _postback(api_client, "wk_wake").status_code == 200
+    db_session.expire_all()
+    fake_line.pushes.clear()
+    assert WakeMonitorService(db_session, fake_line).run(at(6, 20))["operator_reported"] == 1; db_session.commit()
+    assert fake_line.pushes[0][0] == "Uoperator" and "起床報告が届きました" in _texts(fake_line.pushes[0][1])
+    assert WakeMonitorService(db_session, fake_line).run(at(6, 21))["operator_reported"] == 0
+
+
+def test_wake_monitor_skips_after_start_and_without_alert_permission(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
+    from datetime import datetime, time
+    from src.services.wake_monitor import WakeMonitorService
+    worker, _ = _accepted_today(api_client, db_session, ops_user)
+    day = ws.today_jst()
+    fake_line.pushes.clear()
+    assert WakeMonitorService(db_session, fake_line).run(datetime.combine(day, time(9, 0))) == {"worker_reminder": 0, "operator_alert": 0, "operator_reported": 0}
+    db_session.add(RoleAccessPolicy(role="ops", display_name="運営", permissions=["wake_status_read"])); db_session.commit()
+    WakeMonitorService(db_session, fake_line).run(datetime.combine(day, time(6, 15))); db_session.commit()
+    assert all(to != "Uoperator" for to, _ in fake_line.pushes)
+
+
+def test_wake_alert_buttons_reject_non_operators(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
+    from tests.test_line_daily import _postback
+    worker, _ = _accepted_today(api_client, db_session, ops_user)
+    fake_line.messages.clear()
+    assert _postback(api_client, f"wa_claim:{worker.id}:{ws.today_jst().isoformat()}", "U123").status_code == 200
+    assert "運営スタッフだけ" in _texts(fake_line.messages[-1][1])

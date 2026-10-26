@@ -54,4 +54,7 @@ def test_station_name_length_is_limited():
 
 def test_wake_alert_permission_is_granted_per_role():
     assert Permission.WAKE_ALERT_RECEIVE in ROLE_PERMISSIONS[UserRole.ADMIN]
-    assert Permission.WAKE_ALERT_RECEIVE not in ROLE_PERMISSIONS[UserRole.OPS]
+    # 0.54.0（DEC-126）：起床の知らせは運営の全員（運用担当・現場管理者）に届ける。経理は受け取らない
+    assert Permission.WAKE_ALERT_RECEIVE in ROLE_PERMISSIONS[UserRole.OPS]
+    assert Permission.WAKE_ALERT_RECEIVE in ROLE_PERMISSIONS[UserRole.SITE_MANAGER]
+    assert Permission.WAKE_ALERT_RECEIVE not in ROLE_PERMISSIONS[UserRole.ACCOUNTING]

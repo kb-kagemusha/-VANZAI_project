@@ -10,6 +10,7 @@ type WakeRow = {
   worker_id: string; worker_name: string; first_start: string | null; wake_reported_at: string | null; entries: Entry[];
   next_action: { step: string; label: string; priority: number }; handler: Handler;
   last_result: { label: string; actor_name: string; at: string } | null; is_test?: boolean;
+  deadline: string | null; reminded: boolean; alerted: boolean;
 };
 type Wake = { date: string; is_today: boolean; total: number; reported: number; items: WakeRow[] };
 type Person = { worker_id: string; name: string };
@@ -22,7 +23,6 @@ type OrderItem = {
   acked: Recipient[]; unacked: Recipient[]; decline_pending: Recipient[]; declined: Recipient[]; unsent: Recipient[];
 };
 type Orders = { start: string; end: string; items: OrderItem[] };
-type Claim = { worker_id: string; worker_name: string; phone: string | null; handler_name: string };
 type Liff = { init: (options: { liffId: string }) => Promise<void>; isLoggedIn: () => boolean; login: () => void; getIDToken: () => string | null; openWindow?: (p: { url: string; external?: boolean }) => void; isInClient?: () => boolean };
 type Tab = "wake" | "today" | "calendar" | "orders" | "availability" | "profile";
 
@@ -36,16 +36,11 @@ const addDays = (value: string, days: number) => { const d = new Date(`${value}T
 const labels: Record<string, string> = { available_all_day: "終日可", available_after_15: "15時以降可", unavailable: "不可", consult_required: "要相談", undecided: "未定" };
 const buckets = [["ok", "参加予定"], ["changing", "変更確認待ち"], ["unanswered", "未回答"], ["unavailable", "参加不可"]] as const;
 const receipt = [["acked", "受領済み"], ["unacked", "未受領"], ["decline_pending", "辞退の確認待ち"], ["declined", "辞退"], ["unsent", "未送付"]] as const;
-const RESULTS = [
-  { value: "confirmed_awake", label: "起床を確認した" }, { value: "no_answer", label: "電話がつながらない" },
-  { value: "site_notified", label: "現場へ連絡した" }, { value: "absent", label: "欠勤" },
-] as const;
 const time = (value: string) => new Date(value).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
 const dayLabel = (value: string) => { const d = new Date(`${value}T00:00:00+09:00`); return `${d.getMonth() + 1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`; };
 const TEST_KEY = "vanzai.operator.showTest";
 const readShowTest = () => { try { return window.localStorage.getItem(TEST_KEY) !== "0"; } catch { return true; } };
 const TestMark = () => <span className="operator-test">テスト</span>;
-const telHref = (phone: string) => `tel:${phone.replace(/[^0-9+]/g, "")}`;
 
 function openUrl(url: string) {
   const liff = (window as Window & { liff?: Liff }).liff;
@@ -77,7 +72,6 @@ export function PublicLineOperatorPortalPage() {
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [updated, setUpdated] = useState("");
-  const [claim, setClaim] = useState<Claim | null>(null);
   const [busy, setBusy] = useState("");
   // テストの依頼書も表示する（動作確認用。0.53.9）。選んだ表示はこの端末に残す
   const [showTest, setShowTestState] = useState(readShowTest);
@@ -147,22 +141,7 @@ export function PublicLineOperatorPortalPage() {
     return () => { active = false; };
   }, [token, read, refresh]);
 
-  useEffect(() => { setClaim(null); setSearch(""); if (tab === "today") setDay(today()); }, [tab]);
-
-  const startClaim = (row: WakeRow, takeover: boolean) => {
-    setBusy(row.worker_id); setActionError("");
-    operatorPortalRequest<Claim>("/wake-contacts/claim", token, { day, worker_id: row.worker_id, takeover })
-      .then((result) => { setClaim(result); setRefresh((v) => v + 1); })
-      .catch((cause) => { setActionError(cause.message); setRefresh((v) => v + 1); })
-      .finally(() => setBusy(""));
-  };
-  const recordResult = (workerId: string, result: string) => {
-    setBusy(workerId + result); setActionError("");
-    operatorPortalRequest("/wake-contacts", token, { day, worker_id: workerId, result })
-      .then(() => { if (result === "confirmed_awake" || result === "absent") setClaim(null); setRefresh((v) => v + 1); })
-      .catch((cause) => setActionError(cause.message))
-      .finally(() => setBusy(""));
-  };
+  useEffect(() => { setSearch(""); if (tab === "today") setDay(today()); }, [tab]);
 
   const days = useMemo(() => {
     const [y, m] = month.split("-").map(Number);
@@ -201,26 +180,20 @@ export function PublicLineOperatorPortalPage() {
 
     {wake && <><section className="operator-summary"><strong>{wake.total}名</strong> 対象 ／ 報告あり {wake.reported}名 ／ 未報告 {wake.total - wake.reported}名</section>
       {wakeItems.map((row) => {
-        const open = claim?.worker_id === row.worker_id;
-        const needs = !row.wake_reported_at && wake.is_today && row.next_action.step !== "resolved";
-        return <article className={`operator-card${needs && row.next_action.priority <= 3 ? " is-urgent" : ""}`} key={row.worker_id}>
+        const waiting = !row.wake_reported_at && row.next_action.step !== "resolved";
+        const status = !waiting ? null
+          : row.handler ? `${row.handler.actor_name}さんが連絡中（${time(row.handler.at)}〜）`
+          : row.alerted ? "運営へ知らせました（まだ誰も対応していません）"
+          : row.reminded ? "本人へ催促しました"
+          : row.deadline ? `報告の期限 ${row.deadline}` : "";
+        return <article className={`operator-card${waiting && row.alerted && !row.handler ? " is-urgent" : ""}`} key={row.worker_id}>
           <div className="operator-card-title"><h2>{row.worker_name}{row.is_test && <TestMark />}</h2><strong className={row.wake_reported_at ? "operator-reported" : "operator-missing"}>{row.wake_reported_at ? `報告あり ${time(row.wake_reported_at)}` : row.next_action.step === "resolved" ? row.next_action.label : "未報告"}</strong></div>
           {row.entries.map((entry, index) => <p key={index}>{entry.is_test && <TestMark />}<strong>{entry.project_name}</strong><br />{entry.start_time || "時刻未設定"}〜{entry.end_next_day ? "翌" : ""}{entry.end_time || ""} {entry.site_name}{entry.status === "changing" ? "／変更確認待ち" : ""}</p>)}
-          {needs && row.next_action.label && <p className="operator-next">今すること：{row.next_action.label}</p>}
+          {status && <p className={row.handler ? "operator-handler" : "operator-next"}>{status}</p>}
           {row.last_result && <p className="operator-last">最後の記録：{row.last_result.label}（{row.last_result.actor_name} {time(row.last_result.at)}）</p>}
-          {needs && <div className="operator-claim">
-            {row.handler && !row.handler.is_me && !open && <p className="operator-handler">{row.handler.actor_name}さんが対応中です（{time(row.handler.at)}〜）</p>}
-            {!open && (!row.handler ? <button type="button" className="operator-primary" disabled={!!busy} onClick={() => startClaim(row, false)}>{busy === row.worker_id ? "確認しています…" : "私が連絡します"}</button>
-              : row.handler.is_me ? <button type="button" className="operator-primary" disabled={!!busy} onClick={() => startClaim(row, false)}>電話番号を表示</button>
-              : <button type="button" className="operator-secondary" disabled={!!busy} onClick={() => startClaim(row, true)}>代わりに私が対応する</button>)}
-            {open && claim && <div className="operator-call">
-              {claim.phone ? <a className="operator-tel" href={telHref(claim.phone)}>電話をかける<span>{claim.phone}</span></a> : <p className="operator-error">電話番号が登録されていません。管理画面の稼働者登録で確認してください。</p>}
-              <div className="operator-results">{RESULTS.map((item) => <button type="button" key={item.value} className={`operator-result is-${item.value}`} disabled={!!busy} onClick={() => recordResult(row.worker_id, item.value)}>{busy === row.worker_id + item.value ? "記録しています…" : item.label}</button>)}</div>
-            </div>}
-          </div>}
         </article>;
       })}{wake.total === 0 && <p className="operator-empty">この日の対象予定はありません。</p>}
-      <p className="operator-note">未報告は遅刻の確定ではありません。「私が連絡します」を押すと、ほかの運営には対応中と表示されます。</p></>}
+      <p className="operator-note">報告の期限（開始の3時間前）に本人へ催促し、15分後も報告が無ければ公式LINEで運営の全員に知らせます。連絡はその知らせの「私が連絡します」から行います。</p></>}
 
     {calendar && tab === "today" && eventCards}
     {calendar && tab === "calendar" && <><div className="operator-days" aria-label="日付を選択">{days.map((value) => <button className="operator-button" key={value} aria-label={`${Number(value.slice(-2))}日`} aria-pressed={day === value} onClick={() => setDay(value)}>{Number(value.slice(-2))}<small>{calendar.days?.find((r) => r.date === value)?.events.length ? "●" : ""}</small></button>)}</div><h2>{dayLabel(day)} の案件</h2>{eventCards}</>}

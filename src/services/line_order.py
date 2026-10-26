@@ -430,7 +430,9 @@ class LineOrderService:
             if not token or not payload:
                 continue
             try:
-                if kind == "text":
+                if kind == "push":
+                    self.client.push_messages(token, payload)  # token は宛先。保存（commit）の後に送る
+                elif kind == "text":
                     self.client.reply_text(token, payload)
                 else:
                     self.client.reply_messages(token, payload)
@@ -472,6 +474,14 @@ class LineOrderService:
             data = postback.get("data") if isinstance(postback.get("data"), str) else ""
             if data.startswith("op_menu:"):
                 outcome = "operator_menu_switch"
+            elif data.startswith("wa_"):
+                # 起床の監視：運営が「私が連絡します」・結果を押した（0.54.0、DEC-126）
+                from src.services.wake_monitor import WakeMonitorService
+
+                outcome, messages, pushes = WakeMonitorService(self.session, self.client).handle_postback(line_user_id, data)
+                self._reply_messages(reply_token, messages)
+                for to, push in pushes:
+                    self._outbox.append(("push", to, push))
             elif data.startswith("wk_"):
                 from src.services.line_daily import LineDailyService
 

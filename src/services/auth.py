@@ -105,6 +105,9 @@ ROLE_PERMISSIONS[UserRole.SITE_MANAGER].add(Permission.AVAILABILITY_READ)
 # 運営用LINEメニュー（起床状況・案件の参加予定・発注依頼書）を現場管理でも初期状態で使えるようにする（0.53.8、DEC-125）。
 # 金額確定（/api/order-billing）は全体管理者だけのまま。
 ROLE_PERMISSIONS[UserRole.SITE_MANAGER].update({Permission.ORDER_READ, Permission.WAKE_STATUS_READ})
+# 起床報告が無いときの公式LINEの知らせは、運営の全員に届ける（④の運営側の決まり、0.54.0、DEC-126）
+for _role in (UserRole.OPS, UserRole.SITE_MANAGER):
+    ROLE_PERMISSIONS[_role].update({Permission.WAKE_STATUS_READ, Permission.WAKE_ALERT_RECEIVE})
 ROLE_PERMISSIONS[UserRole.OPS].update({Permission.ATTENDANCE_NOTE_READ, Permission.ATTENDANCE_NOTE_WRITE})
 ROLE_PERMISSIONS[UserRole.ACCOUNTING].add(Permission.ATTENDANCE_NOTE_READ)
 
