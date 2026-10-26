@@ -72,7 +72,7 @@ test("shared pending inbox identifies both kinds, approves operator and decremen
   });
   await page.goto("/masters/registration-pending");
   const nav = page.getByRole("link", { name: "登録確認待ち 2件", exact: true });
-  await expect(nav.locator(".nav-unread-badge")).toHaveText("2件");
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("2");
   const row = page.locator("tr").filter({ hasText: "運営 太郎" });
   await expect(row.getByText("運営スタッフ", { exact: true })).toBeVisible();
   await expect(page.locator("tr").filter({ hasText: "稼働者 花子" }).getByText("稼働者", { exact: true })).toBeVisible();
@@ -82,7 +82,7 @@ test("shared pending inbox identifies both kinds, approves operator and decremen
   await page.screenshot({ path: ".work/operator-approval-dialog.png" });
   await dialog.getByRole("button", { name: "承認", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "登録確認待ち 1件", exact: true }).locator(".nav-unread-badge")).toHaveText("1件");
+  await expect(page.getByRole("link", { name: "登録確認待ち 1件", exact: true }).locator(".nav-unread-badge")).toHaveText("1");
   await expect(page.locator("tr").filter({ hasText: "運営 太郎" })).toHaveCount(0);
 });
 
@@ -94,7 +94,7 @@ test("admin invite dialog stays disabled until LINE setup is ready", async ({ pa
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.goto("/masters/operator-staff");
-  await page.getByRole("button", { name: "LINEで登録を招待" }).click();
+  await page.getByRole("button", { name: "LINE登録の招待リンク" }).click();
   const dialog = page.getByRole("dialog", { name: "運営スタッフのLINE招待" });
   await expect(dialog.getByRole("button", { name: "招待リンクを発行" })).toBeDisabled();
   await expect(dialog.getByText(/運営用LIFFの設定後/)).toBeVisible();

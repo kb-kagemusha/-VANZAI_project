@@ -58,7 +58,7 @@ test("LINE request appears before approval and moves to workers without a page r
   await expect(inbox.getByRole("cell", { name: "稼働者", exact: true })).toBeVisible();
   const nav = page.getByRole("link", { name: "登録確認待ち 1件", exact: true });
   await expect(nav.locator("svg.nav-link-icon")).toBeVisible();
-  await expect(nav.locator(".nav-unread-badge")).toHaveText("1件");
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("1");
   expect(calls.some((path) => path.endsWith("/approve"))).toBe(false);
   await page.screenshot({ path: "../../artifacts/worker-line-inbox-pending.png", fullPage: true });
   await inbox.getByRole("button", { name: "内容を確認・反映" }).click();
@@ -148,7 +148,7 @@ test("pending registration badge remains visible when the sidebar is collapsed a
   await expect(nav.locator("svg.nav-link-icon")).toBeVisible();
   await page.getByRole("button", { name: "サイドバーを縮小" }).click();
   await expect(nav.locator(".nav-unread-badge")).toBeVisible();
-  await expect(nav.locator(".nav-unread-badge")).toHaveText("1件");
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("1");
   await page.screenshot({ path: ".work/registration-pending-collapsed.png" });
 });
 

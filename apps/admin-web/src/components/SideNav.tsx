@@ -144,7 +144,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
                     </span>
                     {item.to === "/masters/registration-pending" && ((registrationSummary.data?.total ?? 0) > 0 || registrationSummary.isError) ? (
                       <span className="nav-unread-badge" title={registrationSummary.isError ? "確認待ち件数を取得できません" : `登録確認待ち ${registrationSummary.data!.total}件`}>
-                        {registrationSummary.isError ? "!" : `${registrationSummary.data!.total > 99 ? "99+" : registrationSummary.data!.total}件`}
+                        {registrationSummary.isError ? "!" : registrationSummary.data!.total > 99 ? "99+" : registrationSummary.data!.total}
                       </span>
                     ) : null}
                     {item.to === "/billing/order-amounts" && user?.role === "admin" && ((billingSummary.data?.missing_count ?? 0) > 0 || billingSummary.isError) ? (

@@ -52,7 +52,7 @@ export function OperatorStaffPage() {
   }
   return <div className="page-stack">
     <PageHeader title="運営スタッフ登録・一覧" description="運営スタッフの連絡先、担当ロール、公式LINEの本人紐付けを管理します。" />
-    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary create-button" type="button" onClick={() => edit(null)}>運営スタッフを登録</button><button className="btn btn-ghost" style={{ borderColor: "#8b5bb5", color: "#8b5bb5" }} type="button" onClick={() => setInvitationOpen(true)}>LINEで登録を招待</button></div></section>
+    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary create-button" type="button" onClick={() => edit(null)}>運営スタッフを登録</button><button className="btn btn-ghost" style={{ borderColor: "#8b5bb5", color: "#8b5bb5" }} type="button" onClick={() => setInvitationOpen(true)}>LINE登録の招待リンク</button></div></section>
     {invitationOpen && <OperatorInvitationDialog onClose={() => setInvitationOpen(false)} />}
     {list.isError && <ErrorState title="運営スタッフを取得できませんでした" description={message(list.error)} />}
     {list.isLoading && <p>読み込み中...</p>}
