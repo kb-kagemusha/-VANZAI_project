@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getOperatorLineEntry, operatorPortalRequest } from "../lib/api/client";
 import { operatorMode } from "./PublicLineOperatorEntry";
+import registrationLogo from "../assets/registration-logo.png";
+import "../styles/lineRegistration.css";
 import "../styles/lineOperator.css";
 
 type Me = { name: string; phone: string | null; permissions: { wake: boolean; availability: boolean; orders: boolean } };
@@ -161,7 +163,7 @@ export function PublicLineOperatorPortalPage() {
     <div className="operator-actions">{pdf(event.version_id)}<small>発注依頼書 {event.document_number}</small></div>
   </article>)}{events.length === 0 && <p className="operator-empty">{tab === "today" ? "今日の案件はありません。" : "この日の案件はありません。"}</p>}</>;
 
-  return <main className="operator-line"><header className="operator-head"><div><small>VANZAI 公式LINE</small><h1>運営メニュー</h1></div>{me && <p>{me.name}さん</p>}</header>
+  return <main className={`line-registration-page operator-line operator-view-${tab}`}><div className="lr-container operator-container"><header className="lr-brand"><img src={registrationLogo} alt="VANZAI" /><small>公式LINE</small></header><header className="operator-head"><div><small>運営スタッフ用</small><h1>運営メニュー</h1></div>{me && <p>{me.name}さん</p>}</header>
     <nav aria-label="運営画面" className="operator-tabs">{TABS.map((item) => <button key={item.key} className="operator-button" aria-pressed={tab === item.key} onClick={() => setTab(item.key)}>{item.label}</button>)}</nav>
     {token && <section className="operator-controls">
       {tab === "wake" && <label>確認する日<input aria-label="確認する日" type="date" value={day} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} /></label>}
@@ -211,5 +213,5 @@ export function PublicLineOperatorPortalPage() {
       </details>
       <div className="operator-actions">{item.has_pdf ? pdf(item.version_id) : <small>PDFはまだありません</small>}<small>発注依頼書 {item.document_number}（版{item.version_no}）</small></div>
     </article>)}{orderItems.length === 0 && <p className="operator-empty">{range === "next" ? "これから30日の依頼書はありません。" : "過去30日の依頼書はありません。"}</p>}</>}
-  </main>;
+  </div></main>;
 }

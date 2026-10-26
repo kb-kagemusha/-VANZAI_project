@@ -419,7 +419,16 @@ class LineOrderService:
                     if subject:
                         try:
                             from src.services.line_operator_menu import reconcile
-                            reconcile(self.session, subject, force=True)
+                            # Never replay a delayed selection over a newer one.
+                            # LINE can report its previous menu while switching;
+                            # use fresh, signed intent rather than that stale GET.
+                            requested_view = None
+                            stamp = event.get("timestamp")
+                            if isinstance(stamp, (int, float)) and not isinstance(stamp, bool):
+                                age_ms = datetime.now(timezone.utc).timestamp() * 1000 - stamp
+                                if 0 <= age_ms <= 60000 and not (event.get("deliveryContext") or {}).get("isRedelivery"):
+                                    requested_view = {"op_menu:worker": "worker", "op_menu:operator": "operator"}.get(postback.get("data"))
+                            reconcile(self.session, subject, force=True, requested_view=requested_view)
                             self.session.commit()
                         except Exception:
                             self.session.rollback()

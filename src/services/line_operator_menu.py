@@ -65,7 +65,7 @@ def dual_worker(db, subject):
     return bool(worker and worker.is_active and worker.deleted_at is None)
 
 
-def reconcile(db, subject, client=None, force=False):
+def reconcile(db, subject, client=None, force=False, requested_view=None):
     """Caller commits each person independently. Re-read eligibility under a per-user lock."""
     release = current_release(db)
     if not release and db.query(LineOperatorMenuRelease.id).first() is None:
@@ -87,8 +87,11 @@ def reconcile(db, subject, client=None, force=False):
         dual = dual_worker(db, subject)
         desired = release.menus["operator_dual" if dual else "operator_only"]
         allowed = {release.menus["operator_dual"], release.menus["worker_dual"]} if dual else {desired}
+        # A fresh switch webhook is the user's intent, even if LINE's GET still
+        # returns the previous menu or its alias switch failed. Recheck both roles.
+        requested = release.menus.get({"worker": "worker_dual", "operator": "operator_dual"}.get(requested_view, "")) if dual else None
     except OperatorError:
-        staff, desired, allowed = None, None, set()
+        staff, desired, allowed, requested = None, None, set(), None
         # No eligible/past individual operator menu means no mutation is necessary.
         if state is None:
             return "not_eligible"
@@ -100,7 +103,7 @@ def reconcile(db, subject, client=None, force=False):
     try:
         actual = client.current(subject)
         # Respect a valid dual-role person's selection on LINE. Never replay an old webhook.
-        target = actual if actual in allowed else desired
+        target = requested or (actual if actual in allowed else desired)
         if target != actual:
             if target:
                 client.call("POST", f"/user/{subject}/richmenu/{target}")

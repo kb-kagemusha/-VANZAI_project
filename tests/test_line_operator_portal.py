@@ -144,6 +144,37 @@ def test_menu_failure_is_durable_and_retry_uses_current_role(db_session, operato
     assert client.menu is None
 
 
+@pytest.mark.parametrize("view,start,expected", [("worker", "menu-dual", "menu-worker"), ("operator", "menu-worker", "menu-dual")])
+def test_fresh_switch_uses_intent_when_line_still_returns_previous_menu(db_session, operator, monkeypatch, view, start, expected):
+    from src.services.line_order import LineOrderService
+    release(db_session)
+    worker = Worker(name="兼務本人", is_active=True)
+    db_session.add(worker); db_session.flush()
+    db_session.add(LineWorkerLink(worker_id=worker.id, line_user_id="Uoperator", status="active", linked_at=ws.now_utc()))
+    db_session.commit()
+    client = FakeMenus(); client.menu = start
+    monkeypatch.setattr("src.services.line_operator_menu.MenuClient", lambda: client)
+    event = {"webhookEventId": "switch-1", "type": "postback", "timestamp": int(ws.now_utc().timestamp() * 1000),
+             "source": {"type": "user", "userId": "Uoperator"}, "postback": {"data": f"op_menu:{view}"}}
+    service = LineOrderService(db_session)
+    assert service.handle_webhook({"events": [event]}) is False
+    assert client.menu == expected
+    # Duplicate delivery cannot replay an old choice over a newer menu.
+    client.menu = start; client.calls.clear()
+    assert service.handle_webhook({"events": [event]}) is False
+    assert client.menu == start and client.calls == []
+    for i, extra in enumerate([{"timestamp": int((ws.now_utc() - timedelta(minutes=2)).timestamp() * 1000)},
+                               {"deliveryContext": {"isRedelivery": True}}]):
+        assert service.handle_webhook({"events": [{**event, **extra, "webhookEventId": f"delayed-{i}"}]}) is False
+        assert client.menu == start
+    worker.is_active = False; db_session.commit()
+    reconcile(db_session, "Uoperator", client, requested_view="worker"); db_session.commit()
+    assert client.menu == "menu-ops"
+    operator[2].status = "revoked"; db_session.commit()
+    reconcile(db_session, "Uoperator", client, requested_view="worker")
+    assert client.menu is None
+
+
 def test_wake_and_order_calendar_share_real_accepted_schedule_without_private_fields(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
     worker, _ = _accepted_today(api_client, db_session, ops_user)
     worker.phone = "09099998888"; db_session.commit()
