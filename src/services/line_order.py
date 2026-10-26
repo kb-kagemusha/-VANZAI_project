@@ -410,6 +410,19 @@ class LineOrderService:
                 continue
             if processed:
                 self._send_outbox()
+                # Reconcile only lifecycle changes; LINE performs normal tab switches.
+                postback = event.get("postback") if isinstance(event.get("postback"), dict) else {}
+                message = event.get("message") if isinstance(event.get("message"), dict) else {}
+                source = event.get("source") if isinstance(event.get("source"), dict) else {}
+                if event.get("type") in ("follow", "unfollow") or str(postback.get("data", "")).startswith("op_menu:") or message.get("type") == "text":
+                    subject = source.get("userId")
+                    if subject:
+                        try:
+                            from src.services.line_operator_menu import reconcile
+                            reconcile(self.session, subject, force=True)
+                            self.session.commit()
+                        except Exception:
+                            self.session.rollback()
         return failed
 
     def _send_outbox(self) -> None:
@@ -457,7 +470,9 @@ class LineOrderService:
         elif event_type == "postback":
             postback = event.get("postback") if isinstance(event.get("postback"), dict) else {}
             data = postback.get("data") if isinstance(postback.get("data"), str) else ""
-            if data.startswith("wk_"):
+            if data.startswith("op_menu:"):
+                outcome = "operator_menu_switch"
+            elif data.startswith("wk_"):
                 from src.services.line_daily import LineDailyService
 
                 outcome, messages = LineDailyService(self.session).handle(event, data)
@@ -469,6 +484,9 @@ class LineOrderService:
             from src.services.operator_staff import OperatorStaffService
             OperatorStaffService(self.session).unfollow(line_user_id)
             outcome = "staff_unfollow"
+        elif event_type == "follow":
+            # Re-friending never restores a revoked operator identity.
+            outcome = "staff_follow"
 
         record.outcome = outcome[:40]
         self.session.flush()

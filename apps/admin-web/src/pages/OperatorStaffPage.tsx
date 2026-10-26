@@ -6,6 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { OperatorInvitationDialog } from "../components/OperatorInvitationDialog";
+import { OperatorAccessPanel } from "../components/OperatorAccessPanel";
 import { ApiError, getOperatorStaff, issueOperatorLineCode, revokeOperatorLine, saveOperatorStaff } from "../lib/api/client";
 import { alertApp, confirmApp, promptApp } from "../lib/appDialog";
 import { MANAGEMENT_ROLES, type OperatorStaffItem, type OperatorStaffWrite } from "../types/operatorStaff";
@@ -83,6 +84,7 @@ export function OperatorStaffPage() {
         {current?.line_linked ? <><p>LINE表示名：{current.line_display_name || "未取得"}</p><button type="button" className="btn btn-ghost" disabled={unlink.isPending} onClick={async () => { const reason = await promptApp({ title: "LINE紐付け解除", message: "解除すると運営の連絡を受け取れなくなります。解除理由を入力してください。", confirmLabel: "解除" }); if (reason?.trim()) unlink.mutate(reason.trim()); }}>紐付けを解除</button></> : <button type="button" className="btn btn-ghost" disabled={issue.isPending || !current?.is_active} onClick={() => issue.mutate()}>LINE紐付けコードを発行</button>}
         {code && !current?.line_linked && <div className="surface"><strong>{code.code}</strong><p>{code.instruction}</p><p>期限：{new Date(code.expires_at).toLocaleString("ja-JP")}</p></div>}
       </section>}
+      {selected && <OperatorAccessPanel staffId={selected.id} />}
     </ProfileDialog>}
   </div>;
 }

@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
+    ""|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
@@ -30,7 +30,15 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
     set -a
     source "${APP_DIR}/.env"
     set +a
-    if [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
+    if [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-disable" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" disable
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-status" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" status
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-sync" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" sync
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-publish" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" publish
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
     elif [ "${CALENDAR_DEMO_ACTION}" = "--demo-schedule-gaps-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/repair_demo_schedule_gaps.py"
@@ -368,6 +376,13 @@ REMIND_MARKER="# vanzai-order-ack-reminder"
 REMIND_CRON="${REMIND_MARKER} 15 * * * * cd ${APP_DIR} && ${VENV_DIR}/bin/python ${APP_DIR}/scripts/line/remind_order_acks.py >> ${APP_DIR}/logs/order-ack-reminder.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "${REMIND_MARKER}" || true
  echo "${REMIND_CRON}") | crontab -
+
+# Operator menus are personal only. The global worker menu is never changed.
+"${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" publish
+OPERATOR_MENU_MARKER="# vanzai-operator-menu-sync"
+OPERATOR_MENU_CRON="* * * * * bash ${APP_DIR}/scripts/deploy/02_app_deploy.sh --operator-menu-sync >> ${APP_DIR}/logs/operator-menu-sync.log 2>&1 ${OPERATOR_MENU_MARKER}"
+(crontab -l 2>/dev/null | grep -v "${OPERATOR_MENU_MARKER}" || true
+ echo "${OPERATOR_MENU_CRON}") | crontab -
 
 echo ""
 echo "=============================="

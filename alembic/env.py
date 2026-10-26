@@ -19,6 +19,7 @@ import src.models.line_daily  # noqa: F401
 import src.models.closing_approval
 import src.models.line_registration  # noqa: F401
 import src.models.operator_registration  # noqa: F401
+import src.models.line_operator  # noqa: F401
 
 config = context.config
 

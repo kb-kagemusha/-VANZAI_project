@@ -72,12 +72,12 @@ ROLE_PERMISSIONS = {
         Permission.AUDIT_LOG_READ,
     },
     UserRole.SITE_MANAGER: {
-        # 担当案件の参照、CSV提出、エラー修正再提出
+        # 全案件の参照（DEC-056）。CSV提出は担当案件に限定。
         Permission.MASTER_READ,
-        Permission.PROJECT_READ,  # 担当案件のみ
-        Permission.SHIFT_READ,    # 担当案件のみ
-        Permission.ASSIGNMENT_READ,  # 担当案件のみ
-        Permission.ACTUAL_READ,   # 担当案件のみ
+        Permission.PROJECT_READ,
+        Permission.SHIFT_READ,
+        Permission.ASSIGNMENT_READ,
+        Permission.ACTUAL_READ,
         Permission.CSV_SUBMIT,
     },
     UserRole.WORKER: {

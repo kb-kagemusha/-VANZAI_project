@@ -2769,6 +2769,8 @@ async def get_availability_calendar(
     db: Session = Depends(get_db),
 ):
     """出勤可能日カレンダー（スタッフ×日付マトリクス）を返す"""
+    if not is_management_role(current_user.role, db):
+        raise HTTPException(status_code=403, detail="全員のカレンダーは管理ロールだけが閲覧できます")
     try:
         check_permission(current_user, Permission.AVAILABILITY_READ)
     except AuthorizationError as exc:
@@ -9904,6 +9906,10 @@ from src.api.operator_staff_routes import router as operator_staff_router
 app.include_router(operator_staff_router)
 from src.api.operator_registration_routes import router as operator_registration_router
 app.include_router(operator_registration_router)
+from src.api.line_operator_routes import router as line_operator_router
+app.include_router(line_operator_router)
+from src.api.operator_access_routes import router as operator_access_router
+app.include_router(operator_access_router)
 from src.api.place_routes import router as place_router
 app.include_router(place_router)
 from src.api.client_contact_routes import router as client_contact_router

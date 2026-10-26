@@ -168,6 +168,17 @@ function resolveApiBaseUrl(): string {
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
+// Operator LIFF uses its own short session, never the management login token.
+export async function operatorPortalRequest<T>(path: string, token = "", body?: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/line/operator${path}`, {
+    method: body === undefined ? "GET" : "POST", credentials: "omit", cache: "no-store",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "取得できませんでした。もう一度お試しください。");
+  return data as T;
+}
 const ACCESS_TOKEN_KEY = "vanzai.admin.access_token";
 const REFRESH_TOKEN_KEY = "vanzai.admin.refresh_token";
 const ACCESS_COOKIE = "vanzai_admin_access";
