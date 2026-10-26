@@ -48,6 +48,7 @@ artifacts/
 Thumbs.db
 
 # WebA local artifacts and secrets
+line-operator-config.json
 WebA/.venv/
 WebA/uploads/
 WebA/*.pem

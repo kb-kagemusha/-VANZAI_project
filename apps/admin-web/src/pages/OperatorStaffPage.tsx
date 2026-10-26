@@ -5,6 +5,7 @@ import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
 import { PaginationBar } from "../components/PaginationBar";
 import { ProfileDialog } from "../components/ProfileDialog";
+import { OperatorInvitationDialog } from "../components/OperatorInvitationDialog";
 import { ApiError, getOperatorStaff, issueOperatorLineCode, revokeOperatorLine, saveOperatorStaff } from "../lib/api/client";
 import { alertApp, confirmApp, promptApp } from "../lib/appDialog";
 import { MANAGEMENT_ROLES, type OperatorStaffItem, type OperatorStaffWrite } from "../types/operatorStaff";
@@ -22,6 +23,7 @@ export function OperatorStaffPage() {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<OperatorStaffItem | null>(null);
   const [open, setOpen] = useState(false);
+  const [invitationOpen, setInvitationOpen] = useState(false);
   const [form, setForm] = useState<OperatorStaffWrite>(EMPTY);
   const [baseline, setBaseline] = useState(JSON.stringify(EMPTY));
   const [error, setError] = useState("");
@@ -50,7 +52,8 @@ export function OperatorStaffPage() {
   }
   return <div className="page-stack">
     <PageHeader title="運営スタッフ登録・一覧" description="運営スタッフの連絡先、担当ロール、公式LINEの本人紐付けを管理します。" />
-    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary create-button" type="button" onClick={() => edit(null)}>運営スタッフを登録</button></div></section>
+    <section className="surface"><div className="filter-bar"><label>氏名で検索<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label><button className="btn btn-primary create-button" type="button" onClick={() => edit(null)}>運営スタッフを登録</button><button className="btn btn-ghost" style={{ borderColor: "#8b5bb5", color: "#8b5bb5" }} type="button" onClick={() => setInvitationOpen(true)}>LINEで登録を招待</button></div></section>
+    {invitationOpen && <OperatorInvitationDialog onClose={() => setInvitationOpen(false)} />}
     {list.isError && <ErrorState title="運営スタッフを取得できませんでした" description={message(list.error)} />}
     {list.isLoading && <p>読み込み中...</p>}
     {list.data && <><DataTable rows={list.data.items} getRowKey={(row) => row.id} emptyTitle="運営スタッフが登録されていません" emptyDescription="運営スタッフを登録してください。" columns={[

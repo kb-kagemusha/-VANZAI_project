@@ -1892,3 +1892,13 @@ export function rejectClosingRequest(id: string) { return apiFetch("/api/closing
 export function listOrderRequestReplyGroups(params: { kind: string; limit: number; offset: number }) {
   return apiFetch<OrderRequestReplyGroupList>("/api/order-requests/reply-groups", undefined, params);
 }
+
+export function getOperatorRegistrationSettings() { return apiFetch<{ enabled: boolean }>("/api/operator-registration/settings"); }
+export function issueOperatorInvitation() { return apiFetch<import("../../types/operatorStaff").OperatorInvitation>("/api/operator-registration/invitations", { method: "POST" }); }
+export function getOperatorInvitations() { return apiFetch<{ items: { request_id: string; created_at: string; expires_at: string }[] }>("/api/operator-registration/invitations"); }
+export function revokeOperatorInvitation(id: string) { return apiFetch(`/api/operator-registration/${id}/revoke`, { method: "POST" }); }
+export function getOperatorRegistrationReview(id: string) { return apiFetch<import("../../types/operatorStaff").OperatorRegistrationReview>(`/api/operator-registration/${id}`); }
+export function approveOperatorRegistration(id: string, staff_id?: string, profile_revision?: number) { return apiFetch(`/api/operator-registration/${id}/approve`, { method: "POST", body: JSON.stringify({ staff_id, profile_revision }) }); }
+export function rejectOperatorRegistration(id: string, reason: string) { return apiFetch(`/api/operator-registration/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }); }
+export function getOperatorLineEntry() { return publicApiFetch<{ enabled: boolean; liff_id: string | null }>("/api/line/operator-registration/entry"); }
+export function submitOperatorLineRegistration(body: { invite: string; id_token: string; name: string; phone: string }) { return publicApiFetch<{ request_id: string; status: string }>("/api/line/operator-registration/submissions", { method: "POST", body: JSON.stringify(body) }); }

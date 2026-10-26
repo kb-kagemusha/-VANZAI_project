@@ -129,6 +129,8 @@ DEC-078: 発注依頼書の案件名（確定時必須）と参考URL（任意�
 
 **Phase1 拡張（2026-04）**: registration_requests 系, project_type_documents, task_templates, project_tasks, sales_reports
 
+DEC-110: 運営スタッフのLINE登録は既存registration_requestsに招待・申請・審査状態を保存し、operator_registration_detailsの1表で氏名・電話・検証済みLINE本人・招待失効を保持する。本人の入力は氏名・電話のみ。既存の共通「登録確認待ち」で区分表示・件数合算し、管理者の承認でVanzaiStaffとLineStaffLinkへ反映する。本人照合・承認前にマスタや権限を作らない。既存スタッフへ紐付ける場合は明示選択・版チェックを必要とし、プロフィールを上書きしない。専用LIFF未設定なら招待・受付は無効。個人別メニューと起床未報告の通知は別段階。手順はdocs/ops/LINE_OPERATOR_ONBOARDING_2026-10-26.md。
+
 ### 6.2 状態遷移（要約）
 
 | エンティティ | 状態 |

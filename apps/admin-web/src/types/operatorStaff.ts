@@ -8,3 +8,10 @@ export interface OperatorStaffWrite {
 export interface OperatorStaffItem extends OperatorStaffWrite {
   id: string; profile_revision: number; line_linked: boolean; line_display_name: string | null; line_linked_at: string | null;
 }
+
+export interface OperatorInvitation { request_id: string; expires_at: string; url: string }
+export interface OperatorRegistrationReview {
+  request_id: string; status: string; name: string; phone: string; line_display_name: string;
+  staff_id: string | null;
+  candidates: { id: string; name: string; phone: string | null; profile_revision: number }[];
+}

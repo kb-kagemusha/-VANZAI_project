@@ -129,6 +129,8 @@ async def lifespan(_: FastAPI):
     from src.domain.line_registration_config import load_line_registration_config
 
     load_line_registration_config()
+    from src.domain.line_operator_config import load_line_operator_config
+    load_line_operator_config()
     initialize_default_jobs()
     from src.services.line_registration_receipt import start_registration_receipt_scheduler
 
@@ -456,6 +458,10 @@ def _registration_detail_data(db: Session, request_record: RegistrationRequest) 
 
 
 def _registration_summary_name(db: Session, request_record: RegistrationRequest) -> str | None:
+    if request_record.request_type == "operator_staff":
+        from src.models.operator_registration import OperatorRegistrationDetail
+        detail = db.get(OperatorRegistrationDetail, request_record.id)
+        return detail.name if detail else None
     detail_data = _registration_detail_data(db, request_record) or {}
     if request_record.request_type == "worker":
         return _first_non_empty(
@@ -7628,11 +7634,13 @@ async def list_registration_requests(
         stmt = stmt.filter(RegistrationRequest.source_type == query.source_type)
     if query.line_only:
         from src.models.line_registration import LineRegistrationContext
+        from src.models.operator_registration import OperatorRegistrationDetail
 
         stmt = stmt.filter(
-            select(LineRegistrationContext.id)
+            or_(select(LineRegistrationContext.id)
             .where(LineRegistrationContext.request_id == RegistrationRequest.id)
-            .exists()
+            .exists(), select(OperatorRegistrationDetail.request_id)
+            .where(OperatorRegistrationDetail.request_id == RegistrationRequest.id).exists())
         )
     if query.search:
         pattern = f"%{query.search}%"
@@ -7671,8 +7679,9 @@ async def get_registration_request(
 
 def _refuse_line_request_on_existing_path(db: Session, request_id: str) -> None:
     from src.services.line_registration import EXISTING_REVIEW_UNAVAILABLE, is_line_registration_request
+    from src.models.operator_registration import OperatorRegistrationDetail
 
-    if is_line_registration_request(db, request_id):
+    if is_line_registration_request(db, request_id) or db.get(OperatorRegistrationDetail, request_id) is not None:
         raise HTTPException(status_code=409, detail=EXISTING_REVIEW_UNAVAILABLE)
 
 
@@ -9893,6 +9902,8 @@ from src.api.company_profile_routes import router as company_profile_router
 app.include_router(company_profile_router)
 from src.api.operator_staff_routes import router as operator_staff_router
 app.include_router(operator_staff_router)
+from src.api.operator_registration_routes import router as operator_registration_router
+app.include_router(operator_registration_router)
 from src.api.place_routes import router as place_router
 app.include_router(place_router)
 from src.api.client_contact_routes import router as client_contact_router

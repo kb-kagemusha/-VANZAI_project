@@ -25,7 +25,7 @@ async function setupInbox(page: Page, options: { role?: string; listError?: bool
     if (path === "/api/registration-requests") {
       expect(url.searchParams.get("line_only")).toBe("true");
       expect(url.searchParams.get("status")).toBe("pending");
-      expect(url.searchParams.get("request_type")).toBe("worker");
+      expect(url.searchParams.get("request_type")).toBeNull();
       if (options.listError) return respond({ detail: "取得失敗" }, 500);
       return respond({ items: approved ? [] : [{ id: "test-request", summary_name: "酒井 サンプル", status: "pending", submitted_at: "2026-10-13T01:00:00Z" }], total: approved ? 0 : 1, offset: 0, limit: 30 });
     }

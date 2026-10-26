@@ -83,7 +83,7 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
     enabled: user?.role === "admin" && user.is_active, refetchInterval: 30_000, refetchOnWindowFocus: true });
   const registrationSummary = useQuery({
     queryKey: ["registration-requests", "worker-line-pending-count"],
-    queryFn: () => getRegistrationRequests({ request_type: "worker", status: "pending", line_only: true, limit: 1, offset: 0 }),
+    queryFn: () => getRegistrationRequests({ status: "pending", line_only: true, limit: 1, offset: 0 }),
     enabled: canView(user, "/masters/registration-pending", ["admin", "ops"]),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
