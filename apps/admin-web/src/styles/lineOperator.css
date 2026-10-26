@@ -24,3 +24,4 @@
 .operator-chip.is-acked{background:#e4f4e9;color:#156037}.operator-chip.is-unacked{background:#fff0e2;color:#9a410a}.operator-chip.is-declined,.operator-chip.is-decline_pending{background:#fdecec;color:#9b1c14}
 .operator-details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:#23465a}
 .operator-bucket.is-ok strong,.operator-bucket.is-acked strong{color:#156037}.operator-bucket.is-unanswered strong,.operator-bucket.is-unacked strong{color:#9a410a}
+.operator-test{display:inline-block;margin-right:6px;padding:1px 8px;border-radius:6px;background:#5b21b6;color:white;font-size:12px;font-weight:700;vertical-align:middle}

@@ -70,10 +70,10 @@ def me(context=Depends(access)):
 
 
 @router.get("/wake-status")
-def wake(day: date | None = Query(None, alias="date"), context=Depends(access)):
+def wake(day: date | None = Query(None, alias="date"), include_test: bool = False, context=Depends(access)):
     db, staff, user = context
     try:
-        result = LineOperatorService(db).wake(user, day or ws.today_jst())
+        result = LineOperatorService(db).wake(user, day or ws.today_jst(), include_test)
     except OperatorError as exc:
         read_log(db, staff, user, "wake", False)
         raise HTTPException(exc.status, exc.message) from None
@@ -82,10 +82,10 @@ def wake(day: date | None = Query(None, alias="date"), context=Depends(access)):
 
 
 @router.get("/calendar")
-def calendar(start: date, end: date, kind: str = Query("orders", pattern="^(orders|availability)$"), context=Depends(access)):
+def calendar(start: date, end: date, kind: str = Query("orders", pattern="^(orders|availability)$"), include_test: bool = False, context=Depends(access)):
     db, staff, user = context
     try:
-        result = LineOperatorService(db).calendar(user, start, end, kind)
+        result = LineOperatorService(db).calendar(user, start, end, kind, include_test)
     except OperatorError as exc:
         read_log(db, staff, user, "calendar:" + kind, False)
         raise HTTPException(exc.status, exc.message) from None
@@ -117,10 +117,10 @@ def record_contact(body: ContactBody, context=Depends(access)):
 
 
 @router.get("/orders")
-def orders(start: date, end: date, context=Depends(access)):
+def orders(start: date, end: date, include_test: bool = False, context=Depends(access)):
     db, staff, user = context
     try:
-        result = LineOperatorService(db).orders(user, start, end)
+        result = LineOperatorService(db).orders(user, start, end, include_test)
     except OperatorError as exc:
         read_log(db, staff, user, "orders", False)
         raise HTTPException(exc.status, exc.message) from None

@@ -407,3 +407,28 @@ def test_republish_replaces_personal_menus_and_removes_old_ones(db_session, oper
     assert "/richmenu/alias/old-alias" in client.deleted and "/richmenu/alias/other" not in client.deleted
     assert {"/richmenu/menu-ops", "/richmenu/menu-dual", "/richmenu/menu-worker"} <= set(client.deleted)
     assert all(method == "GET" for method, path in client.calls if "/user/all/" in path)
+
+
+def test_test_orders_are_shown_only_when_asked_and_marked(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
+    from tests.test_line_daily import _create_confirm, _link, _schedule, _send_and_accept, _worker
+    worker = _worker(db_session, "テスト稼働者")
+    version = _create_confirm(api_client, ops_user, [worker.id], kind="test", schedule=_schedule(0, 2))
+    _link(api_client, ops_user, worker.id, "U-test")
+    _send_and_accept(api_client, ops_user, version["deliveries"][0]["id"], "U-test")
+    headers = session(api_client)
+    day = ws.today_jst()
+    assert api_client.get("/api/line/operator/wake-status", headers=headers).json()["total"] == 0
+    wake = api_client.get("/api/line/operator/wake-status?include_test=true", headers=headers).json()
+    assert wake["total"] == 1 and wake["items"][0]["is_test"] is True and wake["items"][0]["entries"][0]["is_test"] is True
+    # The admin screen still shows formal orders only.
+    admin = api_client.get("/api/line-daily/wake-status", headers={"Authorization": "Bearer " + create_access_token({"sub": ops_user.username})}).json()
+    assert admin["total"] == 0
+    assert api_client.post("/api/line/operator/wake-contacts/claim", headers=headers, json={"day": day.isoformat(), "worker_id": worker.id}).status_code == 200
+    plain = api_client.get(f"/api/line/operator/calendar?start={day}&end={day}&kind=orders", headers=headers).json()
+    assert all(not e.get("is_test") for d in plain["days"] for e in d["events"])
+    marked = api_client.get(f"/api/line/operator/calendar?start={day}&end={day}&kind=orders&include_test=true", headers=headers).json()
+    assert any(e["is_test"] and e["version_id"] == version["id"] for d in marked["days"] for e in d["events"])
+    query = f"/api/line/operator/orders?start={day}&end={day + timedelta(days=5)}"
+    assert all(i["version_id"] != version["id"] for i in api_client.get(query, headers=headers).json()["items"])
+    item = next(i for i in api_client.get(query + "&include_test=true", headers=headers).json()["items"] if i["version_id"] == version["id"])
+    assert item["is_test"] is True and [r["worker_id"] for r in item["acked"]] == [worker.id]

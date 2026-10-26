@@ -2022,3 +2022,4 @@
 - 権限画面は7分類＋その他（新しい権限が増えても選べなくならないように）。分類漏れは試験で検出する。
 - 既存の運営LINE画面・権限画面の変更なのでPATCHの0.53.8（作業中の一時版0.53.7は未公開のため使わない）。DB: wake_contact_logs の結果の制約変更、line_operator_file_tokens の追加（20261027a001）。監査: wake_contact_claimed、wake_contact_recorded（via=line_operator）、operator_order_pdf_link、operator_order_pdf_read、operator_menus_republished。
 
+- 0.53.9 追記（本人指定）: 動作確認のため、運営用LINEでテストの依頼書も起床状況などに表示する。正式と混ざらないよう「テスト」の印と「正式のみ／テストも表示」の切替を付ける（初期はテストも表示、端末ごとに記憶）。管理画面の起床状況は正式だけのまま。表示の追加なのでPATCH。DB変更なし。

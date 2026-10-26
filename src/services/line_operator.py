@@ -94,10 +94,10 @@ class LineOperatorService:
             "availability": has_permission(user, Permission.AVAILABILITY_READ),
             "orders": has_permission(user, Permission.ORDER_READ)}}
 
-    def wake(self, user, day: date):
+    def wake(self, user, day: date, include_test: bool = False):
         require(user, Permission.WAKE_STATUS_READ)
         from src.services.wake_status import build_wake_status
-        value = build_wake_status(self.db, day)
+        value = build_wake_status(self.db, day, include_test=include_test)
         # Explicit allowlist: no phone/contact notes/addresses here. The phone is returned only by claim().
         keys = ("worker_id", "worker_name", "first_start", "wake_reported_at", "overlap_warning")
         items = []
@@ -108,17 +108,19 @@ class LineOperatorService:
                 "next_action": {key: row["next_action"][key] for key in ("step", "label", "priority")},
                 "handler": _public_handler(_handler(row["contacts"]), user),
                 "last_result": ({"label": contacts[-1]["result_label"], "actor_name": contacts[-1]["actor_name"], "at": contacts[-1]["created_at"]} if contacts else None),
-                "entries": [{key: entry[key] for key in ("project_name", "site_name", "start_time", "end_time", "end_next_day", "status")} for entry in row["entries"]],
+                "entries": [{key: entry[key] for key in ("project_name", "site_name", "start_time", "end_time", "end_next_day", "status", "is_test")} for entry in row["entries"]],
+                "is_test": all(entry["is_test"] for entry in row["entries"]),
             })
         # Same order as the admin screen: whoever needs action now comes first.
         items.sort(key=lambda r: (r["next_action"]["priority"], r["first_start"] or "99:99", r["worker_name"]))
-        return {"date": value["date"], "is_today": day == ws.today_jst(), "total": value["total"], "reported": value["reported"], "items": items}
+        return {"date": value["date"], "is_today": day == ws.today_jst(), "include_test": include_test, "total": value["total"], "reported": value["reported"], "items": items}
 
     def _wake_row(self, day: date, worker_id: str):
         from src.services.wake_status import build_wake_status
         if day != ws.today_jst():
             raise OperatorError(409, "連絡の記録は当日の分だけできます。")
-        row = next((r for r in build_wake_status(self.db, day)["items"] if r["worker_id"] == worker_id), None)
+        # テストの予定の人も、動作確認のため連絡・記録できる
+        row = next((r for r in build_wake_status(self.db, day, include_test=True)["items"] if r["worker_id"] == worker_id), None)
         if row is None:
             raise OperatorError(404, "この日の予定がある稼働者ではありません。画面を更新してください。")
         return row
@@ -159,17 +161,17 @@ class LineOperatorService:
                                   after_value={"worker_id": worker_id, "date": day.isoformat(), "result": result, "note": log.note, "via": "line_operator"})
         return {"id": log.id, "result": result, "result_label": WAKE_CONTACT_RESULTS[result]}
 
-    def calendar(self, user, start: date, end: date, kind: str):
+    def calendar(self, user, start: date, end: date, kind: str, include_test: bool = False):
         if start > end or (end - start).days > 61:
             raise OperatorError(400, "表示期間は62日以内で指定してください。")
         if kind == "orders":
             require(user, Permission.ORDER_READ)
             from src.services.participation_calendar import build
-            rows = build(self.db, start=start.isoformat(), end=end.isoformat())
+            rows = build(self.db, start=start.isoformat(), end=end.isoformat(), include_test=include_test)
             # Keep only the calendar data needed on a phone, never return the source document.
             return {"kind": kind, "days": [{"date": day["date"], "events": [{
                 "project_name": event["project_name"], "site_name": event["site_name"],
-                "version_id": event["version_id"], "document_number": event["document_number"],
+                "version_id": event["version_id"], "document_number": event["document_number"], "is_test": event["is_test"],
                 **{bucket: [{"worker_id": p["worker_id"], "name": p["name"]} for p in event[bucket]] for bucket in ("ok", "changing", "unanswered", "unavailable")}
             } for event in day["events"]]} for day in rows]}
         require(user, Permission.AVAILABILITY_READ)
@@ -177,7 +179,7 @@ class LineOperatorService:
         return availability(self.db, start, end)
 
     # ---- 発注依頼書（受領状況と依頼書本体。0.53.8、DEC-125） ----------------------------------
-    def orders(self, user, start: date, end: date):
+    def orders(self, user, start: date, end: date, include_test: bool = False):
         """回答受付中の正式な依頼書のうち、日程が期間に入るもの。送付先ごとの受領状況を返す（金額・内部メモは返さない）。"""
         require(user, Permission.ORDER_READ)
         if start > end or (end - start).days > 61:
@@ -192,7 +194,7 @@ class LineOperatorService:
         for series in self.db.query(OrderRequestSeries).filter(OrderRequestSeries.answerable_version_id.is_not(None)).all():
             version = self.db.get(OrderRequestVersion, series.answerable_version_id)
             document = self.db.get(OrderRequestDocument, version.document_id) if version else None
-            if version is None or document is None or document.deleted_at is not None or document.kind != KIND_FORMAL:
+            if version is None or document is None or document.deleted_at is not None or (document.kind != KIND_FORMAL and not include_test):
                 continue
             dates = sorted({d["work_date"] for d in ws.version_work_days(version)})
             in_range = [d for d in dates if start.isoformat() <= d <= end.isoformat()]
@@ -223,7 +225,7 @@ class LineOperatorService:
                 "project_name": display["project_name"], "site_name": display.get("site_name") or "",
                 "work_date_label": version.work_date_label, "first_date": dates[0] if dates else None, "last_date": dates[-1] if dates else None,
                 "next_date": next((d for d in dates if d >= today.isoformat()), None),
-                "has_pdf": bool(version.pdf_object_key), "dispatch_stopped": version.dispatch_stopped, **groups,
+                "has_pdf": bool(version.pdf_object_key), "dispatch_stopped": version.dispatch_stopped, "is_test": document.kind != KIND_FORMAL, **groups,
             })
         items.sort(key=lambda r: (r["next_date"] is None, r["next_date"] or r["last_date"] or "", r["document_number"]))
         return {"start": start.isoformat(), "end": end.isoformat(), "items": items}

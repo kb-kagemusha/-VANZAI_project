@@ -4,21 +4,21 @@ import { operatorMode } from "./PublicLineOperatorEntry";
 import "../styles/lineOperator.css";
 
 type Me = { name: string; phone: string | null; permissions: { wake: boolean; availability: boolean; orders: boolean } };
-type Entry = { project_name: string; site_name: string; start_time: string | null; end_time: string | null; end_next_day: boolean; status: string };
+type Entry = { project_name: string; site_name: string; start_time: string | null; end_time: string | null; end_next_day: boolean; status: string; is_test?: boolean };
 type Handler = { actor_name: string; at: string; is_me: boolean } | null;
 type WakeRow = {
   worker_id: string; worker_name: string; first_start: string | null; wake_reported_at: string | null; entries: Entry[];
   next_action: { step: string; label: string; priority: number }; handler: Handler;
-  last_result: { label: string; actor_name: string; at: string } | null;
+  last_result: { label: string; actor_name: string; at: string } | null; is_test?: boolean;
 };
 type Wake = { date: string; is_today: boolean; total: number; reported: number; items: WakeRow[] };
 type Person = { worker_id: string; name: string };
-type Event = { project_name: string; site_name: string; version_id: string; document_number: string; ok: Person[]; changing: Person[]; unanswered: Person[]; unavailable: Person[] };
+type Event = { project_name: string; site_name: string; version_id: string; document_number: string; is_test?: boolean; ok: Person[]; changing: Person[]; unanswered: Person[]; unavailable: Person[] };
 type Calendar = { kind: string; days?: { date: string; events: Event[] }[]; workers?: { worker_id: string; name: string; days: Record<string, { status: string | null; assignments: { project_name: string; shift_label: string; status: string }[] }> }[] };
 type Recipient = { worker_id: string; name: string; acked_at: string | null };
 type OrderItem = {
   version_id: string; document_number: string; version_no: number; project_name: string; site_name: string; work_date_label: string;
-  first_date: string | null; last_date: string | null; next_date: string | null; has_pdf: boolean; dispatch_stopped: boolean;
+  first_date: string | null; last_date: string | null; next_date: string | null; has_pdf: boolean; dispatch_stopped: boolean; is_test?: boolean;
   acked: Recipient[]; unacked: Recipient[]; decline_pending: Recipient[]; declined: Recipient[]; unsent: Recipient[];
 };
 type Orders = { start: string; end: string; items: OrderItem[] };
@@ -42,6 +42,9 @@ const RESULTS = [
 ] as const;
 const time = (value: string) => new Date(value).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
 const dayLabel = (value: string) => { const d = new Date(`${value}T00:00:00+09:00`); return `${d.getMonth() + 1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`; };
+const TEST_KEY = "vanzai.operator.showTest";
+const readShowTest = () => { try { return window.localStorage.getItem(TEST_KEY) !== "0"; } catch { return true; } };
+const TestMark = () => <span className="operator-test">テスト</span>;
 const telHref = (phone: string) => `tel:${phone.replace(/[^0-9+]/g, "")}`;
 
 function openUrl(url: string) {
@@ -76,6 +79,9 @@ export function PublicLineOperatorPortalPage() {
   const [updated, setUpdated] = useState("");
   const [claim, setClaim] = useState<Claim | null>(null);
   const [busy, setBusy] = useState("");
+  // テストの依頼書も表示する（動作確認用。0.53.9）。選んだ表示はこの端末に残す
+  const [showTest, setShowTestState] = useState(readShowTest);
+  const setShowTest = (value: boolean) => { setShowTestState(value); try { window.localStorage.setItem(TEST_KEY, value ? "1" : "0"); } catch { /* 保存できなくても表示は切り替わる */ } };
 
   useEffect(() => {
     let active = true;
@@ -109,14 +115,14 @@ export function PublicLineOperatorPortalPage() {
     const deny = (allowed: boolean, label: string) => { if (!allowed) throw new Error(`${label}を見る権限がありません。管理者へお問い合わせください。`); };
     if (tab === "wake") {
       deny(person.permissions.wake, "起床状況");
-      const result = await operatorPortalRequest<Wake>(`/wake-status?date=${day}`, token);
+      const result = await operatorPortalRequest<Wake>(`/wake-status?date=${day}&include_test=${showTest}`, token);
       if (isActive()) setWake(result);
     } else if (tab === "today" || tab === "calendar") {
       deny(person.permissions.orders, "案件の参加予定");
       const [y, m] = month.split("-").map(Number);
       const start = tab === "today" ? today() : `${month}-01`;
       const end = tab === "today" ? today() : `${month}-${new Date(y, m, 0).getDate()}`;
-      const result = await operatorPortalRequest<Calendar>(`/calendar?start=${start}&end=${end}&kind=orders`, token);
+      const result = await operatorPortalRequest<Calendar>(`/calendar?start=${start}&end=${end}&kind=orders&include_test=${showTest}`, token);
       if (isActive()) setCalendar(result);
     } else if (tab === "availability") {
       deny(person.permissions.availability, "出勤可否・配置");
@@ -127,11 +133,11 @@ export function PublicLineOperatorPortalPage() {
       deny(person.permissions.orders, "発注依頼書");
       const base = today();
       const [start, end] = range === "next" ? [base, addDays(base, 30)] : [addDays(base, -30), addDays(base, -1)];
-      const result = await operatorPortalRequest<Orders>(`/orders?start=${start}&end=${end}`, token);
+      const result = await operatorPortalRequest<Orders>(`/orders?start=${start}&end=${end}&include_test=${showTest}`, token);
       if (isActive()) setOrders(result);
     }
     if (isActive()) setUpdated(new Date().toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }));
-  }, [token, tab, day, month, range]);
+  }, [token, tab, day, month, range, showTest]);
 
   useEffect(() => {
     if (!token) return;
@@ -171,7 +177,7 @@ export function PublicLineOperatorPortalPage() {
   const pdf = (versionId: string) => <OpenPdf versionId={versionId} token={token} busy={busy} setBusy={setBusy} setError={setActionError} />;
 
   const eventCards = <>{events.map((event) => <article className="operator-card" key={event.version_id + event.project_name}>
-    <h3>{event.project_name || "案件"}</h3>{event.site_name && <p className="operator-sub">{event.site_name}</p>}
+    <h3>{event.is_test && <TestMark />}{event.project_name || "案件"}</h3>{event.site_name && <p className="operator-sub">{event.site_name}</p>}
     {buckets.map(([bucket, label]) => <div className={`operator-bucket is-${bucket}`} key={bucket}><strong>{label} {event[bucket].length}名</strong><p>{event[bucket].map((p) => p.name).join("、") || "—"}</p></div>)}
     <div className="operator-actions">{pdf(event.version_id)}<small>発注依頼書 {event.document_number}</small></div>
   </article>)}{events.length === 0 && <p className="operator-empty">{tab === "today" ? "今日の案件はありません。" : "この日の案件はありません。"}</p>}</>;
@@ -183,6 +189,7 @@ export function PublicLineOperatorPortalPage() {
       {(tab === "calendar" || tab === "availability") && <label>表示する月<input type="month" value={month} onChange={(e) => { if (e.target.value) { setMonth(e.target.value); setDay(`${e.target.value}-01`); } }} /></label>}
       {tab === "today" && <p className="operator-today">{dayLabel(today())} の案件と参加予定者</p>}
       {tab === "orders" && <div className="operator-switch" role="group" aria-label="表示する期間"><button className="operator-button" aria-pressed={range === "next"} onClick={() => setRange("next")}>これから30日</button><button className="operator-button" aria-pressed={range === "past"} onClick={() => setRange("past")}>過去30日</button></div>}
+      {tab !== "availability" && tab !== "profile" && <div className="operator-switch" role="group" aria-label="テストの依頼書"><button className="operator-button" aria-pressed={!showTest} onClick={() => setShowTest(false)}>正式のみ</button><button className="operator-button" aria-pressed={showTest} onClick={() => setShowTest(true)}>テストも表示</button></div>}
       <button className="operator-refresh" disabled={loading} onClick={() => setRefresh((v) => v + 1)}>最新の状況に更新</button>{updated && <small>最終取得 {updated}</small>}
     </section>}
     {error && <p className="operator-error" role="alert">{error}</p>}
@@ -197,8 +204,8 @@ export function PublicLineOperatorPortalPage() {
         const open = claim?.worker_id === row.worker_id;
         const needs = !row.wake_reported_at && wake.is_today && row.next_action.step !== "resolved";
         return <article className={`operator-card${needs && row.next_action.priority <= 3 ? " is-urgent" : ""}`} key={row.worker_id}>
-          <div className="operator-card-title"><h2>{row.worker_name}</h2><strong className={row.wake_reported_at ? "operator-reported" : "operator-missing"}>{row.wake_reported_at ? `報告あり ${time(row.wake_reported_at)}` : row.next_action.step === "resolved" ? row.next_action.label : "未報告"}</strong></div>
-          {row.entries.map((entry, index) => <p key={index}><strong>{entry.project_name}</strong><br />{entry.start_time || "時刻未設定"}〜{entry.end_next_day ? "翌" : ""}{entry.end_time || ""} {entry.site_name}{entry.status === "changing" ? "／変更確認待ち" : ""}</p>)}
+          <div className="operator-card-title"><h2>{row.worker_name}{row.is_test && <TestMark />}</h2><strong className={row.wake_reported_at ? "operator-reported" : "operator-missing"}>{row.wake_reported_at ? `報告あり ${time(row.wake_reported_at)}` : row.next_action.step === "resolved" ? row.next_action.label : "未報告"}</strong></div>
+          {row.entries.map((entry, index) => <p key={index}>{entry.is_test && <TestMark />}<strong>{entry.project_name}</strong><br />{entry.start_time || "時刻未設定"}〜{entry.end_next_day ? "翌" : ""}{entry.end_time || ""} {entry.site_name}{entry.status === "changing" ? "／変更確認待ち" : ""}</p>)}
           {needs && row.next_action.label && <p className="operator-next">今すること：{row.next_action.label}</p>}
           {row.last_result && <p className="operator-last">最後の記録：{row.last_result.label}（{row.last_result.actor_name} {time(row.last_result.at)}）</p>}
           {needs && <div className="operator-claim">
@@ -221,7 +228,7 @@ export function PublicLineOperatorPortalPage() {
       {selectedWorkers.map((worker) => <article className="operator-card" key={worker.worker_id}><h3>{worker.name}</h3><p>{labels[worker.days[day]?.status ?? ""] || "可否未登録"}</p>{worker.days[day]?.assignments.map((assignment, index) => <p key={index}>{assignment.project_name} ／ {assignment.shift_label}</p>)}</article>)}{selectedWorkers.length === 0 && <p className="operator-empty">該当する稼働者はいません。</p>}</>}
 
     {orders && <>{orderItems.map((item) => <article className="operator-card" key={item.version_id}>
-      <h3>{item.project_name || "案件"}</h3>
+      <h3>{item.is_test && <TestMark />}{item.project_name || "案件"}</h3>
       <p className="operator-sub">{item.site_name}{item.site_name ? "／" : ""}{item.first_date ? (item.first_date === item.last_date ? dayLabel(item.first_date) : `${dayLabel(item.first_date)}〜${dayLabel(item.last_date || item.first_date)}`) : item.work_date_label || "日程は依頼書を確認"}</p>
       {item.dispatch_stopped && <p className="operator-missing">送付を止めています</p>}
       <div className="operator-chips">{receipt.map(([key, label]) => item[key].length ? <span key={key} className={`operator-chip is-${key}`}>{label} {item[key].length}名</span> : null)}</div>

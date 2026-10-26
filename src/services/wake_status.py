@@ -64,13 +64,15 @@ def _overlaps(entries: list[WorkerScheduleEntry]) -> bool:
     return any(spans[i][1] > spans[i + 1][0] for i in range(len(spans) - 1))
 
 
-def build_wake_status(db: Session, day: date | None = None) -> dict:
+def build_wake_status(db: Session, day: date | None = None, *, include_test: bool = False) -> dict:
+    """include_test は運営用LINEの動作確認用（0.53.8、DEC-125）。管理画面は従来どおり正式だけ。"""
     target = day or ws.today_jst()
+    query = ws.visible_schedule_entries(db).filter(WorkerScheduleEntry.work_date == target)
+    if not include_test:
+        query = query.filter(WorkerScheduleEntry.is_test.is_(False))
     entries = (
-        ws.visible_schedule_entries(db)
+        query
         .filter(
-            WorkerScheduleEntry.work_date == target,
-            WorkerScheduleEntry.is_test.is_(False),
             or_(WorkerScheduleEntry.status == ENTRY_ACTIVE, WorkerScheduleEntry.status == ENTRY_CHANGING),
         )
         .order_by(WorkerScheduleEntry.start_time, WorkerScheduleEntry.id)
@@ -84,6 +86,10 @@ def build_wake_status(db: Session, day: date | None = None) -> dict:
         r.worker_id: r
         for r in db.query(WakeReport).filter(WakeReport.report_date == target, WakeReport.is_test.is_(False)).all()
     }
+    if include_test:
+        # テストだけの予定の人は、テストの起床報告で報告済みとみなす（正式の報告があればそちらを優先）
+        for r in db.query(WakeReport).filter(WakeReport.report_date == target, WakeReport.is_test.is_(True)).all():
+            reports.setdefault(r.worker_id, r)
     workers = {w.id: w for w in db.query(Worker).filter(Worker.id.in_(worker_ids)).all()} if worker_ids else {}
     contacts: dict[str, list[WakeContactLog]] = {}
     if worker_ids:
@@ -150,6 +156,7 @@ def build_wake_status(db: Session, day: date | None = None) -> dict:
                     "site_name": e.site_name,
                     "meeting_place": e.meeting_place,
                     "status": e.status,
+                    "is_test": bool(e.is_test),
                 }
                 for e in rows
             ],
