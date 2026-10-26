@@ -54,6 +54,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/billing/payouts": CreditCard,
   "/billing/expenses": Receipt,
   "/masters/workers": UserRound,
+  "/masters/operator-staff": Users,
   "/masters/prices": Tag,
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
