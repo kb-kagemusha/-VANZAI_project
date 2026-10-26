@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getOrderBillingSummary } from "../lib/orderBillingApi";
+import { getRegistrationRequests } from "../lib/api/client";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -55,6 +56,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/billing/expenses": Receipt,
   "/masters/workers": UserRound,
   "/masters/operator-staff": Users,
+  "/masters/registration-pending": ClipboardList,
   "/masters/prices": Tag,
   "/masters/data": Database,
   "/audit-logs": ShieldCheck,
@@ -79,6 +81,13 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
   const { user } = useAuth();
   const billingSummary = useQuery({ queryKey: ["order-billing", "summary"], queryFn: () => getOrderBillingSummary(),
     enabled: user?.role === "admin" && user.is_active, refetchInterval: 30_000, refetchOnWindowFocus: true });
+  const registrationSummary = useQuery({
+    queryKey: ["registration-requests", "worker-line-pending-count"],
+    queryFn: () => getRegistrationRequests({ request_type: "worker", status: "pending", line_only: true, limit: 1, offset: 0 }),
+    enabled: canView(user, "/masters/registration-pending", ["admin", "ops"]),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
   const { currentVersion, hasUpdate, refreshNow } = useAppVersion();
   const displayedName = user?.display_name || user?.username || "";
   const visibleItems = NAV_ITEMS.filter((item) => canView(user, item.to, item.allowedRoles));
@@ -126,13 +135,18 @@ export function SideNav({ collapsed, onToggleCollapsed }: SideNavProps) {
                     key={item.to}
                     to={item.to}
                     end
-                    aria-label={item.to === "/billing/order-amounts" && user?.role === "admin" && billingSummary.data ? `${item.label} 未入力${billingSummary.data.missing_count}件` : collapsed ? item.label : undefined}
+                    aria-label={item.to === "/masters/registration-pending" ? `${item.label}${registrationSummary.isError ? " 件数取得失敗" : registrationSummary.data ? ` ${registrationSummary.data.total}件` : ""}` : item.to === "/billing/order-amounts" && user?.role === "admin" && billingSummary.data ? `${item.label} 未入力${billingSummary.data.missing_count}件` : collapsed ? item.label : undefined}
                     className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
                   >
                     {Icon ? <Icon className="nav-link-icon" size={20} aria-hidden="true" /> : null}
                     <span className="nav-link-text">
                       <span className="nav-link-label">{item.label}</span>
                     </span>
+                    {item.to === "/masters/registration-pending" && ((registrationSummary.data?.total ?? 0) > 0 || registrationSummary.isError) ? (
+                      <span className="nav-unread-badge" title={registrationSummary.isError ? "確認待ち件数を取得できません" : `登録確認待ち ${registrationSummary.data!.total}件`}>
+                        {registrationSummary.isError ? "!" : `${registrationSummary.data!.total > 99 ? "99+" : registrationSummary.data!.total}件`}
+                      </span>
+                    ) : null}
                     {item.to === "/billing/order-amounts" && user?.role === "admin" && ((billingSummary.data?.missing_count ?? 0) > 0 || billingSummary.isError) ? (
                       <span className="nav-unread-badge" title={billingSummary.isError ? "未入力件数を取得できません" : `金額未入力 ${billingSummary.data!.missing_count}件`}>
                         {billingSummary.isError ? "!" : billingSummary.data!.missing_count > 99 ? "99+" : billingSummary.data!.missing_count}

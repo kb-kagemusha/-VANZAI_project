@@ -25,6 +25,7 @@ import { PriceManagementPage } from "../pages/PriceManagementPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ShiftSlotsPage } from "../pages/ShiftSlotsPage";
 import { WorkersPage } from "../pages/WorkersPage";
+import { RegistrationPendingPage } from "../pages/RegistrationPendingPage";
 import { OperatorStaffPage } from "../pages/OperatorStaffPage";
 import { AccountProfilePage } from "../pages/AccountProfilePage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
@@ -220,6 +221,7 @@ export function App() {
             }
           />
           <Route path="/masters/operator-staff" element={<PermissionRoute allowedRoles={["admin"]}><OperatorStaffPage /></PermissionRoute>} />
+          <Route path="/masters/registration-pending" element={<PermissionRoute allowedRoles={["admin", "ops"]}><RegistrationPendingPage /></PermissionRoute>} />
           <Route
             path="/audit-logs"
             element={

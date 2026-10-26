@@ -117,6 +117,12 @@ export const NAV_ITEMS: NavItem[] = [
     allowedRoles: ["admin", "ops", "accounting"],
   },
   {
+    to: "/masters/registration-pending",
+    label: "登録確認待ち",
+    description: "登録申請の区分・内容・反映先を確認して審査",
+    allowedRoles: ["admin", "ops"],
+  },
+  {
     to: "/masters/workers",
     label: "稼働者登録・一覧",
     description: "稼働者（スタッフ）の登録、一覧、公式LINEの本人紐付け",
@@ -173,6 +179,7 @@ export const PATH_PERMISSIONS: Record<string, string[]> = {
   "/operations/notices": ["notice_read"], "/operations/registration-requests": ["registration_read"],
   "/billing/invoices": ["invoice_read"], "/billing/payouts": ["payout_read"], "/billing/expenses": ["expense_read"],
   "/masters/workers": ["master_read"], "/masters/data": ["master_read"],
+  "/masters/registration-pending": ["registration_read"],
   "/masters/prices": ["price_read"], "/audit-logs": ["audit_log_read"],
 };
 
