@@ -256,7 +256,10 @@ WAKE_CONTACT_RESULTS = {
     "no_answer": "電話がつながらない",
     "site_notified": "現場へ連絡した",
     "absent": "欠勤",
+    # 運営用LINEで「私が連絡します」を押した記録（0.53.8、DEC-125）。連絡の結果ではないので「今すること」の判定には使わない
+    "claimed": "連絡を引き受けた",
 }
+WAKE_CONTACT_CLAIM = "claimed"
 # 連絡を終えたとみなす結果（「今すること」を出さない）
 WAKE_CONTACT_RESOLVED = {"confirmed_awake", "absent"}
 
@@ -277,7 +280,7 @@ class WakeContactLog(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "result IN ('line_sent','confirmed_awake','no_answer','site_notified','absent')",
+            "result IN ('line_sent','confirmed_awake','no_answer','site_notified','absent','claimed')",
             name="ck_wake_contact_logs_result",
         ),
         Index("ix_wake_contact_logs_date_worker", "contact_date", "worker_id"),

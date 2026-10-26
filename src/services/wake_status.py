@@ -2,7 +2,7 @@
 from datetime import date, datetime, timedelta
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from src.models.line_daily import ENTRY_ACTIVE, ENTRY_CHANGING, WAKE_CONTACT_RESOLVED, WAKE_CONTACT_RESULTS, WakeContactLog, WakeReport, WorkerScheduleEntry
+from src.models.line_daily import ENTRY_ACTIVE, ENTRY_CHANGING, WAKE_CONTACT_CLAIM, WAKE_CONTACT_RESOLVED, WAKE_CONTACT_RESULTS, WakeContactLog, WakeReport, WorkerScheduleEntry
 from src.models.line_order import LINK_ACTIVE, LineWorkerLink
 from src.models.master import Worker
 from src.services import worker_schedule as ws
@@ -106,7 +106,9 @@ def build_wake_status(db: Session, day: date | None = None) -> dict:
         report = reports.get(worker_id)
         worker = workers.get(worker_id)
         logs = contacts.get(worker_id, [])
-        latest = logs[-1].result if logs else None
+        # 「私が連絡します」の記録は連絡の結果ではないので、今することの判定から外す（0.53.8）
+        results = [log.result for log in logs if log.result != WAKE_CONTACT_CLAIM]
+        latest = results[-1] if results else None
         if is_today:
             action = wake_next_action(target=target, first_start=rows[0].start_time, reported=report is not None, latest_result=latest, now=now_jst)
         elif target > ws.today_jst():
@@ -130,6 +132,7 @@ def build_wake_status(db: Session, day: date | None = None) -> dict:
                     "result_label": WAKE_CONTACT_RESULTS.get(log.result, log.result),
                     "note": log.note,
                     "actor_name": log.actor_name,
+                    "actor_user_id": log.actor_user_id,
                     "created_at": log.created_at,
                 }
                 for log in logs

@@ -35,3 +35,19 @@ class LineOperatorMenuState(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (CheckConstraint("status IN ('pending','applied','failed')", name="ck_operator_menu_status"),)
+
+
+class LineOperatorFileToken(Base):
+    """運営用LINEで依頼書（PDF）を開く短命リンク（0.53.8、DEC-125）。平文は保存しない。
+
+    稼働者の送付行の閲覧記録（OrderRequestFileToken）とは分ける。運営が開いても稼働者の受領・閲覧の扱いは変えない。
+    """
+    __tablename__ = "line_operator_file_tokens"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=generate_ulid)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    version_id: Mapped[str] = mapped_column(String(26), ForeignKey("order_request_versions.id"), nullable=False)
+    staff_id: Mapped[str] = mapped_column(String(26), ForeignKey("vanzai_staff.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(26), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("length(token_hash) = 64", name="ck_operator_file_token_hash"),)

@@ -71,8 +71,11 @@ def test_site_manager_reads_all_projects_without_worker_link_and_no_money(api_cl
     result = api_client.get("/api/projects", headers=headers)
     assert result.status_code == 200
     assert project.id in [row["id"] for row in result.json()["items"]]
-    for path in ["/api/invoices", "/api/payouts", "/api/price-sales", "/api/aggregation/sales?year=2026&month=10", "/api/aggregation/outsource?year=2026&month=10", "/api/ocr/images", "/api/order-requests"]:
+    for path in ["/api/invoices", "/api/payouts", "/api/price-sales", "/api/aggregation/sales?year=2026&month=10", "/api/aggregation/outsource?year=2026&month=10", "/api/ocr/images", "/api/order-billing/summary"]:
         assert api_client.get(path, headers=headers).status_code == 403, path
+    # 0.53.8（DEC-125）：運営用LINEメニューのため、現場管理は発注依頼書を閲覧できる（作成・変更・金額確定はできない）
+    assert api_client.get("/api/order-requests", headers=headers).status_code == 200
+    assert api_client.post("/api/order-requests", headers=headers, json={}).status_code in (403, 422)
 
 
 def test_financial_aggregations_require_login(api_client):

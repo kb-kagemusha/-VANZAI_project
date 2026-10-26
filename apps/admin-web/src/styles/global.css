@@ -5835,3 +5835,24 @@ html[data-theme="dark"] .operator-profile-dialog .operator-access-save { border-
 html[data-theme="dark"] .operator-profile-dialog .operator-menu-sync { border-color: #d4aa66; color: #ebc68a; }
 @media (max-width: 760px) { .operator-profile-dialog .operator-profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .operator-account-panels { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .operator-profile-dialog .order-draft-head, .operator-profile-dialog .order-draft-body { padding: 14px; } .operator-profile-dialog .operator-profile-grid { grid-template-columns: 1fr; } }
+
+/* 権限の分類（0.53.8、DEC-125） */
+.access-permission-groups { border: 0; padding: 0; margin: 0; display: grid; gap: .9rem; min-width: 0; }
+.access-permission-groups > legend { font-weight: 700; margin-bottom: .4rem; }
+.access-permission-hint { margin: 0; color: var(--muted); font-size: .9rem; }
+.access-permission-group { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); overflow: hidden; }
+.access-permission-group > header { display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem; background: var(--bg-strong); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.access-permission-group > header > div { flex: 1 1 220px; min-width: 0; }
+.access-permission-group h4 { margin: 0; font-size: 1rem; }
+.access-permission-group header small { color: var(--muted); }
+.access-permission-count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
+.access-group-toggle { min-height: 36px; padding: .35rem .8rem; border-radius: var(--radius-sm); border: 1px solid #2f6db3; color: #255d9c; background: var(--panel); font-weight: 600; cursor: pointer; }
+.access-group-toggle:hover { background: #eaf2fb; }
+.access-permission-group .access-permissions { border: 0; border-radius: 0; }
+.access-permission-group .access-permissions label { align-items: flex-start; }
+.access-permission-group .access-permissions label > span { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.access-line-badge { display: inline-block; padding: 0 .4rem; border-radius: 4px; background: #0b7a3b; color: #fff; font-size: .72rem; font-weight: 700; line-height: 1.5; }
+.access-line-note { flex-basis: 100%; color: var(--muted); font-size: .78rem; }
+html[data-theme="dark"] .access-group-toggle { border-color: #7fb0ea; color: #a9cbf2; }
+html[data-theme="dark"] .access-group-toggle:hover { background: #24364d; }
+html[data-theme="dark"] .access-line-badge { background: #0a8a3e; }

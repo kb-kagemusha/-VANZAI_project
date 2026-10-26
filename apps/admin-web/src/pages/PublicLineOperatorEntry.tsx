@@ -8,5 +8,5 @@ export function operatorMode(): string {
 }
 
 export function PublicLineOperatorEntry() {
-  return ["wake", "calendar", "profile"].includes(operatorMode()) ? <PublicLineOperatorPortalPage /> : <PublicLineOperatorRegistrationPage />;
+  return ["wake", "today", "calendar", "orders", "availability", "profile"].includes(operatorMode()) ? <PublicLineOperatorPortalPage /> : <PublicLineOperatorRegistrationPage />;
 }

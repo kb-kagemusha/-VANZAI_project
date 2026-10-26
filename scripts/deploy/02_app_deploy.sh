@@ -42,6 +42,10 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" sync
     elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-publish" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" publish
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--operator-menu-republish" ]; then
+        # 0.53.8（DEC-125）：公開中の個人別メニューを新しい6分割へ差し替える。全員の既定メニューは変えない
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" republish
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/line/operator_menu.py" status
     elif [ "${CALENDAR_DEMO_ACTION}" = "--calendar-demo-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/seed_calendar_demo.py"
     elif [ "${CALENDAR_DEMO_ACTION}" = "--demo-schedule-gaps-preview" ]; then

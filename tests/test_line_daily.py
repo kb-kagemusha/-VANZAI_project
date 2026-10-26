@@ -471,9 +471,12 @@ def test_same_event_is_processed_once(api_client, db_session, ops_user, pdf_root
 
 
 def test_wake_status_permission(api_client, db_session, ops_user, line_env, fake_line):
+    # 0.53.8（DEC-125）：現場管理者は初期状態で起床状況を見られる。権限の無い役割（経理）は見られない
     manager = create_user_with_hashed_password(db=db_session, username="sm_daily", email="sm_daily@example.com", password="pass123", role=UserRole.SITE_MANAGER.value)
+    accounting = create_user_with_hashed_password(db=db_session, username="acc_daily", email="acc_daily@example.com", password="pass123", role=UserRole.ACCOUNTING.value)
     db_session.commit()
-    assert api_client.get("/api/line-daily/wake-status", headers=_auth(manager.username)).status_code == 403
+    assert api_client.get("/api/line-daily/wake-status", headers=_auth(accounting.username)).status_code == 403
+    assert api_client.get("/api/line-daily/wake-status", headers=_auth(manager.username)).status_code == 200
     assert api_client.get("/api/line-daily/wake-status", headers=_auth(ops_user.username)).status_code == 200
 
 

@@ -101,3 +101,9 @@ set -a; . ./.env; set +a
 
 - 「確認が必要な依頼」と◆の予定に「返事をする（受諾・辞退）」が出て、Web画面（`?m=reply&d=送付行ID`）から全日程で受諾・理由を付けて辞退できる。トークの「受諾」「辞退」と同じ処理。
 - ③-B の「始まった日の予定を残す」修正（0.52.2）との結合試験に合格したため、**2026-10-24 に有効にした**（統合計画 v1.4）。有効にするとき：`.venv/bin/python scripts/line/rich_menu.py features --enable web_reply --by <自分の名前>`。止めるとき：`--disable web_reply`（止めている間は、今までどおりトークのボタンで返事する）。
+
+## 運営用の個人別メニューの差し替え（0.53.8、DEC-125）
+
+- 画像は `scripts/line/rich_menu/make_operator.py` で作る（`operator_dual.png`：兼務者、`operator_only.png`：運営専任）。押せる範囲は `scripts/line/operator_menu.py` の `operator_spec`。
+- 本番での差し替え：`bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --operator-menu-republish`（全員の既定メニューは変えない。新しい個人別メニューへ照合し直してから旧いメニューを削除する）。
+- 結果の確認：同じスクリプトの `--operator-menu-status`。

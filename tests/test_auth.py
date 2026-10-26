@@ -95,11 +95,14 @@ class TestRolePermissions:
         assert has_permission(user, Permission.PROJECT_READ)
         assert has_permission(user, Permission.SHIFT_READ)
         assert has_permission(user, Permission.CSV_SUBMIT)
+        assert has_permission(user, Permission.ORDER_READ)
+        assert has_permission(user, Permission.WAKE_STATUS_READ)
         
         # 許可されていない権限
         assert not has_permission(user, Permission.PROJECT_WRITE)
         assert not has_permission(user, Permission.SHIFT_WRITE)
         assert not has_permission(user, Permission.CSV_IMPORT)
+        assert not has_permission(user, Permission.ORDER_WRITE)
         assert not has_permission(user, Permission.INVOICE_GENERATE)
         assert not has_permission(user, Permission.PRICE_READ)
     

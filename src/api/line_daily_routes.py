@@ -59,7 +59,7 @@ def record_wake_contact(
     """起床の目視確認で連絡した結果を記録する（W-2）。追記のみで、取り消しは新しい記録で行う。"""
     if not has_permission(current_user, Permission.WAKE_STATUS_READ):
         raise HTTPException(status_code=403, detail="起床状況を見る権限がありません")
-    if body.result not in WAKE_CONTACT_RESULTS:
+    if body.result not in WAKE_CONTACT_RESULTS or body.result == "claimed":
         raise HTTPException(status_code=400, detail="連絡の結果を選び直してください")
     if db.get(Worker, body.worker_id) is None:
         raise HTTPException(status_code=404, detail="稼働者が見つかりません")

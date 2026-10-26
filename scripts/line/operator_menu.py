@@ -52,17 +52,31 @@ def image_for(spec, labels):
     return buffer.getvalue()
 
 
+OPERATOR_ACTIONS = [("起床状況", "wake"), ("今日の案件", "today"), ("案件カレンダー", "calendar"), ("発注依頼書", "orders"), ("出勤可否・配置", "availability")]
+OPERATOR_IMAGES = {True: ROOT / "scripts/line/rich_menu/operator_dual.png", False: ROOT / "scripts/line/rich_menu/operator_only.png"}
+
+
 def operator_spec(liff_id, dual, worker_alias):
-    actions = [("起床状況", "wake"), ("カレンダー", "calendar"), ("自分の\n登録情報", "profile")]
+    """稼働者メニューと同じ6分割（0.53.8、DEC-125）。兼務者は6つ目が稼働者メニューへの切替、運営専任は空き枠（押せる範囲なし）。"""
     areas, labels = [], []
-    for i, (label, mode) in enumerate(actions):
-        bounds = {"x": (i % 2) * 1250, "y": (i // 2) * 843, "width": 1250, "height": 843} if dual else {"x": i * 833, "y": 0, "width": 833, "height": 1686}
-        areas.append({"bounds": bounds, "action": {"type": "uri", "uri": f"https://liff.line.me/{liff_id}?m={mode}"}})
+    for i, (label, mode) in enumerate(OPERATOR_ACTIONS):
+        x = (0, 834, 1667)[i % 3]
+        width = (833, 833, 833)[i % 3]
+        bounds = {"x": x, "y": (i // 3) * 843, "width": width, "height": 843}
+        areas.append({"bounds": bounds, "action": {"type": "uri", "label": label, "uri": f"https://liff.line.me/{liff_id}?m={mode}"}})
         labels.append(label)
     if dual:
-        areas.append({"bounds": {"x": 1250, "y": 843, "width": 1250, "height": 843}, "action": {"type": "richmenuswitch", "richMenuAliasId": worker_alias, "data": "op_menu:worker"}})
-        labels.append("稼働者用へ\n切り替える")
-    return {"size": {"width": 2500, "height": 1686}, "selected": True, "name": "VANZAI 運営メニュー", "chatBarText": "運営メニュー", "areas": areas}, labels
+        areas.append({"bounds": {"x": 1667, "y": 843, "width": 833, "height": 843}, "action": {"type": "richmenuswitch", "richMenuAliasId": worker_alias, "data": "op_menu:worker"}})
+        labels.append("稼働者メニューへ")
+    return {"size": {"width": 2500, "height": 1686}, "selected": True, "name": "VANZAI 運営メニュー" + (" 兼務" if dual else ""), "chatBarText": "運営メニュー", "areas": areas}, labels
+
+
+def operator_image(dual):
+    """make_operator.py で作った画像（稼働者メニューと同じ絵柄）。"""
+    data = OPERATOR_IMAGES[bool(dual)].read_bytes()
+    if not data.startswith(b"\x89PNG") or len(data) > 1024 * 1024:
+        raise RuntimeError("Operator menu image is missing or exceeds LINE size limit")
+    return data
 
 
 def worker_spec(default, operator_alias):
@@ -94,17 +108,14 @@ def worker_image(spec, labels, original):
     return data
 
 
-def publish(db, client):
+def _lock(db):
     if db.bind.dialect.name == "postgresql":
         from sqlalchemy import text
         db.execute(text("SELECT pg_advisory_xact_lock(261026530)"))
-    if current_release(db):
-        return {"published": True, "already_published": True}
-    if db.query(LineOperatorMenuRelease.id).first():
-        return {"published": False, "reason": "disabled_by_admin"}
-    entry = operator_entry()
-    if not entry["enabled"]:
-        return {"published": False, "reason": "not_configured"}
+
+
+def _create_release(db, client, entry, previous=None):
+    """3つの個人別メニューと切替用の別名を作り、公開記録を残す。previous があれば同じ取引で無効にする。"""
     original = client.call("GET", "/user/all/richmenu")["richMenuId"]
     default = client.call("GET", f"/richmenu/{original}")
     default_image = client.content(original)
@@ -116,15 +127,18 @@ def publish(db, client):
         for kind, (spec, labels) in specs.items():
             mid = client.call("POST", "/richmenu", spec)["richMenuId"]
             menus[kind] = mid
-            picture = worker_image(spec, labels, default_image) if kind == "worker_dual" else image_for(spec, labels)
+            picture = worker_image(spec, labels, default_image) if kind == "worker_dual" else operator_image(kind == "operator_dual")
             client.call("POST", f"/richmenu/{mid}/content", image=picture)
         for kind, alias in aliases.items():
             client.call("POST", "/richmenu/alias", {"richMenuAliasId": alias, "richMenuId": menus[kind]})
             created_aliases.append(alias)
         if client.call("GET", "/user/all/richmenu")["richMenuId"] != original:
             raise RuntimeError("Default menu changed during publication")
+        if previous is not None:
+            previous.active = False
         db.add(LineOperatorMenuRelease(menus=menus, active=True, created_at=ws.now_utc(), created_by="deploy"))
-        AuditService(db).log("operator_menus_published", actor="deploy", target_type="line_menu", after_value={"count": 3, "default_unchanged": True})
+        AuditService(db).log("operator_menus_republished" if previous is not None else "operator_menus_published", actor="deploy", target_type="line_menu",
+                             after_value={"count": 3, "default_unchanged": True, "replaced": bool(previous)})
         db.commit()
     except Exception:
         db.rollback()
@@ -135,7 +149,53 @@ def publish(db, client):
             try: client.call("DELETE", f"/richmenu/{mid}")
             except MenuError: pass
         raise
+    return menus
+
+
+def publish(db, client):
+    _lock(db)
+    if current_release(db):
+        return {"published": True, "already_published": True}
+    if db.query(LineOperatorMenuRelease.id).first():
+        return {"published": False, "reason": "disabled_by_admin"}
+    entry = operator_entry()
+    if not entry["enabled"]:
+        return {"published": False, "reason": "not_configured"}
+    _create_release(db, client, entry)
     return {"published": True, "created": 3, "default_unchanged": True}
+
+
+def republish(db, client):
+    """公開中の個人別メニューを新しい絵柄・ボタンに差し替える（0.53.8、DEC-125）。全員の既定メニューは変えない。
+
+    新しい公開記録を作って旧い記録を無効にし、各人のメニューを照合し直してから、旧いメニューと別名を消す。
+    無効化中（disable 済み）は差し替えない。
+    """
+    _lock(db)
+    previous = current_release(db)
+    if previous is None:
+        return {"republished": False, "reason": "not_published"}
+    entry = operator_entry()
+    if not entry["enabled"]:
+        return {"republished": False, "reason": "not_configured"}
+    old_menus = set(previous.menus.values())
+    _create_release(db, client, entry, previous)
+    counts = reconcile_all(db, client)
+    removed = 0
+    try:
+        listed = client.call("GET", "/richmenu/alias/list").get("aliases", [])
+    except MenuError:
+        listed = []
+    for alias in listed:
+        if alias.get("richMenuId") in old_menus:
+            try: client.call("DELETE", f"/richmenu/alias/{alias['richMenuAliasId']}")
+            except MenuError: pass
+    for mid in sorted(old_menus):
+        try:
+            client.call("DELETE", f"/richmenu/{mid}"); removed += 1
+        except MenuError:
+            pass
+    return {"republished": True, "created": 3, "old_menus_removed": removed, "reconciled": counts, "default_unchanged": True}
 
 
 def status(db):
@@ -148,11 +208,12 @@ def status(db):
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=("publish", "sync", "status", "disable")); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=("publish", "republish", "sync", "status", "disable")); args = parser.parse_args()
     with SessionLocal() as db:
         if args.action == "publish":
             print(json.dumps(publish(db, MenuClient())))
             print(json.dumps(reconcile_all(db)))
+        elif args.action == "republish": print(json.dumps(republish(db, MenuClient())))
         elif args.action == "sync": print(json.dumps(reconcile_all(db)))
         elif args.action == "disable":
             db.query(LineOperatorMenuRelease).update({"active": False})
