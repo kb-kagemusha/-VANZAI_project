@@ -36,6 +36,7 @@ export function OperatorStaffPage() {
     const next = toForm(item);
     setSelected(item); setForm(next); setBaseline(JSON.stringify(next)); setError("");
     await invalidate(); await alertApp({ title: "保存完了", message: selected ? "情報を更新しました" : "運営スタッフを登録しました" });
+    setOpen(false); setCode(null);
   }, onError: (e) => setError(message(e)) });
   const issue = useMutation({ mutationFn: () => issueOperatorLineCode(selected!.id), onSuccess: (value) => { setCode(value); setError(""); }, onError: (e) => setError(message(e)) });
   const unlink = useMutation({ mutationFn: (reason: string) => revokeOperatorLine(selected!.id, reason), onSuccess: async () => { setCode(null); setError(""); await invalidate(); }, onError: (e) => setError(message(e)) });
