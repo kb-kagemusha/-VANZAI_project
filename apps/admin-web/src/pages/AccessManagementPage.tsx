@@ -18,7 +18,7 @@ export function AccessManagementPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(() => new URLSearchParams(window.location.search).get("create") === "1");
   const [editing, setEditing] = useState<Account | null>(null);
   const [editRole, setEditRole] = useState("site_manager");
   const [active, setActive] = useState(true);
@@ -85,7 +85,7 @@ export function AccessManagementPage() {
       </form>
     </FormDialog>
 
-    <FormDialog open={createOpen} title="ログインIDを作成" busy={busy} onClose={() => setCreateOpen(false)}>
+    <FormDialog open={createOpen && roles.length > 0} title="ログインIDを作成" busy={busy} onClose={() => setCreateOpen(false)}>
       <form className="card access-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void save("/api/access/users", "POST", Object.fromEntries(values.entries()), () => setCreateOpen(false)); }}>
         <div className="access-grid">
           <label>ログインID<input name="username" required maxLength={100} pattern="[A-Za-z0-9_.@\-]+" autoComplete="off" /></label>

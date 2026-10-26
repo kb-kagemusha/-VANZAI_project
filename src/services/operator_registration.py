@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from sqlalchemy import select, text, or_
 from src.models.base import generate_ulid
-from src.models.master import RegistrationRequest, VanzaiStaff
+from src.models.master import RegistrationRequest, VanzaiStaff, User
 from src.models.operator_staff import LineStaffLink
 from src.models.operator_registration import OperatorRegistrationDetail
 from src.models.line_registration import LineRegistrationReceipt
@@ -15,6 +15,7 @@ from src.services.audit import AuditService
 from src.services.order_request_service import OrderRequestError
 from src.domain.line_operator_config import operator_entry
 from src.services.line_messaging import build_line_client
+from src.services.auth import is_management_role
 
 
 def now():
@@ -116,14 +117,19 @@ class OperatorRegistrationService:
         row, detail = self.request(request_id)
         candidates = self.db.query(VanzaiStaff).filter(VanzaiStaff.deleted_at.is_(None), VanzaiStaff.is_active.is_(True),
             or_(VanzaiStaff.name == detail.name, VanzaiStaff.phone == detail.phone)).order_by(VanzaiStaff.name, VanzaiStaff.id).limit(30).all() if detail.name else []
+        users = self.db.query(User).filter(User.is_active.is_(True), User.deleted_at.is_(None), User.worker_id.is_(None),
+            or_(User.vanzai_staff_id.is_(None), User.vanzai_staff_id.in_([staff.id for staff in candidates]))).order_by(User.username, User.id).all()
         return {"request_id": row.id, "status": row.status, "name": detail.name, "phone": detail.phone,
                 "line_display_name": detail.line_display_name, "staff_id": row.approved_target_id,
+                "login_candidates": [{"id": user.id, "username": user.username, "display_name": user.display_name, "staff_id": user.vanzai_staff_id} for user in users if is_management_role(user.role, self.db)],
                 "candidates": [{"id": staff.id, "name": staff.name, "phone": staff.phone, "profile_revision": staff.profile_revision} for staff in candidates]}
 
-    def approve(self, request_id, actor, staff_id=None, revision=None):
+    def approve(self, request_id, actor, staff_id=None, revision=None, user_id=None):
         row, detail = self.request(request_id, lock=True)
         if row.status != "pending" or not detail.is_open or detail.revoked_at:
             raise OrderRequestError(409, "この申請は承認できません。最新の状態を確認してください")
+        if not user_id:
+            raise OrderRequestError(409, "本人の管理画面IDを選んでください。IDがない場合は承認前にID・権限管理で作成してください。")
         if not build_line_client().profile_name(detail.line_user_id):
             raise OrderRequestError(409, "公式LINEとの連携を確認できません。本人の友だち追加・ブロック状態を確認してください")
         staff = None
@@ -136,12 +142,19 @@ class OperatorRegistrationService:
         self.identity_lock(detail.line_user_id)
         if self.db.query(LineStaffLink).filter(LineStaffLink.status == "active", or_(LineStaffLink.line_user_id == detail.line_user_id, LineStaffLink.staff_id == staff_id)).first():
             raise OrderRequestError(409, "LINEの紐付けが変更されています。管理者が現在の連携を確認してください")
+        login = self.db.execute(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True)).scalar_one_or_none()
+        if not login or not login.is_active or login.deleted_at or login.worker_id or not is_management_role(login.role, self.db) or (login.vanzai_staff_id is not None and login.vanzai_staff_id != staff_id):
+            raise OrderRequestError(409, "選択したIDは利用できません。有効な管理ロールで、他の本人に紐付いていないIDを選んでください。")
+        if staff_id and self.db.query(User).filter(User.vanzai_staff_id == staff_id, User.id != login.id).first():
+            raise OrderRequestError(409, "既存の運営スタッフには別のIDが対応しています。現在のIDを選ぶか、運営スタッフ一覧から対応を確認してください。")
         if staff is None:
             staff = VanzaiStaff(id=generate_ulid(), name=detail.name, phone=detail.phone, management_roles=[], is_active=True, profile_revision=1)
             self.db.add(staff)
             self.db.flush()
             self.audit.log("operator_staff_created", target_type="vanzai_staff", target_id=staff.id, actor=actor.id, actor_role=actor.role, after_value={"source": "line_registration", "profile_revision": 1})
         self.db.add(LineStaffLink(id=generate_ulid(), staff_id=staff.id, line_user_id=detail.line_user_id, line_display_name=detail.line_display_name, status="active", linked_at=now()))
+        login.vanzai_staff_id = staff.id
+        self.audit.log("operator_login_bound", target_type="vanzai_staff", target_id=staff.id, actor=actor.id, actor_role=actor.role, after_value={"user_id": login.id, "source": "registration_approval"})
         row.status, row.reviewed_at, row.reviewed_by = "approved", now(), actor.id
         row.approved_target_type, row.approved_target_id = "vanzai_staff", staff.id
         detail.is_open = False

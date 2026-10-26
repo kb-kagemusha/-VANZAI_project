@@ -53,10 +53,11 @@ def test_submit_then_admin_approve_creates_only_operator_and_link(api_client, db
     listing = api_client.get("/api/registration-requests?line_only=true&status=pending", headers=operator_setup[0]).json()
     assert listing["total"] == 1 and listing["items"][0]["request_type"] == "operator_staff"
     assert listing["items"][0]["summary_name"] == "運営 試験" and "line_user_id" not in listing["items"][0]
-    response = api_client.post(f"/api/operator-registration/{invitation['request_id']}/approve", json={}, headers=operator_setup[0])
+    response = api_client.post(f"/api/operator-registration/{invitation['request_id']}/approve", json={"user_id": db_session.query(User).filter_by(username="invite-admin").one().id}, headers=operator_setup[0])
     assert response.status_code == 200, response.text
     staff = db_session.query(VanzaiStaff).one()
     assert staff.phone == "09012345678" and not staff.management_roles
+    assert db_session.query(User).filter_by(username="invite-admin").one().vanzai_staff_id == staff.id
     assert db_session.query(LineStaffLink).one().staff_id == staff.id
     assert db_session.query(User).count() == 1 and db_session.query(Worker).count() == 0
     assert api_client.get("/api/registration-requests?line_only=true&status=pending", headers=operator_setup[0]).json()["total"] == 0
@@ -120,12 +121,12 @@ def test_approval_existing_staff_preserves_profile_and_rejects_stale_revision(ap
     invitation = invite(api_client, operator_setup); assert submit(api_client, invitation).status_code == 200
     path = f"/api/operator-registration/{invitation['request_id']}/approve"
     assert api_client.post(path, json={}, headers=operator_setup[0]).status_code == 409
-    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 2}, headers=operator_setup[0]).status_code == 409
-    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 3}, headers=operator_setup[0]).status_code == 200
+    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 2, "user_id": db_session.query(User).filter_by(username="invite-admin").one().id}, headers=operator_setup[0]).status_code == 409
+    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 3, "user_id": db_session.query(User).filter_by(username="invite-admin").one().id}, headers=operator_setup[0]).status_code == 200
     db_session.refresh(staff)
     assert staff.phone == "0311112222" and staff.profile_revision == 3 and staff.management_roles == ["現場管理"]
     assert db_session.query(VanzaiStaff).count() == 1
-    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 3}, headers=operator_setup[0]).status_code == 409
+    assert api_client.post(path, json={"staff_id": staff.id, "profile_revision": 3, "user_id": db_session.query(User).filter_by(username="invite-admin").one().id}, headers=operator_setup[0]).status_code == 409
 
 
 def test_rejection_keeps_history_and_does_not_allow_generic_approval_bypass(api_client, db_session, operator_setup):
@@ -150,8 +151,41 @@ def test_disabled_entry_never_issues_invite_or_accepts_submission(api_client, op
 def test_approval_rechecks_friend_status_and_existing_link_conflicts(api_client, db_session, operator_setup, monkeypatch):
     invitation = invite(api_client, operator_setup); assert submit(api_client, invitation).status_code == 200
     monkeypatch.setattr(operator_setup[1], "profile_name", lambda subject: None)
-    assert api_client.post(f"/api/operator-registration/{invitation['request_id']}/approve", json={}, headers=operator_setup[0]).status_code == 409
+    assert api_client.post(f"/api/operator-registration/{invitation['request_id']}/approve", json={"user_id": db_session.query(User).filter_by(username="invite-admin").one().id}, headers=operator_setup[0]).status_code == 409
     assert db_session.query(VanzaiStaff).count() == 0
+
+
+def test_approval_requires_precreated_unlinked_management_id_atomically(api_client, db_session, operator_setup):
+    invitation = invite(api_client, operator_setup); assert submit(api_client, invitation).status_code == 200
+    path = f"/api/operator-registration/{invitation['request_id']}/approve"
+    assert api_client.post(path, json={}, headers=operator_setup[0]).status_code == 409
+    assert api_client.post(path, json={"user_id": "missing"}, headers=operator_setup[0]).status_code == 409
+    assert db_session.get(RegistrationRequest, invitation["request_id"]).status == "pending"
+    assert db_session.query(VanzaiStaff).count() == db_session.query(LineStaffLink).count() == 0
+    admin = db_session.query(User).filter_by(username="invite-admin").one()
+    view = api_client.get(f"/api/operator-registration/{invitation['request_id']}", headers=operator_setup[0]).json()
+    assert [u["id"] for u in view["login_candidates"]] == [admin.id]
+    assert api_client.post(path, json={"user_id": admin.id}, headers=operator_setup[0]).status_code == 200
+    assert admin.vanzai_staff_id == db_session.query(VanzaiStaff).one().id
+
+
+@pytest.mark.parametrize("invalid", ["worker", "inactive", "deleted", "other_staff", "worker_link"])
+def test_approval_rechecks_selected_login_and_keeps_pending_on_conflict(api_client, db_session, operator_setup, invalid):
+    invitation = invite(api_client, operator_setup); assert submit(api_client, invitation).status_code == 200
+    login = create_user_with_hashed_password(db=db_session, username="candidate-login", email="candidate@test.example", password="test-password", role="ops")
+    if invalid == "worker": login.role = "worker"
+    elif invalid == "inactive": login.is_active = False
+    elif invalid == "deleted": login.deleted_at = now()
+    elif invalid == "other_staff":
+        other = VanzaiStaff(name="別の運営", is_active=True); db_session.add(other); db_session.flush(); login.vanzai_staff_id = other.id
+    elif invalid == "worker_link":
+        worker = Worker(name="稼働者本人", is_active=True); db_session.add(worker); db_session.flush(); login.worker_id = worker.id
+    db_session.commit()
+    before = db_session.query(VanzaiStaff).count()
+    response = api_client.post(f"/api/operator-registration/{invitation['request_id']}/approve", json={"user_id": login.id}, headers=operator_setup[0])
+    assert response.status_code == 409
+    assert db_session.get(RegistrationRequest, invitation["request_id"]).status == "pending"
+    assert db_session.query(VanzaiStaff).count() == before and db_session.query(LineStaffLink).count() == 0
 
 def test_operator_migration_adds_no_changes_to_existing_headers(tmp_path, monkeypatch):
     from alembic import command

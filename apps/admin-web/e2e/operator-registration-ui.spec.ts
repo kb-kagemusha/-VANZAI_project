@@ -66,7 +66,7 @@ test("shared pending inbox identifies both kinds, approves operator and decremen
       const operator = { id: "operator-request", request_type: "operator_staff", summary_name: "運営 太郎", status: "pending", submitted_at: "2026-10-26T02:00:00Z" };
       body = { items: approved ? [worker] : [operator, worker], total: approved ? 1 : 2 };
     }
-    if (path === "/api/operator-registration/operator-request") body = { request_id: "operator-request", status: "pending", name: "運営 太郎", phone: "09012345678", line_display_name: "太郎のLINE", staff_id: null, candidates: [] };
+    if (path === "/api/operator-registration/operator-request") body = { request_id: "operator-request", status: "pending", name: "運営 太郎", phone: "09012345678", line_display_name: "太郎のLINE", staff_id: null, candidates: [], login_candidates: [{ id: "free-login", username: "operator1", display_name: "運営本人", staff_id: null }] };
     if (path.endsWith("/operator-request/approve") && method === "POST") { approved = true; body = { status: "approved", staff_id: "operator" }; }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
@@ -80,7 +80,9 @@ test("shared pending inbox identifies both kinds, approves operator and decremen
   const dialog = page.getByRole("dialog", { name: "運営スタッフ登録の内容確認" });
   await expect(dialog.getByText("09012345678", { exact: true })).toBeVisible();
   await page.screenshot({ path: ".work/operator-approval-dialog.png" });
-  await dialog.getByRole("button", { name: "承認", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "IDを紐付けて承認", exact: true })).toBeDisabled();
+  await dialog.getByRole("combobox", { name: "紐付けるログインID" }).selectOption("free-login");
+  await dialog.getByRole("button", { name: "IDを紐付けて承認", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("link", { name: "登録確認待ち 1件", exact: true }).locator(".nav-unread-badge")).toHaveText("1");
   await expect(page.locator("tr").filter({ hasText: "運営 太郎" })).toHaveCount(0);

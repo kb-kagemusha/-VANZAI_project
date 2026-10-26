@@ -13,5 +13,6 @@ export interface OperatorInvitation { request_id: string; expires_at: string; ur
 export interface OperatorRegistrationReview {
   request_id: string; status: string; name: string; phone: string; line_display_name: string;
   staff_id: string | null;
+  login_candidates: { id: string; username: string; display_name: string | null; staff_id: string | null }[];
   candidates: { id: string; name: string; phone: string | null; profile_revision: number }[];
 }

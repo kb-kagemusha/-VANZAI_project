@@ -36,6 +36,7 @@ class Approval(BaseModel):
     model_config = ConfigDict(extra="forbid")
     staff_id: str | None = Field(default=None, max_length=26)
     profile_revision: int | None = Field(default=None, ge=1)
+    user_id: str | None = Field(default=None, min_length=1, max_length=26)
 
 
 class Rejection(BaseModel):
@@ -125,9 +126,24 @@ def review(request_id: str, user: User = Depends(get_current_active_user), db: S
 
 
 @router.post("/api/operator-registration/{request_id}/approve")
-def approve(request_id: str, body: Approval, user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def approve(request_id: str, body: Approval, background_tasks: BackgroundTasks, user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     ensure_admin(user)
-    return run(db, lambda: OperatorRegistrationService(db).approve(request_id, user, body.staff_id, body.profile_revision))
+    result = run(db, lambda: OperatorRegistrationService(db).approve(request_id, user, body.staff_id, body.profile_revision, body.user_id))
+    background_tasks.add_task(sync_approved_menu, result["staff_id"], sessionmaker(bind=db.get_bind()))
+    return result
+
+
+def sync_approved_menu(staff_id, factory):
+    from src.models.operator_staff import LineStaffLink
+    from src.services.line_operator_menu import reconcile
+    with factory() as db:
+        link = db.query(LineStaffLink).filter_by(staff_id=staff_id, status="active").one_or_none()
+        if link:
+            try:
+                reconcile(db, link.line_user_id, force=True)
+                db.commit()
+            except Exception:
+                db.rollback()  # Approval is committed; periodic reconciliation retries.
 
 
 @router.post("/api/operator-registration/{request_id}/reject")
