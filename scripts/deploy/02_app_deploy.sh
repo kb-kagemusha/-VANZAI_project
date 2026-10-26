@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
+    ""|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-republish|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
