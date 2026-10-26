@@ -8,6 +8,7 @@ import { ApiError, changePassword, updateProfile } from "../lib/api/client";
 import { useAuth } from "../lib/auth/auth-context";
 import { formatRole } from "../lib/formatters";
 import { SEAL_COLORS, useSealColor } from "./previewSeal";
+import officialLineQr from "../assets/official-line-registration-qr.png";
 
 export function AccountProfilePage() {
   const { user, logout, refreshUser } = useAuth();
@@ -222,6 +223,13 @@ export function AccountProfilePage() {
           </Link>
         </article>
       ) : null}
+
+      <article className="card" aria-labelledby="official-line-qr-title">
+        <h2 id="official-line-qr-title">公式Line登録用QR</h2>
+        <p className="account-profile-note">公式LINEの友だち追加用QRです。現在は検証用アカウントのQRを掲載しています。</p>
+        <img className="account-line-qr" src={officialLineQr} alt="公式LINEの友だち追加用QRコード（検証用）" width={540} height={540} />
+        <a className="ghost-button account-line-qr-download" href={officialLineQr} download="公式Line登録用QR（検証用）.png">画像をダウンロード</a>
+      </article>
 
       <RegistrationUrlsButton />
 

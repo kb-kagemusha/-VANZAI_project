@@ -1284,6 +1284,18 @@ a.primary-button {
 .account-profile .login-form > button, .account-profile > .ghost-button { justify-self: start; width: auto; }
 .account-profile .account-profile-hero dd { overflow-wrap: anywhere; }
 
+.account-line-qr {
+  display: block;
+  width: min(100%, 270px);
+  height: auto;
+  background: #fff;
+}
+
+.account-line-qr-download {
+  justify-self: start;
+  text-decoration: none;
+}
+
 .account-profile .card {
   display: grid;
   gap: 12px;
