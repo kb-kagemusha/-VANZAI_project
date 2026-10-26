@@ -25,7 +25,7 @@ from src.services.pdf_generator import DEFAULT_FONT
 TEMPLATE_LAYOUT_APPLIED = False
 
 # 保存済みPDFを開いたとき、この印が無いものは作り直す（返事は本文の直後。複数人の氏名は出さない）。
-PDF_LAYOUT_ID = "order-request-branded-v8"
+PDF_LAYOUT_ID = "order-request-branded-v9"
 NEW_HEADING = "【新規発注依頼】"
 CHANGE_HEADING = "【発注依頼の変更】"
 CANCEL_HEADING = "【発注済み依頼のキャンセル】"
@@ -180,10 +180,10 @@ def _document_fields(
     worker_names: list[str],
 ) -> list[tuple[str, str]]:
     # 送付先の氏名はPDFに出さない。1通を複数人へ送ると、他の人の名前が渡る。
-    del worker_names
+    # 取引相手メモは社内管理用。テスト・正式・変更通知のいずれにも出さない。
+    del worker_names, counterparty_note
     extras = [
         ("担当者", contact_name or contact_desk or ""),
-        ("取引相手メモ", counterparty_note or ""),
     ]
     if _is_template(request_conditions, body):
         document_body = body or ""

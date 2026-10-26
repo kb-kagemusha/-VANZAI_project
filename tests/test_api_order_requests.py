@@ -1284,3 +1284,68 @@ def test_address_can_be_cleared_in_draft_but_not_in_confirmed_version(api_client
     confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
     assert confirmed.status_code == 200
     assert api_client.patch(f"/api/order-requests/versions/{version_id}", json={"site_address": None}, headers=_auth(ops_user.username)).status_code == 409
+
+
+@pytest.mark.parametrize("kind", ["test", "formal"])
+@pytest.mark.parametrize("template", [False, True])
+@pytest.mark.parametrize("notice", ["new", "change", "cancel"])
+def test_pdf_never_includes_internal_counterparty_note(kind, template, notice, monkeypatch):
+    from src.services import order_request_pdf as pdf_module
+
+    captured = []
+    original = pdf_module._field_table
+
+    def capture(fields, *args, **kwargs):
+        captured.extend(fields)
+        return original(fields, *args, **kwargs)
+
+    monkeypatch.setattr(pdf_module, "_field_table", capture)
+    payload = pdf_module.render_order_request_pdf(
+        document_number="OR-PRIVATE", version_no=1, kind=kind,
+        work_date_label="2026-10-27", site_name="現場", site_address=None,
+        request_conditions='{"format":"additional-request-v1"}' if template else "9時集合",
+        body="【追加案件依頼】\n■案件名\n公開する案件\n■内容\n公開する依頼内容" if template else "公開する依頼内容",
+        contact_name="担当者", contact_desk="", worker_names=[],
+        counterparty_note="INTERNAL-SECRET-CURRENT",
+        previous_counterparty_note="INTERNAL-SECRET-PREVIOUS", notice=notice,
+    )
+    assert payload.startswith(b"%PDF")
+    assert "取引相手メモ" not in [caption for caption, _ in captured]
+    assert "INTERNAL-SECRET" not in str(captured)
+    assert "公開する依頼内容" in str(captured)
+    assert ("担当者", "担当者") in captured
+
+
+def test_stored_pdf_with_old_layout_is_regenerated_without_changing_version(
+    api_client, db_session, ops_user, pdf_root, monkeypatch,
+):
+    from src.services.order_request_pdf import PDF_LAYOUT_ID
+    from src.services.order_request_service import OrderRequestService
+
+    note = "INTERNAL-SECRET-SAVED"
+    worker = _worker(db_session, "稼働者A")
+    created = api_client.post(
+        "/api/order-requests", json=_body([worker.id], counterparty_note=note),
+        headers=_auth(ops_user.username),
+    )
+    assert created.status_code == 200, created.text
+    version_id = created.json()["id"]
+    confirmed = api_client.post(
+        f"/api/order-requests/versions/{version_id}/confirm",
+        headers=_auth(ops_user.username),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    version = db_session.get(OrderRequestVersion, version_id)
+    storage = DocumentStorage(pdf_root)
+    # Old PDFs already have an embedded font, so the layout identifier must change.
+    storage.save_bytes(version.pdf_object_key, b"%PDF IPAexGothic order-request-branded-v8 INTERNAL-SECRET-SAVED")
+    before = (version.version_no, version.status, version.snapshot_json, version.counterparty_note)
+    service = OrderRequestService(db_session, storage)
+    current = service.read_pdf(version)
+    assert PDF_LAYOUT_ID == "order-request-branded-v9"
+    assert PDF_LAYOUT_ID.encode("ascii") in current
+    assert storage.read_bytes(version.pdf_object_key) == current
+    assert (version.version_no, version.status, version.snapshot_json, version.counterparty_note) == before
+    assert version.counterparty_note == note
+    monkeypatch.setattr(service, "_render_stored_pdf", lambda _: pytest.fail("Current PDF should be reused"))
+    assert service.read_pdf(version) == current
