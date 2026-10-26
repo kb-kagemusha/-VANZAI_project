@@ -61,7 +61,7 @@ export function AccessManagementPage() {
         {key: "name", header: "表示名", render: row => row.display_name ?? "—"},
         {key: "email", header: "メール", render: row => row.email},
         {key: "role", header: "役割", render: row => row.role_name || formatRole(row.role)},
-        {key: "status", header: "状態", render: row => row.is_active ? "有効" : "無効"},
+        {key: "status", header: "状態", render: row => <span className={`access-status ${row.is_active ? "access-status--active" : "access-status--inactive"}`}>{row.is_active ? "有効" : "無効"}</span>},
         {key: "edit", header: "操作", render: row => <button onClick={() => {setError(""); setEditing(row); setEditRole(row.role); setActive(row.is_active);}}>権限・状態を変更</button>},
       ]} rows={users.data?.items ?? []} getRowKey={row => row.id} emptyTitle="IDがありません" emptyDescription="新しいIDを作成するか、検索条件を変更してください。" />}
       <div className="record-list-actions"><button disabled={page === 0} onClick={() => setPage(page - 1)}>前へ</button><span>{page + 1}ページ / 全{users.data?.total ?? 0}件</span><button disabled={(page + 1) * 50 >= (users.data?.total ?? 0)} onClick={() => setPage(page + 1)}>次へ</button></div>

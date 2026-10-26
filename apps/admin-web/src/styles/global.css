@@ -5571,6 +5571,11 @@ html[data-theme="dark"] .order-line-banner {
 .master-address-help { margin: 0; font-size: .85rem; color: var(--muted); }
 
 .access-form { padding: 1.25rem; display: grid; gap: 1rem; }
+.access-status { font-weight: 600; }
+.access-status--active { color: #2563eb; }
+.access-status--inactive { color: #dc2626; }
+[data-theme="dark"] .access-status--active { color: #60a5fa; }
+[data-theme="dark"] .access-status--inactive { color: #f87171; }
 .access-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
 .access-form label { display: grid; gap: .4rem; }
 .access-permissions { border: 1px solid var(--color-border, #cbd5e1); border-radius: .6rem; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
