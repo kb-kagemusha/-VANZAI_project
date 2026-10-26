@@ -50,7 +50,7 @@ export function LineRegistrationReviewModal({ requestId, onClose }: { requestId:
 
   return createPortal(
     <div className="order-create-backdrop">
-      <div className="order-draft is-modal worker-profile-modal" role="dialog" aria-modal="true"
+      <div className="order-draft is-modal worker-profile-modal line-registration-review-modal" role="dialog" aria-modal="true"
         aria-labelledby="line-registration-review-title" tabIndex={-1} ref={dialogRef}>
         <header className="order-draft-head">
           <div className="order-draft-head-lead">

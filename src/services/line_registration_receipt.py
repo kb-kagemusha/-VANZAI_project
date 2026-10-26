@@ -6,6 +6,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
 
 from src.models.line_registration import LineRegistrationContext, LineRegistrationReceipt
+from src.models.operator_registration import OperatorRegistrationDetail
+from src.models.master import RegistrationRequest
 from src.services.audit import AuditService
 from src.services.line_messaging import build_line_client, LineNotConfigured
 
@@ -38,13 +40,19 @@ class LineRegistrationReceiptService:
             self._audit(receipt, "expired")
             return
         context = self.session.scalar(select(LineRegistrationContext).where(LineRegistrationContext.request_id == request_id))
+        recipient = context.line_user_id if context else None
         if context is None:
+            request = self.session.get(RegistrationRequest, request_id)
+            operator = self.session.get(OperatorRegistrationDetail, request_id)
+            if request and request.request_type == "operator_staff" and request.source_type == "line_operator" and request.deleted_at is None and operator and operator.revoked_at is None:
+                recipient = operator.line_user_id
+        if not recipient:
             receipt.status = "failed"
             self._audit(receipt, "missing_context")
             return
         receipt.attempt_count += 1
         try:
-            result = self.client.push_receipt(context.line_user_id, receipt.message_text, receipt.retry_key)
+            result = self.client.push_receipt(recipient, receipt.message_text, receipt.retry_key)
             receipt.last_http_status = result.status
             accepted = 200 <= result.status < 300 or (result.status == 409 and bool(result.accepted_request_id))
             retryable = result.status == 0 or result.status >= 500

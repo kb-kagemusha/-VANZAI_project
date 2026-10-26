@@ -1,8 +1,8 @@
 """Operator invitation administration and verified LINE application."""
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from src.api.deps import get_db
 from src.api.jwt_auth import get_current_active_user
 from src.api.operator_staff_routes import ensure_admin
@@ -14,6 +14,7 @@ from src.models.operator_registration import OperatorRegistrationDetail
 from src.services.line_id_token import verify_id_token, LineIdTokenError
 from src.services.line_messaging import build_line_client
 from src.services.operator_registration import OperatorRegistrationService
+from src.services.line_registration_receipt import dispatch_registration_receipt
 from src.services.order_request_service import OrderRequestError
 
 def no_store(response: Response):
@@ -62,7 +63,7 @@ def entry(response: Response):
 
 
 @router.post("/api/line/operator-registration/submissions")
-def submit(body: Submit, response: Response, db: Session = Depends(get_db)):
+def submit(body: Submit, response: Response, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = "no-store"
     if not operator_entry()["enabled"]:
         raise HTTPException(403, "運営スタッフのLINE登録は準備中です")
@@ -77,7 +78,15 @@ def submit(body: Submit, response: Response, db: Session = Depends(get_db)):
         if len(subject) > 64:
             raise OrderRequestError(401, "本人確認に失敗しました")
         return service.submit(body.invite, subject, body.name, body.phone, build_line_client())
-    return run(db, action)
+    try:
+        result = run(db, action)
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "申請を確定できませんでした。") from None
+    background_tasks.add_task(dispatch_registration_receipt, result["request_id"], sessionmaker(bind=db.get_bind()))
+    return result
 
 
 @router.get("/api/operator-registration/settings")

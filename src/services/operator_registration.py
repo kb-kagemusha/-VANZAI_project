@@ -4,11 +4,13 @@ import re
 import secrets
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 from sqlalchemy import select, text, or_
 from src.models.base import generate_ulid
 from src.models.master import RegistrationRequest, VanzaiStaff
 from src.models.operator_staff import LineStaffLink
 from src.models.operator_registration import OperatorRegistrationDetail
+from src.models.line_registration import LineRegistrationReceipt
 from src.services.audit import AuditService
 from src.services.order_request_service import OrderRequestError
 from src.domain.line_operator_config import operator_entry
@@ -95,6 +97,11 @@ class OperatorRegistrationService:
         detail.name, detail.phone, detail.line_user_id, detail.line_display_name = name, phone, subject, profile_name
         detail.is_open = True
         row.status, row.submitted_at = "pending", now()
+        self.db.add(LineRegistrationReceipt(
+            request_id=row.id, retry_key=str(uuid4()),
+            message_text="運営登録の申請を受け付けました", status="pending",
+            attempt_count=0, next_attempt_at=now(),
+        ))
         self.log("operator_registration_submitted", row, "line-operator")
         self.db.flush()
         return {"request_id": row.id, "status": row.status}

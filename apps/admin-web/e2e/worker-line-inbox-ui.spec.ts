@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 1366, height: 900 } });
 
-async function setupInbox(page: Page, options: { role?: string; listError?: boolean; conflict?: boolean; missingProfile?: boolean; profileError?: boolean; workersPage?: boolean } = {}) {
+async function setupInbox(page: Page, options: { role?: string; listError?: boolean; conflict?: boolean; missingProfile?: boolean; profileError?: boolean; workersPage?: boolean; existing?: boolean } = {}) {
   let approved = false;
   let profileName: string | null = null;
   const calls: string[] = [];
@@ -38,7 +38,10 @@ async function setupInbox(page: Page, options: { role?: string; listError?: bool
         return respond({ request_id: "test-request", status: "approved", worker_id: "test-worker" });
       }
       const chosen = path.endsWith("/choice");
-      return respond({ request_id: "test-request", status: approved ? "approved" : "pending", mode: chosen || approved ? "create_new" : "choose", can_decide: chosen && !approved, comparison_ticket: chosen ? "review-ticket" : null, before: {}, after: { name: "酒井 サンプル" }, components: { last_name: "酒井", first_name: "サンプル" }, candidates: [] });
+      return respond({ request_id: "test-request", status: approved ? "approved" : "pending", mode: chosen || approved ? options.existing ? "existing" : "create_new" : "choose", can_decide: chosen && !approved, comparison_ticket: chosen ? "review-ticket" : null,
+        before: options.existing ? { name: "酒井 サンプル", phone: "09011110000" } : {}, after: { name: "酒井 サンプル", phone: "09011112222", email: "worker@example.test" },
+        components: { last_name: "酒井", first_name: "サンプル", last_name_furigana: "さかい", first_name_furigana: "さんぷる", birth_date: "1990-01-20", phone: "09011112222", email: "worker@example.test", postal_code: "1000001", prefecture: "東京都", address1: "試験市1-2-3", nearest_station: "試験駅", station_walk_minutes: "10", emergency_contact_name: "試験 家族", emergency_contact_phone: "09099990000", emergency_contact_relationship: "家族" },
+        candidates: options.existing ? [{ worker_id: "existing-worker", name: "酒井 サンプル", phone: "09011110000", match_reasons: ["氏名一致"] }] : [] });
     }
     if (path === "/api/workers") {
       calls.push(`workers:${approved}`);
@@ -65,10 +68,10 @@ test("LINE request appears before approval and moves to workers without a page r
   const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute("aria-modal", "true");
-  await dialog.getByRole("button", { name: "新規の稼働者として比較する" }).click();
-  await expect(dialog.getByText("変更後: 酒井 サンプル")).toBeVisible();
+  await dialog.getByRole("button", { name: "新規登録へ進む" }).click();
+  await expect(dialog.getByText("酒井 サンプル")).toBeVisible();
   await page.screenshot({ path: "../../artifacts/worker-line-review-modal.png", fullPage: false });
-  await dialog.getByRole("button", { name: "承認", exact: true }).click();
+  await dialog.getByRole("button", { name: "承認して新規登録", exact: true }).click();
   await expect(page.getByRole("heading", { name: "登録・確認待ち（0件）" })).toBeVisible();
   await expect(page.getByText("この申請の審査は終わっています。")).toBeVisible();
   await expect(page.getByRole("link", { name: "登録確認待ち 0件", exact: true }).locator(".nav-unread-badge")).toHaveCount(0);
@@ -84,8 +87,8 @@ test("LINE request appears before approval and moves to workers without a page r
 test("conflicting approval keeps the request pending and does not create a worker", async ({ page }) => {
   const calls = await setupInbox(page, { conflict: true });
   await page.getByRole("button", { name: "内容を確認・反映" }).click();
-  await page.getByRole("button", { name: "新規の稼働者として比較する" }).click();
-  await page.getByRole("button", { name: "承認", exact: true }).click();
+  await page.getByRole("button", { name: "新規登録へ進む" }).click();
+  await page.getByRole("button", { name: "承認して新規登録", exact: true }).click();
   await expect(page.getByText("内容が変わりました。最新の内容を読み込んでください。")).toBeVisible();
   await expect(page.getByRole("heading", { name: "登録・確認待ち（1件）" })).toBeVisible();
   expect(calls).not.toContain("workers:true");
@@ -111,7 +114,7 @@ test("review popup closes with Escape and returns keyboard focus", async ({ page
   await opener.click();
   const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
   await expect(dialog).toBeFocused();
-  await expect(dialog.getByRole("button", { name: "新規の稼働者として比較する" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "新規登録へ進む" })).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(dialog.getByRole("button", { name: "閉じる", exact: true })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -209,4 +212,43 @@ test("users without registration permission cannot see the inbox or fetch its co
   await page.goto("/masters/registration-pending");
   await expect(page).toHaveURL(/\/403$/);
   expect(registrationCalls).toBe(0);
+});
+
+test("worker review groups readable fields and makes new registration the primary action on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setupInbox(page);
+  await page.getByRole("button", { name: "内容を確認・反映" }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  for (const group of ["お名前・生年月日", "連絡先", "住所", "最寄り駅", "緊急連絡先"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
+  const create = dialog.getByRole("button", { name: "新規登録へ進む", exact: true });
+  await expect(create).toHaveClass(/create-button/);
+  await expect(create).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(dialog.getByRole("button", { name: "承認して新規登録", exact: true })).toHaveCount(0);
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.width).toBeLessThanOrEqual(390);
+  expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: ".work/worker-review-mobile.png" });
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await expect(create).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(dialog).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await page.screenshot({ path: ".work/worker-review-mobile-dark.png" });
+  await create.click();
+  await expect(dialog.getByRole("heading", { name: "2. 新規登録する内容を確認", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "承認して新規登録", exact: true })).toBeEnabled();
+});
+
+test("existing worker comparison keeps before and after side by side and highlights changed values", async ({ page }) => {
+  await setupInbox(page, { existing: true });
+  await page.getByRole("button", { name: "内容を確認・反映" }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await dialog.getByRole("button", { name: "この稼働者を選ぶ", exact: true }).click();
+  const contact = dialog.locator("section.line-review-group").filter({ has: page.getByRole("heading", { name: "連絡先", exact: true }) });
+  await expect(contact.getByRole("columnheader", { name: "現在の登録", exact: true })).toBeVisible();
+  await expect(contact.getByRole("columnheader", { name: "申請後", exact: true })).toBeVisible();
+  const phone = contact.locator("tr").filter({ hasText: "電話" });
+  await expect(phone).toHaveClass(/is-changed/);
+  await expect(phone).toContainText("09011110000");
+  await expect(phone).toContainText("09011112222");
+  await expect(dialog.getByRole("button", { name: "承認して更新", exact: true })).toBeEnabled();
+  await page.screenshot({ path: ".work/worker-review-comparison.png" });
 });

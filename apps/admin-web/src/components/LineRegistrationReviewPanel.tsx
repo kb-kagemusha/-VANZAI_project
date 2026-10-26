@@ -47,6 +47,22 @@ const COMPONENT_LABELS: Record<string, string> = {
   emergency_contact_relationship: "ご本人との関係",
 };
 
+const INPUT_GROUPS = [
+  { title: "お名前・生年月日", fields: ["last_name", "first_name", "last_name_furigana", "first_name_furigana", "birth_date"] },
+  { title: "連絡先", fields: ["phone", "email"] },
+  { title: "住所", fields: ["postal_code", "prefecture", "address1", "address2"] },
+  { title: "最寄り駅", fields: ["nearest_station", "station_walk_minutes", "additional_stations"] },
+  { title: "緊急連絡先", fields: ["emergency_contact_name", "emergency_contact_phone", "emergency_contact_relationship"] },
+];
+
+const RESULT_GROUPS = [
+  { title: "お名前・生年月日", fields: ["name", "furigana", "birth_date"] },
+  { title: "連絡先", fields: ["phone", "email"] },
+  { title: "住所", fields: ["postal_code", "address"] },
+  { title: "最寄り駅", fields: ["nearest_station", "station_walk_minutes", "additional_stations"] },
+  { title: "緊急連絡先", fields: ["emergency_contact_name", "emergency_contact_phone", "emergency_contact_relationship"] },
+];
+
 function show(value: string, field?: string) {
   return field === "additional_stations" ? showAdditionalStations(value) : value || "（空）";
 }
@@ -154,130 +170,70 @@ export function LineRegistrationReviewPanel({
     },
   });
 
-  return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
-      <h4 style={{ margin: 0 }}>LINE登録の審査</h4>
-      <p style={{ margin: 0 }}>{targetSentence(shown)}</p>
-      {shown.blocked_reason && shown.mode !== "choose" ? <p style={{ margin: 0 }}>{shown.blocked_reason}</p> : null}
-      {shown.mode === "choose" || shown.mode === "create_new" || shown.mode === "existing" ? (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="氏名・ふりがな・電話で探す"
-              aria-label="既存の稼働者を検索"
-            />
-            <button type="button" className="btn btn-ghost" disabled={search.isPending} onClick={() => search.mutate()}>
-              検索
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={choose.isPending || !pending}
-              onClick={() => choose.mutate({ decision: "create_new" })}
-            >
-              新規の稼働者として比較する
-            </button>
-          </div>
-          {candidates.length === 0 ? (
-            <p style={{ margin: 0 }}>一致する稼働者はいません。新規として作る場合は、新規作成を選んでください。</p>
-          ) : (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              {candidates.map((candidate) => (
-                <div
-                  key={candidate.worker_id}
-                  style={{
-                    display: "flex",
-                    gap: "0.75rem",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "0.75rem",
-                    border: "1px solid var(--color-border-subtle, #d0d5dd)",
-                    borderRadius: "0.5rem",
-                  }}
-                >
-                  <span>
-                    {candidate.name}
-                    {candidate.phone ? ` / ${candidate.phone}` : ""}（{candidate.match_reasons.join("・")}）
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={choose.isPending || !pending}
-                    onClick={() => choose.mutate({ decision: "existing", worker_id: candidate.worker_id })}
-                  >
-                    この稼働者で比較する
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+  const busy = choose.isPending || approve.isPending || reject.isPending;
+  const creating = shown.mode === "create_new";
+  const selecting = shown.mode === "choose";
+  const groups = selecting ? INPUT_GROUPS : RESULT_GROUPS;
+  const labels = selecting ? COMPONENT_LABELS : FIELD_LABELS;
+  const values = selecting ? shown.components : shown.after;
+
+  return <div className="line-review">
+    <section className="line-review-target" aria-labelledby="line-review-target-title">
+      <h4 id="line-review-target-title">1. 登録方法・反映先</h4>
+      <p>{targetSentence(shown)}</p>
+      {shown.blocked_reason && !selecting ? <p className="line-review-warning">{shown.blocked_reason}</p> : null}
+      {["choose", "create_new", "existing"].includes(shown.mode) && pending ? <div className="line-review-options">
+        <div className={`line-review-option${creating ? " is-selected" : ""}`}>
+          <strong>初めて登録する方</strong>
+          <p>新しい稼働者として登録します。次に内容を確認して承認してください。</p>
+          <button type="button" className="btn btn-primary create-button" disabled={busy} onClick={() => choose.mutate({ decision: "create_new" })}>
+            {choose.isPending ? "内容を確認中..." : "新規登録へ進む"}
+          </button>
+          {creating ? <span className="line-review-selection">新規登録を選択中</span> : null}
         </div>
-      ) : null}
-      {shown.mode !== "choose" ? (
-        <div style={{ display: "grid", gap: "0.5rem" }}>
-          {Object.keys(FIELD_LABELS).map((field) => (
-            <div
-              key={field}
-              style={{
-                display: "grid",
-                gap: "0.2rem",
-                padding: "0.75rem",
-                border: "1px solid var(--color-border-subtle, #d0d5dd)",
-                borderRadius: "0.5rem",
-              }}
-            >
-              <strong>{FIELD_LABELS[field]}</strong>
-              <span>変更前: {show(shown.before[field] || "", field)}</span>
-              <span>変更後: {show(shown.after[field] || "", field)}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <div style={{ display: "grid", gap: "0.35rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-        {Object.keys(COMPONENT_LABELS).map((field) => (
-          <div key={field}>
-            {COMPONENT_LABELS[field]}: {show(shown.components[field] || "", field)}
+        <div className="line-review-option">
+          <strong>すでに登録されている方</strong>
+          <p>登録済みの稼働者を探し、更新先を選びます。</p>
+          <div className="line-review-search">
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="氏名・ふりがな・電話で探す" aria-label="既存の稼働者を検索" />
+            <button type="button" className="btn btn-ghost line-review-existing" disabled={search.isPending || busy} onClick={() => search.mutate()}>検索</button>
           </div>
-        ))}
+          {candidates.length === 0 ? <p className="line-review-note">一致する稼働者はいません。初めての方は「新規登録へ進む」を選んでください。</p> : <div className="line-review-candidates">
+            {candidates.map((candidate) => <div key={candidate.worker_id} className="line-review-candidate">
+              <span><strong>{candidate.name}</strong>{candidate.phone ? `／${candidate.phone}` : ""}<small>{candidate.match_reasons.join("・")}</small></span>
+              <button type="button" className="btn btn-ghost line-review-existing" disabled={busy} onClick={() => choose.mutate({ decision: "existing", worker_id: candidate.worker_id })}>この稼働者を選ぶ</button>
+            </div>)}
+          </div>}
+        </div>
+      </div> : null}
+    </section>
+
+    <section className="line-review-content" aria-labelledby="line-review-content-title">
+      <h4 id="line-review-content-title">2. {selecting ? "届いた申請内容" : creating ? "新規登録する内容を確認" : "変更内容を確認"}</h4>
+      {!selecting && !creating ? <p className="line-review-note">色の付いた行が変更される項目です。現在の登録と申請後の内容を確認してください。</p> : null}
+      <div className="line-review-groups">
+        {groups.map((group) => <section className="line-review-group" key={group.title}>
+          <h5>{group.title}</h5>
+          {selecting || creating ? <dl>{group.fields.map((field) => <div key={field}><dt>{labels[field]}</dt><dd>{show(values[field] || "", field)}</dd></div>)}</dl> : <table>
+            <thead><tr><th>項目</th><th>現在の登録</th><th>申請後</th></tr></thead>
+            <tbody>{group.fields.map((field) => <tr key={field} className={(shown.before[field] || "") !== (shown.after[field] || "") ? "is-changed" : undefined}>
+              <th scope="row">{labels[field]}</th><td>{show(shown.before[field] || "", field)}</td><td>{show(shown.after[field] || "", field)}</td>
+            </tr>)}</tbody>
+          </table>}
+        </section>)}
       </div>
-      {message ? <p style={{ margin: 0 }}>{message}</p> : null}
-      {error ? <p style={{ margin: 0 }}>{error}</p> : null}
-      <div>
-        <button type="button" className="btn btn-ghost" onClick={onReload}>
-          最新の内容を読み込む
-        </button>
+    </section>
+    {message ? <p className="line-review-success" role="status">{message}</p> : null}
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+    <div><button type="button" className="btn btn-ghost" disabled={busy} onClick={onReload}>最新の内容を読み込む</button></div>
+    {pending ? <section className="line-review-actions">
+      <div>{shown.can_decide ? <>
+        <p>{creating ? "承認すると、新しい稼働者とLINEの紐付けを作成します。" : "承認すると、選択した稼働者へ内容を反映します。"}</p>
+        <button type="button" className="btn btn-primary create-button" disabled={!shown.comparison_ticket || busy} onClick={() => approve.mutate()}>{approve.isPending ? "承認中..." : creating ? "承認して新規登録" : "承認して更新"}</button>
+      </> : <p>新規登録または既存の稼働者を選ぶと、承認へ進めます。</p>}</div>
+      <div className="line-review-reject"><label>却下する場合の理由<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="却下理由" disabled={busy} /></label>
+        <button type="button" className="btn btn-ghost line-review-reject-button" disabled={!reason.trim() || busy} onClick={() => reject.mutate()}>却下</button>
       </div>
-      {pending ? (
-        <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-          {shown.can_decide ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!shown.comparison_ticket || approve.isPending}
-              onClick={() => approve.mutate()}
-            >
-              承認
-            </button>
-          ) : (
-            <p style={{ margin: 0 }}>承認できる反映先が決まっていません。</p>
-          )}
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="却下理由" />
-            <button
-              type="button"
-              className="btn btn-danger"
-              disabled={reason.trim().length === 0 || reject.isPending}
-              onClick={() => reject.mutate()}
-            >
-              却下
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p style={{ margin: 0 }}>この申請の審査は終わっています。</p>
-      )}
-    </div>
-  );
+    </section> : <p>この申請の審査は終わっています。</p>}
+  </div>;
 }
