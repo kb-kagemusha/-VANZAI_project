@@ -5813,6 +5813,8 @@ html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbod
 .operator-profile-dialog .operator-active-check { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
 .operator-profile-dialog .operator-active-check input { width: auto; margin: 0; }
 .operator-profile-dialog .operator-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.operator-profile-dialog .operator-profile-save-actions { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+.operator-profile-dialog .operator-profile-save-actions > p { margin: 0; }
 .operator-profile-dialog .btn { width: auto; max-width: 100%; flex: 0 0 auto; justify-self: start; }
 .operator-profile-dialog .operator-save-button { min-width: 96px; background: #2563eb; border-color: #2563eb; color: white; }
 .operator-profile-dialog .operator-save-button:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }

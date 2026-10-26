@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "../components/DataTable";
 import { ErrorState } from "../components/ErrorState";
@@ -19,6 +19,7 @@ function toForm(item: OperatorStaffItem): OperatorStaffWrite {
 }
 
 export function OperatorStaffPage() {
+  const profileFormId = useId();
   const client = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -66,7 +67,7 @@ export function OperatorStaffPage() {
       { key: "edit", header: "操作", render: (row) => <button type="button" className="btn btn-ghost" onClick={() => edit(row)}>内容確認・更新</button> },
     ]} /><PaginationBar page={page} total={list.data.total} limit={30} onPrevious={() => setPage(page - 1)} onNext={() => setPage(page + 1)} /></>}
     {open && <ProfileDialog title={selected ? "運営スタッフの内容確認・更新" : "運営スタッフ登録"} className="operator-profile-dialog" onClose={() => void close()}>
-      <form onSubmit={(e) => { e.preventDefault(); setError(""); save.mutate(); }}>
+      <form id={profileFormId} onSubmit={(e) => { e.preventDefault(); setError(""); save.mutate(); }}>
         <fieldset className="operator-profile-fields" disabled={save.isPending}>
           <legend>登録情報</legend><div className="operator-profile-grid">{field("name", "氏名")}{field("phone", "電話番号", "tel")}{field("email", "メールアドレス", "email")}
           <label className="order-field">運転可否<select value={form.can_drive == null ? "" : String(form.can_drive)} onChange={(e) => setForm({ ...form, can_drive: e.target.value === "" ? null : e.target.value === "true" })}><option value="">未確認</option><option value="true">運転可</option><option value="false">運転不可</option></select></label>
@@ -75,16 +76,18 @@ export function OperatorStaffPage() {
           <fieldset><legend>付与ロール</legend><div className="operator-role-options">{MANAGEMENT_ROLES.map((role) => <label key={role}><input type="checkbox" checked={form.management_roles.includes(role)} onChange={(e) => setForm({ ...form, management_roles: e.target.checked ? [...form.management_roles, role] : form.management_roles.filter((r) => r !== role) })} />{role}</label>)}</div><p className="order-field-hint">ロールを付与・保存します。画面の表示項目や操作権限への反映は、今後対応します。</p></fieldset>
           <label className="order-field">備考<textarea rows={2} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value || null })} /></label>
           <label className="operator-active-check"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />有効</label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="operator-form-actions"><button type="submit" className={`btn btn-primary operator-save-button${selected ? "" : " create-button"}`}>{save.isPending ? "保存中..." : selected ? "更新" : "登録"}</button>
-          {selected && form.profile_revision !== current?.profile_revision && <button type="button" className="btn btn-ghost" onClick={() => current && edit(current)}>最新の内容を読み込む</button>}
-          </div>
         </fieldset>
       </form>
       {selected && <div className="operator-account-panels"><section className="order-draft-section operator-account-card"><h4>公式LINEの本人紐付け</h4><p>運営に関する連絡の送付先です。本人が公式LINEへコードを送ると紐付けが完了します。</p>
         {current?.line_linked ? <><p>LINE表示名：{current.line_display_name || "未取得"}</p><button type="button" className="btn btn-ghost operator-unlink-button" disabled={unlink.isPending} onClick={async () => { const reason = await promptApp({ title: "LINE紐付け解除", message: "解除すると運営の連絡を受け取れなくなります。解除理由を入力してください。", confirmLabel: "解除" }); if (reason?.trim()) unlink.mutate(reason.trim()); }}>紐付けを解除</button></> : <button type="button" className="btn btn-ghost operator-code-button" disabled={issue.isPending || !current?.is_active} onClick={() => issue.mutate()}>LINE紐付けコードを発行</button>}
         {code && !current?.line_linked && <div className="surface"><strong>{code.code}</strong><p>{code.instruction}</p><p>期限：{new Date(code.expires_at).toLocaleString("ja-JP")}</p></div>}
       </section><OperatorAccessPanel staffId={selected.id} /></div>}
+      <div className="operator-profile-save-actions">
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="operator-form-actions"><button type="submit" form={profileFormId} disabled={save.isPending} className={`btn btn-primary operator-save-button${selected ? "" : " create-button"}`}>{save.isPending ? "保存中..." : selected ? "更新して保存" : "登録して保存"}</button>
+          {selected && form.profile_revision !== current?.profile_revision && <button type="button" className="btn btn-ghost" disabled={save.isPending} onClick={() => current && edit(current)}>最新の内容を読み込む</button>}
+        </div>
+      </div>
     </ProfileDialog>}
   </div>;
 }
