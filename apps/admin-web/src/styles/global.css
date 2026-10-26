@@ -5798,3 +5798,38 @@ html[data-theme="dark"] .order-list-frame .order-list-table > .data-table > tbod
 .order-billing-filters > .order-billing-search { flex: 1 1 20rem; max-width: 32rem; }
 .order-billing-filters input:not([type="checkbox"]), .order-billing-filters select, .order-billing-filters > button { height: var(--billing-filter-height); box-sizing: border-box; }
 .order-billing-filters > button { padding-block: 0; }
+
+/* Operator profile: compact actions and grouped LINE settings (DEC-121). */
+.operator-profile-dialog.worker-profile-modal.order-draft.is-modal { width: min(900px, 100%); height: auto; max-height: calc(100dvh - 40px); grid-template-rows: auto minmax(0, 1fr); }
+.operator-profile-dialog .order-draft-head { padding: 16px 20px; }
+.operator-profile-dialog .order-draft-head h3 { font-size: 1.2rem; }
+.operator-profile-dialog .order-draft-body { padding: 20px; gap: 16px; align-content: start; }
+.operator-profile-dialog .operator-profile-fields { padding: 0; gap: 12px; margin: 0; align-content: start; }
+.operator-profile-dialog .operator-profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
+.operator-profile-dialog .operator-profile-fields > fieldset { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.operator-profile-dialog .operator-role-options { gap: 8px 16px; padding: 4px 0; }
+.operator-profile-dialog .order-field-hint { margin: 6px 0 0; }
+.operator-profile-dialog textarea { min-height: 72px; resize: vertical; }
+.operator-profile-dialog .operator-active-check { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+.operator-profile-dialog .operator-active-check input { width: auto; margin: 0; }
+.operator-profile-dialog .operator-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.operator-profile-dialog .btn { width: auto; max-width: 100%; flex: 0 0 auto; justify-self: start; }
+.operator-profile-dialog .operator-save-button { min-width: 96px; background: #2563eb; border-color: #2563eb; color: white; }
+.operator-profile-dialog .operator-save-button:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+.operator-account-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.operator-profile-dialog .operator-account-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 16px; gap: 12px; align-content: start; min-width: 0; }
+.operator-profile-dialog .operator-account-card h4, .operator-profile-dialog .operator-account-card p { margin: 0; }
+.operator-profile-dialog .operator-account-card p { line-height: 1.6; font-size: .9rem; overflow-wrap: anywhere; }
+.operator-profile-dialog .operator-account-card select { width: 100%; min-width: 0; }
+.operator-profile-dialog .operator-unlink-button { border-color: #bc4b42; color: #a63730; }
+.operator-profile-dialog .operator-code-button { border-color: #287d80; color: #20676a; }
+.operator-profile-dialog .operator-access-save { border-color: #8660af; color: #77439b; }
+.operator-profile-dialog .operator-menu-sync { border-color: #ac7328; color: #915e1d; }
+html[data-theme="dark"] .operator-profile-dialog .operator-save-button { background: #2563eb; border-color: #2563eb; color: #fff; }
+html[data-theme="dark"] .operator-profile-dialog .operator-save-button:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+html[data-theme="dark"] .operator-profile-dialog .operator-unlink-button { border-color: #e3877f; color: #f3a39d; }
+html[data-theme="dark"] .operator-profile-dialog .operator-code-button { border-color: #6ac1c5; color: #9ad9dc; }
+html[data-theme="dark"] .operator-profile-dialog .operator-access-save { border-color: #b294d7; color: #d1b7ee; }
+html[data-theme="dark"] .operator-profile-dialog .operator-menu-sync { border-color: #d4aa66; color: #ebc68a; }
+@media (max-width: 760px) { .operator-profile-dialog .operator-profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .operator-account-panels { grid-template-columns: 1fr; } }
+@media (max-width: 540px) { .operator-profile-dialog .order-draft-head, .operator-profile-dialog .order-draft-body { padding: 14px; } .operator-profile-dialog .operator-profile-grid { grid-template-columns: 1fr; } }
