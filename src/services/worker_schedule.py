@@ -364,6 +364,8 @@ def day_start_time(version: OrderRequestVersion, day: str) -> str | None:
 
 def participation_sources(session: Session, series_id: str, worker_id: str) -> list[tuple]:
     """現在の適用受諾と終了時点で固定した過去分。派生予定や現在時刻は参照しない。"""
+    from src.models.staffing_replacement import StaffingVacancy
+    vacant_days = {v.work_date.isoformat() for v in session.query(StaffingVacancy).filter(StaffingVacancy.source_series_id == series_id, StaffingVacancy.worker_id == worker_id, StaffingVacancy.status != "cancelled")}
     sources = []
     frozen_days = set()
     for ending in session.query(OrderRequestApplicationEnd).filter_by(series_id=series_id, worker_id=worker_id).order_by(OrderRequestApplicationEnd.ended_at, OrderRequestApplicationEnd.id):
@@ -372,7 +374,7 @@ def participation_sources(session: Session, series_id: str, worker_id: str) -> l
         document = session.get(OrderRequestDocument, version.document_id)
         if document.deleted_at is not None:
             continue
-        dates = set(ending.retained_dates) - frozen_days
+        dates = set(ending.retained_dates) - frozen_days - vacant_days
         frozen_days.update(dates)
         if dates:
             sources.append((delivery, dates, ENTRY_ACTIVE, ending.source_state_id))
@@ -384,7 +386,7 @@ def participation_sources(session: Session, series_id: str, worker_id: str) -> l
         state = current_state(session, delivery)
         series = session.get(OrderRequestSeries, series_id)
         if document.deleted_at is None and state is not None:
-            dates = set(state.dates) - frozen_days
+            dates = set(state.dates) - frozen_days - vacant_days
             status = ENTRY_ACTIVE if series and series.answerable_version_id == version.id else ENTRY_CHANGING
             if dates:
                 sources.append((delivery, dates, status, state.id))
@@ -415,6 +417,8 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
             applied = None
 
     expected: dict[tuple, dict] = {}
+    from src.models.staffing_replacement import StaffingVacancy
+    vacancy_days = {v.work_date for v in session.query(StaffingVacancy).filter(StaffingVacancy.source_series_id == series_id,StaffingVacancy.worker_id == worker_id,StaffingVacancy.status != "cancelled")}
     applied_state = current_state(session, applied) if applied is not None else None
     for source, participating, status, state_id in participation_sources(session, series_id, worker_id):
         version = session.get(OrderRequestVersion, source.version_id)
@@ -486,7 +490,9 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
             continue
         row_version = session.get(OrderRequestVersion, row.version_id)
         newer_acked = any(order > _confirm_order(row_version) for order in acked_orders)
-        if row.delivery_id in ended_reasons:
+        if row.work_date in vacancy_days:
+            status, reason = ENTRY_CANCELLED, "staffing_vacancy"
+        elif row.delivery_id in ended_reasons:
             status, reason = ENTRY_CANCELLED, ended_reasons[row.delivery_id]
         elif newer_acked and (applied is None or row.delivery_id != applied.id):
             status, reason = ENTRY_SUPERSEDED, None

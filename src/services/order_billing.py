@@ -62,11 +62,13 @@ class OrderBillingService:
         return row
 
     def eligible(self, *, include_test=False):
+        from src.models.staffing_replacement import StaffingRecruitment
         return self.session.query(OrderRequestVersion, OrderRequestDocument).join(
             OrderRequestDocument, OrderRequestDocument.id == OrderRequestVersion.document_id
         ).join(OrderRequestSeries, OrderRequestSeries.answerable_version_id == OrderRequestVersion.id).filter(
             OrderRequestVersion.status == "confirmed", OrderRequestDocument.kind.in_(("formal", "test") if include_test else ("formal",)),
-            OrderRequestDocument.deleted_at.is_(None)
+            OrderRequestDocument.deleted_at.is_(None),
+            OrderRequestVersion.series_id.notin_(select(StaffingRecruitment.series_id))
         ).order_by(OrderRequestVersion.confirmed_at.desc(), OrderRequestVersion.id).all()
 
     def latest_amounts(self):

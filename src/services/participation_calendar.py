@@ -56,8 +56,11 @@ def registered_workers(session: Session) -> list[dict]:
 def build(session: Session, *, start: str | None = None, end: str | None = None, series_id: str | None = None, include_test: bool = False, test_only: bool = False) -> list[dict]:
     """日付ごとに、イベントの人数と名前を返す。[{date, events: [{series_id, version_id, document_number, project_name, ok, changing, unanswered}]}]"""
     query = session.query(OrderRequestSeries)
+    from src.models.staffing_replacement import StaffingVacancy, StaffingRecruitment
+    relations = {r.series_id:v.root_series_id for r,v in session.query(StaffingRecruitment,StaffingVacancy).join(StaffingVacancy,StaffingRecruitment.vacancy_id == StaffingVacancy.id)}
     if series_id:
-        query = query.filter(OrderRequestSeries.id == series_id)
+        children = {child for child,parent in relations.items() if parent == series_id}
+        query = query.filter(OrderRequestSeries.id.in_(children | {series_id}))
     from src.models.master import Worker
     workers = session.query(Worker).all()
     worker_names = {w.id: w.name for w in workers}
@@ -158,6 +161,12 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
         for day in work_dates:
             if _in_range(day, start, end):
                 event_of(day)
+        for vacancy in session.query(StaffingVacancy).filter(StaffingVacancy.source_series_id == series.id,StaffingVacancy.status != "cancelled"):
+            value=vacancy.work_date.isoformat()
+            if not _in_range(value,start,end): continue
+            event=event_of(value)
+            event.setdefault("vacancies",[]).append({"id":vacancy.id,"worker_id":vacancy.worker_id,"status":vacancy.status})
+            event[UNAVAILABLE].append({"worker_id":vacancy.worker_id,"name":worker_names.get(vacancy.worker_id,""),"is_newcomer":newcomers.get(vacancy.worker_id,False),"is_director":directors.get(vacancy.worker_id,False)})
         for worker_id, kind, dates, name in buckets:
             for day in set(dates):
                 if not _in_range(day, start, end):
@@ -170,6 +179,22 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                     event_of(day)[UNAVAILABLE].append({"worker_id": worker_id, "name": name, "is_newcomer": newcomers.get(worker_id, False), "is_director": directors.get(worker_id, False)})
     result = []
     for day in sorted(days):
+        for child,parent in relations.items():
+            if child not in days[day] or parent not in days[day]: continue
+            nested=days[day].pop(child)
+            target=days[day][parent]
+            target.setdefault("replacement_version_ids",[]).append(nested["version_id"])
+            target.setdefault("vacancies",[]).extend(nested.get("vacancies",[]))
+            for bucket in (OK,CHANGING,"pending",UNANSWERED,UNAVAILABLE): target[bucket].extend(nested[bucket])
+        # The same person may have an old declined invitation and a new replacement reply.
+        for event in days[day].values():
+            seen=set()
+            for bucket in (OK,CHANGING,"pending",UNANSWERED,UNAVAILABLE):
+                unique=[]
+                for person in event[bucket]:
+                    if person["worker_id"] in seen: continue
+                    seen.add(person["worker_id"]); unique.append(person)
+                event[bucket]=unique
         events = sorted(days[day].values(), key=lambda e: (e["project_name"], e["document_number"]))
         for event in events:
             for kind in (OK, CHANGING, UNANSWERED, UNAVAILABLE, "pending"):

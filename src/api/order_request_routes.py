@@ -162,7 +162,7 @@ def list_order_request_templates(
 
 @router.post("/templates")
 def save_order_request_template(body: TemplateSaveBody, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    _ensure(current_user)
+    _ensure_write(current_user)
     if not has_permission(current_user, Permission.ORDER_WRITE):
         raise HTTPException(status_code=403, detail="テンプレートの保存には発注依頼書の操作権限が必要です")
     row = _call(db, lambda: OrderRequestTemplateService(db).save(name=body.name, source_version_id=body.source_version_id, actor=current_user))
@@ -171,7 +171,7 @@ def save_order_request_template(body: TemplateSaveBody, current_user: User = Dep
 
 @router.post("/templates/create")
 def create_order_request_template(body: TemplateCreateBody, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    _ensure(current_user)
+    _ensure_write(current_user)
     if not has_permission(current_user, Permission.ORDER_WRITE):
         raise HTTPException(status_code=403, detail="テンプレートの作成には発注依頼書の操作権限が必要です")
     row = _call(db, lambda: OrderRequestTemplateService(db).create(name=body.name, content=body.content.model_dump(), actor=current_user))
@@ -189,7 +189,7 @@ def get_order_request_template(template_id: str, current_user: User = Depends(ge
 
 @router.post("/templates/{template_id}/archive")
 def archive_order_request_template(template_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    _ensure(current_user)
+    _ensure_write(current_user)
     if not has_permission(current_user, Permission.ORDER_WRITE):
         raise HTTPException(status_code=403, detail="テンプレートの整理には発注依頼書の操作権限が必要です")
     row = _call(db, lambda: OrderRequestTemplateService(db).archive(template_id, actor=current_user))
@@ -204,6 +204,12 @@ class LineLinkCodeBody(BaseModel):
 def _ensure(user: User) -> None:
     if not has_permission(user, Permission.ORDER_READ):
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
+
+
+def _ensure_write(user: User) -> None:
+    _ensure(user)
+    if not has_permission(user, Permission.ORDER_WRITE):
+        raise HTTPException(status_code=403, detail="発注依頼書を変更する権限がありません")
 
 
 def _ensure_admin(user: User) -> None:
@@ -585,7 +591,7 @@ def create_order_request(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         payload = body.model_dump()
@@ -624,7 +630,7 @@ def update_order_request_version(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
     fields = body.model_dump(exclude_unset=True)
     if fields.get("assign_tracker_self") is True:
         fields["tracker_user_id"] = current_user.id
@@ -679,7 +685,7 @@ def confirm_order_request(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         service = _service(db)
@@ -697,7 +703,7 @@ def revise_order_request(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         service = _service(db)
@@ -715,7 +721,7 @@ def cancel_order_request(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         service = _service(db)
@@ -735,7 +741,7 @@ def withdraw_order_request_acceptance(
     db: Session = Depends(get_db),
 ):
     """受諾後の辞退を運営が記録する。稼働予定はこの稼働者の分だけ取り消す。"""
-    _ensure(current_user)
+    _ensure_write(current_user)
     if not has_permission(current_user, Permission.ORDER_WRITE):
         raise HTTPException(status_code=403, detail="発注依頼書の編集権限がありません")
 
@@ -753,7 +759,7 @@ def add_order_request_note(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         service = _service(db)
@@ -896,7 +902,7 @@ def issue_line_link_code(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         return LineOrderService(db).issue_code(actor=current_user, worker_id=body.worker_id)
@@ -920,7 +926,7 @@ def revoke_line_link(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         return LineOrderService(db).revoke_link(actor=current_user, worker_id=worker_id, reason=body.reason)
@@ -935,7 +941,7 @@ def refresh_line_profile(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
     link = _call(db, lambda: LineOrderService(db).refresh_profile(actor=current_user, worker_id=worker_id))
     return {"worker_id": worker_id, "line_display_name": link.line_display_name}
 
@@ -946,7 +952,7 @@ def send_order_request_line(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    _ensure(current_user)
+    _ensure_write(current_user)
 
     def action():
         service = _service(db)

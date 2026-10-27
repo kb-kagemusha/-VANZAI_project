@@ -218,7 +218,7 @@ export function OrderOverviewBody() {
                                   <span className={`ov-event-name${index ? " is-repeat" : ""}`} aria-hidden={index > 0}>{row.name}</span>
                                   <span className="ov-count">参加OK {event.ok.length}人</span>
                                   {total === 0 ? <span className="ov-empty">まだ誰もいません</span> : null}
-                                  {STATUSES.flatMap((status) => (event[status] ?? []).map((person) => <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{status === "unavailable" ? "× " : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} isDirector={person.is_director} /></span>))}
+                                  {event.vacancies?.some(v=>["open","recruiting"].includes(v.status)) ? <span className="ov-person is-unavailable">欠員 {event.vacancies.filter(v=>["open","recruiting"].includes(v.status)).length}名</span> : null}{STATUSES.flatMap((status) => (event[status] ?? []).map((person) => <span key={`${status}-${person.worker_id}`} className={`ov-person is-${status}`} title={STATUS_LABEL[status]}>{status === "unavailable" ? "× " : ""}<WorkerName name={person.name} isNewcomer={person.is_newcomer} isDirector={person.is_director} /></span>))}
                                 </div>;
                               })}
                             </div>

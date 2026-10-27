@@ -77,6 +77,7 @@ class WakeContactBody(BaseModel):
     worker_id: str = Field(min_length=1, max_length=26)
     result: str = Field(min_length=1, max_length=20)
     note: str = Field(default="", max_length=500)
+    is_test: bool = False
 
 
 @router.post("/wake-contacts")
@@ -95,6 +96,7 @@ def record_wake_contact(
     log = WakeContactLog(
         worker_id=body.worker_id,
         contact_date=body.day,
+        is_test=body.is_test,
         result=body.result,
         note=body.note.strip() or None,
         actor_user_id=current_user.id,

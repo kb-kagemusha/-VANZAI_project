@@ -599,6 +599,8 @@ class OrderRequestService:
         if not reason:
             raise OrderRequestError(400, "取消理由を入力してください")
         series_id = ws.ensure_series(self.session, version)
+        from src.services.staffing_replacement import lock_family
+        lock_family(self.session,series_id)
         series = ws.lock_series(self.session, series_id)
         version = self.session.get(OrderRequestVersion, version.id)
         if version.status == STATUS_CANCELLED:
@@ -630,6 +632,21 @@ class OrderRequestService:
             for worker_id in ws.series_workers(self.session, series.id):
                 ws.set_application(self.session, series_id=series.id, worker_id=worker_id, delivery=None, ended_reason=ws.END_DOCUMENT_ENDED, actor=actor.id)
             ws.rebuild_series(self.session, series.id, actor=actor.id)
+            from src.models.staffing_replacement import StaffingRecruitment, StaffingVacancy
+            own=self.session.query(StaffingRecruitment).filter_by(series_id=series.id).one_or_none()
+            if own:
+                vacancy=self.session.get(StaffingVacancy,own.vacancy_id)
+                root=ws.lock_series(self.session,vacancy.root_series_id)
+                if root.answerable_version_id:
+                    vacancy.status="open"; vacancy.revision+=1
+                    self.audit.log("staffing_recruitment_cancelled",target_type="staffing_vacancy",target_id=vacancy.id,actor=actor.username,actor_role=actor.role,reason=reason)
+            children=self.session.query(StaffingRecruitment).join(StaffingVacancy,StaffingRecruitment.vacancy_id == StaffingVacancy.id).filter(StaffingVacancy.root_series_id == series.id).all()
+            for campaign in children:
+                child_series=ws.lock_series(self.session,campaign.series_id)
+                if child_series.answerable_version_id:
+                    child=self.session.get(OrderRequestVersion,child_series.answerable_version_id)
+                    if child.status != STATUS_CANCELLED:
+                        self.cancel(child,actor=actor,reason="元の案件の取消："+reason)
         return version
 
     def withdraw_acceptance(self, document: OrderRequestDocument, worker_id: str, *, actor: User, reason: str) -> dict:
@@ -862,6 +879,13 @@ class OrderRequestService:
         first = self.session.query(OrderRequestVersion).filter(OrderRequestVersion.document_id == document.id).first()
         if first is not None:
             ws.lock_series(self.session, ws.ensure_series(self.session, first))
+            from src.models.staffing_replacement import StaffingRecruitment, StaffingVacancy
+            from src.models.line_daily import OrderRequestSeries
+            own=self.session.query(StaffingRecruitment).filter_by(series_id=first.series_id).first()
+            children=self.session.query(StaffingRecruitment).join(StaffingVacancy,StaffingRecruitment.vacancy_id == StaffingVacancy.id).filter(StaffingVacancy.root_series_id == first.series_id).all()
+            related=([own] if own else [])+children
+            if any(self.session.get(OrderRequestSeries,c.series_id).answerable_version_id for c in related):
+                raise OrderRequestError(409,"代替募集が関連しています。元の案件または募集を取り消してから一覧から外してください")
         if ws.active_entries_on_or_after(self.session, document.id, ws.today_jst()):
             raise OrderRequestError(409, "今後の稼働予定がある依頼書は一覧から外せません。依頼をやめる場合は取消してください")
         document.deleted_at = _now()

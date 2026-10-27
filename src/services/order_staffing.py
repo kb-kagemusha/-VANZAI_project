@@ -52,7 +52,8 @@ def current_version(db, version_id, *, write=False):
     if not version:
         raise OrderRequestError(404, "依頼書が見つかりません")
     if write:
-        ws.lock_series(db, version.series_id)
+        from src.services.staffing_replacement import lock_family
+        lock_family(db, version.series_id)
         db.refresh(version)
     document = db.get(OrderRequestDocument, version.document_id)
     series = db.get(OrderRequestSeries, version.series_id)
@@ -82,6 +83,8 @@ def read(db, version_id):
         return {"enabled": False, "version_id": version_id, "days": [], "revision": 0, "people": []}
     people = answers(db, version)
     decisions = {(r.worker_id, r.work_date.isoformat()): r for r in db.query(StaffingDecision).filter_by(version_id=version_id)}
+    from src.services.staffing_replacement import family, active_workers
+    root_id, related_series = family(db,version.series_id)
     days = []
     for limit in db.query(StaffingLimit).filter_by(version_id=version_id).order_by(StaffingLimit.work_date):
         value = limit.work_date.isoformat()
@@ -91,10 +94,12 @@ def read(db, version_id):
         confirmed = [wid for (wid, day), d in decisions.items() if day == value and d.status == "confirmed"
                      and wid in people and people[wid]["available"] and wid in scheduled]
         days.append({"date": value, "capacity": limit.capacity, "closed": limit.closed,
-                     "confirmed_ids": confirmed, "confirmed": len(confirmed), "remaining": max(0,limit.capacity-len(confirmed))})
+                     "confirmed_ids": confirmed, "confirmed": len(confirmed),
+                     "family_confirmed": len(active_workers(db,related_series,limit.work_date)) if root_id == version.series_id else len(confirmed),
+                     "remaining": max(0,limit.capacity-len(confirmed))})
     from src.services import wake_test_notifications as tests
     return {"enabled": True, "version_id": version_id, "revision": row.revision, "is_test": document.kind == "test",
-            "notifications_enabled": document.kind != "test" or tests.active(tests.setting(db)), "days": days,
+            "notifications_enabled": document.kind != "test" or tests.active(tests.setting(db)), "is_replacement": root_id != version.series_id, "days": days,
             "people": [{**person, "decisions": {day: decision.status for (wid,day),decision in decisions.items() if wid == person["worker_id"]}} for person in people.values()],
             "notices": [{"kind": n.kind, "status": n.status, "date": n.work_date.isoformat(), "worker_id": n.worker_id} for n in db.query(StaffingNotice).filter_by(version_id=version_id)]}
 
@@ -116,10 +121,13 @@ def save_limits(db, version_id, capacities, revision, actor):
         raise OrderRequestError(422, "稼働日ごとに0以上の人数を設定してください")
     before = {day: limit.capacity for day,limit in limits.items()}
     current = read(db, version_id)
+    from src.models.staffing_replacement import StaffingRecruitment
+    if db.query(StaffingRecruitment.id).filter_by(series_id=version.series_id).first() and any(v != 1 for v in capacities.values()):
+        raise OrderRequestError(409,"代替募集は欠員1名に対して1枠です。元の案件と重複して人数を増やせません")
     for day in current["days"]:
         limit = limits[day["date"]]
         value = capacities[day["date"]]
-        if value < day["confirmed"]:
+        if value < day["family_confirmed"]:
             raise OrderRequestError(409, "確定人数より少ない上限には変更できません")
         if limit.closed and value != limit.capacity:
             raise OrderRequestError(409, "終了した募集は人数を直接変更できません")
@@ -154,6 +162,9 @@ def decide(db, version_id, selected, close_dates, reason, revision, actor):
         db.query(Worker).filter_by(id=wid).with_for_update().populate_existing().first()
     people = answers(db, version)
     existing = {(r.worker_id,r.work_date.isoformat()): r for r in db.query(StaffingDecision).filter_by(version_id=version_id)}
+    from src.services.staffing_replacement import verify_selection, selected as record_replacement_selection
+    previous_by_day = {value:{wid for (wid,day),d in existing.items() if day == value and d.status == "confirmed"} for value in selected}
+    verify_selection(db,version,selected,previous_by_day)
     touched = set()
     for value, chosen_list in selected.items():
         limit = limits[value]
@@ -175,13 +186,19 @@ def decide(db, version_id, selected, close_dates, reason, revision, actor):
                 WorkerScheduleEntry.status.in_(("active","changing"))).first()
             if conflict:
                 raise OrderRequestError(409, "同じ日に別案件の確定予定があります")
+            if _document.kind != "test":
+                from src.models.transaction import Assignment, ShiftSlot
+                assigned=db.query(Assignment.id).join(ShiftSlot,Assignment.shift_slot_id == ShiftSlot.id).filter(Assignment.worker_id == wid,Assignment.status != "canceled",Assignment.deleted_at.is_(None),ShiftSlot.deleted_at.is_(None),ShiftSlot.work_date == date.fromisoformat(value)).first()
+                if assigned: raise OrderRequestError(409,"同じ日に配置の予定があります。担当案件を確認してください")
             decision = existing.get((wid,value))
             if decision is None:
                 decision = StaffingDecision(version_id=version_id, worker_id=wid, work_date=limit.work_date)
                 db.add(decision); existing[(wid,value)] = decision
             decision.status, decision.reason = "confirmed", reason
             decision.decided_by, decision.decided_at = actor_name, ws.now_utc()
-            queue_notice(db,version,wid,limit.work_date,"confirmed","参加が確定しました。\n引き受けていただきありがとうございます。\n当日はよろしくお願いします。")
+            from src.models.staffing_replacement import StaffingRecruitment
+            urgent = db.query(StaffingRecruitment.id).filter_by(series_id=version.series_id).first() is not None
+            queue_notice(db,version,wid,limit.work_date,"confirmed","参加が確定しました。\n" + ("急なお願いにもかかわらず、" if urgent else "") + "引き受けていただきありがとうございます。\n当日はよろしくお願いします。")
             touched.add(wid)
         if value in close_dates or (limit.capacity > 0 and len(chosen) == limit.capacity):
             if len(chosen) < limit.capacity and not reason.strip():
@@ -201,6 +218,7 @@ def decide(db, version_id, selected, close_dates, reason, revision, actor):
                     queue_notice(db,version,wid,limit.work_date,"closed",body)
                 touched.add(wid)
     db.flush()
+    record_replacement_selection(db,version,selected)
     for wid in sorted(touched):
         ws.rebuild(db,version.series_id,wid,actor=actor.username)
     row.revision += 1
@@ -246,6 +264,11 @@ def dispatch_notices(db, version_id, actor, *, client=None, retry_failed=False):
         if valid and notice.kind == "confirmed":
             state = ws.current_state(db,delivery)
             valid = bool(state and notice.work_date.isoformat() in state.dates)
+        if valid and notice.kind == "closed":
+            from src.services.staffing_replacement import family, active_workers
+            root_id,related=family(db,version.series_id)
+            if notice.worker_id in active_workers(db,related-{version.series_id},notice.work_date):
+                valid=False
         if not valid or (notice.kind == "closed" and delivery.ack_status in ("declined", "decline_pending")):
             notice.status = "cancelled"
         elif document.kind == "test" and (not tests.active(tests.setting(db), now)

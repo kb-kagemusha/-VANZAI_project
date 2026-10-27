@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getOperatorLineEntry, operatorPortalRequest } from "../lib/api/client";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { getOperatorLineEntry, operatorPortalRequest, operatorStaffingRequest } from "../lib/api/client";
+import { ReplacementDesk, openReplacement } from "../components/ReplacementDesk";
 import { operatorMode } from "./PublicLineOperatorEntry";
 import registrationLogo from "../assets/registration-logo.png";
 import "../styles/lineRegistration.css";
 import "../styles/lineOperator.css";
 
-type Me = { name: string; phone: string | null; permissions: { wake: boolean; availability: boolean; orders: boolean } };
-type Entry = { project_name: string; site_name: string; start_time: string | null; end_time: string | null; end_next_day: boolean; status: string; is_test?: boolean };
+type Me = { name: string; phone: string | null; permissions: { wake: boolean; availability: boolean; orders: boolean; staffing?: boolean } };
+type Entry = { id?: string; project_name: string; site_name: string; start_time: string | null; end_time: string | null; end_next_day: boolean; status: string; is_test?: boolean };
 type Handler = { actor_name: string; at: string; is_me: boolean } | null;
 type WakeRow = {
   worker_id: string; worker_name: string; first_start: string | null; wake_reported_at: string | null; entries: Entry[];
@@ -61,8 +62,10 @@ function OpenPdf({ versionId, token, busy, setBusy, setError }: { versionId: str
 export function PublicLineOperatorPortalPage() {
   const [tab, setTab] = useState<Tab>(MODES[operatorMode()] ?? "wake");
   const [token, setToken] = useState("");
+  const staffingRequest = useCallback(<T,>(path: string, init?: RequestInit) => operatorStaffingRequest<T>(path, token, init), [token]);
   const [me, setMe] = useState<Me | null>(null);
-  const [day, setDay] = useState(today());
+  const [day, setDay] = useState(() => { const value = new URLSearchParams(window.location.search).get("replacement_date"); return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : today(); });
+  const openedReplacement = useRef(false);
   const [month, setMonth] = useState(today().slice(0, 7));
   const [range, setRange] = useState<"next" | "past">("next");
   const [wake, setWake] = useState<Wake | null>(null);
@@ -157,6 +160,15 @@ export function PublicLineOperatorPortalPage() {
   const wakeItems = (wake?.items ?? []).filter((row) => !query || `${row.worker_name} ${row.entries.map((e) => e.project_name).join(" ")}`.toLocaleLowerCase().includes(query));
   const pdf = (versionId: string) => <OpenPdf versionId={versionId} token={token} busy={busy} setBusy={setBusy} setError={setActionError} />;
 
+  useEffect(() => {
+    const workerId = new URLSearchParams(window.location.search).get("replacement_worker");
+    const row = wake?.items.find(r=>r.worker_id === workerId);
+    if (!openedReplacement.current && row && me?.permissions.staffing) {
+      openedReplacement.current = true;
+      openReplacement(row.entries.filter(e=>e.id).map(e=>({id:e.id!,project_name:e.project_name})));
+    }
+  }, [wake,me]);
+
   const eventCards = <>{events.map((event) => <article className="operator-card" key={event.version_id + event.project_name}>
     <h3>{event.is_test && <TestMark />}{event.project_name || "案件"}</h3>{event.site_name && <p className="operator-sub">{event.site_name}</p>}
     {buckets.map(([bucket, label]) => <div className={`operator-bucket is-${bucket}`} key={bucket}><strong>{label} {(event[bucket] ?? []).length}名</strong><p>{(event[bucket] ?? []).map((p) => p.name).join("、") || "—"}</p></div>)}
@@ -180,6 +192,7 @@ export function PublicLineOperatorPortalPage() {
 
     {tab === "profile" && me && !error && <section className="operator-card"><h2>自分の登録情報</h2><dl><dt>氏名</dt><dd>{me.name}</dd><dt>電話番号</dt><dd>{me.phone || "未登録"}</dd></dl><p>変更がある場合は管理者へご連絡ください。</p></section>}
 
+    {token && me?.permissions.orders && tab === "wake" ? <ReplacementDesk day={day} canWrite={Boolean(me.permissions.staffing)} includeTest={showTest} request={staffingRequest} onChanged={()=>setRefresh(v=>v+1)} /> : null}
     {wake && <><section className="operator-summary"><strong>{wake.total}名</strong> 対象 ／ 報告あり {wake.reported}名 ／ 未報告 {wake.total - wake.reported}名</section>
       {wakeItems.map((row) => {
         const waiting = !row.wake_reported_at && row.next_action.step !== "resolved";
@@ -190,7 +203,7 @@ export function PublicLineOperatorPortalPage() {
           : row.deadline ? `報告の期限 ${row.deadline}` : "";
         return <article className={`operator-card${waiting && row.alerted && !row.handler ? " is-urgent" : ""}`} key={row.worker_id}>
           <div className="operator-card-title"><h2>{row.worker_name}{row.is_test && <TestMark />}</h2><strong className={row.wake_reported_at ? "operator-reported" : "operator-missing"}>{row.wake_reported_at ? `報告あり ${time(row.wake_reported_at)}` : row.next_action.step === "resolved" ? row.next_action.label : "未報告"}</strong></div>
-          {row.entries.map((entry, index) => <p key={index}>{entry.is_test && <TestMark />}<strong>{entry.project_name}</strong><br />{entry.start_time || "時刻未設定"}〜{entry.end_next_day ? "翌" : ""}{entry.end_time || ""} {entry.site_name}{entry.status === "changing" ? "／変更確認待ち" : ""}</p>)}
+          {row.entries.map((entry, index) => <p key={index}>{entry.is_test && <TestMark />}<strong>{entry.project_name}</strong><br />{entry.start_time || "時刻未設定"}〜{entry.end_next_day ? "翌" : ""}{entry.end_time || ""} {entry.site_name}{entry.status === "changing" ? "／変更確認待ち" : ""}{me?.permissions.staffing && entry.id ? <button type="button" className="operator-button" onClick={()=>openReplacement([{id:entry.id!,project_name:entry.project_name}])}>別人員を確保する</button> : null}</p>)}
           {status && <p className={row.handler ? "operator-handler" : "operator-next"}>{status}</p>}
           {row.last_result && <p className="operator-last">最後の記録：{row.last_result.label}（{row.last_result.actor_name} {time(row.last_result.at)}）</p>}
         </article>;

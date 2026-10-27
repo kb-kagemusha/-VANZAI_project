@@ -22,7 +22,7 @@ try {
     } else {
         & (Join-Path $PSScriptRoot "start_conflict_postgres.ps1")
     }
-    python -m pytest tests/postgres_conflict/test_harness_ready.py tests/postgres_conflict/test_worker_edit_conflict.py tests/postgres_conflict/test_staffing_conflict.py -q --tb=short
+    python -m pytest tests/postgres_conflict/test_harness_ready.py tests/postgres_conflict/test_worker_edit_conflict.py tests/postgres_conflict/test_staffing_conflict.py tests/postgres_conflict/test_replacement_conflict.py -q --tb=short
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
     if ($useDocker) {

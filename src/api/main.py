@@ -9900,6 +9900,9 @@ app.include_router(public_ocr_router)
 app.include_router(order_request_router)
 from src.api.order_staffing_routes import router as order_staffing_router
 app.include_router(order_staffing_router)
+from src.api.staffing_replacement_routes import router as staffing_replacement_router, line_router as line_staffing_replacement_router
+app.include_router(staffing_replacement_router)
+app.include_router(line_staffing_replacement_router)
 from src.api.order_billing_routes import router as order_billing_router
 app.include_router(order_billing_router)
 from src.api.company_profile_routes import router as company_profile_router

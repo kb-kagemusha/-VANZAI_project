@@ -4,21 +4,22 @@ import { apiFetch } from "../lib/api/client";
 import { FormDialog } from "./FormDialog";
 import "../styles/staffing.css";
 
-type Day = { date: string; capacity: number; confirmed: number; confirmed_ids: string[]; closed: boolean };
+type Day = { date: string; capacity: number; confirmed: number; family_confirmed?: number; confirmed_ids: string[]; closed: boolean };
 type Person = { worker_id: string; name: string; accepted_dates: string[]; offered_dates: string[]; ack_status: string; send_status?: string; available: boolean };
-type Staffing = { enabled: boolean; revision: number; is_test: boolean; notifications_enabled?: boolean; days: Day[]; people: Person[]; notices: { status: string; worker_id?: string; date?: string; kind?: string }[] };
+type Staffing = { enabled: boolean; revision: number; is_test: boolean; is_replacement?: boolean; notifications_enabled?: boolean; days: Day[]; people: Person[]; notices: { status: string; worker_id?: string; date?: string; kind?: string }[] };
+export type StaffingRequester = <T>(path: string, init?: RequestInit) => Promise<T>;
 
 /** All staffing input remains inside a modal; viewing a request never sends LINE. */
-export function StaffingPanel({ versionId, canWrite }: { versionId: string; canWrite: boolean }) {
+export function StaffingPanel({ versionId, canWrite, request = apiFetch }: { versionId: string; canWrite: boolean; request?: StaffingRequester }) {
   const [open, setOpen] = useState(false);
   return <><button type="button" className="btn btn-line-blue" onClick={() => setOpen(true)}>参加者・日別人数を確認</button>
-    {open ? <StaffingDialog versionId={versionId} canWrite={canWrite} onClose={() => setOpen(false)} /> : null}</>;
+    {open ? <StaffingDialog versionId={versionId} canWrite={canWrite} request={request} onClose={() => setOpen(false)} /> : null}</>;
 }
 
-function StaffingDialog({ versionId, canWrite, onClose }: { versionId: string; canWrite: boolean; onClose: () => void }) {
+function StaffingDialog({ versionId, canWrite, request, onClose }: { versionId: string; canWrite: boolean; request: StaffingRequester; onClose: () => void }) {
   const cache = useQueryClient();
   const endpoint = `/api/order-staffing/${versionId}`;
-  const query = useQuery({ queryKey: ["staffing", versionId], queryFn: () => apiFetch<Staffing>(endpoint) });
+  const query = useQuery({ queryKey: ["staffing", versionId], queryFn: () => request<Staffing>(endpoint) });
   const [capacities, setCapacities] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [closeDates, setCloseDates] = useState<string[]>([]);
@@ -32,7 +33,7 @@ function StaffingDialog({ versionId, canWrite, onClose }: { versionId: string; c
     setCloseDates([]); setReview(false);
   }, [query.data]);
   const save = useMutation({
-    mutationFn: (action: "limits" | "decisions" | "notices/send") => apiFetch(endpoint + "/" + action, {
+    mutationFn: (action: "limits" | "decisions" | "notices/send") => request(endpoint + "/" + action, {
       method: action === "limits" ? "PUT" : "POST",
       body: action === "notices/send" ? undefined : JSON.stringify(action === "limits" ? { capacities, revision: query.data?.revision } : {
         selected: Object.fromEntries(query.data!.days.filter(d => !d.closed).map(d => [d.date, selected[d.date] ?? []])),
@@ -40,6 +41,7 @@ function StaffingDialog({ versionId, canWrite, onClose }: { versionId: string; c
       }),
     }),
     onSuccess: async (_result, action) => {
+      setReview(false);
       setMessage(action === "limits" ? "上限人数を保存しました。" : action === "decisions" ? "参加者を確定しました。通知結果を下で確認してください。" : "通知の送信結果を更新しました。");
       await cache.invalidateQueries();
     },
@@ -69,8 +71,8 @@ function StaffingDialog({ versionId, canWrite, onClose }: { versionId: string; c
       {data.is_test && data.notifications_enabled === false ? <p className="form-error">テスト通知はオフです。参加者の確定は保存し、LINE通知は省略します。</p> : null}
       <p>上限まで確定すると、その日の募集は終了し、見送り・未回答の方へお礼を通知します。参加不可の方には終了通知を送りません。</p>
       {data.days.map(day => <fieldset key={day.date} disabled={!canWrite || save.isPending || day.closed} style={{ marginBottom: 16, padding: 16, border: "1px solid var(--border-color, #aaa)", borderRadius: 8 }}>
-        <legend>{day.date}　{day.closed ? "募集終了" : `確定 ${day.confirmed}人`}</legend>
-        <label>上限人数 <input type="number" min={day.confirmed} step={1} value={capacities[day.date] ?? 0} style={{ width: 90 }} onChange={e => { setReview(false); setCapacities({ ...capacities, [day.date]: Number(e.target.value) }); }} /></label>
+        <legend>{day.date}　{day.closed ? "募集終了" : `確定 ${day.family_confirmed ?? day.confirmed}人`}</legend>
+        <label>上限人数 <input type="number" disabled={data.is_replacement} min={day.family_confirmed ?? day.confirmed} step={1} value={capacities[day.date] ?? 0} style={{ width: 90 }} onChange={e => { setReview(false); setCapacities({ ...capacities, [day.date]: Number(e.target.value) }); }} /></label>
         <p>選択 {(selected[day.date] ?? []).length}人 / 上限 {day.capacity}人</p>
         {data.people.filter(p => p.offered_dates.includes(day.date)).map(p => {
           const confirmed = day.confirmed_ids.includes(p.worker_id);

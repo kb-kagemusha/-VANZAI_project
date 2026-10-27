@@ -39,7 +39,7 @@ def test_operator_session_and_minimal_own_profile(api_client, db_session, operat
     headers = session(api_client)
     result = api_client.get("/api/line/operator/me", headers=headers)
     assert result.status_code == 200 and result.headers["cache-control"] == "no-store"
-    assert result.json() == {"name": "運営本人", "phone": "09011112222", "permissions": {"wake": True, "orders": True, "availability": True}}
+    assert result.json() == {"name": "運営本人", "phone": "09011112222", "permissions": {"wake": True, "orders": True, "availability": True, "staffing": True}}
     token = headers["Authorization"][7:]
     assert db_session.query(LineOperatorSession).one().token_hash == hashlib.sha256(token.encode()).hexdigest()
     assert api_client.get("/api/line/operator/wake-status", headers=headers).json()["total"] == 0

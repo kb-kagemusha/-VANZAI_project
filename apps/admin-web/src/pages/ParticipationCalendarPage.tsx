@@ -93,6 +93,7 @@ function EventDetail({ event }: { event: ParticipationEvent }) {
       <strong>{event.project_name || "案件名なし"}</strong>
       <span className="order-field-hint">　{event.document_number}</span>
       {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{participantNames(event.unavailable)}</p> : null}
+      {event.vacancies?.some(v=>["open","recruiting"].includes(v.status)) ? <p className="form-error">欠員 {event.vacancies.filter(v=>["open","recruiting"].includes(v.status)).length}名（代替手配中）</p> : null}
       <p>参加OK {event.ok.length}人：{event.ok.length ? participantNames(event.ok) : "なし"}</p>
       {event.pending?.length ? <p>運営確認待ち {event.pending.length}人：{participantNames(event.pending)}</p> : null}
       {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{participantNames(event.changing)}</p> : null}

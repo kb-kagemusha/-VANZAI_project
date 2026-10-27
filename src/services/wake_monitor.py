@@ -37,6 +37,14 @@ ORANGE = "#B45309"
 LOCK_KEY = 261027540
 
 
+def replacement_url(worker_id, day):
+    from src.domain.line_operator_config import operator_entry
+    from urllib.parse import urlencode
+    entry=operator_entry()
+    if not entry.get("enabled") or not entry.get("liff_id"): return None
+    return f"https://liff.line.me/{entry['liff_id']}?" + urlencode({"m":"wake","replacement_worker":worker_id,"replacement_date":day.isoformat()})
+
+
 def deadline_for(day: date, first_start: str | None) -> tuple[datetime, datetime, datetime] | None:
     """(期限, 運営へ知らせる時刻, 開始時刻)。日本時間の tz なし。開始時刻が無ければ None。"""
     if not first_start:
@@ -255,6 +263,8 @@ class WakeMonitorService:
                 {"type": "button", "style": "primary", "color": ORANGE, "height": "sm", "flex": 4,
                  "action": {"type": "postback", "label": "私が連絡します", "data": f"wa_claim:{row['worker_id']}:{day.isoformat()}{':test' if self.is_test else ''}", "displayText": f"{row['worker_name']}さんに連絡します"}},
             ]})
+            url=replacement_url(row["worker_id"],day)
+            if url: rows.append({"type":"button","style":"secondary","height":"sm","action":{"type":"uri","label":"別人員を確保する","uri":url}})
         contents = [
             {"type": "text", "text": "起床報告がまだの方がいます", "weight": "bold", "color": ORANGE, "size": "sm"},
             {"type": "text", "text": f"{label}{project or '案件'}", "weight": "bold", "size": "lg", "wrap": True},
@@ -297,6 +307,13 @@ class WakeMonitorService:
                 return "wake_alert_claimed", [self._claim_reply(claim, day)], shares
             if action == "wa_res":
                 result = parts[3] if len(parts) > 3 else ""
+                if result == "absent":
+                    if not has_permission(user,Permission.ORDER_WRITE) or not has_permission(user,Permission.ORDER_READ):
+                        raise OperatorError(403,"欠員の登録は人員を変更する権限がある運営者が行ってください。")
+                    service._wake_row(day,worker_id)
+                    url=replacement_url(worker_id,day)
+                    if not url: raise OperatorError(503,"運営画面を開けません。管理画面の起床状況から欠員を登録してください。")
+                    return "wake_vacancy_selection",[{"type":"template","altText":"欠員の対象案件を確認してください","template":{"type":"buttons","text":"欠員にする案件と日付を確認し、予定への反映と代替人員の手配へ進みます。","actions":[{"type":"uri","label":"欠員・代替人員の手配","uri":url}]}}],[]
                 saved = service.record(staff, user, day, worker_id, result, "")
                 return "wake_alert_recorded", [{"type": "text", "text": f"記録しました：{saved['result_label']}"}], []
         except OperatorError as exc:

@@ -8,6 +8,8 @@ import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { SummaryCard } from "../components/SummaryCard";
+import { ReplacementDesk, openReplacement } from "../components/ReplacementDesk";
+import { hasPermission } from "../lib/auth/permissions";
 import { WakeTestNotificationSettings } from "../components/WakeTestNotificationSettings";
 import { useAuth } from "../lib/auth/auth-context";
 import { ApiError, getWakeStatus, recordWakeContact } from "../lib/api/client";
@@ -64,8 +66,10 @@ function ContactRecorder({ day, row }: { day: string; row: WakeStatusItem }) {
   const [result, setResult] = useState<WakeContactResult | "">(suggestedResult(row.next_action));
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const { user } = useAuth();
+  const canStaff = hasPermission(user, "order_write") && hasPermission(user, "order_read");
   const save = useMutation({
-    mutationFn: () => recordWakeContact({ day, worker_id: row.worker_id, result: result as WakeContactResult, note }),
+    mutationFn: () => recordWakeContact({ day, worker_id: row.worker_id, result: result as WakeContactResult, note, is_test: row.entries.every(e=>e.is_test) }),
     onSuccess: async () => {
       setNote("");
       setError("");
@@ -78,10 +82,10 @@ function ContactRecorder({ day, row }: { day: string; row: WakeStatusItem }) {
     <div className="wake-contact-recorder">
       <select aria-label={`${row.worker_name}さんへの連絡の結果`} value={result} disabled={save.isPending} onChange={(event) => setResult(event.target.value as WakeContactResult | "")}>
         <option value="">連絡の結果を選ぶ</option>
-        {CONTACT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {CONTACT_OPTIONS.filter(option=>option.value !== "absent" || canStaff).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
       <input aria-label={`${row.worker_name}さんへの連絡のメモ`} maxLength={500} placeholder="メモ（任意）" value={note} disabled={save.isPending} onChange={(event) => setNote(event.target.value)} />
-      <button type="button" className="btn btn-line-blue btn-sm" disabled={!result || save.isPending} onClick={() => save.mutate()}>記録</button>
+      <button type="button" className="btn btn-line-blue btn-sm" disabled={!result || save.isPending} onClick={() => { if (result === "absent") openReplacement(row.entries.map(e=>({id:e.id,project_name:e.project_name})), note || "欠勤を確認"); else save.mutate(); }}>記録</button>
       {error ? <div className="form-error" role="alert">{error}</div> : null}
     </div>
   );
@@ -120,6 +124,7 @@ export function WakeStatusPage() {
         <SummaryCard label="今連絡が必要" value={actionNow} accent="#b45309" />
       </section>
 
+      <ReplacementDesk day={day} canWrite={hasPermission(user, "order_write")} enabled={hasPermission(user, "order_read")} />
       <FilterBar>
         <label>
           日付
@@ -187,6 +192,7 @@ export function WakeStatusPage() {
                         {timeInTokyo(contact.created_at)} {contact.result_label}（{contact.actor_name}）{contact.note ? `：${contact.note}` : ""}
                       </div>
                     ))}
+                    {hasPermission(user, "order_write") && hasPermission(user, "order_read") ? <button type="button" className="btn btn-line-blue btn-sm" onClick={()=>openReplacement(row.entries.map(e=>({id:e.id,project_name:e.project_name})))}>別人員を確保する</button> : null}
                     {!row.wake_reported_at ? <ContactRecorder key={`${row.worker_id}-${row.next_action.step}`} day={day} row={row} /> : null}
                   </div>
                 ),

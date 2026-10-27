@@ -52,6 +52,7 @@ export interface OrderRequestDelivery {
 }
 
 export interface WakeStatusEntry {
+  is_test?: boolean;
   id: string;
   document_id: string;
   start_time: string | null;

@@ -297,6 +297,8 @@ class LineOrderService:
         self.session.flush()
 
         pdf_url = f"{settings.public_api_base.rstrip('/')}/api/line/order-request-files/{file_token.token}"
+        from src.models.staffing_replacement import StaffingRecruitment
+        replacement = self.session.query(StaffingRecruitment.id).filter_by(series_id=version.series_id).first() is not None
         messages = _push_messages(
             document_number=document.document_number,
             version_no=version.version_no,
@@ -310,6 +312,7 @@ class LineOrderService:
             off_dates=off_dates_in_period(version, delivery.offered_dates),
             pick_dates_url=self._pick_dates_url(version, delivery),
             operator_confirmation=bool(version.requires_operator_confirmation),
+            replacement=replacement,
         )
         try:
             result = self.client.push_messages(link.line_user_id, messages)
@@ -953,6 +956,7 @@ def _push_messages(
     pick_dates_url: str | None = None,
     off_dates: list[str] | None = None,
     operator_confirmation: bool = False,
+    replacement: bool = False,
 ) -> list[dict]:
     lines = [
         f"発注依頼書 {document_number}（版{version_no}）",
@@ -969,6 +973,8 @@ def _push_messages(
         lines = [TEST_BANNER, *lines[:-1], "このメッセージはテスト送信です。", lines[-1]]
     if operator_confirmation:
         from src.services.order_staffing import INVITATION_NOTE
+        if replacement:
+            lines.insert(0,"【代替人員の募集】")
         lines.append(INVITATION_NOTE)
     detail = "\n".join(lines)
     return [

@@ -1862,6 +1862,8 @@ export type ParticipationEvent = {
   ok: ParticipationPerson[];
   changing: ParticipationPerson[];
   pending?: ParticipationPerson[];
+  vacancies?: { id: string; status: string }[];
+  replacement_version_ids?: string[];
   unanswered: ParticipationPerson[];
   unavailable?: ParticipationPerson[];
 };
@@ -1899,7 +1901,7 @@ export function saveWakeTestNotificationSettings(body: { enabled: boolean; enabl
   return apiFetch<WakeTestNotificationSettings>("/api/line-daily/test-notification-settings", { method: "PUT", body: JSON.stringify(body) });
 }
 
-export function recordWakeContact(body: { day: string; worker_id: string; result: WakeContactResult; note: string }) {
+export function recordWakeContact(body: { day: string; worker_id: string; result: WakeContactResult; note: string; is_test?: boolean }) {
   return apiFetch<WakeContact>("/api/line-daily/wake-contacts", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -1926,3 +1928,15 @@ export function approveOperatorRegistration(id: string, staff_id?: string, profi
 export function rejectOperatorRegistration(id: string, reason: string) { return apiFetch(`/api/operator-registration/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }); }
 export function getOperatorLineEntry() { return publicApiFetch<{ enabled: boolean; liff_id: string | null }>("/api/line/operator-registration/entry"); }
 export function submitOperatorLineRegistration(body: { invite: string; id_token: string; name: string; phone: string }) { return publicApiFetch<{ request_id: string; status: string }>("/api/line/operator-registration/submissions", { method: "POST", body: JSON.stringify(body) }); }
+
+/** LINE operator identity only; never attach the admin JWT to staffing operations. */
+export async function operatorStaffingRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  if (!/^\/api\/(staffing-replacements|order-staffing)(\/|\?|$)/.test(path)) throw new Error("この画面では操作できません。");
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (init?.body) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_BASE_URL}/api/line/operator${path.slice(4)}`, { ...init, credentials:"omit", cache:"no-store", headers });
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "操作できませんでした。最新の状態を確認してください。");
+  return data as T;
+}

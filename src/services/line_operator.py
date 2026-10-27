@@ -92,7 +92,8 @@ class LineOperatorService:
         return {"name": staff.name, "phone": staff.phone, "permissions": {
             "wake": has_permission(user, Permission.WAKE_STATUS_READ),
             "availability": has_permission(user, Permission.AVAILABILITY_READ),
-            "orders": has_permission(user, Permission.ORDER_READ)}}
+            "orders": has_permission(user, Permission.ORDER_READ),
+            "staffing": has_permission(user, Permission.ORDER_READ) and has_permission(user, Permission.ORDER_WRITE)}}
 
     def wake(self, user, day: date, include_test: bool = False):
         require(user, Permission.WAKE_STATUS_READ)
@@ -114,7 +115,7 @@ class LineOperatorService:
                 "next_action": {key: row["next_action"][key] for key in ("step", "label", "priority")},
                 "handler": _public_handler(_handler(row["contacts"]), user),
                 "last_result": ({"label": contacts[-1]["result_label"], "actor_name": contacts[-1]["actor_name"], "at": contacts[-1]["created_at"]} if contacts else None),
-                "entries": [{key: entry[key] for key in ("project_name", "site_name", "start_time", "end_time", "end_next_day", "status", "is_test")} for entry in row["entries"]],
+                "entries": [{key: entry[key] for key in ("id", "project_name", "site_name", "start_time", "end_time", "end_next_day", "status", "is_test")} for entry in row["entries"]],
                 "is_test": all(entry["is_test"] for entry in row["entries"]),
                 # 起床の監視（0.54.0、DEC-126）：期限、本人への催促・運営への知らせを送ったか
                 "deadline": times[0].strftime("%H:%M") if times else None,
@@ -163,6 +164,8 @@ class LineOperatorService:
     def record(self, staff, user, day: date, worker_id: str, result: str, note: str):
         """電話などの結果を記録する。管理画面の起床状況と同じ記録（追記のみ）。"""
         require(user, Permission.WAKE_STATUS_READ)
+        if result == "absent":
+            raise OperatorError(409,"欠員の対象案件と日付を、別人員の手配画面で確認してください。")
         from src.models.line_daily import WAKE_CONTACT_RESULTS, WakeContactLog
         if result not in WAKE_CONTACT_RESULTS or result == WAKE_CONTACT_CLAIM:
             raise OperatorError(400, "連絡の結果を選び直してください。")
