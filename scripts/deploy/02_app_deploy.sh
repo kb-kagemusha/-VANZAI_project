@@ -11,7 +11,7 @@ set -euo pipefail
 # 通常デプロイはデータに触れない。自己更新で再実行するときも引数を保持する。
 CALENDAR_DEMO_ACTION="${1:-}"
 case "${CALENDAR_DEMO_ACTION}" in
-    ""|--sample-participation-preview|--sample-participation-apply|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-republish|--wake-monitor|--wake-monitor-status|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
+    ""|--admin-password-preview|--admin-password-reset|--sample-participation-preview|--sample-participation-apply|--operator-bind-login-preview|--operator-bind-login-apply|--operator-menu-status|--operator-menu-sync|--operator-menu-publish|--operator-menu-republish|--wake-monitor|--wake-monitor-status|--operator-menu-disable|--calendar-demo-preview|--calendar-demo-apply|--calendar-demo-tune|--calendar-demo-enrich|--restore-test-account-name|--calendar-demo-directors|--legacy-samples-preview|--legacy-samples-remove|--demo-incentives-preview|--demo-incentives-apply|--archived-demo-schedules-preview|--archived-demo-schedules-repair|--demo-schedule-gaps-preview|--demo-schedule-gaps-repair) ;;
     *) echo "不明なデプロイ引数"; exit 2 ;;
 esac
 
@@ -30,7 +30,11 @@ if [ -n "${CALENDAR_DEMO_ACTION}" ]; then
     set -a
     source "${APP_DIR}/.env"
     set +a
-    if [ "${CALENDAR_DEMO_ACTION}" = "--sample-participation-preview" ]; then
+    if [ "${CALENDAR_DEMO_ACTION}" = "--admin-password-preview" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/reset_admin_password.py" --username "${2:?username required}"
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--admin-password-reset" ]; then
+        "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/reset_admin_password.py" --apply --username "${2:?username required}" --user-id "${3:?user id required}" --token "${4:?preview token required}"
+    elif [ "${CALENDAR_DEMO_ACTION}" = "--sample-participation-preview" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/add_sample_participation.py" --query "${2:?worker name required}"
     elif [ "${CALENDAR_DEMO_ACTION}" = "--sample-participation-apply" ]; then
         "${VENV_DIR}/bin/python" "${APP_DIR}/scripts/add_sample_participation.py" --apply --worker-id "${2:?worker id required}" --token "${3:?preview token required}"
