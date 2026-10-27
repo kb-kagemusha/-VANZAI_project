@@ -2,7 +2,7 @@
 
 予定/確定集計:
 - 予定: Assignment (status != canceled)
-- 確定: Actual (status = valid)
+- 確定: Actual (status = active)
 - 売上 / 外注 / 粗利
 """
 from dataclasses import dataclass
@@ -10,12 +10,13 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.models.enums import ActualStatus, AssignmentStatus
 from src.models.transaction import Actual, Assignment, Project, ShiftSlot
 from src.services.price_resolver import resolve_sales_price, resolve_outsource_price
+from src.domain.period import month_date_range
 
 
 @dataclass
@@ -121,7 +122,7 @@ def aggregate_by_project(
         select(ShiftSlot.project_id)
         .join(Assignment)
         .where(
-            func.strftime('%Y%m', ShiftSlot.work_date) == period_key
+            ShiftSlot.work_date.between(*month_date_range(period_key))
         )
         .distinct()
     )
@@ -154,7 +155,7 @@ def aggregate_by_client(
         .join(ShiftSlot)
         .join(Assignment)
         .where(
-            func.strftime('%Y%m', ShiftSlot.work_date) == period_key
+            ShiftSlot.work_date.between(*month_date_range(period_key))
         )
         .distinct()
     )
@@ -179,7 +180,7 @@ def _aggregate_planned(
         select(Assignment)
         .join(ShiftSlot)
         .where(
-            func.strftime('%Y%m', ShiftSlot.work_date) == period_key,
+            ShiftSlot.work_date.between(*month_date_range(period_key)),
             Assignment.status != AssignmentStatus.CANCELED,
         )
     )

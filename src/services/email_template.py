@@ -7,13 +7,22 @@
 - CSVエラー差戻し
 - 請求書承認依頼
 - 支払承認依頼
+- 支払明細送信
 - エスカレーション
 
 仕様参照: EMAIL_TEMPLATES.md
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
+
+
+@dataclass
+class EmailAttachment:
+    """メール添付ファイル"""
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
 
 
 @dataclass
@@ -23,6 +32,7 @@ class EmailTemplate:
     body: str
     to: str
     cc: str | None = None
+    attachments: list[EmailAttachment] = field(default_factory=list)
 
 
 class EmailTemplateService:
@@ -81,6 +91,43 @@ Ops {self.sender_signature}
             to=site_manager_email,
         )
 
+    def assignment_response_reminder(
+        self,
+        worker_name: str,
+        worker_email: str,
+        period_start: date,
+        period_end: date,
+        pending_assignments: list[dict[str, Any]],
+    ) -> EmailTemplate:
+        """予定確認の未回答催促メール"""
+        subject = f"【ご確認ください】未回答の予定確認が{len(pending_assignments)}件あります"
+
+        assignment_lines = "\n".join(
+            f"- {item['work_date'].strftime('%Y-%m-%d')} {item['project_name']}"
+            + (f" / {item['shift_label']}" if item.get("shift_label") else "")
+            for item in pending_assignments
+        )
+
+        body = f"""{worker_name} 様
+
+以下の予定確認が未回答です
+- 対象期間: {period_start.strftime('%Y-%m-%d')}〜{period_end.strftime('%Y-%m-%d')}
+- 未回答件数: {len(pending_assignments)}
+
+未回答一覧
+{assignment_lines}
+
+staff-mobile の予定画面から「参加可」または「辞退」で返信してください
+
+{self.sender_signature}
+"""
+
+        return EmailTemplate(
+            subject=subject,
+            body=body,
+            to=worker_email,
+        )
+
     def csv_unsubmitted_reminder(
         self,
         site_manager_name: str,
@@ -88,7 +135,7 @@ Ops {self.sender_signature}
         project_name: str,
         target_month: str,
         deadline: datetime,
-        submission_method: str = "kintoneアプリにアップロード",
+        submission_method: str = "管理画面（vanzai-portal.com）のCSV取込",
     ) -> EmailTemplate:
         """
         実績CSV未提出催促メール
@@ -277,6 +324,34 @@ Accounting {self.sender_signature}
             to=approver_email,
         )
 
+    def payout_statement_delivery(
+        self,
+        payee_name: str,
+        payee_email: str,
+        period_key: str,
+        total_amount: float,
+        payout_id: str,
+    ) -> EmailTemplate:
+        """支払明細送付メール"""
+        subject = f"【支払明細】{period_key[:4]}-{period_key[4:]}分の支払明細をお送りします"
+
+        body = f"""{payee_name} 様
+
+{period_key[:4]}-{period_key[4:]}分の支払明細をお送りします
+- 支払明細ID: {payout_id}
+- 支払金額: ¥{total_amount:,.0f}
+
+添付のPDFをご確認ください
+
+{self.sender_signature}
+"""
+
+        return EmailTemplate(
+            subject=subject,
+            body=body,
+            to=payee_email,
+        )
+
     def escalation_notification(
         self,
         admin_name: str,
@@ -325,4 +400,93 @@ Ops {self.sender_signature}
             subject=subject,
             body=body,
             to=admin_email,
+        )
+
+    def assignment_response_escalation_summary(
+        self,
+        admin_name: str,
+        admin_email: str,
+        period_start: date,
+        period_end: date,
+        escalated_assignments: list[dict[str, Any]],
+    ) -> EmailTemplate:
+        """予定確認未回答の要エスカレーション一覧メール"""
+        subject = f"【要確認】予定確認のエスカレーション対象が{len(escalated_assignments)}件あります"
+
+        assignment_lines = "\n".join(
+            f"- {item['work_date'].strftime('%Y-%m-%d')} {item['project_name']} / {item['worker_name']}"
+            + (f" / {item['shift_label']}" if item.get("shift_label") else "")
+            + f" / {item['reason']}"
+            for item in escalated_assignments
+        )
+
+        body = f"""{admin_name} 様
+
+予定確認の未回答で要エスカレーション対象が発生しています
+- 対象期間: {period_start.strftime('%Y-%m-%d')}〜{period_end.strftime('%Y-%m-%d')}
+- 対象件数: {len(escalated_assignments)}
+
+対象一覧
+{assignment_lines}
+
+admin-web の予定確認監視画面から状況確認と追加対応をお願いします
+
+{self.sender_signature}
+"""
+
+        return EmailTemplate(subject=subject, body=body, to=admin_email)
+
+    def notice_to_worker(
+        self,
+        worker_name: str,
+        worker_email: str,
+        title: str,
+        body_text: str,
+        notice_type: str,
+        priority: str = "normal",
+        project_name: str | None = None,
+    ) -> EmailTemplate:
+        """
+        管理者→スタッフ通知メール
+
+        Args:
+            worker_name: 稼働者名
+            worker_email: 稼働者メールアドレス
+            title: 通知タイトル
+            body_text: 通知本文
+            notice_type: 通知種別 (shift_confirm/project_change/general)
+            priority: 優先度 (normal/urgent)
+            project_name: 対象案件名（あれば）
+
+        Returns:
+            EmailTemplate
+        """
+        _type_labels = {
+            "shift_confirm": "シフト確定",
+            "project_change": "案件変更",
+            "general": "お知らせ",
+        }
+        type_label = _type_labels.get(notice_type, "お知らせ")
+        urgent_prefix = "【緊急】" if priority == "urgent" else ""
+        subject = f"{urgent_prefix}【{type_label}】{title}"
+
+        project_line = f"- 対象案件: {project_name}\n" if project_name else ""
+
+        body = f"""{worker_name} 様
+
+{type_label}があります
+{project_line}
+---
+{body_text}
+---
+
+ご確認いただけますようお願いします
+
+{self.sender_signature}
+"""
+
+        return EmailTemplate(
+            subject=subject,
+            body=body,
+            to=worker_email,
         )

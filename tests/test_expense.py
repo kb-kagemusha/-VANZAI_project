@@ -99,7 +99,7 @@ def test_approve_expense(session):
     
     assert result.success is True
     assert result.expense.status == ExpenseStatus.APPROVED
-    assert result.expense.approved_by == accounting_user.id
+    assert result.expense.approved_by == accounting_user.username
 
 
 def test_reject_expense(session):
@@ -143,7 +143,7 @@ def test_reject_expense(session):
     
     assert result.success is True
     assert result.expense.status == ExpenseStatus.REJECTED
-    assert result.expense.rejection_reason == "金額が高すぎる"
+    assert result.expense.reject_reason == "金額が高すぎる"
 
 
 def test_get_expenses_for_project_period(session):

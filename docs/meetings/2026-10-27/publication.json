@@ -1,0 +1,9 @@
+{
+  "public_path": "/meetings/2026-10-27-769dbdafbdfcd41b975ddf445c768611/index.html",
+  "sha256": "19819be5f649d4747740293e7aa310304fb7796f4a1b798fab414b6ac7653bd3",
+  "app_version": "0.53.9",
+  "published_file": "apps/admin-web/public/meetings/2026-10-27-769dbdafbdfcd41b975ddf445c768611/index.html",
+  "source_sha256": "0d0e6cf0e9ebd919d9d0fb7c7eca8895e9f3b6a102a498815c48c76711a8167a",
+  "content_updated": "2026-10-27",
+  "wake_monitor_status": "0.54.0 applying; live LINE end-to-end verification required"
+}

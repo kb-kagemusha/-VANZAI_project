@@ -1,0 +1,105 @@
+/* 依頼の俯瞰カレンダー（0.48.6） */
+.overview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.overview-month { display: flex; align-items: center; gap: 8px; }
+.overview-month strong { font-size: 1.1rem; min-width: 7.5em; text-align: center; }
+.overview-modes { display: inline-flex; border: 1px solid #2563eb; border-radius: 8px; overflow: hidden; }
+.overview-modes button { border: 0; background: transparent; color: #2563eb; padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.overview-modes button + button { border-left: 1px solid #2563eb; }
+.overview-modes button.is-active { background: #2563eb; color: #fff; }
+.overview-legend { display: flex; gap: 6px; margin: 0; align-items: center; }
+
+.overview-scroll { overflow: auto; max-height: calc(100dvh - 240px); min-height: 160px; padding: 0; }
+.overview-grid { --overview-day-width: 160px; border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
+.overview-grid th, .overview-grid td { border-bottom: 1px solid var(--line, #e3e5ea); border-right: 1px solid var(--line, #e3e5ea); vertical-align: top; }
+.overview-head-name, .overview-row-name { position: sticky; left: 0; z-index: 2; background: var(--panel, #fff); width: 200px; min-width: 200px; max-width: 200px; text-align: left; padding: 8px 10px; }
+.overview-head-name { z-index: 3; }
+.overview-grid thead th { position: sticky; top: 0; background: var(--panel, #fff); z-index: 1; }
+.overview-grid thead .overview-head-name { z-index: 4; }
+.overview-head-day { width: var(--overview-day-width); min-width: var(--overview-day-width); text-align: center; padding: 4px 0; font-weight: 600; }
+.overview-head-day.is-sun { color: #c0392b; background: #fdf3f2; }
+.overview-head-day.is-sat { color: #2563eb; background: #f1f5fe; }
+.overview-head-day.is-today { box-shadow: inset 0 -3px 0 #2563eb; }
+.ov-day-num { display: block; font-size: 1rem; }
+.ov-day-wd { display: block; font-size: 0.75rem; }
+.ov-row-title { display: block; font-weight: 700; line-height: 1.3; word-break: break-all; }
+.ov-row-sub { display: block; font-size: 0.75rem; color: var(--muted, #6b7280); margin-top: 2px; word-break: break-all; }
+.ov-document-link { border: 0; padding: 0; background: transparent; color: var(--brand, #2563eb); text-decoration: underline; font: inherit; text-align: left; cursor: pointer; }
+.ov-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; float: left; margin-top: 4px; }
+.ov-test { display: inline-block; font-size: 0.7rem; padding: 0 4px; margin-right: 4px; border-radius: 4px; background: #fef3c7; color: #92400e; font-weight: 700; }
+
+.overview-cell { padding: 4px 0; min-height: 56px; }
+.is-worker .overview-cell { padding: 4px; }
+.ov-event-box { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 4px 6px; min-height: 48px; border: 2px solid; border-left-width: 0; border-right-width: 0; }
+.ov-event-box.is-start { border-left-width: 2px; border-radius: 8px 0 0 8px; margin-left: 4px; }
+.ov-event-box.is-end { border-right-width: 2px; border-radius: 0 8px 8px 0; margin-right: 4px; }
+.ov-event-box.is-start.is-end { border-radius: 8px; }
+.ov-event-name { font-size: 0.75rem; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-count { font-size: 0.7rem; color: var(--muted, #6b7280); }
+.ov-empty { font-size: 0.7rem; color: var(--muted, #9ca3af); }
+
+.ov-person { display: block; font-size: 0.78rem; line-height: 1.25; padding: 1px 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.85); color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-legend .ov-person { display: inline-block; border: 1px solid #d1d5db; }
+.ov-person.is-changing { background: #fff7e6; color: #92400e; border: 1px dashed #d97706; }
+.ov-person.is-unanswered { background: transparent; color: #6b7280; border: 1px dashed #9ca3af; }
+
+.ov-event-chip { display: block; margin-bottom: 3px; padding: 3px 6px; border-radius: 6px; border: 2px solid; font-size: 0.78rem; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-event-chip small { display: block; font-size: 0.68rem; font-weight: 500; }
+.ov-event-chip.is-changing { border-style: dashed; }
+.ov-event-chip.is-unanswered { border-style: dashed; background: transparent !important; color: #6b7280 !important; }
+
+/* イベントの色（8色） */
+.ov-c0 { border-color: #2563eb; background-color: #e8f0fe; color: #1e3a8a; }
+.ov-c1 { border-color: #16a34a; background-color: #e8f7ee; color: #14532d; }
+.ov-c2 { border-color: #d97706; background-color: #fdf3e2; color: #78350f; }
+.ov-c3 { border-color: #9333ea; background-color: #f3e8fd; color: #581c87; }
+.ov-c4 { border-color: #db2777; background-color: #fde8f1; color: #831843; }
+.ov-c5 { border-color: #0891b2; background-color: #e3f6fa; color: #164e63; }
+.ov-c6 { border-color: #65a30d; background-color: #f0f7e3; color: #365314; }
+.ov-c7 { border-color: #dc2626; background-color: #fdeaea; color: #7f1d1d; }
+.ov-swatch.ov-c0 { background: #2563eb; } .ov-swatch.ov-c1 { background: #16a34a; } .ov-swatch.ov-c2 { background: #d97706; } .ov-swatch.ov-c3 { background: #9333ea; }
+.ov-swatch.ov-c4 { background: #db2777; } .ov-swatch.ov-c5 { background: #0891b2; } .ov-swatch.ov-c6 { background: #65a30d; } .ov-swatch.ov-c7 { background: #dc2626; }
+
+html[data-theme="dark"] .overview-head-day.is-sun { background: #3a2424; }
+html[data-theme="dark"] .overview-head-day.is-sat { background: #1f2a44; }
+html[data-theme="dark"] .ov-person { background: rgba(0, 0, 0, 0.35); color: #f3f4f6; }
+html[data-theme="dark"] .ov-person.is-changing { background: #3b2a10; color: #fcd34d; }
+html[data-theme="dark"] .ov-person.is-unanswered { color: #9ca3af; }
+html[data-theme="dark"] .ov-c0, html[data-theme="dark"] .ov-c1, html[data-theme="dark"] .ov-c2, html[data-theme="dark"] .ov-c3,
+html[data-theme="dark"] .ov-c4, html[data-theme="dark"] .ov-c5, html[data-theme="dark"] .ov-c6, html[data-theme="dark"] .ov-c7 { background-color: #1f2533; color: #e5e7eb; }
+html[data-theme="dark"] .overview-modes button { color: #9bbcff; }
+html[data-theme="dark"] .overview-modes button.is-active { background: #2563eb; color: #fff; }
+/* 連続する日の枠の高さをそろえる（2日目以降もイベント名の行を確保して見えなくする） */
+.ov-event-name.is-repeat { visibility: hidden; }
+
+/* カレンダーの表示切り替え（0.48.8） */
+.calendar-hub-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.calendar-hub-tabs button { border: 1.5px solid #2563eb; background: var(--panel, #fff); color: #2563eb; border-radius: 999px; padding: 8px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+.calendar-hub-tabs button:hover { background: rgba(37, 99, 235, 0.08); }
+.calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }
+html[data-theme="dark"] .calendar-hub-tabs button { color: #9bbcff; border-color: #7aa7ff; }
+html[data-theme="dark"] .calendar-hub-tabs button.is-active { background: #2563eb; color: #fff; }
+/* 稼働者ごと：LINE未連携の印（0.48.9） */
+.ov-line-badge { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: #fde8e8; color: #b91c1c; border: 1px solid #f5b5b5; }
+html[data-theme="dark"] .ov-line-badge { background: #4a2020; color: #fecaca; border-color: #7f1d1d; }
+
+/* 連続する日を単一の外枠にまとめる。内側のgridは最多人数の高さに伸びる。 */
+.ov-event-run { display: grid; align-items: stretch; margin: 0 4px; border-width: 2px; border-style: solid; border-radius: 8px; overflow: hidden; }
+.ov-event-run .ov-event-box { border: 0; min-width: 0; margin: 0; border-radius: 0; }
+.overview-grid .overview-worker-track-cell { padding: 0; }
+.ov-worker-track { display: grid; grid-auto-rows: minmax(54px, auto); row-gap: 4px; padding: 4px 0; min-height: 54px; background-image: linear-gradient(to right, transparent calc(100% - 1px), var(--line, #e3e5ea) calc(100% - 1px)); }
+.ov-worker-run.ov-event-chip { margin: 0 4px; min-width: 0; align-self: stretch; white-space: normal; }
+.ov-worker-run-title { display: flex; align-items: center; gap: 3px; overflow: hidden; white-space: nowrap; }
+.ov-worker-run .ov-run-length { display: inline-block; flex-shrink: 0; margin-left: auto; font-weight: 700; }
+.ov-worker-run-days { display: grid; margin-top: 3px; }
+.ov-worker-run-days small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ov-person.is-unavailable { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+.ov-worker-run.is-unavailable { border-style: dashed; background: #fee2e2; color: #991b1b; }
+html[data-theme="dark"] .ov-person.is-unavailable, html[data-theme="dark"] .ov-worker-run.is-unavailable { background: #442029; color: #fecaca; }
+
+/* ×付きの氏名に、列幅の拡張分を使えるよう余白も調整する。 */
+.ov-event-run .ov-event-box { padding-left: 4px; padding-right: 4px; }
+.ov-event-run .ov-person { padding-left: 2px; padding-right: 2px; }
+
+.ov-person.is-pending { background: #eff6ff; color: #1e40af; border: 1px dashed #3b82f6; }
+html[data-theme="dark"] .ov-person.is-pending { background: #1e3a5f; color: #bfdbfe; }

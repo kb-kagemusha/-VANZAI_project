@@ -1,0 +1,4 @@
+.payouts-page .table-card { overflow-x: auto; }
+.payouts-page .data-table { min-width: 1800px; }
+.payouts-page .data-table th { white-space: nowrap; }
+.payouts-page .data-table td button { white-space: nowrap; }

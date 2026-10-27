@@ -1,0 +1,57 @@
+/* 稼働者向けのWeb確認画面（統合計画 ②、DEC-084）。lineWorker.css（日付を選ぶ画面）の部品を使い、ここでは追加分だけを書く。 */
+.lwp-alert { display: block; margin: 10px 0 4px; padding: 12px 14px; border-radius: 12px; background: #fff4d6; color: #7a4d00; font-weight: 700; text-decoration: none; border: 1px solid #f2cf78; }
+.lwp-no-confirm { margin-top: 6px; }
+.lwp-summary { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eceef1; }
+.lwp-summary-item { display: grid; gap: 2px; }
+.lwp-summary-label { font-size: 12px; color: var(--lr-muted); }
+.lwp-summary-value { font-size: 22px; line-height: 1.3; }
+.lwp-summary-note { grid-column: 1 / -1; margin-top: 0; }
+.lwp-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #f1f2f5; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+.lwp-tabs button { height: 42px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-weight: 700; color: #555; cursor: pointer; }
+.lwp-tabs button.is-active { background: #fff; color: #1b3f8f; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.lwp-cal-day { width: 100%; min-height: 48px; border-radius: 10px; border: 1px solid transparent; background: transparent; display: grid; place-items: center; align-content: center; padding: 4px 0; font: inherit; color: #9a9ba3; }
+.lwp-cal-day.has-work { color: #1b3f8f; background: #f1f6ff; border-color: #c9d9fb; cursor: pointer; }
+.lwp-cal-day.is-changing { background: #fff6e6; border-color: #f2cf78; color: #7a4d00; }
+.lwp-cal-day.is-selected { outline: 2px solid #1c64f2; outline-offset: 1px; }
+/* 今日（0.51.6）：オレンジの枠で、仕事の有無に関係なく分かるようにする（凡例にも「今日」） */
+.lwp-cal-day.is-today { box-shadow: inset 0 0 0 2px #f08c00; border-color: #f08c00; }
+.lwp-cal-day.is-today:not(.has-work) { background: #fff7eb; color: #9a5b00; }
+.lwp-cal-day.is-today .lw-day-num { color: #c26a00; }
+.lwp-legend-today { display: inline-block; width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 2px #f08c00; margin-right: 4px; vertical-align: -1px; }
+.lwp-cal-day:disabled { cursor: default; }
+.lwp-dot { font-size: 11px; line-height: 1.1; }
+.lwp-legend-mark { color: #1b3f8f; margin-right: 2px; }
+.lwp-legend-mark.is-changing { color: #b7791f; }
+.lwp-week-range { font-weight: 700; margin: 0 0 10px; }
+.lwp-day-block { margin-top: 14px; }
+.lwp-day-block h3 { font-size: 15px; margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid #eceef1; }
+.lwp-entry { border: 1px solid #e4e5e9; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.lwp-entry.is-changing { border-color: #f2cf78; background: #fffaf0; }
+.lwp-entry-time { margin: 0; font-size: 13px; color: #44464f; font-weight: 700; }
+.lwp-entry-title { margin: 2px 0 4px; font-size: 16px; font-weight: 700; line-height: 1.4; }
+.lwp-badge { display: inline-block; margin: 6px 0 0; padding: 3px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.lwp-badge.is-changing { background: #fff0cc; color: #7a4d00; }
+.lwp-badge.is-unanswered { background: #fde8e7; color: #8a2b25; }
+.lwp-confirm-item { border: 1px solid #e4e5e9; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.lwp-actions { display: grid; gap: 8px; margin-top: 10px; }
+/* 「日付を選んで返事する」（リンク）。lineWorker.css の .lw-primary（display:block）より後に効くよう、2つのクラスで指定する（0.51.5） */
+.lw-primary.lwp-link-button { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; height: 52px; line-height: 1.2; font-size: 16px; color: #fff; box-sizing: border-box; padding: 0 16px; }
+.lw-primary.lwp-link-button:visited { color: #fff; }
+.lwp-retry { margin-top: 12px; }
+.lwp-fetched { text-align: center; margin-bottom: 20px; }
+.lwp-summary-test { grid-column: 1 / -1; margin: 0; }
+.lwp-summary-testrow { grid-column: 1 / -1; margin: 0; font-size: 13px; color: #44464f; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.lwp-test-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #fff4d6; color: #8a5a00; font-size: 11px; font-weight: 700; }
+/* 内容変更の確認待ち（0.51.13）：何が起きていて、何をすればよいか */
+.lwp-change { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #fff3d6; border: 1px solid #f2cf78; }
+.lwp-change-title { margin: 0 0 4px; font-weight: 700; color: #7a4d00; font-size: 14px; }
+.lwp-change-text { margin: 0; font-size: 13px; color: #5c4210; line-height: 1.6; }
+.lwp-change .lwp-actions { margin-top: 8px; }
+.lwp-change-hint { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: #fff8e8; color: #7a4d00; font-size: 12px; line-height: 1.6; }
+/* Web画面からの返事（統合計画 ③-C） */
+.lw-secondary.lwp-link-button { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; height: 46px; box-sizing: border-box; color: #333; }
+.lwp-reason { display: grid; gap: 6px; margin-top: 12px; }
+.lwp-reason textarea { width: 100%; box-sizing: border-box; border: 1px solid #c9ccd3; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; }
+.lw-primary.lwp-decline { background: #d14343; }
+.lw-primary.lwp-decline:disabled { background: #e8b4b4; }
+.lw-secondary.lwp-decline-entry { color: #b42318; border-color: #f0b4ae; }

@@ -95,11 +95,14 @@ class TestRolePermissions:
         assert has_permission(user, Permission.PROJECT_READ)
         assert has_permission(user, Permission.SHIFT_READ)
         assert has_permission(user, Permission.CSV_SUBMIT)
+        assert has_permission(user, Permission.ORDER_READ)
+        assert has_permission(user, Permission.WAKE_STATUS_READ)
         
         # 許可されていない権限
         assert not has_permission(user, Permission.PROJECT_WRITE)
         assert not has_permission(user, Permission.SHIFT_WRITE)
         assert not has_permission(user, Permission.CSV_IMPORT)
+        assert not has_permission(user, Permission.ORDER_WRITE)
         assert not has_permission(user, Permission.INVOICE_GENERATE)
         assert not has_permission(user, Permission.PRICE_READ)
     
@@ -331,13 +334,13 @@ class TestProjectAccessScope:
 
         assert can_access_project(db_session, user, project.id)
 
-    def test_site_manager_cannot_access_unassigned_project(
+    def test_site_manager_can_access_unassigned_project(
         self,
         db_session: Session,
         worker: Worker,
         project,
     ):
-        """担当外案件にはアクセスできない"""
+        """DEC-056: 現場管理者は担当外案件も閲覧できる"""
         other_worker = Worker(
             id=generate_ulid(),
             name="Other Worker",
@@ -359,7 +362,7 @@ class TestProjectAccessScope:
             worker_id=worker.id,
         )
 
-        assert not can_access_project(db_session, user, project.id)
+        assert can_access_project(db_session, user, project.id)
 
     def test_worker_can_access_assigned_project(
         self,

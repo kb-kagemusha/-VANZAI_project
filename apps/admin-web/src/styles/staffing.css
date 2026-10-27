@@ -1,0 +1,15 @@
+.record-dialog:has(.staffing-form) { max-width: 880px; }
+.staffing-form { display: grid; gap: 12px; }
+.staffing-form p { margin: 0; }
+.staffing-form button { width: fit-content; justify-self: start; }
+.staffing-form fieldset { width: 100%; box-sizing: border-box; }
+.staffing-form fieldset p { margin: 10px 0; }
+.staffing-form input[type="number"] { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color, #aaa); font: inherit; }
+.staffing-reason { display: grid; gap: 6px; max-width: 520px; }
+.staffing-reason textarea { width: 100%; min-height: 64px; box-sizing: border-box; }
+.staffing-candidate { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+.staffing-vacancies { padding: 16px; }
+.staffing-vacancy-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--border-color, #ddd); }
+.staffing-invitation { white-space: pre-wrap; overflow: auto; max-height: 260px; padding: 12px; border: 1px solid var(--border-color, #ccc); border-radius: 8px; font: inherit; }
+.staffing-form blockquote { margin: 0; padding: 12px; border-left: 3px solid #3b82f6; background: rgba(59,130,246,.06); text-align: left; font: inherit; }
+.record-dialog:has(.staffing-form) .order-draft-head .btn { width: fit-content; flex: none; align-self: flex-start; margin-left: auto; }

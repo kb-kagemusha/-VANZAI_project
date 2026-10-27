@@ -103,3 +103,88 @@ def test_list_price_master_endpoints_block_site_manager(api_client, db_session):
     for path in ("/api/price-sales", "/api/price-outsource"):
         response = api_client.get(path, headers=_auth_header(user.username))
         assert response.status_code == 403
+
+
+def test_create_price_sales_requires_price_write(api_client, db_session, project, role):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="ops_create_price_sales",
+        email="ops_create_price_sales@example.com",
+        password="secret123",
+        role=UserRole.OPS.value,
+    )
+    db_session.commit()
+
+    response = api_client.post(
+        "/api/price-sales",
+        json={"project_id": project.id, "role_id": role.id, "client_id": project.client_id, "unit_price": "15000.00", "unit_type": "hourly", "is_default": False, "notes": "memo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_and_update_price_sales_succeeds_for_admin(api_client, db_session, project, role):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_price_sales",
+        email="admin_create_price_sales@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    create_response = api_client.post(
+        "/api/price-sales",
+        json={"project_id": project.id, "role_id": role.id, "client_id": project.client_id, "unit_price": "15000.00", "unit_type": "hourly", "is_default": False, "notes": "memo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["unit_price"] == "15000.00"
+
+    update_response = api_client.put(
+        f"/api/price-sales/{created['id']}",
+        json={"project_id": project.id, "role_id": role.id, "client_id": project.client_id, "unit_price": "15500.00", "unit_type": "daily", "valid_from": "2026-01-01", "valid_to": "2026-12-31", "is_default": True, "notes": "updated"},
+        headers=_auth_header(user.username),
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["unit_price"] == "15500.00"
+    assert updated["unit_type"] == "daily"
+    assert updated["is_default"] is True
+
+
+def test_create_and_update_price_outsource_succeeds_for_admin(api_client, db_session, project, worker, role):
+    user = create_user_with_hashed_password(
+        db=db_session,
+        username="admin_create_price_outsource",
+        email="admin_create_price_outsource@example.com",
+        password="secret123",
+        role=UserRole.ADMIN.value,
+    )
+    db_session.commit()
+
+    create_response = api_client.post(
+        "/api/price-outsource",
+        json={"project_id": project.id, "worker_id": worker.id, "role_id": role.id, "unit_price": "9000.00", "unit_type": "hourly", "is_default": False, "notes": "memo"},
+        headers=_auth_header(user.username),
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["unit_price"] == "9000.00"
+
+    update_response = api_client.put(
+        f"/api/price-outsource/{created['id']}",
+        json={"project_id": project.id, "worker_id": worker.id, "role_id": role.id, "unit_price": "9500.00", "unit_type": "daily", "valid_from": "2026-01-01", "valid_to": "2026-12-31", "is_default": True, "notes": "updated"},
+        headers=_auth_header(user.username),
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["unit_price"] == "9500.00"
+    assert updated["unit_type"] == "daily"
+    assert updated["is_default"] is True

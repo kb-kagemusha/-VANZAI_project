@@ -398,8 +398,8 @@ def create_3project_test_data():
         logger.info(f"案件: {len(projects)}件")
         logger.info(f"実績: {total_actuals}件")
         logger.info("\n次のステップ:")
-        logger.info("  1. python scripts/sync_db_to_kintone.py all")
-        logger.info("  2. 月次ドライランの実施")
+        logger.info("  1. 月次ドライランの実施")
+        logger.info("  （Kintone 同期スクリプトは未使用のため .old/ に移した。実行しない）")
         
     except Exception as e:
         db.rollback()

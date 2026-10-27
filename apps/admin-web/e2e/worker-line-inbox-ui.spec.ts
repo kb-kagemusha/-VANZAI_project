@@ -1,0 +1,254 @@
+import { expect, test, type Page } from "@playwright/test";
+
+test.use({ viewport: { width: 1366, height: 900 } });
+
+async function setupInbox(page: Page, options: { role?: string; listError?: boolean; conflict?: boolean; missingProfile?: boolean; profileError?: boolean; workersPage?: boolean; existing?: boolean } = {}) {
+  let approved = false;
+  let profileName: string | null = null;
+  const calls: string[] = [];
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "mock-admin-token"));
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    const respond = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/auth/me")) return respond({ id: "test-admin", username: "test-admin", display_name: "試験管理者", role: options.role || "admin", is_active: true, permissions: ["registration_read", "master_read"] });
+    if (path.endsWith("/auth/session")) return respond({ access_token: "mock-admin-token", refresh_token: "mock-refresh-token", token_type: "bearer" });
+    if (path === "/api/order-requests/line-links/test-worker/refresh-profile") {
+      if (options.profileError) return respond({ detail: "LINE表示名を取得できませんでした。" }, 502);
+      profileName = "LINEのサンプル名";
+      return respond({ worker_id: "test-worker", line_display_name: profileName });
+    }
+    if (path === "/api/order-requests/line-links" && options.missingProfile) {
+      return respond({ items: [{ worker_id: "test-worker", worker_name: "酒井 サンプル", line_display_name: profileName, linked_at: "2026-10-13T01:00:00Z" }] });
+    }
+    if (path === "/api/registration-requests") {
+      expect(url.searchParams.get("line_only")).toBe("true");
+      expect(url.searchParams.get("status")).toBe("pending");
+      expect(url.searchParams.get("request_type")).toBeNull();
+      if (options.listError) return respond({ detail: "取得失敗" }, 500);
+      return respond({ items: approved ? [] : [{ id: "test-request", summary_name: "酒井 サンプル", status: "pending", submitted_at: "2026-10-13T01:00:00Z" }], total: approved ? 0 : 1, offset: 0, limit: 30 });
+    }
+    if (path.startsWith("/api/line/registration/reviews/")) {
+      calls.push(path);
+      if (path.endsWith("/approve")) {
+        expect(route.request().postDataJSON().comparison_ticket).toBe("review-ticket");
+        if (options.conflict) return respond({ detail: "内容が変わりました。最新の内容を読み込んでください。" }, 409);
+        approved = true;
+        return respond({ request_id: "test-request", status: "approved", worker_id: "test-worker" });
+      }
+      const chosen = path.endsWith("/choice");
+      return respond({ request_id: "test-request", status: approved ? "approved" : "pending", mode: chosen || approved ? options.existing ? "existing" : "create_new" : "choose", can_decide: chosen && !approved, comparison_ticket: chosen ? "review-ticket" : null,
+        before: options.existing ? { name: "酒井 サンプル", phone: "09011110000" } : {}, after: { name: "酒井 サンプル", phone: "09011112222", email: "worker@example.test" },
+        components: { last_name: "酒井", first_name: "サンプル", last_name_furigana: "さかい", first_name_furigana: "さんぷる", birth_date: "1990-01-20", phone: "09011112222", email: "worker@example.test", postal_code: "1000001", prefecture: "東京都", address1: "試験市1-2-3", nearest_station: "試験駅", station_walk_minutes: "10", emergency_contact_name: "試験 家族", emergency_contact_phone: "09099990000", emergency_contact_relationship: "家族" },
+        candidates: options.existing ? [{ worker_id: "existing-worker", name: "酒井 サンプル", phone: "09011110000", match_reasons: ["氏名一致"] }] : [] });
+    }
+    if (path === "/api/workers") {
+      calls.push(`workers:${approved}`);
+      return respond({ items: approved ? [{ id: "test-worker", name: "酒井 サンプル", is_active: true, tags: [] }] : [], total: approved ? 1 : 0, offset: 0, limit: 30 });
+    }
+    return respond({ items: [], total: 0, offset: 0, limit: 30 });
+  });
+  await page.goto(options.workersPage ? "/masters/workers" : "/masters/registration-pending");
+  return calls;
+}
+
+test("LINE request appears before approval and moves to workers without a page reload", async ({ page }) => {
+  const calls = await setupInbox(page);
+  const inbox = page.locator("section").filter({ has: page.getByRole("heading", { name: "登録・確認待ち（1件）" }) });
+  await expect(inbox.getByText("酒井 サンプル", { exact: true })).toBeVisible();
+  await expect(inbox.getByRole("columnheader", { name: "区分", exact: true })).toBeVisible();
+  await expect(inbox.getByRole("cell", { name: "稼働者", exact: true })).toBeVisible();
+  const nav = page.getByRole("link", { name: "登録確認待ち 1件", exact: true });
+  await expect(nav.locator("svg.nav-link-icon")).toBeVisible();
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("1");
+  expect(calls.some((path) => path.endsWith("/approve"))).toBe(false);
+  await page.screenshot({ path: "../../artifacts/worker-line-inbox-pending.png", fullPage: true });
+  await inbox.getByRole("button", { name: "内容を確認・反映" }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await dialog.getByRole("button", { name: "新規登録へ進む" }).click();
+  await expect(dialog.getByText("酒井 サンプル")).toBeVisible();
+  await page.screenshot({ path: "../../artifacts/worker-line-review-modal.png", fullPage: false });
+  await dialog.getByRole("button", { name: "承認して新規登録", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登録・確認待ち（0件）" })).toBeVisible();
+  await expect(page.getByText("この申請の審査は終わっています。")).toBeVisible();
+  await expect(page.getByRole("link", { name: "登録確認待ち 0件", exact: true }).locator(".nav-unread-badge")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "閉じる", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("link", { name: "稼働者登録・一覧", exact: true }).click();
+  await expect(page.locator("tr").filter({ hasText: "酒井 サンプル" })).toHaveCount(1);
+  expect(calls).toContain("workers:true");
+  await expect(page.getByRole("heading", { name: /登録・確認待ち/ })).toHaveCount(0);
+  await page.screenshot({ path: "../../artifacts/worker-line-inbox-approved.png", fullPage: true });
+});
+
+test("conflicting approval keeps the request pending and does not create a worker", async ({ page }) => {
+  const calls = await setupInbox(page, { conflict: true });
+  await page.getByRole("button", { name: "内容を確認・反映" }).click();
+  await page.getByRole("button", { name: "新規登録へ進む" }).click();
+  await page.getByRole("button", { name: "承認して新規登録", exact: true }).click();
+  await expect(page.getByText("内容が変わりました。最新の内容を読み込んでください。")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登録・確認待ち（1件）" })).toBeVisible();
+  expect(calls).not.toContain("workers:true");
+});
+
+test("ops can see pending requests but cannot start an approval", async ({ page }) => {
+  const calls = await setupInbox(page, { role: "ops" });
+  await expect(page.getByRole("heading", { name: "登録・確認待ち（1件）" })).toBeVisible();
+  await expect(page.getByText("管理者が承認します", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "内容を確認・反映" })).toHaveCount(0);
+  expect(calls.some((path) => path.includes("/reviews/"))).toBe(false);
+});
+
+test("a failed request load is not presented as an empty inbox", async ({ page }) => {
+  await setupInbox(page, { listError: true });
+  await expect(page.getByText("LINE登録申請を取得できませんでした。申請を更新してください。")).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText("LINEの確認待ち申請はありません")).toHaveCount(0);
+});
+
+test("review popup closes with Escape and returns keyboard focus", async ({ page }) => {
+  await setupInbox(page);
+  const opener = page.getByRole("button", { name: "内容を確認・反映" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await expect(dialog).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "新規登録へ進む" })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "閉じる", exact: true })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByPlaceholder("却下理由")).toBeFocused();
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+});
+
+test("an unavailable LINE name is retrieved into the existing link", async ({ page }) => {
+  await setupInbox(page, { workersPage: true, missingProfile: true });
+  const links = page.locator("section").filter({ has: page.getByRole("heading", { name: "公式LINEの本人紐付け" }) });
+  await expect(links.getByText("未取得", { exact: true })).toBeVisible();
+  await expect(links.getByText("表示名なし", { exact: true })).toHaveCount(0);
+  await links.getByRole("button", { name: "表示名を更新" }).click();
+  await expect(links.getByText("LINEのサンプル名", { exact: true })).toBeVisible();
+  await expect(links.getByText("LINE表示名を更新しました。", { exact: true })).toBeVisible();
+});
+
+test("a failed LINE profile lookup does not present a made-up name", async ({ page }) => {
+  await setupInbox(page, { workersPage: true, missingProfile: true, profileError: true });
+  const links = page.locator("section").filter({ has: page.getByRole("heading", { name: "公式LINEの本人紐付け" }) });
+  await links.getByRole("button", { name: "表示名を更新" }).click();
+  await expect(links.getByText("LINE表示名を取得できませんでした。", { exact: true })).toBeVisible();
+  await expect(links.getByText("未取得", { exact: true })).toBeVisible();
+  await expect(links.getByText("LINEのサンプル名", { exact: true })).toHaveCount(0);
+});
+
+test("pending registration badge remains visible when the sidebar is collapsed and reports failures", async ({ page }) => {
+  await setupInbox(page);
+  const nav = page.getByRole("link", { name: "登録確認待ち 1件", exact: true });
+  await expect(nav.locator("svg.nav-link-icon")).toBeVisible();
+  await page.getByRole("button", { name: "サイドバーを縮小" }).click();
+  await expect(nav.locator(".nav-unread-badge")).toBeVisible();
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("1");
+  await page.screenshot({ path: ".work/registration-pending-collapsed.png" });
+});
+
+test("a failed pending count is shown as an error instead of zero", async ({ page }) => {
+  await setupInbox(page, { listError: true });
+  const nav = page.getByRole("link", { name: "登録確認待ち 件数取得失敗", exact: true });
+  await expect(nav.locator(".nav-unread-badge")).toHaveText("!", { timeout: 20000 });
+});
+
+test("workers sort by newest initially and switch to name order from the first page", async ({ page }) => {
+  const calls: URLSearchParams[] = [];
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "mock-token"));
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    let body: unknown = { items: [], total: 0 };
+    if (path.endsWith("/auth/me")) body = { id: "admin", username: "admin", role: "admin", is_active: true };
+    if (path.endsWith("/auth/session")) body = { access_token: "mock-token", token_type: "bearer" };
+    if (path === "/api/workers" && url.searchParams.get("limit") === "30") {
+      calls.push(url.searchParams);
+      const newer = { id: "new", name: "わ行 新人", is_active: true, tags: [] };
+      const older = { id: "old", name: "あ行 先輩", is_active: true, tags: [] };
+      body = { items: url.searchParams.get("sort_by") === "name" ? [older, newer] : [newer, older], total: 31, offset: Number(url.searchParams.get("offset")), limit: 30 };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/masters/workers");
+  await expect(page.getByRole("button", { name: "登録が新しい順", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const rows = page.locator("tr").filter({ hasText: /わ行 新人|あ行 先輩/ });
+  await expect(rows.first()).toContainText("わ行 新人");
+  expect(calls.at(-1)!.get("sort_order")).toBe("desc");
+  await page.getByRole("button", { name: "次へ", exact: true }).click();
+  await expect(page.getByText("2 / 2 ページ", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "名前順", exact: true }).click();
+  await expect(page.getByText("1 / 2 ページ", { exact: true })).toBeVisible();
+  await expect(rows.first()).toContainText("あ行 先輩");
+  expect(calls.at(-1)!.get("sort_by")).toBe("name");
+  expect(calls.at(-1)!.get("sort_order")).toBe("asc");
+  expect(calls.at(-1)!.get("offset")).toBe("0");
+  await page.getByRole("button", { name: "登録が新しい順", exact: true }).click();
+  await expect(rows.first()).toContainText("わ行 新人");
+  await page.screenshot({ path: ".work/workers-sorting.png" });
+});
+
+test("users without registration permission cannot see the inbox or fetch its count", async ({ page }) => {
+  let registrationCalls = 0;
+  await page.addInitScript(() => localStorage.setItem("vanzai.admin.access_token", "mock-token"));
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/registration-requests") registrationCalls++;
+    const body = path.endsWith("/auth/me") ? { id: "site", username: "site", role: "site_manager", is_active: true, permissions: ["master_read"] } : path.endsWith("/auth/session") ? { access_token: "mock-token", token_type: "bearer" } : { items: [], total: 0 };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/masters/workers");
+  await expect(page.getByRole("heading", { name: "稼働者登録・一覧", exact: true })).toBeVisible();
+  await expect(page.locator('a[href="/masters/registration-pending"]')).toHaveCount(0);
+  expect(registrationCalls).toBe(0);
+  await page.goto("/masters/registration-pending");
+  await expect(page).toHaveURL(/\/403$/);
+  expect(registrationCalls).toBe(0);
+});
+
+test("worker review groups readable fields and makes new registration the primary action on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setupInbox(page);
+  await page.getByRole("button", { name: "内容を確認・反映" }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  for (const group of ["お名前・生年月日", "連絡先", "住所", "最寄り駅", "緊急連絡先"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
+  const create = dialog.getByRole("button", { name: "新規登録へ進む", exact: true });
+  await expect(create).toHaveClass(/create-button/);
+  await expect(create).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(dialog.getByRole("button", { name: "承認して新規登録", exact: true })).toHaveCount(0);
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.width).toBeLessThanOrEqual(390);
+  expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: ".work/worker-review-mobile.png" });
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await expect(create).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(dialog).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await page.screenshot({ path: ".work/worker-review-mobile-dark.png" });
+  await create.click();
+  await expect(dialog.getByRole("heading", { name: "2. 新規登録する内容を確認", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "承認して新規登録", exact: true })).toBeEnabled();
+});
+
+test("existing worker comparison keeps before and after side by side and highlights changed values", async ({ page }) => {
+  await setupInbox(page, { existing: true });
+  await page.getByRole("button", { name: "内容を確認・反映" }).click();
+  const dialog = page.getByRole("dialog", { name: "LINE登録の内容確認" });
+  await dialog.getByRole("button", { name: "この稼働者を選ぶ", exact: true }).click();
+  const contact = dialog.locator("section.line-review-group").filter({ has: page.getByRole("heading", { name: "連絡先", exact: true }) });
+  await expect(contact.getByRole("columnheader", { name: "現在の登録", exact: true })).toBeVisible();
+  await expect(contact.getByRole("columnheader", { name: "申請後", exact: true })).toBeVisible();
+  const phone = contact.locator("tr").filter({ hasText: "電話" });
+  await expect(phone).toHaveClass(/is-changed/);
+  await expect(phone).toContainText("09011110000");
+  await expect(phone).toContainText("09011112222");
+  await expect(dialog.getByRole("button", { name: "承認して更新", exact: true })).toBeEnabled();
+  await page.screenshot({ path: ".work/worker-review-comparison.png" });
+});

@@ -1,0 +1,17 @@
+.record-dialog:has(.daily-billing-form) { max-width: 1080px; }
+.daily-billing-form { display: grid; gap: 14px; min-width: 0; }
+.daily-billing-form p { margin: 0; }
+.daily-billing-form fieldset { padding: 16px; border: 1px solid var(--border-color, #bbb); border-radius: 8px; min-width: 0; display: grid; gap: 12px; }
+.daily-billing-form button { width: fit-content; justify-self: start; }
+.daily-billing-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 16px; }
+.daily-billing-weekdays { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; }
+.daily-billing-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.daily-billing-actions [aria-pressed="true"] { background: #e8f0fe; color: #17469a; }
+.daily-billing-table { overflow: auto; min-width: 0; max-width: 100%; }
+.daily-billing-table table { min-width: 780px; }
+.daily-billing-table input { width: 220px; max-width: 100%; display: block; margin: 6px 0; padding: 10px; border: 1px solid var(--border-color, #bcc4ce); border-radius: 8px; background: var(--input-bg, #fff); color: inherit; font: inherit; box-sizing: border-box; }
+.daily-billing-table ul { margin: 6px 0; padding-left: 18px; }
+.daily-billing-total { font-size: 1.2rem; font-weight: 700; }
+.daily-billing-check { display: flex; gap: 8px; align-items: flex-start; }
+.daily-billing-check input { width: auto; flex: none; }
+.daily-billing-review { padding: 14px; border: 1px solid var(--border-color, #aaa); border-radius: 8px; display: grid; gap: 12px; }

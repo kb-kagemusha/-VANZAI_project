@@ -1,3 +1,4 @@
+import { queryClient } from "../query/query-client";
 import {
   createContext,
   startTransition,
@@ -8,12 +9,17 @@ import {
 } from "react";
 
 import {
+  ApiError,
   clearStoredAccessToken,
+  ensurePersistentSession,
   getCurrentUser,
   getStoredAccessToken,
+  getStoredRefreshToken,
+  refreshStoredSession,
   requestToken,
-  setStoredAccessToken,
+  setStoredSession,
 } from "../api/client";
+import { DASHBOARD_ROLES, canAccess } from "./permissions";
 import type { AuthUser } from "../../types/api";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -23,9 +29,15 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function canUseAdminConsole(user: AuthUser): boolean {
+  if (user.can_use_admin_console !== undefined) return user.can_use_admin_console;
+  return canAccess(user.role, DASHBOARD_ROLES);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
@@ -35,25 +47,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     async function restoreSession() {
-      const token = getStoredAccessToken();
-      if (!token) {
-        if (active) {
-          setStatus("unauthenticated");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (!getStoredAccessToken()) {
+          await refreshStoredSession();
         }
-        return;
-      }
+        if (!getStoredAccessToken()) {
+          if (active) {
+            setStatus("unauthenticated");
+          }
+          return;
+        }
 
-      try {
-        const currentUser = await getCurrentUser();
-        if (active) {
-          setUser(currentUser);
-          setStatus("authenticated");
-        }
-      } catch {
-        clearStoredAccessToken();
-        if (active) {
-          setUser(null);
-          setStatus("unauthenticated");
+        try {
+          const currentUser = await getCurrentUser();
+          if (!canUseAdminConsole(currentUser)) {
+            clearStoredAccessToken();
+            if (active) {
+              setUser(null);
+              setStatus("unauthenticated");
+            }
+            return;
+          }
+          try {
+            await ensurePersistentSession();
+          } catch {
+            // 更新用トークンの保存に失敗しても、今のログインは維持する
+          }
+          if (active) {
+            setUser(currentUser);
+            setStatus("authenticated");
+          }
+          return;
+        } catch (error) {
+          const status = error instanceof ApiError ? error.status : 0;
+          if (status === 403) {
+            clearStoredAccessToken();
+            if (active) {
+              setUser(null);
+              setStatus("unauthenticated");
+            }
+            return;
+          }
+          const sessionGone = !getStoredAccessToken() && !getStoredRefreshToken();
+          if (status === 401 && sessionGone) {
+            if (active) {
+              setUser(null);
+              setStatus("unauthenticated");
+            }
+            return;
+          }
+          if (attempt < 2) {
+            await new Promise((resolve) => window.setTimeout(resolve, 800));
+            continue;
+          }
+          if (active) {
+            setUser(null);
+            setStatus("unauthenticated");
+          }
         }
       }
     }
@@ -76,20 +126,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+    let active = true;
+    async function syncPermissions() {
+      try {
+        const next = await getCurrentUser();
+        if (!active) return;
+        if (!canUseAdminConsole(next)) {
+          clearStoredAccessToken(); queryClient.clear(); setUser(null); setStatus("unauthenticated");
+        } else if (JSON.stringify(next) !== JSON.stringify(user)) {
+          queryClient.clear(); setUser(next);
+        }
+      } catch (error) {
+        if (active && error instanceof ApiError && [401, 403].includes(error.status)) {
+          clearStoredAccessToken(); queryClient.clear(); setUser(null); setStatus("unauthenticated");
+        }
+      }
+    }
+    const timer = window.setInterval(() => { void syncPermissions(); }, 30000);
+    window.addEventListener("focus", syncPermissions);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", syncPermissions); };
+  }, [status, user]);
+
   const value: AuthContextValue = {
     status,
     user,
     async login(username: string, password: string) {
       const token = await requestToken(username, password);
-      setStoredAccessToken(token.access_token);
+      setStoredSession(token.access_token, token.refresh_token);
       const currentUser = await getCurrentUser();
+      if (!canUseAdminConsole(currentUser)) {
+        clearStoredAccessToken();
+        setUser(null);
+        setStatus("unauthenticated");
+        throw new ApiError(403, "このアカウントは管理画面を利用できません");
+      }
+      queryClient.clear();
       setUser(currentUser);
       setStatus("authenticated");
     },
     logout() {
+      queryClient.clear();
       clearStoredAccessToken();
       setUser(null);
       setStatus("unauthenticated");
+    },
+    async refreshUser() {
+      const currentUser = await getCurrentUser();
+      if (!canUseAdminConsole(currentUser)) {
+        clearStoredAccessToken();
+        setUser(null);
+        setStatus("unauthenticated");
+        throw new ApiError(403, "このアカウントは管理画面を利用できません");
+      }
+      setUser(currentUser);
     },
   };
 

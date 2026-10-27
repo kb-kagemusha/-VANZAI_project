@@ -250,7 +250,7 @@ def test_csv_upload_rejects_oversized_file(api_client, db_session, project):
 	assert response.json()["detail"] == "CSVファイルサイズが上限を超えています"
 
 
-def test_import_batches_list_scopes_site_manager_projects(api_client, db_session, project, worker, client):
+def test_import_batches_list_allows_site_manager_all_projects(api_client, db_session, project, worker, client):
 	project.primary_manager_id = worker.id
 	db_session.add(project)
 	db_session.flush()
@@ -336,11 +336,11 @@ def test_import_batches_list_scopes_site_manager_projects(api_client, db_session
 
 	assert response.status_code == 200
 	payload = response.json()
-	assert payload["total"] == 1
-	assert payload["items"][0]["file_name"] == "managed.csv"
+	assert payload["total"] == 2
+	assert {row["file_name"] for row in payload["items"]} == {"managed.csv", "other.csv"}
 
 
-def test_import_batches_list_rejects_unscoped_project_for_site_manager(api_client, db_session, project, worker, client):
+def test_import_batches_list_allows_unscoped_project_for_site_manager(api_client, db_session, project, worker, client):
 	other_project = Project(
 		id=generate_ulid(),
 		name="Other Project",
@@ -374,5 +374,5 @@ def test_import_batches_list_rejects_unscoped_project_for_site_manager(api_clien
 		headers=_auth_header(site_manager.username),
 	)
 
-	assert response.status_code == 403
-	assert response.json()["detail"] == "Project access denied"
+	assert response.status_code == 200
+	assert response.json()["total"] == 0

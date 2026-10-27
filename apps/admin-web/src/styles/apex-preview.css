@@ -1,0 +1,1423 @@
+.apex-preview {
+  --apex-sidebar: 260px;
+  --apex-ink: #1d2731;
+  --apex-muted: #667085;
+  --apex-line: #e6e8ee;
+  --apex-green: #16a34a;
+  --apex-green-soft: #4ade80;
+  --apex-warning: #d97706;
+  --apex-danger: #dc2626;
+  display: grid;
+  grid-template-columns: var(--apex-sidebar) minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f4f6f8;
+  color: var(--apex-ink);
+  font-family: "Aptos", "BIZ UDPGothic", "Yu Gothic UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: clip;
+}
+
+.apex-preview.is-collapsed {
+  --apex-sidebar: 72px;
+}
+
+.apex-preview.is-collapsed .apex-preview__sidebar,
+.apex-preview.is-collapsed .apex-preview__nav {
+  overflow: visible;
+}
+
+.apex-preview.is-narrow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.apex-preview button,
+.apex-preview input {
+  font: inherit;
+  color: inherit;
+}
+
+.apex-preview button {
+  cursor: pointer;
+}
+
+.apex-preview a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.apex-preview__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  padding: 0;
+  background: rgba(17, 19, 24, 0.45);
+}
+
+.apex-preview__sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: var(--apex-sidebar);
+  height: 100vh;
+  min-height: 100vh;
+  background: #111318;
+  color: #a3aab8;
+  overflow: hidden;
+}
+
+.apex-preview__sidebar::-webkit-scrollbar,
+.apex-preview__nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.apex-preview__sidebar::-webkit-scrollbar-track,
+.apex-preview__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.apex-preview__sidebar::-webkit-scrollbar-thumb,
+.apex-preview__nav::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: #2a2f3a;
+}
+
+.apex-preview.is-narrow .apex-preview__sidebar {
+  position: fixed;
+  z-index: 40;
+  width: 260px;
+  transform: translateX(-105%);
+}
+
+.apex-preview.is-narrow.is-drawer-open .apex-preview__sidebar {
+  transform: none;
+}
+
+.apex-preview__brand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 16px;
+}
+
+.apex-preview__brand-name {
+  margin: 0;
+  color: #f8efe1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.apex-preview__brand-meta {
+  margin: 0;
+  color: #a3aab8;
+  font-size: 12px;
+}
+
+button.apex-preview__version-update {
+  flex-basis: 100%;
+  margin-top: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--vanzai-seal, #22c55e);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--vanzai-seal, #22c55e);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.apex-preview__version-update:hover,
+.apex-preview__version-update:focus-visible {
+  background: #1c2b22;
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-collapsed .apex-preview__version-update {
+  flex-basis: auto;
+  width: 36px;
+  padding: 2px 0;
+  overflow: hidden;
+  font-size: 0;
+}
+
+.apex-preview.is-collapsed .apex-preview__version-update::after {
+  content: "更新";
+  font-size: 11px;
+}
+
+.apex-preview__brand-copy {
+  display: grid;
+  justify-items: start;
+}
+
+.apex-preview__sidebar-tools {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 8px;
+}
+
+.apex-preview__icon-button,
+.apex-preview__menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+.apex-preview__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.apex-preview__icon-button {
+  color: #a3aab8;
+}
+
+.apex-preview__icon-button:hover,
+.apex-preview__icon-button:focus-visible,
+.apex-preview__menu:hover,
+.apex-preview__menu:focus-visible,
+.apex-preview__header-link:hover,
+.apex-preview__header-link:focus-visible {
+  border-color: var(--apex-line);
+  outline: 2px solid var(--apex-green);
+  outline-offset: 2px;
+}
+
+.apex-preview__menu {
+  display: none;
+  color: var(--apex-ink);
+  border-color: var(--apex-line);
+  background: #fff;
+}
+
+.apex-preview.is-narrow .apex-preview__menu {
+  display: inline-flex;
+}
+
+.apex-preview.is-narrow .apex-preview__collapse {
+  display: none;
+}
+
+.apex-preview__brand,
+.apex-preview__sidebar-tools,
+.apex-preview__user {
+  flex-shrink: 0;
+}
+
+.apex-preview__nav {
+  display: grid;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px 16px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f3a transparent;
+}
+
+.apex-preview__group {
+  display: grid;
+  gap: 4px;
+}
+
+.apex-preview__group-label {
+  margin: 0;
+  padding: 0 8px;
+  color: #a3aab8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.apex-preview__nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #a3aab8;
+}
+
+.apex-preview__nav-link svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.apex-preview__nav-link:hover,
+.apex-preview__nav-link:focus-visible,
+.apex-preview__nav-link.is-active {
+  background: #1c2b22;
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview__nav-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.apex-preview__tooltip {
+  display: none;
+}
+
+.apex-preview.is-collapsed .apex-preview__brand-copy,
+.apex-preview.is-collapsed .apex-preview__group-label,
+.apex-preview.is-collapsed .apex-preview__nav-label,
+.apex-preview.is-collapsed .apex-preview__user-copy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.apex-preview.is-collapsed .apex-preview__nav-link,
+.apex-preview.is-collapsed .apex-preview__brand,
+.apex-preview.is-collapsed .apex-preview__user {
+  justify-content: center;
+}
+
+.apex-preview.is-collapsed .apex-preview__tooltip {
+  display: block;
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  z-index: 5;
+  transform: translateY(-50%);
+  padding: 6px 8px;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: #111318;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.apex-preview.is-collapsed .apex-preview__nav-link:hover .apex-preview__tooltip,
+.apex-preview.is-collapsed .apex-preview__nav-link:focus-visible .apex-preview__tooltip,
+.apex-preview.is-collapsed .apex-preview__collapse:hover .apex-preview__tooltip,
+.apex-preview.is-collapsed .apex-preview__collapse:focus-visible .apex-preview__tooltip,
+.apex-preview.is-collapsed .apex-preview__user:hover .apex-preview__tooltip,
+.apex-preview.is-collapsed .apex-preview__user:focus-within .apex-preview__tooltip {
+  opacity: 1;
+}
+
+.apex-preview__user {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.apex-preview__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--vanzai-seal, #22c55e);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+a.apex-preview__user {
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.apex-preview__user:hover,
+.apex-preview__user:focus-visible,
+.apex-preview__user[aria-current="page"] {
+  background: #1c2b22;
+  outline: none;
+}
+
+.apex-preview__user-name {
+  margin: 0;
+  color: #f8efe1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.apex-preview__user-role {
+  margin: 0;
+  color: #a3aab8;
+  font-size: 12px;
+}
+
+.apex-preview__main {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.apex-preview__header {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  min-height: 64px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--apex-line);
+  background: #fff;
+}
+
+.apex-preview__month {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__month input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--apex-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--apex-ink);
+}
+
+.apex-preview__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.apex-preview__account {
+  position: relative;
+}
+
+.apex-preview__account-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.apex-preview__account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--apex-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+}
+
+.apex-preview__account-menu a,
+.apex-preview__account-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--apex-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.apex-preview__account-menu a:hover,
+.apex-preview__account-menu a:focus-visible,
+.apex-preview__account-menu button:hover,
+.apex-preview__account-menu button:focus-visible {
+  background: #f4f6f8;
+  outline: none;
+}
+
+.apex-preview__header-link,
+.apex-preview__logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--apex-line);
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-size: 13px;
+}
+
+.apex-preview__version,
+.apex-preview__identity {
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__content {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+  min-width: 0;
+}
+
+.apex-preview__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.apex-preview__lead,
+.apex-preview__note {
+  margin: 0;
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__heading-block {
+  display: grid;
+  gap: 8px;
+}
+
+.apex-preview__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.apex-preview__card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--apex-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.apex-preview__kpi-label {
+  margin: 0;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__kpi-value {
+  margin: 8px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.apex-preview__kpi-value small {
+  margin-left: 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.apex-preview__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+  gap: 24px;
+}
+
+.apex-preview__section-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.apex-preview__table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.apex-preview__table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.apex-preview__table th,
+.apex-preview__table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef0f3;
+  text-align: left;
+  vertical-align: top;
+}
+
+.apex-preview__table th {
+  color: var(--apex-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.apex-preview__table td {
+  color: var(--apex-ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.apex-preview__pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.apex-preview__pill.is-positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.apex-preview__pill.is-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.apex-preview__pill.is-info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.apex-preview__pill.is-neutral {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.apex-preview__bar-label,
+.apex-preview__count {
+  margin: 0;
+  font-size: 13px;
+}
+
+.apex-preview__bar-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__bar {
+  height: 8px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6e8ee;
+}
+
+.apex-preview__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--apex-green);
+  transition: width 1.1s cubic-bezier(0, 0, 0.58, 1);
+}
+
+.apex-preview__counts {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.apex-preview__count.is-attention {
+  color: var(--apex-warning);
+  font-weight: 600;
+}
+
+.apex-preview__empty,
+.apex-preview__status {
+  margin: 0;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__status.is-error {
+  color: var(--apex-danger);
+}
+
+.apex-preview__stack {
+  display: grid;
+  gap: 16px;
+}
+
+@media (max-width: 959px) {
+  .apex-preview__header,
+  .apex-preview__content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 899px) {
+  .apex-preview__kpis,
+  .apex-preview__demo-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .apex-preview__demo-mid,
+  .apex-preview__demo-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .apex-preview__kpis,
+  .apex-preview__split,
+  .apex-preview__demo-top,
+  .apex-preview__days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .apex-preview__days {
+    grid-column: auto;
+  }
+}
+
+.apex-preview__card-head .apex-preview__section-title,
+.apex-preview__demo .apex-preview__section-title {
+  margin: 0;
+}
+
+.apex-preview__subtitle {
+  margin: 4px 0 0;
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__title-row,
+.apex-preview__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.apex-preview__billing,
+.apex-preview__theme,
+.apex-preview__switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--apex-line);
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-size: 13px;
+}
+
+.apex-preview__billing.is-active,
+.apex-preview__switch button.is-active,
+.apex-preview__theme[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--apex-green);
+  color: #fff;
+}
+
+.apex-preview__switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.apex-preview__profile {
+  display: grid;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.apex-preview__profile-hero {
+  padding: 0 0 20px;
+  overflow: hidden;
+}
+
+.apex-preview__cover {
+  height: 96px;
+  background: linear-gradient(120deg, #16a34a, #86efac);
+}
+
+.apex-preview__avatar.is-large {
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 20px;
+  border: 4px solid #fff;
+  font-size: 28px;
+}
+
+.apex-preview__profile-name {
+  margin: 12px 20px 0;
+  font-size: 22px;
+}
+
+.apex-preview__profile-hero .apex-preview__subtitle,
+.apex-preview__profile-bio,
+.apex-preview__profile-facts,
+.apex-preview__profile-stats {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.apex-preview__profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.apex-preview__profile-stats div {
+  display: grid;
+  gap: 2px;
+}
+
+.apex-preview__profile-stats dt {
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__profile-stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.apex-preview__profile-bio {
+  margin-top: 16px;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__profile-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin-top: 16px;
+}
+
+.apex-preview__profile-facts dt {
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__profile-facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.apex-preview__seal-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.apex-preview__seal-choice {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--apex-line);
+}
+
+.apex-preview__seal-choice.is-active {
+  box-shadow: 0 0 0 2px var(--apex-ink);
+}
+
+.apex-preview__password {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+  margin-top: 16px;
+}
+
+.apex-preview__field {
+  display: grid;
+  gap: 6px;
+  color: var(--apex-muted);
+  font-size: 13px;
+}
+
+.apex-preview__field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--apex-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--apex-ink);
+}
+
+.apex-preview__demo {
+  display: grid;
+  gap: 16px;
+}
+
+.apex-preview__demo-top,
+.apex-preview__demo-bottom {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.apex-preview__demo-bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.apex-preview__demo-mid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 16px;
+}
+
+.apex-preview__demo-side {
+  display: grid;
+  gap: 16px;
+}
+
+.apex-preview__trend-card,
+.apex-preview__stat {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 16px 0;
+  overflow: hidden;
+}
+
+.apex-preview__stat:has(.apex-preview__day-grid) {
+  padding-bottom: 16px;
+}
+
+.apex-preview__card.is-live {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.apex-preview__card.is-live:hover {
+  border-color: rgba(22, 163, 74, 0.28);
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+}
+
+.apex-preview__stat-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.apex-preview__stat-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.apex-preview__kpi-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.apex-preview__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.apex-preview__delta.is-up {
+  color: var(--apex-green);
+}
+
+.apex-preview__delta.is-down {
+  color: var(--apex-danger);
+}
+
+.apex-preview__spark {
+  display: block;
+  width: calc(100% + 32px);
+  height: 100px;
+  margin: 12px -16px 0;
+  clip-path: inset(0 100% 0 0);
+  animation: apex-reveal 1.3s cubic-bezier(0, 0, 0.58, 1) forwards;
+}
+
+.apex-preview__spark path {
+  vector-effect: non-scaling-stroke;
+}
+
+.apex-preview__day-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.apex-preview__day-grid > div:first-child {
+  padding-left: 20px;
+}
+
+.apex-preview__day-value {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.apex-preview__day-value small {
+  margin-left: 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.apex-preview__day-caption {
+  margin: 4px 0 0;
+  color: var(--apex-muted);
+  font-size: 12px;
+}
+
+.apex-preview__days {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  padding: 16px 0;
+}
+
+.apex-preview__day-pane {
+  min-width: 0;
+  padding: 0 16px;
+}
+
+.apex-preview__day-pane + .apex-preview__day-pane {
+  border-left: 1px solid var(--apex-line);
+}
+
+.apex-preview__chart {
+  position: relative;
+  margin-top: 8px;
+}
+
+.apex-preview__area {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.apex-preview__grid {
+  stroke: var(--apex-line);
+  stroke-width: 1;
+}
+
+.apex-preview__axis {
+  fill: var(--apex-muted);
+  font-size: 11px;
+}
+
+.apex-preview__axis.is-active {
+  fill: var(--apex-ink);
+  font-weight: 700;
+}
+
+.apex-preview__area-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.apex-preview__draw {
+  stroke-dasharray: var(--draw-length, 1);
+  stroke-dashoffset: var(--draw-length, 1);
+}
+
+.apex-preview__area-fill {
+  opacity: 0;
+  animation: apex-fade 1.3s cubic-bezier(0, 0, 0.58, 1) forwards;
+}
+
+.apex-preview__cursor {
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.apex-preview__tip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  min-width: 88px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #111318;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.3;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.18);
+}
+
+.apex-preview__tip strong {
+  font-size: 13px;
+}
+
+.apex-preview__tip.is-below {
+  transform: translate(-50%, 14px);
+}
+
+@keyframes apex-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes apex-fade {
+  to { opacity: 1; }
+}
+
+@keyframes apex-reveal {
+  to { clip-path: inset(0 0 0 0); }
+}
+
+.apex-preview__demo .apex-preview__table-scroll,
+.apex-preview__donut-wrap {
+  margin-top: 16px;
+}
+
+.apex-preview__donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.apex-preview__donut-stage {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  flex-shrink: 0;
+}
+
+.apex-preview__donut {
+  width: 148px;
+  height: 148px;
+}
+
+.apex-preview__donut circle {
+  cursor: pointer;
+  transition: stroke-width 0.2s ease, opacity 0.2s ease;
+}
+
+.apex-preview__donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.apex-preview__donut-center strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.apex-preview__donut-center span {
+  color: var(--apex-muted);
+  font-size: 11px;
+}
+
+.apex-preview__donut-center small {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.apex-preview__legend {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.apex-preview__legend li {
+  display: block;
+}
+
+.apex-preview__legend button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.apex-preview__legend button:hover,
+.apex-preview__legend button.is-active,
+.apex-preview__legend button:focus-visible {
+  background: #f4f6f8;
+}
+
+.apex-preview__legend strong {
+  margin-left: auto;
+}
+
+.apex-preview__segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f2f4f7;
+}
+
+.apex-preview__segment button {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--apex-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.apex-preview__segment button.is-active {
+  background: #fff;
+  color: var(--apex-ink);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.apex-preview__person {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.apex-preview__avatar {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.apex-preview__table .is-num,
+.apex-preview__goal-head span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.apex-preview__demo .apex-preview__table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.apex-preview__demo .apex-preview__table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.apex-preview__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.apex-preview__goal {
+  margin-top: 16px;
+}
+
+.apex-preview__goal + .apex-preview__goal {
+  margin-top: 16px;
+}
+
+.apex-preview__goal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.apex-preview__table--fit {
+  min-width: 0;
+}
+
+.apex-preview.is-dark {
+  --apex-ink: #f4f6f8;
+  --apex-muted: #a3aab8;
+  --apex-line: #2a3140;
+  background: #0f1218;
+}
+
+.apex-preview.is-dark .apex-preview__account-menu,
+.apex-preview.is-dark .apex-preview__field input,
+.apex-preview.is-dark .apex-preview__card,
+.apex-preview.is-dark .apex-preview__header,
+.apex-preview.is-dark .apex-preview__header-link,
+.apex-preview.is-dark .apex-preview__logout,
+.apex-preview.is-dark .apex-preview__billing,
+.apex-preview.is-dark .apex-preview__theme,
+.apex-preview.is-dark .apex-preview__switch button,
+.apex-preview.is-dark .apex-preview__month input {
+  background: #171b22;
+  color: #f4f6f8;
+  border-color: #2a3140;
+}
+
+.apex-preview.is-dark .apex-preview__table,
+.apex-preview.is-dark .apex-preview__table td,
+.apex-preview.is-dark .apex-preview__table th {
+  background: transparent;
+  color: inherit;
+}
+
+.apex-preview.is-dark .apex-preview__nav-link:hover,
+.apex-preview.is-dark .apex-preview__nav-link:focus-visible,
+.apex-preview.is-dark .apex-preview__nav-link.is-active {
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark button.apex-preview__version-update,
+.apex-preview.is-dark .apex-preview__version-update:hover,
+.apex-preview.is-dark .apex-preview__version-update:focus-visible {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark .theme-toggle:hover,
+.apex-preview.is-dark .theme-toggle:focus-visible,
+.apex-preview.is-dark .theme-toggle[aria-pressed="true"] {
+  border-color: var(--vanzai-seal, #22c55e);
+  color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark .apex-preview__billing.is-active,
+.apex-preview.is-dark .apex-preview__switch button.is-active {
+  background: var(--apex-green);
+  color: #fff;
+}
+
+.apex-preview.is-dark .apex-preview__theme[aria-pressed="true"] {
+  background: var(--vanzai-seal, #22c55e);
+  color: #fff;
+}
+
+.apex-preview.is-dark .apex-preview__segment {
+  background: #11151c;
+}
+
+.apex-preview.is-dark .apex-preview__segment button.is-active {
+  background: #2a3140;
+  color: #f4f6f8;
+}
+
+.apex-preview.is-dark .apex-preview__legend button:hover,
+.apex-preview.is-dark .apex-preview__legend button.is-active,
+.apex-preview.is-dark .apex-preview__demo .apex-preview__table tbody tr:hover {
+  background: #222833;
+}
+
+.apex-preview.is-dark .apex-preview__account-menu a:hover,
+.apex-preview.is-dark .apex-preview__account-menu a:focus-visible,
+.apex-preview.is-dark .apex-preview__account-menu button:hover,
+.apex-preview.is-dark .apex-preview__account-menu button:focus-visible {
+  background: #222833;
+}
+
+.apex-preview.is-dark .apex-preview__icon-button:hover,
+.apex-preview.is-dark .apex-preview__icon-button:focus-visible,
+.apex-preview.is-dark .apex-preview__menu:hover,
+.apex-preview.is-dark .apex-preview__menu:focus-visible,
+.apex-preview.is-dark .apex-preview__header-link:hover,
+.apex-preview.is-dark .apex-preview__header-link:focus-visible {
+  outline-color: var(--vanzai-seal, #22c55e);
+}
+
+.apex-preview.is-dark .apex-preview__card.is-live:hover {
+  border-color: color-mix(in srgb, var(--vanzai-seal, #22c55e) 35%, transparent);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apex-preview__draw,
+  .apex-preview__area-fill,
+  .apex-preview__spark,
+  .apex-preview__bar-fill,
+  .apex-preview__card.is-live,
+  .apex-preview__donut circle,
+  .apex-preview__demo .apex-preview__table tbody tr {
+    animation: none;
+    transition: none;
+  }
+
+  .apex-preview__draw {
+    stroke-dashoffset: 0;
+  }
+
+  .apex-preview__area-fill {
+    opacity: 1;
+  }
+
+  .apex-preview__spark {
+    clip-path: none;
+  }
+}
