@@ -135,7 +135,9 @@ class WakeMonitorService:
             if not self.db.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_KEY}).scalar():
                 return {"skipped": "running"}
         day = now.date()
-        data = build_wake_status(self.db, day, include_test=True)
+        # Emergency default: test schedules remain visible but never trigger
+        # automatic LINE sends. Filter before grouping to protect formal times.
+        data = build_wake_status(self.db, day, include_test=False)
         counts = {"worker_reminder": 0, "operator_alert": 0, "operator_reported": 0}
         recipients = None
         groups: dict[tuple, list[tuple[dict, int]]] = {}
@@ -285,6 +287,9 @@ class WakeMonitorService:
         return {"type": "flex", "altText": f"{claim['worker_name']}さんへの連絡", "contents": {"type": "bubble", "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": contents}}}
 
     def _share_claim(self, worker_id: str, day: date, staff_name: str, claimer: str, worker_name: str) -> list[tuple[str, list[dict]]]:
+        from src.services.wake_status import build_wake_status
+        if not any(row["worker_id"] == worker_id for row in build_wake_status(self.db, day, include_test=False)["items"]):
+            return []  # Old test alerts may still have working claim buttons.
         alerted = {s.recipient for s in self._sent(worker_id, day, "operator_alert") if s.status == "sent"} - {claimer, "-"}
         if not alerted:
             return []

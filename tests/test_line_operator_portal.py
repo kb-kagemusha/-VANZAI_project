@@ -508,6 +508,24 @@ def test_wake_monitor_skips_after_start_and_without_alert_permission(api_client,
     assert all(to != "Uoperator" for to, _ in fake_line.pushes)
 
 
+def test_test_wake_schedules_never_push_even_from_old_alerts(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
+    from datetime import datetime, time
+    from src.models.line_daily import WorkerScheduleEntry, WakeMonitorSend
+    from src.services.wake_monitor import WakeMonitorService
+    worker, _ = _accepted_today(api_client, db_session, ops_user)
+    db_session.query(WorkerScheduleEntry).filter_by(worker_id=worker.id).update({"is_test": True})
+    day = ws.today_jst()
+    db_session.add(WakeMonitorSend(worker_id=worker.id, work_date=day, kind="operator_alert", round=0,
+                                  recipient="Uother", status="sent", created_at=ws.now_utc()))
+    db_session.commit()
+    fake_line.pushes.clear()
+    service = WakeMonitorService(db_session, fake_line)
+    for hour, minute in [(6, 0), (6, 15), (6, 25), (8, 55)]:
+        assert service.run(datetime.combine(day, time(hour, minute))) == {"worker_reminder": 0, "operator_alert": 0, "operator_reported": 0}
+    assert service._share_claim(worker.id, day, "運営", "Uoperator", worker.name) == []
+    assert fake_line.pushes == []
+
+
 def test_wake_alert_buttons_reject_non_operators(api_client, db_session, operator, ops_user, pdf_root, line_env, fake_line):
     from tests.test_line_daily import _postback
     worker, _ = _accepted_today(api_client, db_session, ops_user)
