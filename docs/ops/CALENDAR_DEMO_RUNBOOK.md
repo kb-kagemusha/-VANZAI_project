@@ -115,3 +115,7 @@ LINEの過去に送られたメッセージは取り消さない。メニュー�
 `bash /var/www/vanzai/scripts/deploy/02_app_deploy.sh --demo-schedule-gaps-repair` で元受諾から派生予定を再構築。結果remaining_missing_worker_days=0かつremaining_unexpected_worker_days=0を確認する。
 再プレビューで両差分0。原回答・参加日・版・PDF・金額・削除済み依頼は変更しない。実送信なし。
 本人についてはカレンダーの全参加日とWebの月/受託済み一覧を照合する。LINEトークの予定は直近7日、受託済みは本日以降、Web受託済みは当月初以降という既存期間差に注意し、同じ期間で比較する。
+
+## 指定したサンプル稼働者への参加追加（0.54.4 / DEC-129）
+
+Chromeを使わず、--sample-participation-preview "氏名" で対象候補と日程の重ならない3件の計画を確認し、--sample-participation-apply "稼働者ID" "プレビュートークン" で適用する。いずれも02_app_deploy.shの単独運用モード。元の確定済み依頼を変更せず、既存テスト依頼を元に本人だけの確認用テスト依頼を作り、明示的なデモ受諾から参加予定を再構築する。LINE送信なし、通知オンなら停止。同じ稼働者・同じ日の再実行は追加作成しない。実績・正式配置・請求・支払は作成しない。
