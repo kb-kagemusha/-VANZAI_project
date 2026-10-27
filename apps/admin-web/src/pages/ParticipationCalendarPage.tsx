@@ -37,7 +37,7 @@ export function ParticipationCalendarPage({ embedded = false }: { embedded?: boo
     <div className="page-stack">
       {embedded ? null : <PageHeader
         title="参加カレンダー"
-        description="正式の発注依頼書について、イベントごと・日ごとの参加OKの人数を表示します。参加OK＝今の依頼書で受諾済み、確認待ち＝前の版で受諾済みで新しい版は未回答、未回答＝送付済みでまだ返事がない人です。同じ人は1日に1つにだけ数えます。テストの依頼書と取消した依頼書は出しません。"
+        description="正式の発注依頼書について、イベントごと・日ごとの参加OKの人数を表示します。運営確定方式では運営の決定後に参加OKになります。従来方式は受諾で参加OKです。確認待ち＝前の版で受諾済みで新しい版は未回答、未回答＝送付済みでまだ返事がない人です。同じ人は1日に1つにだけ数えます。テストの依頼書と取消した依頼書は出しません。"
         eyebrow="運用"
       />}
       {query.isError ? (
@@ -77,7 +77,8 @@ function DayCell({ day, data, selected, onSelect }: { day: string; data?: Partic
         <span key={event.series_id} className={`pc-event ov-c${categoryColor(event.categories)}`} title={event.project_name}>
           <span className="pc-event-name">{(event.project_name || "").split("\n")[0] || event.document_number}</span>
           <span className="pc-ok">{event.ok.length}</span>
-          {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
+          {event.pending?.length ? <span className="pc-changing">待{event.pending.length}</span> : null}
+      {event.changing.length > 0 ? <span className="pc-changing">{event.changing.length}</span> : null}
           {event.unanswered.length > 0 ? <span className="pc-unanswered">{event.unanswered.length}</span> : null}
           {event.unavailable?.length ? <span className="pc-unavailable">×{event.unavailable.length}</span> : null}
         </span>
@@ -93,6 +94,7 @@ function EventDetail({ event }: { event: ParticipationEvent }) {
       <span className="order-field-hint">　{event.document_number}</span>
       {event.unavailable?.length ? <p>× 参加不可 {event.unavailable.length}人：{participantNames(event.unavailable)}</p> : null}
       <p>参加OK {event.ok.length}人：{event.ok.length ? participantNames(event.ok) : "なし"}</p>
+      {event.pending?.length ? <p>運営確認待ち {event.pending.length}人：{participantNames(event.pending)}</p> : null}
       {event.changing.length > 0 ? <p>変更確認待ち {event.changing.length}人：{participantNames(event.changing)}</p> : null}
       {event.unanswered.length > 0 ? <p>未回答 {event.unanswered.length}人：{participantNames(event.unanswered)}</p> : null}
     </div>
@@ -113,9 +115,9 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
   return (
     <div className="order-draft-table participation-summary-table">
       <table className="data-table">
-        <colgroup><col className="pc-summary-date-column" /><col /><col /><col /><col /></colgroup>
+        <colgroup><col className="pc-summary-date-column" /><col /><col /><col /><col /><col /></colgroup>
         <thead>
-          <tr><th scope="col">日付</th><th scope="col">参加OK</th><th scope="col">変更確認待ち</th><th scope="col">未回答</th><th scope="col">参加不可</th></tr>
+          <tr><th scope="col">日付</th><th scope="col">参加OK</th><th scope="col">運営確認待ち</th><th scope="col">変更確認待ち</th><th scope="col">未回答</th><th scope="col">参加不可</th></tr>
         </thead>
         <tbody>
           {days.map((day) => {
@@ -124,6 +126,7 @@ export function VersionParticipationSummary({ versionId }: { versionId: string }
               <tr key={day.date}>
                 <td className="pc-summary-date">{dayLabel(day.date)}</td>
                 <td><ParticipationMembers label="参加OK" people={event.ok} /></td>
+                <td><ParticipationMembers label="運営確認待ち" people={event.pending ?? []} /></td>
                 <td><ParticipationMembers label="変更確認待ち" people={event.changing} /></td>
                 <td><ParticipationMembers label="未回答" people={event.unanswered} /></td>
                 <td><ParticipationMembers label="参加不可" people={event.unavailable ?? []} unavailable /></td>

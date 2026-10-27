@@ -68,6 +68,7 @@ def render_order_request_pdf(
     worker_names: list[str],
     created_at: datetime | None = None,
     notice: str = "new",
+    requires_operator_confirmation: bool = False,
     previous_work_date_label: str = "",
     previous_site_name: str = "",
     previous_site_address: str | None = None,
@@ -149,7 +150,10 @@ def render_order_request_pdf(
     ))
     story.append(_field_table(fields, content_width, styles, changed))
     story.append(Spacer(1, 3 * mm))
-    story.append(_reply_note(content_width, styles))
+    if requires_operator_confirmation:
+        story.append(Paragraph("参加可能の回答後、運営が参加者を決定します。人数調整で見送りになる場合もあります。結果は改めて連絡しますので、少しお待ちください。", styles["note"]))
+    else:
+        story.append(_reply_note(content_width, styles))
     def _decorate(canvas, _doc):
         canvas.saveState()
         canvas.setFillColor(_INK)

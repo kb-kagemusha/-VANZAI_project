@@ -170,6 +170,7 @@ export interface OrderRequestVersion {
   /** 送付先ごとの個人不参加日（DEC-065）。 */
   draft_recipient_absences?: Record<string, string[]>;
   allow_partial_accept: boolean;
+  requires_operator_confirmation?: boolean;
   phone_first: boolean;
   phone_contacted_at: string | null;
   phone_note: string | null;
@@ -246,6 +247,7 @@ export interface OrderRequestListResponse {
 }
 
 export interface OrderRequestReplyItem {
+  requires_operator_confirmation?: boolean;
   delivery_id: string;
   version_id: string;
   document_number: string;
@@ -296,6 +298,7 @@ export interface OrderRequestWrite {
   recipient_absences?: Record<string, string[]>;
   /** 日付を選んで受諾できる（A1+ §3.1） */
   allow_partial_accept?: boolean;
+  requires_operator_confirmation?: boolean;
 }
 
 export interface OrderRequestReplyGroup extends Omit<OrderRequestReplyItem, "delivery_id" | "worker_name" | "send_status" | "ack_status" | "decline_reason" | "acked_at" | "ack_reminded_at"> {

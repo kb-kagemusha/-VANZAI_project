@@ -1225,6 +1225,7 @@ export type LineWorkerPickView = {
   meeting_place: string | null;
   state: "open" | "accepted" | "declined" | "superseded" | "not_allowed" | "closed";
   allow_partial_accept: boolean;
+  requires_operator_confirmation?: boolean;
   offered_dates: string[];
   period: { from: string; to: string } | null;
   work_days: Array<{ date: string; start_time: string; end_time: string; end_next_day: boolean }>;
@@ -1860,6 +1861,7 @@ export type ParticipationEvent = {
   is_test?: boolean;
   ok: ParticipationPerson[];
   changing: ParticipationPerson[];
+  pending?: ParticipationPerson[];
   unanswered: ParticipationPerson[];
   unavailable?: ParticipationPerson[];
 };

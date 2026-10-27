@@ -139,6 +139,7 @@ class OrderRequestVersion(Base, TimestampMixin):
     draft_recipient_absences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 日付を選んで受諾できる（一部の日だけの参加を認める）。確定後は変えない（修正版で変える）。A1+ §3.1
     allow_partial_accept: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    requires_operator_confirmation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     phone_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     phone_contacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

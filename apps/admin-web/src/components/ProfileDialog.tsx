@@ -13,6 +13,8 @@ export function ProfileDialog({ title, onClose, children, className = "" }: { ti
     panel.current?.focus();
     function onKey(event: KeyboardEvent) {
       if (event.defaultPrevented || document.querySelector(".app-dialog-backdrop")) return;
+      const dialogs = document.querySelectorAll(".worker-profile-modal");
+      if (dialogs[dialogs.length - 1] !== panel.current) return;
       if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
       if (event.key !== "Tab") return;
       const items = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]') ?? []).filter((el) => el.getClientRects().length > 0);

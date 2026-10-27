@@ -26,7 +26,7 @@ function StateNotice({ view }: { view: PortalReplyView }) {
     case "open":
       return null;
     case "accepted":
-      return <p className="lw-ok">受諾済みです。参加する日：{"\n"}{participationDateLines(view.accepted_dates)}</p>;
+      return <p className="lw-ok">{view.requires_operator_confirmation ? "参加可能の回答済みです。運営からの結果連絡をお待ちください。回答した日：" : "受諾済みです。参加する日："}{"\n"}{participationDateLines(view.accepted_dates)}</p>;
     case "declined":
       return <p className="lw-warn">この依頼は辞退済みです。</p>;
     case "superseded":
@@ -112,7 +112,7 @@ export function LineWorkerReply({ token, deliveryId }: { token: string; delivery
   if (phase === "done") {
     return (
       <div className="lw-card">
-        <h1>{doneOutcome === "acked" ? "受諾を送りました" : "辞退を送りました"}</h1>
+        <h1>{doneOutcome === "acked" ? view.requires_operator_confirmation ? "参加可能の回答を送りました" : "受諾を送りました" : "辞退を送りました"}</h1>
         <p className="lw-note">LINEのトークに受付の通知を送りました。</p>
         <a className="lw-secondary lwp-link-button lwp-back" href="?m=home">予定の画面へ戻る</a>
       </div>
@@ -138,11 +138,11 @@ export function LineWorkerReply({ token, deliveryId }: { token: string; delivery
     return (
       <div className="lw-card">
         <h1>確認</h1>
-        <p className="lw-confirm-lead">依頼された日すべてで受諾します。</p>
+        <p className="lw-confirm-lead">{view.requires_operator_confirmation ? "依頼された日すべてで参加可能と回答します。参加者は運営が決定し、改めて連絡します。" : "依頼された日すべてで受諾します。"}</p>
         {summary}
         {message ? <p className="lw-footer-error">{message}</p> : null}
         <div className="lw-confirm-actions">
-          <button type="button" className="lw-primary" disabled={sending} onClick={() => void send("accept")}>{sending ? "送信しています…" : "受諾を送る"}</button>
+          <button type="button" className="lw-primary" disabled={sending} onClick={() => void send("accept")}>{sending ? "送信しています…" : view.requires_operator_confirmation ? "参加可能と回答する" : "受諾を送る"}</button>
           <button type="button" className="lw-secondary" disabled={sending} onClick={() => { setMessage(""); setPhase("ready"); }}>戻る</button>
         </div>
       </div>
@@ -179,8 +179,8 @@ export function LineWorkerReply({ token, deliveryId }: { token: string; delivery
         ) : null}
         {view.state === "open" ? (
           <>
-            <button type="button" className="lw-primary" onClick={() => { setMessage(""); setPhase("accept"); window.scrollTo(0, 0); }}>全日程で受諾する</button>
-            {view.can_pick ? <a className="lw-secondary lwp-link-button" href={`?m=pick&d=${encodeURIComponent(view.delivery_id)}`}>日付を選んで受諾する</a> : null}
+            <button type="button" className="lw-primary" onClick={() => { setMessage(""); setPhase("accept"); window.scrollTo(0, 0); }}>{view.requires_operator_confirmation ? "全日程で参加可能" : "全日程で受諾する"}</button>
+            {view.can_pick ? <a className="lw-secondary lwp-link-button" href={`?m=pick&d=${encodeURIComponent(view.delivery_id)}`}>{view.requires_operator_confirmation ? "参加可能な日を選ぶ" : "日付を選んで受諾する"}</a> : null}
             <button type="button" className="lw-secondary lwp-decline-entry" onClick={() => { setMessage(""); setPhase("decline"); window.scrollTo(0, 0); }}>辞退する</button>
           </>
         ) : null}

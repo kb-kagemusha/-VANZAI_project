@@ -195,7 +195,7 @@ class WorkerScheduleEntry(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("delivery_id", "work_group_id", "work_date", name="uq_worker_schedule_entry_key"),
         CheckConstraint(
-            "status IN ('active', 'changing', 'superseded', 'cancelled')",
+            "status IN ('active', 'changing', 'pending', 'superseded', 'cancelled')",
             name="ck_worker_schedule_entry_status",
         ),
         ForeignKeyConstraint(

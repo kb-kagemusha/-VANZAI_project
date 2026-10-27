@@ -100,3 +100,6 @@ html[data-theme="dark"] .ov-person.is-unavailable, html[data-theme="dark"] .ov-w
 /* ×付きの氏名に、列幅の拡張分を使えるよう余白も調整する。 */
 .ov-event-run .ov-event-box { padding-left: 4px; padding-right: 4px; }
 .ov-event-run .ov-person { padding-left: 2px; padding-right: 2px; }
+
+.ov-person.is-pending { background: #eff6ff; color: #1e40af; border: 1px dashed #3b82f6; }
+html[data-theme="dark"] .ov-person.is-pending { background: #1e3a5f; color: #bfdbfe; }

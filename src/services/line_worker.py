@@ -148,6 +148,12 @@ class LineWorkerService:
         work_days = ws.version_work_days(version)
         all_dates = sorted({d["work_date"] for d in work_days})
         state = self._pick_state(delivery, version, series)
+        offered_dates = list(delivery.offered_dates or [])
+        if version.requires_operator_confirmation and state in ("open", "not_allowed"):
+            from src.services.order_staffing import open_response_dates
+            offered_dates = [d for d in offered_dates if d in open_response_dates(self.session,version,worker.id)]
+            if not offered_dates:
+                state = "closed"
         current = ws.current_state(self.session, delivery) if delivery.ack_status == ACK_ACKED else None
         from src.services.line_order import version_date_context
 
@@ -163,7 +169,8 @@ class LineWorkerService:
             "meeting_place": display["meeting_place"],
             "state": state,
             "allow_partial_accept": bool(version.allow_partial_accept),
-            "offered_dates": [d for d in (delivery.offered_dates or []) if d in set(all_dates) and d not in set(holidays)],
+            "requires_operator_confirmation": bool(version.requires_operator_confirmation),
+            "offered_dates": [d for d in offered_dates if d in set(all_dates) and d not in set(holidays)],
             "period": context["period"],
             "work_days": [
                 {"date": d["work_date"], "start_time": d["start_time"], "end_time": d["end_time"], "end_next_day": d["end_next_day"]}
@@ -200,7 +207,7 @@ class LineWorkerService:
         view["can_pick"] = bool(
             view["state"] == "open"
             and version.allow_partial_accept
-            and len(view["offered_dates"]) >= 2
+            and len(view["offered_dates"]) >= (1 if version.requires_operator_confirmation else 2)
             and FEATURE_PICK_DATES in enabled_actions(self.session)
         )
         view["pdf_available"] = bool(version.pdf_object_key) and ws.pdf_viewable(self.session, delivery)
@@ -239,6 +246,7 @@ class LineWorkerService:
             # 確定（commit）後にトークへ受付の通知を送る。論理キーは「送付行×返事の結果」（v1.2：送信予定表へ移っても二重に送らない）
             self.pending_notice = {
                 "to": session_row.line_user_id,
+                "delivery_id": delivery.id,
                 "text": self._reply_notice_text(delivery, outcome, accepted, reason),
                 "retry_key": reply_notice_key(delivery.id, outcome),
             }
@@ -279,6 +287,9 @@ class LineWorkerService:
             lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
         if outcome == "declined" and reason:
             lines.append(f"理由：{reason}")
+        if version.requires_operator_confirmation:
+            lines[0] = "参加可能の回答を受け付けました。ありがとうございます。運営からの結果連絡をお待ちください。" if delivery.ack_status == ACK_ACKED else "承知しました。ご回答ありがとうございます。"
+            lines = [line for line in lines if not line.startswith("予定はメニュー")]
         return "\n".join(lines)
 
     def accept_dates(self, session_row: LineWorkerSession, worker: Worker, delivery_id: str, dates: list, idempotency_key: str) -> dict:
@@ -306,6 +317,7 @@ class LineWorkerService:
             # 確定（commit）後にトークへ受付の通知を送る。再送（同じキー）では送らない
             self.pending_notice = {
                 "to": session_row.line_user_id,
+                "delivery_id": delivery.id,
                 "text": self._accept_notice_text(delivery, accepted),
                 "retry_key": str(uuid.uuid5(uuid.NAMESPACE_URL, f"vanzai-pick:{worker.id}:{key}")),
             }
@@ -344,6 +356,9 @@ class LineWorkerService:
         lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
         lines.append(participation_summary(version, dates))
         lines.append("予定はメニューの「スケジュール確認」でも確認できます。")
+        if version.requires_operator_confirmation:
+            lines[0] = "参加可能の回答を受け付けました。ありがとうございます。運営からの結果連絡をお待ちください。" if delivery.ack_status == ACK_ACKED else "承知しました。ご回答ありがとうございます。"
+            lines = [line for line in lines if not line.startswith("予定はメニュー")]
         return "\n".join(lines)
 
     def send_pending_notice(self) -> None:
@@ -352,6 +367,15 @@ class LineWorkerService:
         self.pending_notice = None
         if not notice:
             return
+        delivery = self.session.get(OrderRequestDelivery,notice.get("delivery_id")) if notice.get("delivery_id") else None
+        if delivery:
+            version = self.session.get(OrderRequestVersion,delivery.version_id)
+            document = self.session.get(OrderRequestDocument,version.document_id)
+            if version.requires_operator_confirmation and document.kind == KIND_TEST:
+                from src.services import wake_test_notifications as tests
+                tests.lock(self.session)
+                if not tests.active(tests.setting(self.session)):
+                    return
         try:
             result = build_line_client().push_receipt(notice["to"], notice["text"], notice["retry_key"])
             if result.status not in (200, 409):

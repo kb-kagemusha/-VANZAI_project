@@ -11,6 +11,7 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { TestBadge } from "../components/TestBadge";
 import { PageHeader } from "../components/PageHeader";
+import { StaffingPanel } from "../components/StaffingPanel";
 import { FormDialog } from "../components/FormDialog";
 import { OrderDatePicker } from "../components/OrderDatePicker";
 import { OrderChangeDeliveryNotice } from "../components/OrderChangeDeliveryNotice";
@@ -166,6 +167,7 @@ const EMPTY_FORM: OrderRequestWrite = {
   worker_ids: [],
   recipient_absences: {},
   allow_partial_accept: false,
+  requires_operator_confirmation: true,
   phone_first: false,
   phone_note: "",
   tracker_user_id: null,
@@ -304,6 +306,7 @@ export function OrderRequestsPage() {
       worker_ids: version.draft_worker_ids,
       recipient_absences: version.draft_recipient_absences ?? {},
       allow_partial_accept: Boolean(version.allow_partial_accept),
+      requires_operator_confirmation: Boolean(version.requires_operator_confirmation),
       phone_first: version.phone_first,
       phone_note: version.phone_note ?? "",
       tracker_user_id: version.tracker_user_id,
@@ -1104,7 +1107,7 @@ export function OrderRequestsPage() {
                       {row.recipients.map((person) => (
                         <li key={person.delivery_id}>
                           <span>{person.worker_name}</span>
-                          <span className={`order-reply-status is-${person.ack_status}`}>{REPLY_LABEL[person.ack_status] ?? person.ack_status}</span>
+                          <span className={`order-reply-status is-${person.ack_status}`}>{person.requires_operator_confirmation && person.ack_status === "acked" ? "参加可能の回答" : REPLY_LABEL[person.ack_status] ?? person.ack_status}</span>
                           {person.version_no !== row.version_no ? <small>第{person.version_no}版への回答</small> : null}
                           {person.send_status === "failed" ? <small>送信失敗</small> : null}
                           {person.decline_reason ? <small>{person.decline_reason}</small> : null}
@@ -1305,6 +1308,7 @@ export function OrderRequestsPage() {
                   ? (basedOn ? `${basedOn.documentNumber} の変更` : "発注依頼書")
                   : detail?.document_number}
               </p>
+              {detail?.requires_operator_confirmation && detail.status === "confirmed" && !detail.dispatch_stopped ? <StaffingPanel versionId={detail.id} canWrite={canWrite} /> : null}
               <h3 id="order-draft-title">{templateMode ? "テンプレートの作成" : creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
               <p className="order-draft-lead">{detailLead}</p>
               {!creating && detail && detail.change_documents.length > 0 ? (
@@ -1563,6 +1567,8 @@ export function OrderRequestsPage() {
                   </>}
                   {sections.schedule ? (
                     <div className="order-field order-span-6 order-partial-accept">
+                      <label className="order-check"><input type="checkbox" checked={Boolean(form.requires_operator_confirmation)} disabled={!editable} onChange={(event) => setForm({ ...form, requires_operator_confirmation: event.target.checked })} />運営が人数調整して参加者を確定する</label>
+                      <p className="order-field-hint">参加可能の返事だけでは確定しません。依頼書の確定後に日別の上限人数を設定します。</p>
                       <label className="order-check">
                         <input
                           type="checkbox"
@@ -1900,7 +1906,7 @@ export function OrderRequestsPage() {
                             ) : null}
                           </td>
                           <td>
-                            {REPLY_LABEL[row.ack_status] ?? row.ack_status}
+                            {detail?.requires_operator_confirmation && row.ack_status === "acked" ? "参加可能の回答" : REPLY_LABEL[row.ack_status] ?? row.ack_status}
                             {row.decline_reason ? `（${row.decline_reason}）` : ""}
                             {row.applied && row.participation_dates.length > 0 ? (
                               <div className="order-field-hint">

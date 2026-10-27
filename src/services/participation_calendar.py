@@ -95,7 +95,20 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
             for delivery, dates, status, _state_id in ws.participation_sources(session, series.id, worker_id):
                 kind = OK if status == "active" else CHANGING
                 name = worker_names.get(worker_id, delivery.worker_name_snapshot)
-                buckets.append((worker_id, kind, dates, name))
+                source_version = session.get(OrderRequestVersion, delivery.version_id)
+                if source_version.requires_operator_confirmation:
+                    from src.models.order_staffing import StaffingDecision
+                    decisions = {d.work_date.isoformat(): d.status for d in session.query(StaffingDecision).filter_by(version_id=source_version.id, worker_id=worker_id)}
+                    for day in dates:
+                        decision = decisions.get(day)
+                        if decision == "confirmed":
+                            buckets.append((worker_id, kind, {day}, name))
+                        elif decision is None:
+                            buckets.append((worker_id, "pending", {day}, name))
+                        else:
+                            buckets.append((worker_id, UNAVAILABLE, {day}, name))
+                else:
+                    buckets.append((worker_id, kind, dates, name))
                 bucket_dates[worker_id].update(dates)
         current_deliveries = session.query(OrderRequestDelivery).filter(OrderRequestDelivery.version_id == answerable.id).all() if series.answerable_version_id else []
         for delivery in current_deliveries:
@@ -133,6 +146,7 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
                     "site_name": display.get("site_name") or "",
                     "is_test": document.kind != KIND_FORMAL,
                     "categories": (parse_sections(answerable.request_conditions) or {}).get("categories", []),
+                    "pending": [],
                     OK: [],
                     CHANGING: [],
                     UNANSWERED: [],
@@ -158,7 +172,7 @@ def build(session: Session, *, start: str | None = None, end: str | None = None,
     for day in sorted(days):
         events = sorted(days[day].values(), key=lambda e: (e["project_name"], e["document_number"]))
         for event in events:
-            for kind in (OK, CHANGING, UNANSWERED, UNAVAILABLE):
+            for kind in (OK, CHANGING, UNANSWERED, UNAVAILABLE, "pending"):
                 event[kind].sort(key=lambda w: w["name"])
         result.append({"date": day, "events": events})
     return result

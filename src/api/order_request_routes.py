@@ -84,6 +84,7 @@ class OrderRequestWrite(BaseModel):
     internal_source: InternalOrderSource | None = None
     recipient_absences: dict[str, list[str]] | None = None
     allow_partial_accept: bool = False
+    requires_operator_confirmation: bool = False
 
 
 class OrderRequestUpdate(BaseModel):
@@ -110,6 +111,7 @@ class OrderRequestUpdate(BaseModel):
     internal_source: InternalOrderSource | None = None
     recipient_absences: dict[str, list[str]] | None = None
     allow_partial_accept: bool | None = None
+    requires_operator_confirmation: bool | None = None
 
 
 class ReasonBody(BaseModel):
@@ -371,6 +373,7 @@ def _version_out(
         "draft_worker_ids": list(version.draft_worker_ids or []),
         "draft_recipient_absences": dict(version.draft_recipient_absences or {}),
         "allow_partial_accept": bool(version.allow_partial_accept),
+        "requires_operator_confirmation": bool(version.requires_operator_confirmation),
         "phone_first": version.phone_first,
         "phone_contacted_at": version.phone_contacted_at,
         "phone_note": version.phone_note,
@@ -661,6 +664,7 @@ def update_order_request_version(
             recipient_absences=fields.get("recipient_absences"),
             recipient_absences_set="recipient_absences" in fields,
             allow_partial_accept=fields.get("allow_partial_accept"),
+            requires_operator_confirmation=fields.get("requires_operator_confirmation"),
             actor=current_user,
         )
 
@@ -798,6 +802,7 @@ def participation_calendar(
 
 def _reply_item(delivery, document, version, sources, changes, worker_names=None):
     return {
+        "requires_operator_confirmation": bool(version.requires_operator_confirmation),
         "delivery_id": delivery.id,
         "version_id": version.id,
         "document_number": document.document_number,

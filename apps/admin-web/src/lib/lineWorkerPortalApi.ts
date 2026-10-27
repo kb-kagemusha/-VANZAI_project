@@ -49,6 +49,7 @@ export type PortalEntry = {
   site_address: string | null;
   meeting_place: string | null;
   changing: boolean;
+  pending?: boolean;
   change?: PortalChange | null;
   is_test: boolean;
   delivery_id: string;
@@ -112,6 +113,7 @@ export type PortalOrder = {
   upcoming_days: number;
   acked_at: string | null;
   changing: boolean;
+  pending?: boolean;
   change?: PortalChange | null;
   newer_delivery_id: string | null;
   is_test: boolean;
@@ -136,6 +138,7 @@ export type PortalReplyView = {
   meeting_place: string | null;
   state: "open" | "accepted" | "declined" | "superseded" | "closed";
   allow_partial_accept: boolean;
+  requires_operator_confirmation?: boolean;
   offered_dates: string[];
   period: { from: string; to: string } | null;
   work_days: Array<{ date: string; start_time: string; end_time: string; end_next_day: boolean }>;

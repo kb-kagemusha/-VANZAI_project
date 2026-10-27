@@ -187,7 +187,7 @@ class LineOperatorService:
             return {"kind": kind, "days": [{"date": day["date"], "events": [{
                 "project_name": event["project_name"], "site_name": event["site_name"],
                 "version_id": event["version_id"], "document_number": event["document_number"], "is_test": event["is_test"],
-                **{bucket: [{"worker_id": p["worker_id"], "name": p["name"]} for p in event[bucket]] for bucket in ("ok", "changing", "unanswered", "unavailable")}
+                **{bucket: [{"worker_id": p["worker_id"], "name": p["name"]} for p in event[bucket]] for bucket in ("ok", "changing", "unanswered", "unavailable", "pending")}
             } for event in day["events"]]} for day in rows]}
         require(user, Permission.AVAILABILITY_READ)
         from src.services.operator_calendar import availability

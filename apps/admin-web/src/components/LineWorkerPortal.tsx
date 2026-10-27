@@ -107,6 +107,7 @@ function EntryCard({ entry, onPdf, pdfBusy, replyEnabled }: { entry: PortalEntry
       <p className="lwp-entry-title">{firstLine(entry.project_name) || "（案件名なし）"}</p>
       {entry.site_name ? <p className="lw-meta">稼働場所：{firstLine(entry.site_name)}</p> : null}
       {entry.meeting_place ? <p className="lw-meta">集合場所：{entry.meeting_place}</p> : null}
+      {entry.pending ? <p className="lwp-badge is-changing">運営の確認待ち（参加は未確定）</p> : null}
       {entry.changing ? <ChangeNotice change={entry.change} onPdf={onPdf} pdfBusy={pdfBusy} replyEnabled={replyEnabled} /> : null}
     </div>
   );
@@ -357,6 +358,7 @@ function OrdersView({ token, onHome, homeEnabled }: { token: string; onHome: () 
           <p className="lwp-entry-title">{firstLine(item.project_name) || "案件"}</p>
           {item.site_name ? <p className="lw-meta">稼働場所：{firstLine(item.site_name)}</p> : null}
           <p className="lw-meta">日程：{periodLabel(item.first_date, item.last_date)}（{item.work_days}日{item.upcoming_days < item.work_days ? `、これから${item.upcoming_days}日` : ""}）</p>
+          {item.pending ? <p className="lwp-badge is-changing">運営の確認待ち（参加は未確定）</p> : null}
           {item.changing ? <ChangeNotice change={item.change} onPdf={(id) => void pdf.open(id)} pdfBusy={pdf.busy} replyEnabled={data.reply_enabled} /> : null}
           <div className="lwp-actions">
             {item.pdf_available ? (

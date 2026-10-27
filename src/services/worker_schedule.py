@@ -423,13 +423,22 @@ def rebuild(session: Session, series_id: str, worker_id: str, *, actor: str) -> 
         for day in version_work_days(version):
             if day["work_date"] not in participating:
                 continue
+            staffing_status, staffing_reason = status, None
+            if version.requires_operator_confirmation:
+                from src.models.order_staffing import StaffingDecision
+                decision = session.query(StaffingDecision).filter_by(version_id=version.id, worker_id=worker_id,
+                    work_date=date.fromisoformat(day["work_date"])).one_or_none()
+                if decision is None:
+                    staffing_status, staffing_reason = "pending", "awaiting_operator_confirmation"
+                elif decision.status != "confirmed":
+                    staffing_status, staffing_reason = ENTRY_CANCELLED, "staffing_" + decision.status
             key = (source.id, day["work_group_id"], day["work_date"])
             expected[key] = {
                 "series_id": series_id, "document_id": document.id, "version_id": version.id,
                 "delivery_id": source.id, "worker_id": worker_id,
                 "work_group_id": day["work_group_id"], "work_date": date.fromisoformat(day["work_date"]),
                 "start_time": _time(day["start_time"]), "end_time": _time(day["end_time"]),
-                "end_next_day": day["end_next_day"], "status": status, "status_reason": None,
+                "end_next_day": day["end_next_day"], "status": staffing_status, "status_reason": staffing_reason,
                 "source_state_id": state_id, "is_test": document.kind == KIND_TEST, **display,
             }
 

@@ -111,6 +111,7 @@ def estimate_for(session: Session, entries: list[WorkerScheduleEntry]) -> dict:
     - 合計は小数のまま足し、表示用に円未満を切り捨てる。
     - テストの依頼書の予定は正式の合計に混ぜず、"test" に同じ計算で別に返す（0.51.5：画面の確認用に【テスト】として表示する）。
     """
+    entries = [e for e in entries if e.status in (ENTRY_ACTIVE, ENTRY_CHANGING)]
     versions: dict[str, dict] = {}
     formal = _estimate(session, [e for e in entries if not e.is_test], versions)
     tests = [e for e in entries if e.is_test]
@@ -176,7 +177,7 @@ class LineWorkerPortal:
                 WorkerScheduleEntry.worker_id == worker_id,
                 WorkerScheduleEntry.work_date >= start,
                 WorkerScheduleEntry.work_date <= end,
-                or_(WorkerScheduleEntry.status == ENTRY_ACTIVE, WorkerScheduleEntry.status == ENTRY_CHANGING),
+                WorkerScheduleEntry.status.in_((ENTRY_ACTIVE, ENTRY_CHANGING, "pending")),
             )
             .order_by(WorkerScheduleEntry.work_date, WorkerScheduleEntry.start_time, WorkerScheduleEntry.id)
             .all()
@@ -228,6 +229,7 @@ class LineWorkerPortal:
             "site_address": entry.site_address or None,
             "meeting_place": entry.meeting_place or None,
             "changing": entry.status == ENTRY_CHANGING,
+            "pending": entry.status == "pending",
             "change": self._change_info(entry, enabled or set(), changes if changes is not None else {}),
             "is_test": bool(entry.is_test),
             "delivery_id": entry.delivery_id,
@@ -270,6 +272,11 @@ class LineWorkerPortal:
             display = ws.version_display(version)
             dates = sorted({d["work_date"] for d in ws.version_work_days(version)})
             offered = [d for d in (delivery.offered_dates or []) if d in set(dates)]
+            if version.requires_operator_confirmation:
+                from src.services.order_staffing import open_response_dates
+                offered = [d for d in offered if d in open_response_dates(self.session,version,worker.id)]
+                if not offered:
+                    continue
             items[series.id] = {
                 "kind": kind,
                 "delivery_id": delivery.id,
@@ -327,7 +334,7 @@ class LineWorkerPortal:
             .filter(
                 WorkerScheduleEntry.worker_id == worker.id,
                 WorkerScheduleEntry.work_date >= since,
-                or_(WorkerScheduleEntry.status == ENTRY_ACTIVE, WorkerScheduleEntry.status == ENTRY_CHANGING),
+                WorkerScheduleEntry.status.in_((ENTRY_ACTIVE, ENTRY_CHANGING, "pending")),
             )
             .order_by(WorkerScheduleEntry.work_date, WorkerScheduleEntry.start_time)
             .all()
@@ -364,6 +371,7 @@ class LineWorkerPortal:
                 "upcoming_days": sum(1 for d in dates if d >= today),
                 "acked_at": delivery.acked_at.isoformat() if delivery.acked_at else None,
                 "changing": changing,
+                "pending": any(e.status == "pending" for e in entries),
                 "change": next((self._change_info(e, enabled, changes) for e in entries if e.status == ENTRY_CHANGING), None),
                 "newer_delivery_id": newer,
                 "is_test": bool(entries[0].is_test),

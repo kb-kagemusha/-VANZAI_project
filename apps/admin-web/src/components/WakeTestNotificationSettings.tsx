@@ -19,14 +19,14 @@ function SettingsDialog({ settings, onClose }: { settings: Settings; onClose: ()
     onSuccess: (result) => { client.setQueryData(key, result); onClose(); },
     onError: (cause) => setError(cause.message),
   });
-  return <FormDialog open title="テスト予定の起床関連LINE通知" size="compact" busy={save.isPending || reloading} onClose={onClose}>
+  return <FormDialog open title="テスト案件のLINE通知（起床・人員確定）" size="compact" busy={save.isPending || reloading} onClose={onClose}>
     <form className="wake-test-settings-form" onSubmit={(event) => {
       event.preventDefault(); setError("");
       const expiry = enabled ? new Date(`${until}+09:00`) : null;
       if (expiry && Number.isNaN(expiry.getTime())) { setError("終了時刻を入力してください。"); return; }
       save.mutate({ enabled, enabled_until: expiry?.toISOString() ?? null, revision });
     }}>
-      <p>全運営で共有する設定です。テスト予定の本人への催促・運営への未報告通知などを切り替えます。正式予定の通知と、画面の「テストも表示」は変わりません。</p>
+      <p>全運営で共有する設定です。テスト予定の催促・未報告通知と、運営確定方式の募集・確定・終了通知を切り替えます。正式予定の通知と、画面の「テストも表示」は変わりません。</p>
       <fieldset className="order-draft-section" disabled={save.isPending || reloading}>
         <legend>テスト通知</legend>
         <div role="group" aria-label="テスト通知の送信" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -58,7 +58,7 @@ export function WakeTestNotificationSettings() {
   const enabled = !!(settings?.enabled && settings.enabled_until && new Date(settings.enabled_until).getTime() > Date.now());
   return <section className="wake-test-notification-summary" aria-label="テスト通知の設定">
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-      <div><strong>テスト予定の起床関連LINE通知</strong><p style={{ margin: "4px 0" }} role="status">{query.isError ? "設定を取得できませんでした" : !settings ? "設定を確認中…" : enabled ? `送る：${display(settings.enabled_until!)}まで（日本時間）` : "送らない"}</p>
+      <div><strong>テスト案件のLINE通知（起床・人員確定）</strong><p style={{ margin: "4px 0" }} role="status">{query.isError ? "設定を取得できませんでした" : !settings ? "設定を確認中…" : enabled ? `送る：${display(settings.enabled_until!)}まで（日本時間）` : "送らない"}</p>
       {settings?.updated_by && <small>最終変更：{settings.updated_by} {settings.updated_at && display(settings.updated_at)}</small>}</div>
       <button type="button" className="btn btn-ghost" disabled={!settings || query.isError} onClick={() => setOpen(true)}>テスト通知を設定</button>
       {query.isError && <button type="button" className="btn btn-ghost" onClick={() => query.refetch()}>再読み込み</button>}

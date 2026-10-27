@@ -15,9 +15,9 @@ import { ApiError, getParticipationCalendar, type ParticipationEvent } from "../
 import { categoryColor } from "../lib/calendarCategory";
 import "../styles/orderOverview.css";
 
-type Status = "ok" | "changing" | "unanswered" | "unavailable";
-const STATUS_LABEL: Record<Status, string> = { ok: "参加OK", changing: "変更確認待ち", unanswered: "未回答", unavailable: "× 参加不可" };
-const STATUSES: Status[] = ["ok", "changing", "unanswered", "unavailable"];
+type Status = "pending" | "ok" | "changing" | "unanswered" | "unavailable";
+const STATUS_LABEL: Record<Status, string> = { pending: "運営確認待ち", ok: "参加OK", changing: "変更確認待ち", unanswered: "未回答", unavailable: "× 参加不可" };
+const STATUSES: Status[] = ["ok", "pending", "changing", "unanswered", "unavailable"];
 
 
 type EventRow = {
@@ -213,7 +213,7 @@ export function OrderOverviewBody() {
                             <div className={`ov-event-run ov-c${row.color}`} data-series-id={row.seriesId}
                               style={{ gridTemplateColumns: `repeat(${run.items.length}, minmax(0, 1fr))` }}>
                               {run.items.map((event, index) => {
-                                const total = event.ok.length + event.changing.length + event.unanswered.length + (event.unavailable?.length ?? 0);
+                                const total = event.ok.length + event.changing.length + event.unanswered.length + (event.pending?.length ?? 0) + (event.unavailable?.length ?? 0);
                                 return <div key={days[run.start + index]} className={`ov-event-box ov-c${row.color}`}>
                                   <span className={`ov-event-name${index ? " is-repeat" : ""}`} aria-hidden={index > 0}>{row.name}</span>
                                   <span className="ov-count">参加OK {event.ok.length}人</span>

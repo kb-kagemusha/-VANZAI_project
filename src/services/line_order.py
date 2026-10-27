@@ -266,6 +266,18 @@ class LineOrderService:
             raise OrderRequestError(409, "確定済みで送付を止めていない版だけ送れます")
         if delivery.view_revoked:
             raise OrderRequestError(409, "閲覧を停止した送付先には送れません")
+        if version.requires_operator_confirmation:
+            from src.models.order_staffing import StaffingLimit
+            from src.services import wake_test_notifications as tests
+            limits = self.session.query(StaffingLimit).filter_by(version_id=version.id).all()
+            if not limits or any(r.capacity <= 0 for r in limits):
+                raise OrderRequestError(409, "参加者・日別人数から、全稼働日の上限人数を設定してください")
+            if all(r.closed for r in limits):
+                raise OrderRequestError(409, "この募集は終了しています")
+            if document.kind == KIND_TEST:
+                tests.lock(self.session)
+                if not tests.active(tests.setting(self.session)):
+                    raise OrderRequestError(409, "テスト案件のLINE通知はオフです。起床状況の通知設定で期間を指定してください")
         if not version.pdf_object_key:
             raise OrderRequestError(409, "PDFが無いため送れません")
         link = self._active_link_for_worker(delivery.worker_id)
@@ -297,6 +309,7 @@ class LineOrderService:
             offered_dates=delivery.offered_dates,
             off_dates=off_dates_in_period(version, delivery.offered_dates),
             pick_dates_url=self._pick_dates_url(version, delivery),
+            operator_confirmation=bool(version.requires_operator_confirmation),
         )
         try:
             result = self.client.push_messages(link.line_user_id, messages)
@@ -680,6 +693,13 @@ class LineOrderService:
             return "already", "受諾は記録済みです。"
         if delivery.ack_status == ACK_DECLINED:
             return "already", "辞退は記録済みです。"
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        if version.requires_operator_confirmation:
+            from src.services.order_staffing import open_response_dates
+            offered = list(delivery.offered_dates or []) if dates is None else dates
+            allowed = open_response_dates(self.session, version, delivery.worker_id)
+            if not set(offered).issubset(allowed):
+                return "closed", "募集が終了した日が含まれています。最新の案内を確認してください。"
         delivery.ack_status = ACK_ACKED
         delivery.acked_at = _now()
         delivery.decline_reason = None
@@ -709,6 +729,8 @@ class LineOrderService:
             ws.set_application(self.session, series_id=series_id, worker_id=delivery.worker_id, delivery=delivery, ended_reason=None, actor=actor)
             ws.rebuild(self.session, series_id, delivery.worker_id, actor=actor)
             reply = f"{ACCEPT_REPLY}\n{participation_summary(version, participating)}"
+        if version.requires_operator_confirmation:
+            reply = "参加可能の回答を受け付けました。ありがとうございます。\n運営からの結果連絡をお待ちください。"
         return "acked", reply
 
     def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
@@ -776,6 +798,10 @@ class LineOrderService:
             },
         )
         self.session.flush()
+        version = self.session.get(OrderRequestVersion, delivery.version_id)
+        if version.requires_operator_confirmation:
+            from src.services.order_staffing import DECLINE_THANKS
+            return "declined", DECLINE_THANKS
         return "declined", DECLINE_RECORDED
 
     def send_due_reminders(self, *, now: datetime | None = None) -> int:
@@ -801,6 +827,19 @@ class LineOrderService:
         )
         sent = 0
         for delivery in rows:
+            version = delivery.version
+            if version.requires_operator_confirmation:
+                from src.services.order_staffing import open_response_dates
+                from src.services import wake_test_notifications as tests
+                series = ws.lock_series(self.session, version.series_id)
+                if series.answerable_version_id != version.id or not (set(delivery.offered_dates or []) & open_response_dates(self.session,version,delivery.worker_id)):
+                    continue
+                document = self.session.get(OrderRequestDocument, version.document_id)
+                if document.kind == KIND_TEST:
+                    tests.lock(self.session)
+                    setting = tests.setting(self.session)
+                    if not tests.active(setting) or tests.utc(version.follow_up_due_at) < tests.utc(setting.enabled_from):
+                        continue
             due_at = delivery.version.follow_up_due_at
             if due_at is None:
                 continue
@@ -913,6 +952,7 @@ def _push_messages(
     offered_dates: list[str] | None = None,
     pick_dates_url: str | None = None,
     off_dates: list[str] | None = None,
+    operator_confirmation: bool = False,
 ) -> list[dict]:
     lines = [
         f"発注依頼書 {document_number}（版{version_no}）",
@@ -927,6 +967,9 @@ def _push_messages(
         lines.insert(3, f"期間中の休業日: {format_date_set(off_dates) or 'なし'}"[:300])
     if is_test:
         lines = [TEST_BANNER, *lines[:-1], "このメッセージはテスト送信です。", lines[-1]]
+    if operator_confirmation:
+        from src.services.order_staffing import INVITATION_NOTE
+        lines.append(INVITATION_NOTE)
     detail = "\n".join(lines)
     return [
         {"type": "text", "text": detail[:5000]},
@@ -940,7 +983,7 @@ def _push_messages(
                     "layout": "vertical",
                     "spacing": "md",
                     "contents": [
-                        {"type": "text", "text": BUTTON_TEMPLATE_TEXT, "wrap": True, "size": "sm"},
+                        {"type": "text", "text": "参加できるか教えてください。結果は改めて連絡します。" if operator_confirmation else BUTTON_TEMPLATE_TEXT, "wrap": True, "size": "sm"},
                         {
                             "type": "button",
                             "style": "primary",
@@ -948,9 +991,9 @@ def _push_messages(
                             "height": "sm",
                             "action": {
                                 "type": "postback",
-                                "label": ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
+                                "label": "全日程で参加可能" if operator_confirmation else ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
                                 "data": f"or_accept:{delivery_id}",
-                                "displayText": ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
+                                "displayText": "全日程で参加可能" if operator_confirmation else ACCEPT_ALL_LABEL if pick_dates_url else ACCEPT_LABEL,
                             },
                         },
                         *([{

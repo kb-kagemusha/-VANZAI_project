@@ -155,6 +155,7 @@ class OrderRequestService:
         internal_source_set: bool = False,
         recipient_absences: dict | None = None,
         allow_partial_accept: bool = False,
+        requires_operator_confirmation: bool = False,
     ) -> OrderRequestVersion:
         self._validate_kind(kind)
         worker_ids = self._normalize_worker_ids(worker_ids)
@@ -191,6 +192,7 @@ class OrderRequestService:
             recipient_absences, version.draft_worker_ids or [], version.request_conditions
         )
         version.allow_partial_accept = bool(allow_partial_accept)
+        version.requires_operator_confirmation = bool(requires_operator_confirmation)
         if source is not None:
             self._copy_internal_source(source, version)
         if internal_source_set:
@@ -248,6 +250,7 @@ class OrderRequestService:
         recipient_absences: dict | None = None,
         recipient_absences_set: bool = False,
         allow_partial_accept: bool | None = None,
+        requires_operator_confirmation: bool | None = None,
     ) -> OrderRequestVersion:
         if version.status == STATUS_CANCELLED:
             raise OrderRequestError(409, "取消済みの版は編集できません")
@@ -264,7 +267,7 @@ class OrderRequestService:
             worker_ids,
             site_address,
         ]
-        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set or internal_source_set or recipient_absences_set or allow_partial_accept is not None
+        content_change = any(item is not None for item in content_keys) or clear_site_id or site_id is not None or site_address_set or internal_source_set or recipient_absences_set or allow_partial_accept is not None or requires_operator_confirmation is not None
         if content_change and version.status != STATUS_DRAFT:
             raise OrderRequestError(409, "確定済みの本文と送付先は変更できません。改訂で新しい版を作ってください")
 
@@ -328,6 +331,12 @@ class OrderRequestService:
         version.draft_recipient_absences = self._normalize_absences(
             absences, version.draft_worker_ids or [], version.request_conditions
         )
+        if requires_operator_confirmation is not None and version.revision_of_version_id:
+            previous = self.session.get(OrderRequestVersion, version.revision_of_version_id)
+            if previous and bool(previous.requires_operator_confirmation) != bool(requires_operator_confirmation):
+                raise OrderRequestError(409, "改訂では参加確定方式を変更できません。新しい依頼書として作成してください")
+        if requires_operator_confirmation is not None:
+            version.requires_operator_confirmation = bool(requires_operator_confirmation)
         if allow_partial_accept is not None:
             version.allow_partial_accept = bool(allow_partial_accept)
         self.session.flush()
@@ -464,6 +473,7 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=names,
             created_at=version.created_at,
+            requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
         )
         object_key = (
@@ -495,6 +505,8 @@ class OrderRequestService:
                 )
             )
         self.session.flush()
+        from src.services.order_staffing import ensure_round
+        ensure_round(self.session, version)
         self._apply_confirmation_to_series(series, version, set(worker_ids), actor)
         try:
             self.storage.save_bytes(object_key, pdf_bytes)
@@ -556,6 +568,7 @@ class OrderRequestService:
             draft_worker_ids=source_ids,
             draft_recipient_absences=dict(version.draft_recipient_absences or {}) or None,
             allow_partial_accept=bool(version.allow_partial_accept),
+            requires_operator_confirmation=bool(version.requires_operator_confirmation),
             phone_first=False,
             tracker_user_id=version.tracker_user_id,
             follow_up_due_on=version.follow_up_due_on,
@@ -706,6 +719,7 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=names,
             created_at=version.created_at,
+            requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
         )
 
@@ -741,6 +755,7 @@ class OrderRequestService:
             counterparty_note=version.counterparty_note,
             worker_names=[str(name) for name in names],
             created_at=version.created_at,
+            requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
         )
 

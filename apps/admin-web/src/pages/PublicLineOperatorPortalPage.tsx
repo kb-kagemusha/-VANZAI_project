@@ -16,7 +16,7 @@ type WakeRow = {
 };
 type Wake = { date: string; is_today: boolean; total: number; reported: number; items: WakeRow[] };
 type Person = { worker_id: string; name: string };
-type Event = { project_name: string; site_name: string; version_id: string; document_number: string; is_test?: boolean; ok: Person[]; changing: Person[]; unanswered: Person[]; unavailable: Person[] };
+type Event = { project_name: string; site_name: string; version_id: string; document_number: string; is_test?: boolean; ok: Person[]; pending?: Person[]; changing: Person[]; unanswered: Person[]; unavailable: Person[] };
 type Calendar = { kind: string; days?: { date: string; events: Event[] }[]; workers?: { worker_id: string; name: string; days: Record<string, { status: string | null; assignments: { project_name: string; shift_label: string; status: string }[] }> }[] };
 type Recipient = { worker_id: string; name: string; acked_at: string | null };
 type OrderItem = {
@@ -36,7 +36,7 @@ const MODES: Record<string, Tab> = { wake: "wake", today: "today", calendar: "ca
 const today = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
 const addDays = (value: string, days: number) => { const d = new Date(`${value}T00:00:00+09:00`); d.setUTCDate(d.getUTCDate() + days); return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(d); };
 const labels: Record<string, string> = { available_all_day: "終日可", available_after_15: "15時以降可", unavailable: "不可", consult_required: "要相談", undecided: "未定" };
-const buckets = [["ok", "参加予定"], ["changing", "変更確認待ち"], ["unanswered", "未回答"], ["unavailable", "参加不可"]] as const;
+const buckets = [["ok", "参加予定"], ["pending", "運営確認待ち"], ["changing", "変更確認待ち"], ["unanswered", "未回答"], ["unavailable", "参加不可"]] as const;
 const receipt = [["acked", "受領済み"], ["unacked", "未受領"], ["decline_pending", "辞退の確認待ち"], ["declined", "辞退"], ["unsent", "未送付"]] as const;
 const time = (value: string) => new Date(value).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
 const dayLabel = (value: string) => { const d = new Date(`${value}T00:00:00+09:00`); return `${d.getMonth() + 1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`; };
@@ -151,7 +151,7 @@ export function PublicLineOperatorPortalPage() {
   }, [month]);
   const query = search.trim().toLocaleLowerCase();
   const events = (calendar?.days?.find((row) => row.date === (tab === "today" ? today() : day))?.events ?? [])
-    .filter((event) => !query || `${event.project_name} ${event.site_name} ${buckets.flatMap(([b]) => event[b].map((p) => p.name)).join(" ")}`.toLocaleLowerCase().includes(query));
+    .filter((event) => !query || `${event.project_name} ${event.site_name} ${buckets.flatMap(([b]) => (event[b] ?? []).map((p) => p.name)).join(" ")}`.toLocaleLowerCase().includes(query));
   const selectedWorkers = calendar?.workers?.filter((row) => !query || row.name.toLocaleLowerCase().includes(query) || row.days[day]?.assignments.some((a) => a.project_name.toLocaleLowerCase().includes(query))) ?? [];
   const orderItems = (orders?.items ?? []).filter((item) => !query || `${item.project_name} ${item.site_name} ${item.document_number} ${receipt.flatMap(([k]) => item[k].map((p) => p.name)).join(" ")}`.toLocaleLowerCase().includes(query));
   const wakeItems = (wake?.items ?? []).filter((row) => !query || `${row.worker_name} ${row.entries.map((e) => e.project_name).join(" ")}`.toLocaleLowerCase().includes(query));
@@ -159,7 +159,7 @@ export function PublicLineOperatorPortalPage() {
 
   const eventCards = <>{events.map((event) => <article className="operator-card" key={event.version_id + event.project_name}>
     <h3>{event.is_test && <TestMark />}{event.project_name || "案件"}</h3>{event.site_name && <p className="operator-sub">{event.site_name}</p>}
-    {buckets.map(([bucket, label]) => <div className={`operator-bucket is-${bucket}`} key={bucket}><strong>{label} {event[bucket].length}名</strong><p>{event[bucket].map((p) => p.name).join("、") || "—"}</p></div>)}
+    {buckets.map(([bucket, label]) => <div className={`operator-bucket is-${bucket}`} key={bucket}><strong>{label} {(event[bucket] ?? []).length}名</strong><p>{(event[bucket] ?? []).map((p) => p.name).join("、") || "—"}</p></div>)}
     <div className="operator-actions">{pdf(event.version_id)}<small>発注依頼書 {event.document_number}</small></div>
   </article>)}{events.length === 0 && <p className="operator-empty">{tab === "today" ? "今日の案件はありません。" : "この日の案件はありません。"}</p>}</>;
 

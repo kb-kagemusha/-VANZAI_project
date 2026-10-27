@@ -211,7 +211,7 @@ export function PublicLineWorkerPage() {
         {phase === "confirm" && view ? (
           <div className="lw-card">
             <h1>確認</h1>
-            <p className="lw-confirm-lead">以下の参加日で返信します。</p>
+            <p className="lw-confirm-lead">{view.requires_operator_confirmation ? "以下の日程で参加可能と回答します。参加者は運営が決定し、改めて連絡します。" : "以下の参加日で返信します。"}</p>
             <p className="lw-eyebrow">発注依頼書 {view.document_number}（版{view.version_no}）{view.project_name ? `　${view.project_name.split("\n")[0]}` : ""}</p>
             <PeriodSummary view={view} />
             <h2 className="lw-confirm-head">参加する日（{selected.length}日）</h2>
@@ -311,7 +311,7 @@ function StateNotice({ view }: { view: LineWorkerPickView }) {
     case "open":
       return <p className="lw-note">初めは依頼された日をすべて選んでいます。参加できない日だけタップして外し、確認へ進んでください。</p>;
     case "accepted":
-      return <p className="lw-ok">受諾済みです。参加する日：{"\n"}{participationDateLines(view.accepted_dates)}</p>;
+      return <p className="lw-ok">{view.requires_operator_confirmation ? "参加可能の回答済みです。運営からの結果連絡をお待ちください。回答した日：" : "受諾済みです。参加する日："}{"\n"}{participationDateLines(view.accepted_dates)}</p>;
     case "declined":
       return <p className="lw-warn">この依頼は辞退済みです。</p>;
     case "superseded":
