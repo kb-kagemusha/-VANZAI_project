@@ -237,7 +237,12 @@ def test_menu_images_and_actions_fit_without_changing_default():
     assert json.dumps(default, sort_keys=True) == before
     assert spec["areas"][0]["action"]["type"] == "richmenuswitch"
     assert [a["action"] for a in spec["areas"][1:]] == [a["action"] for a in default["areas"]]
-    from scripts.line.operator_menu import operator_image
+    from scripts.line.operator_menu import operator_image, worker_image
+    from PIL import Image
+    from io import BytesIO
+    worker_data = worker_image(spec, labels, Path("scripts/line/rich_menu/a2.png").read_bytes())
+    assert len(worker_data) < 1024 * 1024
+    assert Image.open(BytesIO(worker_data)).size == (2500, 1686)
     dual, _ = operator_spec("2011980694-test", True, "test-worker")
     only, _ = operator_spec("2011980694-test", False, "test-worker")
     modes = [a["action"]["uri"].rsplit("m=", 1)[1] for a in only["areas"]]

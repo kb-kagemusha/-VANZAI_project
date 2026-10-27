@@ -97,12 +97,9 @@ def worker_spec(default, operator_alias):
 
 
 def worker_image(spec, labels, original):
-    from PIL import Image
-    image = Image.open(BytesIO(image_for({"areas": spec["areas"][:1]}, labels[:1])))
-    with Image.open(BytesIO(original)) as source:
-        image.paste(source.convert("RGB").resize((2500, 1466)), (0, 220))
-    output = BytesIO(); image.save(output, format="PNG", optimize=True)
-    data = output.getvalue()
+    from scripts.line.worker_dual_image import render
+    # Draw to the final layout. Never stretch the default menu bitmap vertically.
+    data = render(spec, labels)
     if len(data) > 1024 * 1024:
         raise RuntimeError("Worker menu image exceeds LINE size limit")
     return data
