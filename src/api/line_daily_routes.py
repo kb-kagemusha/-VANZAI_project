@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,35 @@ from src.services.auth import has_permission
 router = APIRouter(prefix="/api/line-daily", tags=["LINE daily"])
 
 from src.services.wake_status import build_wake_status, wake_next_action
+
+
+def test_settings_admin(user=Depends(get_current_active_user)):
+    if getattr(user.role, "value", user.role) != "admin":
+        raise HTTPException(403, "テスト通知の設定は全体管理者だけが変更できます。")
+    return user
+
+
+class WakeTestSettingBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: StrictBool
+    enabled_until: datetime | None = None
+    revision: int = Field(ge=0)
+
+
+@router.get("/test-notification-settings")
+def read_test_notification_settings(response: Response, user: User = Depends(test_settings_admin), db: Session = Depends(get_db)):
+    from src.services.wake_test_notifications import view
+    response.headers["Cache-Control"] = "no-store"
+    return view(db)
+
+
+@router.put("/test-notification-settings")
+def save_test_notification_settings(body: WakeTestSettingBody, response: Response, user: User = Depends(test_settings_admin), db: Session = Depends(get_db)):
+    from src.services.wake_test_notifications import update
+    response.headers["Cache-Control"] = "no-store"
+    result = update(db, user, **body.model_dump())
+    db.commit()
+    return result
 
 
 @router.get("/wake-status")

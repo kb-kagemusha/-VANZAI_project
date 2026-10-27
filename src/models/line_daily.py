@@ -276,6 +276,7 @@ class WakeContactLog(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(26), nullable=False)
     actor_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -393,12 +394,28 @@ class WakeMonitorSend(Base):
     kind: Mapped[str] = mapped_column(String(30), nullable=False)
     round: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     recipient: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("worker_id", "work_date", "kind", "round", "recipient", name="uq_wake_monitor_sends_key"),
+        UniqueConstraint("worker_id", "work_date", "kind", "round", "recipient", "is_test", name="uq_wake_monitor_sends_key"),
         CheckConstraint("kind IN ('worker_reminder','operator_alert','operator_claimed','operator_reported')", name="ck_wake_monitor_sends_kind"),
         CheckConstraint("status IN ('pending','sent','failed','skipped')", name="ck_wake_monitor_sends_status"),
         Index("ix_wake_monitor_sends_date_worker", "work_date", "worker_id"),
+    )
+
+
+class WakeTestNotificationSetting(Base):
+    """Global, expiring permission to send test wake notifications. Missing = off."""
+    __tablename__ = "wake_test_notification_settings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    enabled_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_wake_test_setting_singleton"),
+        CheckConstraint("(enabled_from IS NULL AND enabled_until IS NULL) OR (enabled_from IS NOT NULL AND enabled_until IS NOT NULL AND enabled_until > enabled_from)", name="ck_wake_test_setting_window"),
     )

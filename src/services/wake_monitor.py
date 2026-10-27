@@ -72,6 +72,9 @@ def _resolved(contacts: list[dict]) -> bool:
 class WakeMonitorService:
     def __init__(self, db: Session, client=None):
         self.db = db
+        self.is_test = False
+        self.test_from = None
+        self.test_until = None
         if client is None:
             from src.services.line_messaging import build_line_client
             client = build_line_client()
@@ -96,7 +99,9 @@ class WakeMonitorService:
         return link.line_user_id if link else None
 
     def _sent(self, worker_id: str, day: date, kind: str, round_no: int | None = None):
-        query = self.db.query(WakeMonitorSend).filter_by(worker_id=worker_id, work_date=day, kind=kind)
+        query = self.db.query(WakeMonitorSend).filter_by(worker_id=worker_id, work_date=day, kind=kind, is_test=self.is_test)
+        if self.is_test and self.test_from:
+            query = query.filter(WakeMonitorSend.created_at >= self.test_from)
         if round_no is not None:
             query = query.filter_by(round=round_no)
         return query.all()
@@ -104,7 +109,7 @@ class WakeMonitorService:
     def _reserve(self, worker_id: str, day: date, kind: str, round_no: int, recipient: str) -> WakeMonitorSend | None:
         """送る前に記録する。同じ知らせが既にあれば None（二重送信しない）。"""
         row = WakeMonitorSend(id=generate_ulid(), worker_id=worker_id, work_date=day, kind=kind, round=round_no,
-                              recipient=recipient, status="pending", created_at=ws.now_utc())
+                              recipient=recipient, is_test=self.is_test, status="pending", created_at=ws.now_utc())
         try:
             with self.db.begin_nested():
                 self.db.add(row)
@@ -115,6 +120,13 @@ class WakeMonitorService:
 
     def _push(self, to: str, messages: list[dict], rows: list[WakeMonitorSend]) -> bool:
         from src.services.line_messaging import LineNotConfigured
+        if self.is_test:
+            from src.services.wake_test_notifications import utc
+            if self.test_until is None or ws.now_utc() >= utc(self.test_until):
+                for row in rows:
+                    row.status = "skipped"
+                self.db.flush()
+                return False
         try:
             result = self.client.push_messages(to, messages)
             ok = result.status == 200
@@ -129,23 +141,38 @@ class WakeMonitorService:
 
     # ---- 定期の確認（毎分） --------------------------------------------------------------------
     def run(self, now_jst: datetime | None = None) -> dict:
-        from src.services.wake_status import build_wake_status
+        from src.services.wake_test_notifications import active, setting, utc
         now = now_jst or ws.now_utc().astimezone(ws.JST).replace(tzinfo=None)
         if self.db.bind.dialect.name == "postgresql":
             if not self.db.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_KEY}).scalar():
                 return {"skipped": "running"}
+        self.is_test = False
+        counts = self._run_scope(now)
+        config = setting(self.db)
+        if active(config, now.replace(tzinfo=ws.JST)):
+            self.is_test = True
+            self.test_from, self.test_until = utc(config.enabled_from), utc(config.enabled_until)
+            for key, value in self._run_scope(now).items():
+                counts[key] += value
+        self.is_test = False
+        return counts
+
+    def _run_scope(self, now):
+        from src.services.wake_status import build_wake_status
         day = now.date()
-        # Emergency default: test schedules remain visible but never trigger
-        # automatic LINE sends. Filter before grouping to protect formal times.
-        data = build_wake_status(self.db, day, include_test=False)
+        data = build_wake_status(self.db, day, include_test=self.is_test)
         counts = {"worker_reminder": 0, "operator_alert": 0, "operator_reported": 0}
         recipients = None
         groups: dict[tuple, list[tuple[dict, int]]] = {}
         for row in data["items"]:
+            if self.is_test and not all(entry["is_test"] for entry in row["entries"]):
+                continue  # Formal work always takes priority on mixed worker days.
             times = deadline_for(day, row["first_start"])
             if times is None:
                 continue
             deadline, alert_at, start = times
+            if self.is_test and deadline.replace(tzinfo=ws.JST) < self.test_from:
+                continue  # Do not flush overdue test schedules when enabling.
             if row["wake_reported_at"] is not None:
                 counts["operator_reported"] += self._notify_reported(row, day)
                 continue
@@ -226,7 +253,7 @@ class WakeMonitorService:
             rows.append({"type": "box", "layout": "horizontal", "spacing": "md", "alignItems": "center", "contents": [
                 {"type": "text", "text": f"{row['worker_name']}さん", "flex": 3, "wrap": True, "weight": "bold", "size": "md"},
                 {"type": "button", "style": "primary", "color": ORANGE, "height": "sm", "flex": 4,
-                 "action": {"type": "postback", "label": "私が連絡します", "data": f"wa_claim:{row['worker_id']}:{day.isoformat()}", "displayText": f"{row['worker_name']}さんに連絡します"}},
+                 "action": {"type": "postback", "label": "私が連絡します", "data": f"wa_claim:{row['worker_id']}:{day.isoformat()}{':test' if self.is_test else ''}", "displayText": f"{row['worker_name']}さんに連絡します"}},
             ]})
         contents = [
             {"type": "text", "text": "起床報告がまだの方がいます", "weight": "bold", "color": ORANGE, "size": "sm"},
@@ -245,6 +272,8 @@ class WakeMonitorService:
     def handle_postback(self, line_user_id: str, data: str) -> tuple[str, list[dict], list[tuple[str, list[dict]]]]:
         """(記録用の結果, 本人への返信, ほかの人への知らせ[(宛先, メッセージ)])。"""
         from src.services.line_operator import LineOperatorService, OperatorError, identity
+        from src.services.wake_test_notifications import lock
+        lock(self.db)
         try:
             _link, staff, user = identity(self.db, line_user_id)
         except OperatorError:
@@ -255,9 +284,15 @@ class WakeMonitorService:
         except (IndexError, ValueError):
             return "wake_alert_invalid", [{"type": "text", "text": "このボタンは使えません。運営メニューの起床状況から確認してください。"}], []
         service = LineOperatorService(self.db)
+        test_button = parts[-1] == "test"
         try:
+            if test_button:
+                require_test_row = service._wake_row(day, worker_id)
+                if not all(e["is_test"] for e in require_test_row["entries"]):
+                    raise OperatorError(409, "テスト予定が変更されています。正式予定の操作は運営メニューから確認してください。")
             if action in ("wa_claim", "wa_take"):
                 claim = service.claim(staff, user, day, worker_id, takeover=action == "wa_take")
+                claim["is_test"] = test_button
                 shares = self._share_claim(worker_id, day, staff.name, line_user_id, claim["worker_name"]) if claim["new_claim"] else []
                 return "wake_alert_claimed", [self._claim_reply(claim, day)], shares
             if action == "wa_res":
@@ -267,7 +302,7 @@ class WakeMonitorService:
         except OperatorError as exc:
             if exc.status == 409 and "対応中" in exc.message:
                 return "wake_alert_busy", [{"type": "template", "altText": exc.message, "template": {"type": "buttons", "text": exc.message[:160], "actions": [
-                    {"type": "postback", "label": "代わりに私が対応する", "data": f"wa_take:{worker_id}:{day.isoformat()}", "displayText": "代わりに私が対応します"}]}}], []
+                    {"type": "postback", "label": "代わりに私が対応する", "data": f"wa_take:{worker_id}:{day.isoformat()}{':test' if test_button else ''}", "displayText": "代わりに私が対応します"}]}}], []
             return "wake_alert_rejected", [{"type": "text", "text": exc.message}], []
         return "wake_alert_invalid", [{"type": "text", "text": "このボタンは使えません。"}], []
 
@@ -283,13 +318,18 @@ class WakeMonitorService:
             contents.append({"type": "text", "text": "電話番号が登録されていません。管理画面の稼働者登録で確認してください。", "wrap": True, "color": "#9B1C14", "size": "sm"})
         contents.append({"type": "text", "text": "結果を押すと、ほかの運営にも記録が見えます。", "size": "xs", "color": "#4B5563", "wrap": True, "margin": "md"})
         for value, label in RESULT_BUTTONS:
-            contents.append({"type": "button", "style": "secondary", "height": "sm", "action": {"type": "postback", "label": label, "data": f"wa_res:{claim['worker_id']}:{day.isoformat()}:{value}", "displayText": label}})
+            contents.append({"type": "button", "style": "secondary", "height": "sm", "action": {"type": "postback", "label": label, "data": f"wa_res:{claim['worker_id']}:{day.isoformat()}:{value}{':test' if claim.get('is_test') else ''}", "displayText": label}})
         return {"type": "flex", "altText": f"{claim['worker_name']}さんへの連絡", "contents": {"type": "bubble", "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": contents}}}
 
     def _share_claim(self, worker_id: str, day: date, staff_name: str, claimer: str, worker_name: str) -> list[tuple[str, list[dict]]]:
         from src.services.wake_status import build_wake_status
-        if not any(row["worker_id"] == worker_id for row in build_wake_status(self.db, day, include_test=False)["items"]):
-            return []  # Old test alerts may still have working claim buttons.
+        from src.services.wake_test_notifications import active, setting, utc
+        self.is_test = not any(row["worker_id"] == worker_id for row in build_wake_status(self.db, day, include_test=False)["items"])
+        if self.is_test:
+            config = setting(self.db)
+            if not active(config):
+                return []
+            self.test_from, self.test_until = utc(config.enabled_from), utc(config.enabled_until)
         alerted = {s.recipient for s in self._sent(worker_id, day, "operator_alert") if s.status == "sent"} - {claimer, "-"}
         if not alerted:
             return []
@@ -298,7 +338,7 @@ class WakeMonitorService:
         for to in sorted(alerted):
             if self._reserve(worker_id, day, "operator_claimed", round_no, to) is None:
                 continue
-            pushes.append((to, [{"type": "text", "text": f"{worker_name}さんは、{staff_name}さんが連絡します。"}]))
+            pushes.append((to, [{"type": "text", "text": f"{'【テスト】' if self.is_test else ''}{worker_name}さんは、{staff_name}さんが連絡します。"}]))
         return pushes
 
 

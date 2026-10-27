@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import os
 import sys
 
@@ -17,9 +18,16 @@ from src.services import worker_schedule as ws  # noqa: E402
 from src.services.wake_monitor import WakeMonitorService  # noqa: E402
 
 
-def main() -> None:
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--status", action="store_true", help="Read settings without monitoring or sending LINE")
+    args = parser.parse_args(argv)
     db = SessionLocal()
     try:
+        if args.status:
+            from src.services.wake_test_notifications import view
+            print(json.dumps(view(db), ensure_ascii=False, default=lambda value: value.isoformat()))
+            return
         counts = WakeMonitorService(db).run()
         db.commit()
         if any(value for value in counts.values() if isinstance(value, int)):

@@ -87,9 +87,15 @@ def build_wake_status(db: Session, day: date | None = None, *, include_test: boo
         for r in db.query(WakeReport).filter(WakeReport.report_date == target, WakeReport.is_test.is_(False)).all()
     }
     if include_test:
-        # テストだけの予定の人は、テストの起床報告で報告済みとみなす（正式の報告があればそちらを優先）
+        # Test-only days use only test reports; mixed days retain formal reports.
+        test_reports = {}
         for r in db.query(WakeReport).filter(WakeReport.report_date == target, WakeReport.is_test.is_(True)).all():
-            reports.setdefault(r.worker_id, r)
+            test_reports[r.worker_id] = r
+        for worker_id, rows in by_worker.items():
+            if all(e.is_test for e in rows):
+                reports.pop(worker_id, None)
+                if worker_id in test_reports:
+                    reports[worker_id] = test_reports[worker_id]
     workers = {w.id: w for w in db.query(Worker).filter(Worker.id.in_(worker_ids)).all()} if worker_ids else {}
     contacts: dict[str, list[WakeContactLog]] = {}
     if worker_ids:
@@ -109,14 +115,15 @@ def build_wake_status(db: Session, day: date | None = None, *, include_test: boo
     )
     items = []
     for worker_id, rows in by_worker.items():
+        primary_rows = [row for row in rows if not row.is_test] or rows
         report = reports.get(worker_id)
         worker = workers.get(worker_id)
-        logs = contacts.get(worker_id, [])
+        logs = [log for log in contacts.get(worker_id, []) if bool(log.is_test) == all(e.is_test for e in rows)]
         # 「私が連絡します」の記録は連絡の結果ではないので、今することの判定から外す（0.53.8）
         results = [log.result for log in logs if log.result != WAKE_CONTACT_CLAIM]
         latest = results[-1] if results else None
         if is_today:
-            action = wake_next_action(target=target, first_start=rows[0].start_time, reported=report is not None, latest_result=latest, now=now_jst)
+            action = wake_next_action(target=target, first_start=primary_rows[0].start_time, reported=report is not None, latest_result=latest, now=now_jst)
         elif target > ws.today_jst():
             action = (
                 {"step": "reported", "label": "", "priority": 90, "next_at": None}
@@ -143,7 +150,7 @@ def build_wake_status(db: Session, day: date | None = None, *, include_test: boo
                 }
                 for log in logs
             ],
-            "first_start": _hm(rows[0].start_time),
+            "first_start": _hm(primary_rows[0].start_time),
             "overlap_warning": _overlaps(rows),
             "entries": [
                 {

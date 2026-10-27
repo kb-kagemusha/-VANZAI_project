@@ -1886,6 +1886,17 @@ export function getWakeStatus(date?: string) {
   return apiFetch<WakeStatusList>("/api/line-daily/wake-status", undefined, date ? { date } : undefined);
 }
 
+export type WakeTestNotificationSettings = {
+  enabled: boolean; enabled_from: string | null; enabled_until: string | null;
+  revision: number; updated_at: string | null; updated_by: string | null;
+};
+export function getWakeTestNotificationSettings() {
+  return apiFetch<WakeTestNotificationSettings>("/api/line-daily/test-notification-settings");
+}
+export function saveWakeTestNotificationSettings(body: { enabled: boolean; enabled_until: string | null; revision: number }) {
+  return apiFetch<WakeTestNotificationSettings>("/api/line-daily/test-notification-settings", { method: "PUT", body: JSON.stringify(body) });
+}
+
 export function recordWakeContact(body: { day: string; worker_id: string; result: WakeContactResult; note: string }) {
   return apiFetch<WakeContact>("/api/line-daily/wake-contacts", { method: "POST", body: JSON.stringify(body) });
 }

@@ -104,7 +104,7 @@ class LineOperatorService:
         from src.services.wake_monitor import deadline_for
         sends = {}
         for send in self.db.query(WakeMonitorSend).filter(WakeMonitorSend.work_date == day, WakeMonitorSend.status == "sent").all():
-            sends.setdefault(send.worker_id, set()).add(send.kind)
+            sends.setdefault((send.worker_id, bool(send.is_test)), set()).add(send.kind)
         items = []
         for row in value["items"]:
             times = deadline_for(day, row["first_start"])
@@ -118,8 +118,8 @@ class LineOperatorService:
                 "is_test": all(entry["is_test"] for entry in row["entries"]),
                 # 起床の監視（0.54.0、DEC-126）：期限、本人への催促・運営への知らせを送ったか
                 "deadline": times[0].strftime("%H:%M") if times else None,
-                "reminded": "worker_reminder" in sends.get(row["worker_id"], set()),
-                "alerted": "operator_alert" in sends.get(row["worker_id"], set()),
+                "reminded": "worker_reminder" in sends.get((row["worker_id"], all(e["is_test"] for e in row["entries"])), set()),
+                "alerted": "operator_alert" in sends.get((row["worker_id"], all(e["is_test"] for e in row["entries"])), set()),
             })
         # Same order as the admin screen: whoever needs action now comes first.
         items.sort(key=lambda r: (r["next_action"]["priority"], r["first_start"] or "99:99", r["worker_name"]))
@@ -130,7 +130,9 @@ class LineOperatorService:
         if day != ws.today_jst():
             raise OperatorError(409, "連絡の記録は当日の分だけできます。")
         # テストの予定の人も、動作確認のため連絡・記録できる
-        row = next((r for r in build_wake_status(self.db, day, include_test=True)["items"] if r["worker_id"] == worker_id), None)
+        row = next((r for r in build_wake_status(self.db, day, include_test=False)["items"] if r["worker_id"] == worker_id), None)
+        if row is None:
+            row = next((r for r in build_wake_status(self.db, day, include_test=True)["items"] if r["worker_id"] == worker_id), None)
         if row is None:
             raise OperatorError(404, "この日の予定がある稼働者ではありません。画面を更新してください。")
         return row
@@ -149,6 +151,7 @@ class LineOperatorService:
         created = not handler or handler["actor_user_id"] != user.id
         if created:
             log = WakeContactLog(worker_id=worker_id, contact_date=day, result=WAKE_CONTACT_CLAIM, note=None,
+                                 is_test=all(e["is_test"] for e in row["entries"]),
                                  actor_user_id=user.id, actor_name=staff.name[:100], created_at=ws.now_utc())
             self.db.add(log)
             self.db.flush()
@@ -163,8 +166,9 @@ class LineOperatorService:
         from src.models.line_daily import WAKE_CONTACT_RESULTS, WakeContactLog
         if result not in WAKE_CONTACT_RESULTS or result == WAKE_CONTACT_CLAIM:
             raise OperatorError(400, "連絡の結果を選び直してください。")
-        self._wake_row(day, worker_id)
+        row = self._wake_row(day, worker_id)
         log = WakeContactLog(worker_id=worker_id, contact_date=day, result=result, note=note.strip() or None,
+                             is_test=all(e["is_test"] for e in row["entries"]),
                              actor_user_id=user.id, actor_name=staff.name[:100], created_at=ws.now_utc())
         self.db.add(log)
         self.db.flush()

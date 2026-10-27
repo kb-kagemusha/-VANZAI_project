@@ -1,0 +1,6 @@
+.wake-test-notification-summary { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.wake-test-settings-form { display: grid; align-content: start; gap: 14px; min-width: 0; }
+.wake-test-settings-form p { margin: 0; }
+.wake-test-settings-form fieldset { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.wake-test-settings-form input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; }
+.wake-test-settings-form small { font-size: 12px; }

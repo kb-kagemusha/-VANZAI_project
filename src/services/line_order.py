@@ -441,11 +441,19 @@ class LineOrderService:
             try:
                 if kind == "push":
                     self.client.push_messages(token, payload)  # token は宛先。保存（commit）の後に送る
+                elif kind == "wake_test_push":
+                    from src.services.wake_test_notifications import active, lock, setting
+                    lock(self.session)
+                    if active(setting(self.session)):
+                        self.client.push_messages(token, payload)
+                    self.session.commit()
                 elif kind == "text":
                     self.client.reply_text(token, payload)
                 else:
                     self.client.reply_messages(token, payload)
             except Exception:
+                if kind == "wake_test_push":
+                    self.session.rollback()  # Release the send/settings lock on transport errors.
                 continue  # 返信の失敗は業務を巻き戻さない。押し直せば保存済みの結果が返る
         self._outbox = []
 
@@ -490,7 +498,8 @@ class LineOrderService:
                 outcome, messages, pushes = WakeMonitorService(self.session, self.client).handle_postback(line_user_id, data)
                 self._reply_messages(reply_token, messages)
                 for to, push in pushes:
-                    self._outbox.append(("push", to, push))
+                    kind = "wake_test_push" if any(m.get("text", "").startswith("【テスト】") for m in push) else "push"
+                    self._outbox.append((kind, to, push))
             elif data.startswith("wk_"):
                 from src.services.line_daily import LineDailyService
 

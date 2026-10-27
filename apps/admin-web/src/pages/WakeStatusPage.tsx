@@ -8,6 +8,8 @@ import { FilterBar } from "../components/FilterBar";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import { PageHeader } from "../components/PageHeader";
 import { SummaryCard } from "../components/SummaryCard";
+import { WakeTestNotificationSettings } from "../components/WakeTestNotificationSettings";
+import { useAuth } from "../lib/auth/auth-context";
 import { ApiError, getWakeStatus, recordWakeContact } from "../lib/api/client";
 import type { WakeContactResult, WakeNextAction, WakeStatusEntry, WakeStatusItem } from "../types/orderRequest";
 
@@ -86,6 +88,7 @@ function ContactRecorder({ day, row }: { day: string; row: WakeStatusItem }) {
 }
 
 export function WakeStatusPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const day = searchParams.get("date") || todayInTokyo();
 
@@ -107,6 +110,8 @@ export function WakeStatusPage() {
         description="その日に稼働予定がある人の、公式LINEでの起床報告を一覧にします。今連絡が必要な人ほど上に並びます（最初の開始の2時間前からLINE、1時間30分前から電話、1時間前から現場へ連絡）。予定は受諾済みの発注依頼書から作られ、テスト用の依頼書の予定は含みません。1分ごとに更新します。"
         eyebrow="当日運用"
       />
+
+      {user?.role === "admin" && <WakeTestNotificationSettings />}
 
       <section className="summary-grid">
         <SummaryCard label="稼働予定の人数" value={data?.total ?? 0} accent="#0f766e" />
