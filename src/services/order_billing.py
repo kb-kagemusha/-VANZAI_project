@@ -35,6 +35,9 @@ class OrderBillingService:
     def lock(self):
         # All mutations take the same existing client locks before series locks.
         self.session.execute(select(Client).order_by(Client.id).with_for_update().execution_options(populate_existing=True)).scalars().all()
+        # Serialize with actual imports, monthly closing and the legacy invoice path.
+        from src.services.financial_guards import lock_all_projects
+        lock_all_projects(self.session)
 
     def issuer_settings(self):
         row = self.session.get(OrderBillingIssuer, "default")
@@ -90,10 +93,14 @@ class OrderBillingService:
             incentive_enabled, incentive_note = incentive_details(sections)
             client_matches = bool(amount and amount.client_id == client_id)
             incentive_reviewed = not incentive_enabled or bool(amount and amount.snapshot.get("incentive_enabled") is True and amount.incentive_amount is not None)
-            ready = client_matches and incentive_reviewed
+            from src.services.order_billing_daily import is_current
+            pricing_current = is_current(self.session,amount) if amount else True
+            issued = bool(claim and self.session.get(OrderBillingInvoice,claim.invoice_id).status == "issued")
+            ready = client_matches and incentive_reviewed and (pricing_current or issued)
             total = amount.amount + (amount.incentive_amount or Decimal(0)) if amount and ready else None
             result.append({"version_id": version.id, "series_id": version.series_id, "document_number": document.document_number,
                 "is_test": document.kind == "test",
+                "pricing_mode": amount.snapshot.get("mode","legacy_total") if amount else "legacy_total", "pricing_stale": not pricing_current,
                 "version_no": version.version_no, "project_name": sections.get("project_name", ""), "work_date_label": version.work_date_label,
                 "categories": sections.get("categories", []),
                 "client_id": client_id, "client_name": client.name if client else "未設定", "revision": amount.revision if amount else 0,
@@ -107,7 +114,7 @@ class OrderBillingService:
                 "status": "invoice_created" if claim else "confirmed" if ready else "missing"})
         return result
 
-    def save_amount(self, version_id, *, billing_month, amount, expected_revision, reason, actor, client_id=None, incentive_amount=None):
+    def save_amount(self, version_id, *, billing_month, amount, expected_revision, reason, actor, client_id=None, incentive_amount=None, _daily_context=None):
         validate_month(billing_month)
         self.lock()
         source = self.session.get(OrderRequestVersion, version_id)
@@ -124,6 +131,8 @@ class OrderBillingService:
         if self.session.query(OrderBillingInvoiceLine).filter_by(active_series_id=source.series_id).first():
             raise OrderRequestError(409, "この依頼は請求書に含まれています。下書きは取り消してから変更してください。発行済みは上書きできません")
         current = self.latest_amounts().get(version_id)
+        if current and current.snapshot.get("mode") == "person_day" and _daily_context is None:
+            raise OrderRequestError(409,"1人日方式で確定した金額は、日別の実績確認画面から変更してください")
         revision = current.revision if current else 0
         if expected_revision != revision:
             raise OrderRequestError(409, "別の操作で金額が更新されました。一覧を更新して確認してください")
@@ -144,6 +153,7 @@ class OrderBillingService:
                       "is_test": document.kind == "test",
                       "incentive_enabled": incentive_enabled, "incentive_note": incentive_note,
                       "project_name": sections.get("project_name", ""), "work_date_label": source.work_date_label, "client_name": client.name})
+        if _daily_context is not None: row.snapshot={**row.snapshot,**_daily_context}
         self.session.add(row)
         self.session.flush()
         AuditService(self.session).log("order_billing_amount_confirmed", target_type="order_billing_amount", target_id=row.id,
@@ -201,11 +211,19 @@ class OrderBillingService:
         self.session.add(invoice)
         self.session.flush()
         for index, row in enumerate(sorted(rows, key=lambda r: r["document_number"]), 1):
+            from src.services.order_billing_daily import frozen_lines
+            amount=self.session.get(OrderBillingAmount,row["amount_id"])
+            pricing=None
+            if amount.snapshot.get("mode") == "person_day":
+                days=frozen_lines(self.session,amount.id)
+                if not days or sum((Decimal(d["subtotal"]) for d in days),Decimal(0)) != amount.amount:
+                    raise OrderRequestError(409,"日別明細と通常請求額が一致しません。発行せず明細を確認してください")
+                pricing={**amount.snapshot,"days":days}
             self.session.add(OrderBillingInvoiceLine(invoice_id=invoice.id, amount_id=row["amount_id"], series_id=row["series_id"],
                 active_series_id=row["series_id"], line_number=index, description=row["project_name"] or "案件", document_number=row["document_number"],
                 work_date_label=row["work_date_label"], amount=Decimal(row["total_amount"]),
                 incentive_amount=Decimal(row["incentive_amount"]) if row["incentive_enabled"] else None,
-                incentive_note=row["incentive_note"] if row["incentive_enabled"] else None))
+                incentive_note=row["incentive_note"] if row["incentive_enabled"] else None,pricing_snapshot=pricing))
         self.session.flush()
         invoice.subtotal = sum((line.amount for line in self.lines(invoice)), Decimal(0))
         invoice.tax_amount = (invoice.subtotal * invoice.tax_rate).quantize(Decimal("1"), rounding=ROUND_FLOOR)
@@ -239,6 +257,11 @@ class OrderBillingService:
         current = {r["version_id"]: r for r in self.rows()}
         for line in lines:
             amount = self.session.get(OrderBillingAmount, line.amount_id)
+            if line.pricing_snapshot:
+                from src.services.order_billing_daily import frozen_lines
+                saved=frozen_lines(self.session,amount.id)
+                if line.pricing_snapshot.get("days") != saved or sum((Decimal(d["subtotal"]) for d in saved),Decimal(0)) != amount.amount:
+                    raise OrderRequestError(409,"保存した日別明細が一致しません。発行せず確認してください")
             if amount.version_id not in current or current[amount.version_id]["amount_id"] != amount.id or not current[amount.version_id]["billing_ready"] or current[amount.version_id]["client_id"] != invoice.client_id:
                 raise OrderRequestError(409, "請求書作成後に依頼が変更・取消されました。下書きを取り消して確認してください")
         # Unallocated new orders for the same client/month must not silently disappear.

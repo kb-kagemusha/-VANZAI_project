@@ -1,5 +1,6 @@
 """Render only stored invoice header/line snapshots; never resolve live order data."""
 from io import BytesIO
+from decimal import Decimal
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
@@ -42,6 +43,16 @@ def generate_pdf(invoice, lines) -> bytes:
     story += [metadata, Spacer(1, 6 * mm), para("ご請求金額（税込）　" + money(invoice.total_amount), ParagraphStyle("OrderBillingTotal", parent=body, fontSize=18, leading=26)), Spacer(1, 7 * mm)]
     rows = [[para("依頼内容"), para("数量"), para("税抜金額", right)]]
     for line in lines:
+        pricing=getattr(line,"pricing_snapshot",None)
+        if pricing and pricing.get("mode") == "person_day":
+            for day in pricing["days"]:
+                weekday="月火水木金土日"[day["weekday"]]
+                detail=f"{line.description}\n{day['date']}（{weekday}） 単価 {money(Decimal(day['unit_price']))}／人日\n依頼書：{line.document_number}"
+                if Decimal(day["adjustment"]): detail+=f"\n個別調整 {money(Decimal(day['adjustment']))}：{day['adjustment_reason']}"
+                rows.append([para(detail,small),para(f"{day['quantity']}人日"),para(money(Decimal(day["subtotal"])),right)])
+            if getattr(line,"incentive_amount",None) is not None:
+                rows.append([para(f"{line.description}\nインセンティブ：{line.incentive_note or ''}",small),para("1件"),para(money(line.incentive_amount),right)])
+            continue
         text = f"{line.description}\n{line.work_date_label}\n依頼書：{line.document_number}"
         if getattr(line, "incentive_amount", None) is not None:
             text += f"\nインセンティブ条件：{line.incentive_note or ''}\n内訳：通常 {money(line.amount - line.incentive_amount)} ＋ インセンティブ {money(line.incentive_amount)}"

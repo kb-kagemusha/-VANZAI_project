@@ -130,11 +130,13 @@ def confirm(version_id: str, body: AmountBody, user: User = Depends(admin), db: 
 
 @router.get("/orders/{version_id}/history")
 def history(version_id: str, db: Session = Depends(get_db)):
+    from src.services.order_billing_daily import frozen_lines
     rows = db.query(OrderBillingAmount).filter_by(version_id=version_id).order_by(OrderBillingAmount.revision.desc()).all()
     return {"items": [{"revision": r.revision, "client_id": r.client_id, "client_name": r.snapshot["client_name"],
                       "amount": str(r.amount), "incentive_amount": str(r.incentive_amount) if r.incentive_amount is not None else None,
                       "incentive_enabled": r.snapshot.get("incentive_enabled", False), "incentive_note": r.snapshot.get("incentive_note", ""),
-                      "billing_month": r.billing_month, "reason": r.reason, "created_at": r.created_at} for r in rows]}
+                      "billing_month": r.billing_month, "reason": r.reason, "created_at": r.created_at,
+                      "pricing_mode":r.snapshot.get("mode","legacy_total"),"days":frozen_lines(db,r.id)} for r in rows]}
 
 
 @router.get("/invoices")
@@ -165,7 +167,7 @@ def detail(invoice_id: str, db: Session = Depends(get_db)):
         raise HTTPException(exc.status_code, exc.detail) from exc
     return {**invoice_out(row), "lines": [{"id": l.id, "description": l.description, "document_number": l.document_number,
         "work_date_label": l.work_date_label, "amount": str(l.amount), "incentive_amount": str(l.incentive_amount) if l.incentive_amount is not None else None,
-        "incentive_note": l.incentive_note} for l in service.lines(row)]}
+        "incentive_note": l.incentive_note,"pricing_snapshot":l.pricing_snapshot} for l in service.lines(row)]}
 
 
 @router.post("/invoices/{invoice_id}/issue")

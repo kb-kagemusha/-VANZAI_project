@@ -100,6 +100,7 @@ class OrderBillingInvoiceLine(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     incentive_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
     incentive_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pricing_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     __table_args__ = (UniqueConstraint("invoice_id", "line_number", name="uq_order_billing_line_number"),
                      CheckConstraint("incentive_amount IS NULL OR (incentive_amount >= 0 AND incentive_amount <= amount)", name="ck_order_billing_line_incentive"),
                      CheckConstraint("amount >= 0 AND line_number > 0", name="ck_order_billing_line"),

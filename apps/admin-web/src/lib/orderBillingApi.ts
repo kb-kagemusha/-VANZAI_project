@@ -9,14 +9,14 @@ export type CompanyProfile = { revision: number; name: string; postal_code: stri
 export const getCompanyProfile = () => apiFetch<CompanyProfile>("/api/company-profile");
 export const saveCompanyProfile = ({ revision, ...values }: CompanyProfile) => apiFetch<CompanyProfile>("/api/company-profile", { method: "PUT", body: JSON.stringify({ ...values, expected_revision: revision }) });
 
-export type BillingOrder = { is_test?: boolean; version_id: string; series_id: string; document_number: string; version_no: number; project_name: string;
+export type BillingOrder = { pricing_mode?: "legacy_total"|"person_day"; pricing_stale?: boolean; is_test?: boolean; version_id: string; series_id: string; document_number: string; version_no: number; project_name: string;
   work_date_label: string; categories: string[]; client_id: string | null; client_name: string; revision: number; amount_id: string | null; amount: string | null;
   billing_month: string | null; invoice_id: string | null; status: string; incentive_enabled: boolean; incentive_note: string;
   incentive_amount: string | null; total_amount: string | null; billing_ready: boolean; client_mismatch: boolean };
 export type BillingInvoice = { id: string; document_number: string; client_id: string; client_name: string; billing_month: string; billing_date: string;
   version: number; parent_invoice_id: string | null; status: "draft" | "issued" | "cancelled"; subtotal: string; tax_amount: string; total_amount: string;
   issuer_snapshot: BillingIssuer;
-  lines?: { id: string; description: string; document_number: string; work_date_label: string; amount: string; incentive_amount: string | null; incentive_note: string | null }[] };
+  lines?: { id: string; description: string; document_number: string; work_date_label: string; amount: string; incentive_amount: string | null; incentive_note: string | null; pricing_snapshot?: { mode: string; days: {date:string;quantity:number;unit_price:string;subtotal:string;adjustment:string;adjustment_reason:string}[] } | null }[] };
 export type BillingHistory = { revision: number; client_name: string; amount: string; incentive_enabled: boolean; incentive_note: string; incentive_amount: string | null; billing_month: string; reason: string; created_at: string };
 type Page<T> = { items: T[]; total: number; limit: number; offset: number };
 export const getOrderBillingSummary = (include_test = false) => apiFetch<{ missing_count: number; total: number }>("/api/order-billing/summary", undefined, { include_test });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate } from "react-router-dom";
+import { DailyBillingDialog } from "../components/DailyBillingDialog";
 import { FormDialog } from "../components/FormDialog";
 import { BillingAmountInput } from "../components/BillingAmountInput";
 import { isValidBillingAmount } from "../lib/billingAmountFormat";
@@ -30,6 +31,7 @@ export function OrderBillingPage() {
   const [invoicePage, setInvoicePage] = useState(0);
   const [invoiceMonth, setInvoiceMonth] = useState(todayInTokyo().slice(0, 7));
   const [edit, setEdit] = useState<BillingOrder | null>(null);
+  const [daily, setDaily] = useState<BillingOrder | null>(null);
   const [editMonth, setEditMonth] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editIncentive, setEditIncentive] = useState("");
@@ -54,6 +56,7 @@ export function OrderBillingPage() {
 
   async function refresh() { await client.invalidateQueries({ queryKey: ["order-billing"] }); }
   function openEdit(row: BillingOrder) {
+    if (row.pricing_mode === "person_day") { setDaily(row); return; }
     setEdit(row); setEditMonth(row.billing_month ? `${row.billing_month.slice(0, 4)}-${row.billing_month.slice(4)}` : "");
     setEditIncentive((row.incentive_amount ?? "").replace(/\.0+$/, ""));
     setEditAmount((row.amount ?? "").replace(/\.0+$/, "")); setReason(""); setDialogError("");
@@ -124,6 +127,8 @@ export function OrderBillingPage() {
           <td className="order-cell-multiline">{row.work_date_label}</td><td>{row.client_name}{row.client_mismatch ? <p className="form-error">旧記録の請求先と不一致・再確認が必要</p> : null}</td><td>{row.billing_month ? monthLabel(row.billing_month) : "未設定"}</td><td>{row.amount !== null ? <>通常 {yen(row.amount)}{row.billing_ready && row.incentive_enabled ? <div>合計 {yen(row.total_amount!)}</div> : null}</> : <strong style={{ color: "#dc2626" }}>未入力</strong>}</td>
           <td className="order-cell-multiline">{row.incentive_enabled ? <>{row.incentive_note}<br />{row.incentive_amount !== null ? yen(row.incentive_amount) : <strong className="form-error">金額未確定</strong>}</> : "インセンティブなし"}</td>
           <td><div className="order-row-actions"><button type="button" className="btn create-button btn-sm" disabled={!!row.invoice_id} onClick={() => openEdit(row)}>{row.invoice_id ? "請求書作成済み" : row.amount_id ? "金額・請求月を変更" : "請求金額を確定"}</button>
+            {!row.invoice_id && row.pricing_mode !== "person_day" ? <button type="button" className="btn btn-line-blue btn-sm" disabled={!row.client_id} onClick={()=>setDaily(row)}>1人日単価で計算</button> : null}
+            {row.pricing_stale ? <span className="form-error">実績・単価の変更あり{row.invoice_id?"（作成済みの請求書を確認）":"・再確認が必要"}</span> : null}
             {row.invoice_id && !row.amount_id ? <span className="form-error">依頼書が改訂されています。作成済みの請求書を確認してください。</span> : null}
             {row.amount_id ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => void showHistory(row)}>確定履歴</button> : null}
             {row.invoice_id ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDialogError(""); setInvoiceId(row.invoice_id); }}>請求書を確認</button> : null}
@@ -150,6 +155,7 @@ export function OrderBillingPage() {
       <div className="order-template-pagination"><button type="button" className="btn btn-ghost btn-sm" disabled={!invoicePage} onClick={() => setInvoicePage(invoicePage - 1)}>前へ</button><span>{invoices.data?.total ?? 0}件</span><button type="button" className="btn btn-ghost btn-sm" disabled={!invoices.data || (invoicePage + 1) * 30 >= invoices.data.total} onClick={() => setInvoicePage(invoicePage + 1)}>次へ</button></div>
     </section>
 
+    {daily ? <DailyBillingDialog row={daily} onClose={()=>setDaily(null)} /> : null}
     <FormDialog open={!!edit} title="依頼書の請求金額を確定" size="compact" busy={busy} onClose={() => setEdit(null)}>
       <dl className="billing-order-context">
         <div><dt>文書番号</dt><dd>{edit?.document_number} 第{edit?.version_no}版</dd></div>
@@ -182,7 +188,7 @@ export function OrderBillingPage() {
       {invoice.isLoading ? <p>読み込んでいます…</p> : null}
       {invoice.isError ? <p className="form-error">請求書を取得できませんでした。</p> : null}
       {invoice.data ? <><h4>{invoice.data.client_name}　{monthLabel(invoice.data.billing_month)}　{invoiceStatus[invoice.data.status]}</h4><p>{invoice.data.document_number}　第{invoice.data.version}版</p>
-        <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書</th><th>案件名・稼働日</th><th>税抜金額</th></tr></thead><tbody>{invoice.data.lines?.map((line) => <tr key={line.id}><td>{line.document_number}</td><td className="order-cell-multiline">{line.description}<br />{line.work_date_label}{line.incentive_amount != null ? <><br />インセンティブ：{line.incentive_note}<br />内訳：通常 {yen(String(Number(line.amount) - Number(line.incentive_amount)))} ＋ インセンティブ {yen(line.incentive_amount)}</> : null}</td><td>{yen(line.amount)}</td></tr>)}</tbody></table></div>
+        <div className="order-list-table"><table className="data-table"><thead><tr><th>依頼書</th><th>案件名・稼働日</th><th>税抜金額</th></tr></thead><tbody>{invoice.data.lines?.map((line) => <tr key={line.id}><td>{line.document_number}</td><td className="order-cell-multiline">{line.description}<br />{line.work_date_label}{line.pricing_snapshot?.days.map(day=><div key={day.date}>{day.date}　{day.quantity}人日 × {yen(day.unit_price)}{Number(day.adjustment)?`　調整 ${yen(day.adjustment)}：${day.adjustment_reason}`:""} ＝ {yen(day.subtotal)}</div>)}{line.incentive_amount != null ? <><br />インセンティブ：{line.incentive_note}<br />内訳：通常 {yen(String(Number(line.amount) - Number(line.incentive_amount)))} ＋ インセンティブ {yen(line.incentive_amount)}</> : null}</td><td>{yen(line.amount)}</td></tr>)}</tbody></table></div>
         <p>税抜小計 {yen(invoice.data.subtotal)} ／ 消費税 {yen(invoice.data.tax_amount)} ／ 合計 {yen(invoice.data.total_amount)}</p>
         <div className="order-cell-multiline"><strong>発行元：{invoice.data.issuer_snapshot?.name}</strong><br />{invoice.data.issuer_snapshot?.postal_code ? `〒${invoice.data.issuer_snapshot.postal_code} ` : ""}{invoice.data.issuer_snapshot?.address}<br />{invoice.data.issuer_snapshot?.phone ? <>TEL：{invoice.data.issuer_snapshot.phone}<br /></> : null}{invoice.data.issuer_snapshot?.email ? <>メール：{invoice.data.issuer_snapshot.email}<br /></> : null}{invoice.data.issuer_snapshot?.registration_number ? `登録番号：${invoice.data.issuer_snapshot.registration_number}` : "登録番号：未設定"}<br />振込先：{invoice.data.issuer_snapshot?.bank_details || "未設定"}<br />支払期限・条件：{invoice.data.issuer_snapshot?.payment_terms || "未設定"}</div>
         <div className="order-template-actions"><button type="button" className="btn btn-line-blue" disabled={busy} onClick={() => void showPdf(invoice.data!.id)}>PDFを表示</button>

@@ -43,7 +43,7 @@ def ensure_import_mutable(session, project_id, period_key):
     ensure_unallocated(session, ids, "payout")
 
 
-def ensure_unallocated(session, actual_ids, kind, exclude_document_ids=()):
+def ensure_unallocated(session, actual_ids, kind, exclude_document_ids=(), exclude_order_series_ids=()):
     ids = list(set(actual_ids))
     if not ids:
         return
@@ -55,6 +55,16 @@ def ensure_unallocated(session, actual_ids, kind, exclude_document_ids=()):
         query = query.where(book.id.not_in(exclude_document_ids))
     if session.scalar(query.limit(1)):
         raise ValidationException("発行済みの請求書または承認済みの支払明細に含まれる実績を再計上・変更できません。訂正手順を使用してください。")
+    if kind == "invoice":
+        from src.models.order_billing import OrderBillingInvoice, OrderBillingInvoiceLine
+        from src.models.order_billing_daily import OrderBillingActualClaim
+        claimed=select(OrderBillingInvoiceLine.id).select_from(Actual).join(OrderBillingActualClaim,
+            (OrderBillingActualClaim.project_id == Actual.project_id) & (OrderBillingActualClaim.work_date == Actual.work_date)).join(
+            OrderBillingInvoiceLine,OrderBillingInvoiceLine.active_series_id == OrderBillingActualClaim.series_id).join(
+            OrderBillingInvoice,OrderBillingInvoice.id == OrderBillingInvoiceLine.invoice_id).where(Actual.id.in_(ids),OrderBillingActualClaim.active.is_(True),OrderBillingInvoice.status == "issued")
+        if exclude_order_series_ids: claimed=claimed.where(OrderBillingActualClaim.series_id.notin_(exclude_order_series_ids))
+        if session.scalar(claimed.limit(1)):
+            raise ValidationException("1人日方式で発行済みの依頼書請求に含まれる実績です。二重計上・変更せず、訂正手順を確認してください。")
 
 
 def ancestor_ids(session, document, model, parent_field):

@@ -9905,6 +9905,8 @@ app.include_router(staffing_replacement_router)
 app.include_router(line_staffing_replacement_router)
 from src.api.order_billing_routes import router as order_billing_router
 app.include_router(order_billing_router)
+from src.api.order_billing_daily_routes import router as order_billing_daily_router
+app.include_router(order_billing_daily_router)
 from src.api.company_profile_routes import router as company_profile_router
 app.include_router(company_profile_router)
 from src.api.operator_staff_routes import router as operator_staff_router
