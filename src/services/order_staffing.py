@@ -32,10 +32,13 @@ def ensure_round(db, version):
     previous = db.get(OrderRequestVersion, version.revision_of_version_id) if version.revision_of_version_id else None
     previous_id = previous.id if previous and previous.series_id == version.series_id else None
     old_limits = {r.work_date.isoformat(): r for r in db.query(StaffingLimit).filter_by(version_id=previous_id)} if previous_id else {}
+    from src.models.order_formalization import OrderFormalization
+    formalization=db.query(OrderFormalization).filter_by(formal_document_id=version.document_id).first() if not previous_id else None
     recipients = {r.worker_id for r in db.query(OrderRequestDelivery).filter_by(version_id=version.id)}
     for value in days:
         old = old_limits.get(value)
-        db.add(StaffingLimit(version_id=version.id, work_date=date.fromisoformat(value), capacity=old.capacity if old else 0, closed=False))
+        capacity=old.capacity if old else (formalization.capacity_snapshot.get(value,0) if formalization else 0)
+        db.add(StaffingLimit(version_id=version.id, work_date=date.fromisoformat(value), capacity=capacity, closed=False))
     db.flush()
     # Existing operator-selected workers keep their selection across a revision.
     if previous_id:

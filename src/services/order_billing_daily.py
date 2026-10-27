@@ -69,7 +69,10 @@ def state(db,version_id):
     version,document,days=_version(db,version_id)
     row=db.get(OrderBillingRateSetting,version_id)
     amount=db.query(OrderBillingAmount).filter_by(version_id=version_id).order_by(OrderBillingAmount.revision.desc()).first()
+    from src.models.order_formalization import OrderFormalization
+    link=db.query(OrderFormalization).filter_by(formal_document_id=document.id).first()
     return {"setting":setting_out(row),"dates":days,"is_test":document.kind == "test","client_id":version.internal_client_id,
+        "reference_rates":link.rate_reference if link and not row else None,
         "previous_days":frozen_lines(db,amount.id) if amount and amount.snapshot.get("mode") == "person_day" else [],
         "projects":[{"id":p.id,"name":p.name,"code":p.code} for p in db.query(Project).filter(Project.client_id == version.internal_client_id,Project.deleted_at.is_(None)).order_by(Project.name,Project.id)]}
 

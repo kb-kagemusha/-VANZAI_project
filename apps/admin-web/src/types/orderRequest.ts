@@ -146,6 +146,7 @@ export interface OrderRequestNote {
 }
 
 export interface OrderRequestVersion {
+  formalization?: {source_document_number:string;source_version_id:string;formal_document_number:string;formal_version_id:string;formal_status:string;formal_hidden:boolean}|null;
   internal_source?: InternalOrderSource | null;
   document_id: string;
   document_number: string;

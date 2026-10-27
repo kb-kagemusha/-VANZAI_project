@@ -273,6 +273,9 @@ class OrderRequestService:
 
         if kind is not None and kind != document.kind:
             self._validate_kind(kind)
+            from src.models.order_formalization import OrderFormalization
+            if self.session.query(OrderFormalization).filter_by(formal_document_id=document.id).first():
+                raise OrderRequestError(409,"正式化して作成した下書きは、正式の区分で確認してください")
             if self._has_confirmed(document.id):
                 raise OrderRequestError(409, "確定後にテスト／正式の区分は変更できません")
             document.kind = kind

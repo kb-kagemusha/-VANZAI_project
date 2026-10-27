@@ -1,0 +1,9 @@
+.record-dialog:has(.order-formalization) { max-width: 960px; }
+.order-formalization { display: grid; gap: 16px; min-width: 0; }
+.order-formalization p { margin: 0; }
+.order-formalization fieldset { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border-color,#bfc6d0); border-radius: 8px; }
+.order-formalization-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.order-formalization-workers { max-height: 240px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; }
+.order-formalization-capacities { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; }
+.order-formalization button { width: fit-content; justify-self: start; }
+.btn.btn-line-purple { border: 1px solid #8a5db0; color: #75439d; background: transparent; }

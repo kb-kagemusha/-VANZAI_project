@@ -9,7 +9,7 @@ import { todayInTokyo } from "./MonthCalendar";
 import "../styles/dailyBilling.css";
 
 type Setting={project_id:string;base_rate:string;weekday_rates:Record<string,string>;revision:number};
-type State={setting:Setting|null;dates:string[];is_test:boolean;client_id:string|null;previous_days?:{date:string;adjustment:string;adjustment_reason:string}[];projects:{id:string;name:string;code:string|null}[]};
+type State={setting:Setting|null;reference_rates?:{base_rate:string;weekday_rates:Record<string,string>}|null;dates:string[];is_test:boolean;client_id:string|null;previous_days?:{date:string;adjustment:string;adjustment_reason:string}[];projects:{id:string;name:string;code:string|null}[]};
 type Day={date:string;weekday:number;quantity:number;unit_price:string;subtotal:string;workers:{name:string;worker_id:string;actual_ids:string[];minutes:number}[]};
 type Preview={project_name:string;source_digest:string;rates_revision:number;excluded_count:number;needs_review:number;days:Day[]};
 const weekdays=["月","火","水","木","金","土","日"];
@@ -37,8 +37,9 @@ export function DailyBillingDialog({row,onClose}:{row:BillingOrder;onClose:()=>v
   useEffect(()=>{
     if(!state.data || initialized.current) return;
     initialized.current=true;const setting=state.data.setting;
-    setProject(setting?.project_id??"");setBase(setting?.base_rate??"");setWeekly(setting?.weekday_rates??{});
-    setUseWeekly(Boolean(setting && Object.keys(setting.weekday_rates).length));setEditing(!setting);
+    const rates=setting??state.data.reference_rates;
+    setProject(setting?.project_id??"");setBase(rates?.base_rate??"");setWeekly(rates?.weekday_rates??{});
+    setUseWeekly(Boolean(rates && Object.keys(rates.weekday_rates).length));setEditing(!setting);
     setAdjustments(Object.fromEntries((state.data.previous_days??[]).map(d=>[d.date,{amount:d.adjustment,reason:d.adjustment_reason}])));
   },[state.data]);
   const preview=useQuery({queryKey:["order-billing","daily-preview",row.version_id,state.data?.setting?.revision],enabled:!!state.data?.setting && !editing,queryFn:()=>apiFetch<Preview>(endpoint+"/preview")});
@@ -63,6 +64,7 @@ export function DailyBillingDialog({row,onClose}:{row:BillingOrder;onClose:()=>v
     {status?<p role="status">{status}</p>:null}
     {state.isLoading?<p>確認しています…</p>:null}
     {state.data && editing ? <fieldset disabled={busy}><legend>請求単価と実績の案件</legend>
+      {state.data.reference_rates?<p>元のテストの単価を参考表示しています。正式な実績の案件と単価を確認し、保存してください。テストの金額は引き継いでいません。</p>:null}
       <div className="daily-billing-grid"><label className="order-field">人数を確認する実績の案件<select value={project} onChange={e=>setProject(e.target.value)}><option value="">実績の案件を選択</option>{state.data.projects.map(p=><option key={p.id} value={p.id}>{p.code?`${p.code} `:""}{p.name}</option>)}</select></label>
         <BillingAmountInput label="基本の1人日単価（税抜・円）" value={base} disabled={busy} onChange={setBase}/></div>
       {!state.data.projects.length?<p className="form-error">同じクライアントの実績案件がありません。案件を登録し、実績との対応を確認してください。</p>:null}

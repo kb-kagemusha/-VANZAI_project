@@ -24,6 +24,7 @@ from src.models.order_request import (
     OrderRequestTemplate,
 )
 from src.models.line_daily import OrderRequestWorkerApplication
+from src.models.order_formalization import OrderFormalization  # register before metadata/fixtures
 from src.services import worker_schedule as ws
 from src.services.line_messaging import line_settings
 from src.services.line_order import (
@@ -117,6 +118,31 @@ class OrderRequestUpdate(BaseModel):
 class ReasonBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     reason: str
+
+
+class FormalizeBody(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    source_digest:str=Field(min_length=64,max_length=64)
+    internal_source:InternalOrderSource
+    worker_ids:list[str]=Field(min_length=1,max_length=40)
+    capacities:dict[str,int]=Field(default_factory=dict)
+    masters_reviewed:bool=False
+    follow_up_due_on:date
+
+
+@router.get("/versions/{version_id}/formalization")
+def preview_formalization(version_id:str,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    _ensure(current_user)
+    from src.services.order_formalization import preview
+    return _call(db,lambda:preview(db,version_id,current_user))
+
+
+@router.post("/versions/{version_id}/formalization")
+def create_formalization(version_id:str,body:FormalizeBody,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    _ensure_write(current_user)
+    from src.services.order_formalization import create
+    version=_call(db,lambda:create(db,version_id,actor=current_user,**body.model_dump()))
+    return _version_out(db,db.get(OrderRequestDocument,version.document_id),version)
 
 
 class NoteBody(BaseModel):
@@ -356,7 +382,9 @@ def _version_out(
     worker_names = _worker_name_map(db, {row.worker_id for row in deliveries})
     sources = _source_labels(db, {version.revision_of_version_id})
     changes = _changes_by_source(db, {version.id})
+    from src.services.order_formalization import relation
     return {
+        "formalization":relation(db,document.id),
         "document_id": document.id,
         "document_number": document.document_number,
         "kind": document.kind,

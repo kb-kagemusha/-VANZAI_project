@@ -12,6 +12,7 @@ import { LoadingOverlay } from "../components/LoadingOverlay";
 import { TestBadge } from "../components/TestBadge";
 import { PageHeader } from "../components/PageHeader";
 import { StaffingPanel } from "../components/StaffingPanel";
+import { OrderFormalizationDialog } from "../components/OrderFormalizationDialog";
 import { FormDialog } from "../components/FormDialog";
 import { OrderDatePicker } from "../components/OrderDatePicker";
 import { OrderChangeDeliveryNotice } from "../components/OrderChangeDeliveryNotice";
@@ -198,6 +199,7 @@ export function OrderRequestsPage() {
   const isAdmin = user?.role === "admin";
   const canWrite = hasPermission(user, "order_write");
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [formalizing,setFormalizing]=useState<string|null>(null);
   const [saveTemplateFor, setSaveTemplateFor] = useState<{ id: string; label: string } | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateSaving, setTemplateSaving] = useState(false);
@@ -1022,6 +1024,7 @@ export function OrderRequestsPage() {
   return (
     <section>
       {templatesOpen ? <OrderRequestTemplatesDialog onClose={() => setTemplatesOpen(false)} onUse={useTemplate} canWrite={canWrite} /> : null}
+      {formalizing?<OrderFormalizationDialog versionId={formalizing} workers={workers} onClose={()=>setFormalizing(null)} onCreated={id=>{setFormalizing(null);showDetail(id);void refresh();setActionMessage("正式版を開きました。日程・条件・期限を確認し、確定と送付は別に行ってください。");}}/>:null}
       <FormDialog open={saveTemplateFor !== null} title="テンプレートとして保存" size="compact" busy={templateSaving} onClose={() => setSaveTemplateFor(null)}>
         <p>保存済みの依頼書「{saveTemplateFor?.label}」の内容を再利用できるようにします。日付・休業日・期限・送付先・送付状況は引き継ぎません。</p>
         <label className="order-field"><span className="order-field-label">テンプレート名</span>
@@ -1237,6 +1240,7 @@ export function OrderRequestsPage() {
                       </button>
                     )}
                     {canWrite ? <button type="button" className="btn create-button btn-sm" onClick={() => openTemplateSave(item.version_id, item.project_name || item.document_number)}>テンプレートとして保存</button> : null}
+                    {canWrite&&item.kind==="test"&&item.status!=="cancelled"?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(item.version_id)}>正式版を作成・確認</button>:null}
                     <button
                       type="button"
                       className="btn btn-line-green btn-sm"
@@ -1311,6 +1315,7 @@ export function OrderRequestsPage() {
               {detail?.requires_operator_confirmation && detail.status === "confirmed" && !detail.dispatch_stopped ? <StaffingPanel versionId={detail.id} canWrite={canWrite} /> : null}
               <h3 id="order-draft-title">{templateMode ? "テンプレートの作成" : creating ? (basedOn ? "変更の下書き" : "新規の下書き") : `第${detail?.version_no}版`}</h3>
               <p className="order-draft-lead">{detailLead}</p>
+              {detail?.formalization?<p className="order-draft-lead">元テスト：{detail.formalization.source_document_number} ／ 正式版：{detail.formalization.formal_document_number}。テストの回答・送信履歴・金額は別に保持しています。</p>:null}
               {!creating && detail && detail.change_documents.length > 0 ? (
                 <div className="order-row-actions">
                   {detail.change_documents.map((change) => (
@@ -1374,6 +1379,7 @@ export function OrderRequestsPage() {
                   この版の内容をフォームに表示
                 </button>
               ) : null}
+              {!creating&&detail?.kind==="test"&&detail.status!=="cancelled"&&canWrite?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(detail.id)}>正式版を作成・確認</button>:null}
             </div>
           </header>
 
