@@ -20,9 +20,10 @@ export function OrderDatePicker({ value, onChange, disabled = false, min, max, l
       <FormDialog open title={label} size="compact" onClose={() => setOpen(false)}>
         <MonthCalendar month={month} onMonthChange={setMonth} minMonth={min?.slice(0, 7)} maxMonth={max?.slice(0, 7)} renderDay={(day) => (
           <button type="button" className={`order-calendar-day${orderDayColor(day, holidays.days)}${day === value ? " is-selected" : ""}`} disabled={Boolean((min && day < min) || (max && day > max))}
-            aria-label={day} aria-pressed={day === value} onClick={() => { onChange(day); setOpen(false); }}>{Number(day.slice(8))}</button>
+            aria-label={holidays.candidates.has(day) ? `${day}（祝日候補・要確認）` : day} title={holidays.candidates.has(day) ? "祝日候補・要確認" : undefined} aria-pressed={day === value} onClick={() => { onChange(day); setOpen(false); }}>{Number(day.slice(8))}</button>
         )} />
         {holidays.error && <p role="alert">祝日一覧を取得できませんでした。祝日の色を確認できません。</p>}
+        {holidays.candidates.size > 0 && <p className="order-field-hint">赤い日には未確認の祝日候補を含みます。祝日一覧で確認してください。</p>}
         <button type="button" className="btn btn-ghost" onClick={() => { onChange(""); setOpen(false); }}>日付をクリア</button>
       </FormDialog>
     </span> : null}

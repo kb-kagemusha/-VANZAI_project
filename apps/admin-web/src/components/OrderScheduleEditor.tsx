@@ -75,13 +75,14 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
             const usable = inRange(day);
             const off = editing.includes(day);
             return <button type="button" className={`order-excluded-day${orderDayColor(day, publicHolidays.days)}${usable ? "" : " is-out"}${off ? " is-off" : ""}`}
-              disabled={!usable} aria-pressed={off} onClick={() => toggle(day)}>
+              disabled={!usable} aria-label={publicHolidays.candidates.has(day) ? `${day}（祝日候補・要確認）` : day} title={publicHolidays.candidates.has(day) ? "祝日候補・要確認" : undefined} aria-pressed={off} onClick={() => toggle(day)}>
               <span>{Number(day.slice(8))}</span>
               {usable ? <small>{off ? "休業" : "稼働"}</small> : null}
             </button>;
           }}
         />
         {publicHolidays.error && <p role="alert">祝日一覧を取得できませんでした。祝日の色を確認できません。</p>}
+        {publicHolidays.candidates.size > 0 && <p className="order-field-hint">赤い日には未確認の祝日候補を含みます。祝日一覧で確認してください。</p>}
         <p className="order-excluded-summary">{editing.filter(inRange).length ? `休業日：${editing.filter(inRange).map(label).join("、")}` : "休業日：なし"}</p>
         <div className="order-schedule-actions">
           <button type="button" className="btn btn-primary btn-sm" onClick={confirm}>OK</button>

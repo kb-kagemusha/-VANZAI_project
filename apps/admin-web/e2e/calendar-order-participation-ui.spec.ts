@@ -277,7 +277,8 @@ test("order calendar colors confirmed holidays and weekends", async ({ page }) =
   const calendar = page.getByRole("dialog", { name: "稼働日の詳細1の開始日", exact: true });
   await expect(calendar.getByRole("button", { name: "2026-10-31" })).toHaveClass(/is-holiday/);
   await expect(calendar.getByRole("button", { name: "2026-10-30" })).not.toHaveClass(/is-holiday/);
-  await expect(calendar.getByRole("button", { name: "2026-10-29" })).not.toHaveClass(/is-holiday/);
+  await expect(calendar.getByRole("button", { name: "2026-10-29（祝日候補・要確認）" })).toHaveClass(/is-holiday/);
+  await expect(calendar.getByText("赤い日には未確認の祝日候補を含みます。祝日一覧で確認してください。")).toBeVisible();
   await expect(calendar.locator(".month-calendar-weekday.is-sat")).toHaveText("土");
   await expect(calendar.locator(".month-calendar-weekday.is-sun")).toHaveText("日");
   await calendar.getByRole("button", { name: "次の月" }).click();
