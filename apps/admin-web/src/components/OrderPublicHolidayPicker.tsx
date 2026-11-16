@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api/client";
 import { syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 
 type Holiday = { day: string; name: string; is_holiday: boolean; revision: number; source: string };
+type ImportStatus = { imported: boolean; label: string | null; needs_refresh: boolean; notice: string | null };
 
 /** Public holidays differ from non-working days; edits update the shared calendar. */
 export function OrderPublicHolidayPicker({ from, to, schedule, disabled, onChange }: {
@@ -14,8 +15,18 @@ export function OrderPublicHolidayPicker({ from, to, schedule, disabled, onChang
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<ImportStatus | null>(null);
+  const [statusTick, setStatusTick] = useState(0);
   const key = `${from}/${to}`;
   const valid = Boolean(from && to && from <= to);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<ImportStatus>("/api/order-requests/holiday-calendar/import")
+      .then((result) => { if (active && typeof result?.imported === "boolean") setStatus(result); })
+      .catch(() => { if (active) setStatus(null); });
+    return () => { active = false; };
+  }, [statusTick]);
 
   async function load() {
     setBusy(true); setMessage("");
@@ -31,6 +42,17 @@ export function OrderPublicHolidayPicker({ from, to, schedule, disabled, onChang
       await apiFetch("/api/order-requests/holiday-calendar", { method: "PUT", body: JSON.stringify({ day: target, is_holiday: isHoliday, name: label, revision }) });
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "祝日一覧を更新できませんでした"); }
+    finally { setBusy(false); }
+  }
+  async function importCsv() {
+    setBusy(true); setMessage("");
+    try {
+      const result = await apiFetch<ImportStatus>("/api/order-requests/holiday-calendar/import", { method: "POST" });
+      if (typeof result?.imported === "boolean") setStatus(result);
+      setStatusTick((current) => current + 1);
+      if (rows && loadedPeriod === key) await load();
+      setMessage("内閣府の祝日CSVを取り込みました。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "内閣府の祝日CSVを取り込めませんでした"); }
     finally { setBusy(false); }
   }
   async function apply() {
@@ -49,7 +71,10 @@ export function OrderPublicHolidayPicker({ from, to, schedule, disabled, onChang
   }
   return <fieldset className="order-schedule-row" disabled={disabled || busy}>
     <legend>祝日の確認</legend>
-    <p className="order-field-hint">祝日は稼働しない「休業日」と別です。候補の正確性は将来の法改正などで変わるため、確認してください。変更は報酬と請求で共有する祝日一覧に記録されます。</p>
+    <p className="order-field-hint">祝日は稼働しない「休業日」と別です。内閣府のCSVにある日は確認済みです。CSVより先の年は候補なので、依頼書に反映する前に確認してください。手で追加・除外した日は残ります。</p>
+    {status?.label && <p className="order-field-hint">{status.label}</p>}
+    {status?.notice && <p role="status">{status.notice}</p>}
+    <button type="button" className="btn btn-ghost" onClick={() => void importCsv()}>内閣府の祝日CSVを取り込む</button>
     <button type="button" className="order-action-button is-add" disabled={!valid} onClick={() => void load()}>祝日一覧を確認</button>
     {rows && loadedPeriod === key && <>
       <ul>{rows.map((row) => <li key={row.day}>{row.day} {row.name || "名称なし"} {row.is_holiday ? "祝日" : "祝日から除外"}

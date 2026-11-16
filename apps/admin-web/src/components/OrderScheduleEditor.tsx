@@ -3,7 +3,7 @@ import { useState } from "react";
 import { isTokyoToday, MonthCalendar, monthOf } from "./MonthCalendar";
 import { OrderDatePicker } from "./OrderDatePicker";
 import { OrderPublicHolidayPicker } from "./OrderPublicHolidayPicker";
-import { orderDayColor, useConfirmedHolidays } from "../lib/useConfirmedHolidays";
+import { holidayMark, orderDayColor, useConfirmedHolidays } from "../lib/useConfirmedHolidays";
 import "../styles/monthCalendar.css";
 import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
@@ -74,8 +74,9 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
           renderDay={(day) => {
             const usable = inRange(day);
             const off = editing.includes(day);
+            const mark = holidayMark(day, publicHolidays);
             return <button type="button" className={`order-excluded-day${orderDayColor(day, publicHolidays.days)}${usable ? "" : " is-out"}${off ? " is-off" : ""}${isTokyoToday(day) ? " is-today" : ""}`}
-              disabled={!usable} aria-label={publicHolidays.candidates.has(day) ? `${day}（祝日候補・要確認）` : day} title={publicHolidays.candidates.has(day) ? "祝日候補・要確認" : undefined} aria-current={isTokyoToday(day) ? "date" : undefined} aria-pressed={off} onClick={() => toggle(day)}>
+              disabled={!usable} aria-label={mark.label} title={mark.title} aria-current={isTokyoToday(day) ? "date" : undefined} aria-pressed={off} onClick={() => toggle(day)}>
               <span>{Number(day.slice(8))}</span>
               {usable ? <small>{off ? "休業" : "稼働"}</small> : null}
             </button>;

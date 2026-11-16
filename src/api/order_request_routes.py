@@ -295,6 +295,20 @@ def confirm_holiday_calendar(body: HolidayCalendarConfirm, current_user: User = 
     return _call(db, lambda: confirm_calendar(db, actor=current_user, **body.model_dump()))
 
 
+@router.get("/holiday-calendar/import")
+def get_holiday_csv_import(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    from src.services.holiday_calendar import import_status
+    return import_status(db)
+
+
+@router.post("/holiday-calendar/import")
+def import_holiday_csv(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_write(current_user)
+    from src.services.holiday_calendar import import_official_csv
+    return _call(db, lambda: import_official_csv(db, actor=current_user))
+
+
 def _user_map(db: Session, user_ids: set[str]) -> dict[str, str]:
     if not user_ids:
         return {}
