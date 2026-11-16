@@ -13,6 +13,12 @@
 .order-date-trigger:disabled { opacity: .65; cursor: default; }
 .order-calendar-day { width: 100%; min-height: 44px; border: 1px solid var(--line, #dcdde3); border-radius: 8px; background: var(--panel, #fff); color: inherit; cursor: pointer; font: inherit; }
 .order-calendar-day.is-selected { background: #2563eb; color: #fff; }
+.order-calendar-day.is-saturday, .order-excluded-day.is-saturday span { color: #1d4ed8; }
+.order-calendar-day.is-holiday, .order-excluded-day.is-holiday span { color: #b91c1c; }
+.order-calendar-day.is-selected.is-saturday { background: #dbeafe; }
+.order-calendar-day.is-selected.is-holiday { background: #fee2e2; }
+html[data-theme="dark"] .order-excluded-day.is-saturday span { color: #93c5fd; }
+html[data-theme="dark"] .order-excluded-day.is-holiday span { color: #fca5a5; }
 .order-calendar-day:disabled { opacity: .3; cursor: default; }
 
 /* 運営の参加カレンダー */

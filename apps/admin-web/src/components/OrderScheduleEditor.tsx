@@ -3,6 +3,7 @@ import { useState } from "react";
 import { MonthCalendar, monthOf } from "./MonthCalendar";
 import { OrderDatePicker } from "./OrderDatePicker";
 import { OrderPublicHolidayPicker } from "./OrderPublicHolidayPicker";
+import { orderDayColor, useConfirmedHolidays } from "../lib/useConfirmedHolidays";
 import "../styles/monthCalendar.css";
 import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
@@ -16,6 +17,7 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
   const prefix = "";
   const [editing, setEditing] = useState<string[] | null>(null);
   const [month, setMonth] = useState("");
+  const publicHolidays = useConfirmedHolidays(editing !== null ? month : "");
   const [notice, setNotice] = useState("");
   const ready = Boolean(group.from && group.to && group.from < group.to);
   const inRange = (day: string) => Boolean(group.from && group.to && day >= group.from && day <= group.to);
@@ -72,13 +74,14 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
           renderDay={(day) => {
             const usable = inRange(day);
             const off = editing.includes(day);
-            return <button type="button" className={`order-excluded-day${usable ? "" : " is-out"}${off ? " is-off" : ""}`}
+            return <button type="button" className={`order-excluded-day${orderDayColor(day, publicHolidays.days)}${usable ? "" : " is-out"}${off ? " is-off" : ""}`}
               disabled={!usable} aria-pressed={off} onClick={() => toggle(day)}>
               <span>{Number(day.slice(8))}</span>
               {usable ? <small>{off ? "休業" : "稼働"}</small> : null}
             </button>;
           }}
         />
+        {publicHolidays.error && <p role="alert">祝日一覧を取得できませんでした。祝日の色を確認できません。</p>}
         <p className="order-excluded-summary">{editing.filter(inRange).length ? `休業日：${editing.filter(inRange).map(label).join("、")}` : "休業日：なし"}</p>
         <div className="order-schedule-actions">
           <button type="button" className="btn btn-primary btn-sm" onClick={confirm}>OK</button>

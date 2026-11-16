@@ -264,6 +264,27 @@ test("saved template can be found and loaded into an independent blank-date draf
   expect(writes).toEqual([]);
 });
 
+test("order calendar colors confirmed holidays and weekends", async ({ page }) => {
+  await adminMocks(page);
+  await page.route("**/api/order-requests/holiday-calendar?*", route => route.fulfill({ json: [
+    { day: "2026-10-31", is_holiday: true, revision: 1 },
+    { day: "2026-10-30", is_holiday: false, revision: 1 },
+    { day: "2026-10-29", is_holiday: true, revision: 0 },
+  ] }));
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日の詳細1の開始日", exact: true }).click();
+  const calendar = page.getByRole("dialog", { name: "稼働日の詳細1の開始日", exact: true });
+  await expect(calendar.getByRole("button", { name: "2026-10-31" })).toHaveClass(/is-holiday/);
+  await expect(calendar.getByRole("button", { name: "2026-10-30" })).not.toHaveClass(/is-holiday/);
+  await expect(calendar.getByRole("button", { name: "2026-10-29" })).not.toHaveClass(/is-holiday/);
+  await expect(calendar.locator(".month-calendar-weekday.is-sat")).toHaveText("土");
+  await expect(calendar.locator(".month-calendar-weekday.is-sun")).toHaveText("日");
+  await calendar.getByRole("button", { name: "次の月" }).click();
+  await expect(calendar.getByRole("button", { name: "2026-11-01" })).toHaveClass(/is-holiday/);
+  await expect(calendar.getByRole("button", { name: "2026-11-07" })).toHaveClass(/is-saturday/);
+});
+
 test("form layout and detail dates stay within the overall work period", async ({ page }, testInfo) => {
   await adminMocks(page);
   await page.goto("/operations/order-requests");
