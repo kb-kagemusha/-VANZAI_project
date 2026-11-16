@@ -18,7 +18,7 @@ def main():
         if actor is None:
             parser.error("有効なユーザーが見つかりません。ユーザー名を確認してください")
         try:
-            status = import_official_csv(db, actor=actor)
+            status = import_official_csv(db, actor=actor, reason="デプロイ時の初回取り込み")
         except OrderRequestError as exc:
             db.rollback()
             raise SystemExit(exc.detail) from exc

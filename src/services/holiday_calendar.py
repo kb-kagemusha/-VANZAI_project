@@ -106,11 +106,11 @@ def import_status(db, *, today: date | None = None) -> dict:
     }
 
 
-def import_official_csv(db, *, actor, source_url: str = CABINET_CSV_URL) -> dict:
-    return import_cabinet_csv(db, actor=actor, raw=_fetch_cabinet_csv(source_url), source_url=source_url)
+def import_official_csv(db, *, actor, source_url: str = CABINET_CSV_URL, reason: str | None = None) -> dict:
+    return import_cabinet_csv(db, actor=actor, raw=_fetch_cabinet_csv(source_url), source_url=source_url, reason=reason)
 
 
-def import_cabinet_csv(db, *, actor, raw: bytes, source_url: str) -> dict:
+def import_cabinet_csv(db, *, actor, raw: bytes, source_url: str, reason: str | None = None) -> dict:
     official = _parse_cabinet_csv(raw)
     previous = _latest_import(db)
     previous_days = _json_map(previous.official_days) if previous else {}
@@ -147,7 +147,7 @@ def import_cabinet_csv(db, *, actor, raw: bytes, source_url: str) -> dict:
     except IntegrityError as exc:
         raise OrderRequestError(409, "祝日CSVの取り込みが競合しました。もう一度取り込んでください") from exc
     AuditService(db).log("holiday_csv_imported", target_type="holiday_csv_import", target_id=record.id,
-        actor=actor.username, actor_role=actor.role,
+        actor=actor.username, actor_role=actor.role, reason=reason,
         after_value={"source_url": source_url, "coverage_start": coverage_start.isoformat(),
             "coverage_end": coverage_end.isoformat(), "imported_count": len(official),
             "added_days": added, "removed_days": removed, "renamed_days": renamed})
