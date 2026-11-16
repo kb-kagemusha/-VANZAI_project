@@ -264,6 +264,36 @@ test("saved template can be found and loaded into an independent blank-date draf
   expect(writes).toEqual([]);
 });
 
+test("confirmed cabinet holidays show only their names and the import record", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.route("**/api/order-requests/holiday-calendar?*", route => route.fulfill({ json: [
+    { day: "2026-11-03", name: "文化の日", is_holiday: true, revision: 1, source: "cabinet_csv" },
+    { day: "2026-11-23", name: "勤労感謝の日", is_holiday: true, revision: 1, source: "cabinet_csv" },
+  ] }));
+  await page.route("**/api/order-requests/holiday-calendar/import", route => route.fulfill({ json: {
+    imported: true, needs_refresh: false, notice: null,
+    label: "内閣府CSV取込：2026年11月16日、1955年1月〜2027年11月分",
+  } }));
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日の開始", exact: true }).click();
+  const calendar = page.getByRole("dialog", { name: "稼働日の開始", exact: true });
+  if (await calendar.getByRole("button", { name: "2026-11-03（文化の日）", exact: true }).count() === 0) {
+    await calendar.getByRole("button", { name: "次の月", exact: true }).click();
+  }
+  const culture = calendar.getByRole("button", { name: "2026-11-03（文化の日）", exact: true });
+  const labor = calendar.getByRole("button", { name: "2026-11-23（勤労感謝の日）", exact: true });
+  await expect(culture).toHaveAttribute("title", "文化の日");
+  await expect(labor).toHaveAttribute("title", "勤労感謝の日");
+  await expect(calendar.getByText("未確認の祝日候補を含みます")).toHaveCount(0);
+  await culture.hover();
+  await page.screenshot({ path: testInfo.outputPath("holiday-names.png") });
+  await page.keyboard.press("Escape");
+  await page.getByRole("group", { name: "稼働日の詳細1の日付の設定" }).getByRole("button", { name: "毎週" }).click();
+  await expect(page.getByText("内閣府CSV取込：2026年11月16日、1955年1月〜2027年11月分", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("holiday-import-record.png") });
+});
+
 test("order calendar colors confirmed holidays and weekends", async ({ page }) => {
   await adminMocks(page);
   await page.route("**/api/order-requests/holiday-calendar?*", route => route.fulfill({ json: [
