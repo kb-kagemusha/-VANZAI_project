@@ -20,6 +20,9 @@
 html[data-theme="dark"] .order-excluded-day.is-saturday span { color: #93c5fd; }
 html[data-theme="dark"] .order-excluded-day.is-holiday span { color: #fca5a5; }
 .order-calendar-day:disabled { opacity: .3; cursor: default; }
+.order-calendar-day.is-today,
+.order-excluded-day.is-today:not(.is-off) { border-color: var(--accent, #16a34a); box-shadow: 0 0 0 1px var(--accent, #16a34a); }
+.order-excluded-day.is-off.is-today { box-shadow: 0 0 0 2px var(--accent, #16a34a); }
 
 /* 運営の参加カレンダー */
 .participation-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 1rem; align-items: start; }

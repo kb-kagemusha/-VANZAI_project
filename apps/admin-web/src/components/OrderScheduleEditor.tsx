@@ -1,6 +1,6 @@
 import { confirmApp } from "../lib/appDialog";
 import { useState } from "react";
-import { MonthCalendar, monthOf } from "./MonthCalendar";
+import { isTokyoToday, MonthCalendar, monthOf } from "./MonthCalendar";
 import { OrderDatePicker } from "./OrderDatePicker";
 import { OrderPublicHolidayPicker } from "./OrderPublicHolidayPicker";
 import { orderDayColor, useConfirmedHolidays } from "../lib/useConfirmedHolidays";
@@ -74,8 +74,8 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
           renderDay={(day) => {
             const usable = inRange(day);
             const off = editing.includes(day);
-            return <button type="button" className={`order-excluded-day${orderDayColor(day, publicHolidays.days)}${usable ? "" : " is-out"}${off ? " is-off" : ""}`}
-              disabled={!usable} aria-label={publicHolidays.candidates.has(day) ? `${day}（祝日候補・要確認）` : day} title={publicHolidays.candidates.has(day) ? "祝日候補・要確認" : undefined} aria-pressed={off} onClick={() => toggle(day)}>
+            return <button type="button" className={`order-excluded-day${orderDayColor(day, publicHolidays.days)}${usable ? "" : " is-out"}${off ? " is-off" : ""}${isTokyoToday(day) ? " is-today" : ""}`}
+              disabled={!usable} aria-label={publicHolidays.candidates.has(day) ? `${day}（祝日候補・要確認）` : day} title={publicHolidays.candidates.has(day) ? "祝日候補・要確認" : undefined} aria-current={isTokyoToday(day) ? "date" : undefined} aria-pressed={off} onClick={() => toggle(day)}>
               <span>{Number(day.slice(8))}</span>
               {usable ? <small>{off ? "休業" : "稼働"}</small> : null}
             </button>;

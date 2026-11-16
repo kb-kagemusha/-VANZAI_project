@@ -396,6 +396,53 @@ test("weekly conditions select weekdays and save the confirmed holiday snapshot"
   expect(written.rate_groups[1].amount).toBe("15000");
 });
 
+test("order calendars mark today in Japan time without replacing selection or weekend colors", async ({ page }, testInfo) => {
+  await page.clock.install({ time: new Date("2026-11-16T03:00:00Z") });
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日の開始", exact: true }).click();
+  const start = page.getByRole("dialog", { name: "稼働日の開始", exact: true });
+  if (await start.getByRole("button", { name: "2026-11-16", exact: true }).count() === 0) {
+    await start.getByRole("button", { name: "次の月", exact: true }).click();
+  }
+  const today = start.getByRole("button", { name: "2026-11-16", exact: true });
+  const saturday = start.getByRole("button", { name: "2026-11-14", exact: true });
+  const sunday = start.getByRole("button", { name: "2026-11-15", exact: true });
+  await expect(today).toHaveClass(/is-today/);
+  await expect(today).toHaveCSS("border-top-color", "rgb(22, 163, 74)");
+  await expect(today).toHaveCSS("box-shadow", "rgb(22, 163, 74) 0px 0px 0px 1px");
+  await expect(saturday).not.toHaveClass(/is-today/);
+  await expect(saturday).toHaveCSS("color", "rgb(29, 78, 216)");
+  await expect(sunday).toHaveCSS("color", "rgb(185, 28, 28)");
+  await page.screenshot({ path: testInfo.outputPath("today-open.png") });
+  await today.click();
+  await page.getByRole("button", { name: "稼働日の開始", exact: true }).click();
+  const selectedToday = page.getByRole("dialog", { name: "稼働日の開始", exact: true }).getByRole("button", { name: "2026-11-16", exact: true });
+  await expect(selectedToday).toHaveClass(/is-today/);
+  await expect(selectedToday).toHaveClass(/is-selected/);
+  await expect(selectedToday).toHaveCSS("background-color", "rgb(37, 99, 235)");
+  await expect(selectedToday).toHaveCSS("border-top-color", "rgb(22, 163, 74)");
+  await expect(selectedToday).toHaveCSS("color", "rgb(255, 255, 255)");
+  await page.screenshot({ path: testInfo.outputPath("today-selected.png") });
+  await selectedToday.click();
+  await page.getByRole("button", { name: "稼働日の終了", exact: true }).click();
+  await page.getByRole("dialog", { name: "稼働日の終了", exact: true }).getByRole("button", { name: "2026-11-30", exact: true }).click();
+  await page.getByRole("button", { name: "休業日を変更", exact: true }).click();
+  const closed = page.locator(".order-excluded-calendar");
+  const closedToday = closed.getByRole("button", { name: "2026-11-16", exact: true });
+  await expect(closedToday).toHaveClass(/is-today/);
+  await expect(closedToday).not.toHaveClass(/is-off/);
+  await expect(closed.locator("button.is-saturday span").first()).toHaveCSS("color", "rgb(29, 78, 216)");
+  await closedToday.click();
+  await expect(closedToday).toHaveClass(/is-today/);
+  await expect(closedToday).toHaveClass(/is-off/);
+  await expect(closedToday).toHaveCSS("border-top-color", "rgb(220, 38, 38)");
+  await expect(closedToday).toHaveCSS("background-color", "rgb(253, 232, 232)");
+  await expect(closedToday).toHaveCSS("box-shadow", "rgb(22, 163, 74) 0px 0px 0px 2px");
+  await page.screenshot({ path: testInfo.outputPath("today-closed.png") });
+});
+
 test("Monday date picker and PDF correction preserve draft and reuse its id", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   await page.goto("/operations/order-requests");

@@ -21,6 +21,10 @@ export function todayInTokyo(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
 }
 
+export function isTokyoToday(day: string): boolean {
+  return day === todayInTokyo();
+}
+
 /** 月のマス（月曜始まり、前後の空白を含む7列）。null は空白。 */
 export function monthCells(month: string): Array<string | null> {
   const [year, mon] = month.split("-").map(Number);
