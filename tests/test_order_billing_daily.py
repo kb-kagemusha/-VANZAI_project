@@ -75,6 +75,54 @@ def test_weekday_prices_deduplicate_people_and_freeze_daily_lines(api_client,db_
     assert Decimal(invoice.json()["tax_amount"]) == Decimal("11500")
 
 
+def test_weekly_holiday_billing_uses_fixed_order_snapshot(api_client, db_session, admin_user, client, project, role, pdf_root, monkeypatch):
+    monkeypatch.setattr(ws, "today_jst", lambda: date(2026, 10, 27))
+    headers = _auth(admin_user.username)
+    change = {"day": "2026-10-23", "is_holiday": True, "name": "特別祝日", "revision": 0}
+    response = api_client.put("/api/order-requests/holiday-calendar", headers=headers, json=change)
+    assert response.status_code == 200, response.text
+    worker = _worker(db_session, "祝日稼働者")
+    holiday = ["2026-10-23"]
+    works = [{"id": "regular", "date_mode": "weekly", "from": DAYS[0], "to": DAYS[-1],
+              "weekdays": [0,1,2,3,4,5], "holiday_mode": "exclude", "holiday_dates": holiday, "holiday_review_from": DAYS[0], "holiday_review_to": DAYS[-1],
+              "start_time": "09:00", "end_time": "17:00"},
+             {"id": "special", "date_mode": "weekly", "from": DAYS[0], "to": DAYS[-1],
+              "weekdays": [6], "holiday_mode": "include", "holiday_dates": holiday, "holiday_review_from": DAYS[0], "holiday_review_to": DAYS[-1],
+              "start_time": "08:00", "end_time": "19:00"}]
+    rates = [{"id": "r-"+g["id"], "work_group_id": g["id"], "date_mode": "range", "from": DAYS[0], "to": DAYS[-1], "amount": "10000"} for g in works]
+    conditions = {"format": "additional-request-v1", "project_name": "祝日請求", "schedule": {"version": 1, "work_groups": works, "rates_follow_work": True, "rate_groups": rates}}
+    response = api_client.post("/api/order-requests", headers=headers, json={"kind": "formal", "worker_ids": [worker.id], "internal_source": {"client_id": client.id}, "request_conditions": json.dumps(conditions), "site_name": "会場", "contact_name": "担当", "follow_up_due_on": "2026-10-21"})
+    assert response.status_code == 200, response.text
+    response = api_client.post(f"/api/order-requests/versions/{response.json()['id']}/confirm", headers=headers)
+    assert response.status_code == 200, response.text
+    version = response.json()
+    batch = _create_import_batch(db_session, project.id, "202610")
+    for day in DAYS:
+        actual = _create_actual(db_session, project=project, worker=worker, role_id=role.id, work_date=date.fromisoformat(day), import_batch=batch)
+        actual.period_key = "202610"
+    db_session.commit()
+    root = f"/api/order-billing/orders/{version['id']}/daily"
+    response = api_client.put(root+"/rates", headers=headers, json={"project_id":project.id,"base_rate":"20000","weekday_rates":{"holiday":"30000"},"revision":0})
+    assert response.status_code == 200, response.text
+    preview = api_client.get(root+"/preview", headers=headers).json()
+    assert [(day["date"], day["unit_price"]) for day in preview["days"]] == [(DAYS[0], "20000.00"), (DAYS[1], "30000"), (DAYS[2], "20000.00")]
+    response = confirm(api_client, admin_user, root)
+    assert response.status_code == 200, response.text
+    assert Decimal(response.json()["amount"]) == Decimal("70000")
+    invoice = generate(api_client, admin_user, client)
+    assert invoice.status_code == 200, invoice.text
+    invoice_id = invoice.json()["id"]
+    issued = api_client.post(f"/api/order-billing/invoices/{invoice_id}/issue", headers=headers)
+    assert issued.status_code == 200, issued.text
+    pdf = api_client.get(f"/api/order-billing/invoices/{invoice_id}/pdf", headers=headers).content
+    change.update(is_holiday=False, revision=1)
+    assert api_client.put("/api/order-requests/holiday-calendar", headers=headers, json=change).status_code == 200
+    assert api_client.get(root+"/preview", headers=headers).json()["days"][1]["unit_price"] == "30000"
+    stored = db_session.query(OrderBillingDailyLine).filter_by(work_date=date(2026,10,23)).one()
+    assert stored.source_snapshot["is_holiday"] is True and stored.unit_price == Decimal("30000")
+    assert api_client.get(f"/api/order-billing/invoices/{invoice_id}/pdf", headers=headers).content == pdf
+
+
 def test_changed_actuals_invalidate_preview_and_unissued_amount(api_client,db_session,admin_user,setup_daily):
     version,root,actuals,_=setup_daily
     old=api_client.get(root+"/preview",headers=_auth(admin_user.username)).json()

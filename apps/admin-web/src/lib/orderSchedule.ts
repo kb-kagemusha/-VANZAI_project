@@ -1,6 +1,6 @@
 import { formatWorkDateRange } from "./orderRequestFormat";
 
-export interface DateGroup { id: string; date_mode: "single" | "range"; from: string; to: string }
+export interface DateGroup { id: string; date_mode: "single" | "range" | "weekly"; from: string; to: string; weekdays?: number[]; holiday_mode?: "include" | "exclude"; holiday_dates?: string[]; holiday_review_from?: string; holiday_review_to?: string }
 export interface WorkGroup extends DateGroup {
   start_time: string; end_time: string; end_next_day: boolean; gathering_time: string; notes: string;
   /** 期間の中の共通の休業日（DEC-065）。旧データには無い。 */
@@ -27,7 +27,7 @@ export function applyPeriodHolidays(schedule: OrderSchedule, holidays: string[])
   const days = new Set(holidays);
   return { ...schedule, work_groups: schedule.work_groups.map((group) => ({
     ...group,
-    excluded_dates: group.date_mode === "range" && group.from && group.to ? [...days].filter((d) => d >= group.from && d <= group.to).sort() : [],
+    excluded_dates: group.date_mode !== "single" && group.from && group.to ? [...days].filter((d) => d >= group.from && d <= group.to).sort() : [],
   })) };
 }
 /** 休業日に重なっている「1日ごと」の稼働日（保存できないので、その場で知らせる）。 */
@@ -40,7 +40,7 @@ export function syncSchedule(schedule: OrderSchedule): OrderSchedule {
   return { ...schedule, rate_groups: schedule.work_groups.map((group) => {
     const existing = schedule.rate_groups.find((rate) => rate.work_group_id === group.id)
       ?? schedule.rate_groups.find((rate) => !rate.work_group_id && rate.from === group.from && rate.to === group.to && rate.date_mode === group.date_mode);
-    return { ...(existing ?? newRateGroup(group)), work_group_id: group.id, date_mode: group.date_mode, from: group.from, to: group.to };
+    return { ...(existing ?? newRateGroup(group)), work_group_id: group.id, date_mode: group.date_mode, from: group.from, to: group.to, weekdays: group.weekdays ?? [], holiday_mode: group.holiday_mode ?? "exclude", holiday_dates: group.holiday_dates ?? [], holiday_review_from: group.holiday_review_from ?? "", holiday_review_to: group.holiday_review_to ?? "" };
   }) };
 }
 function shortDate(iso: string): string {
@@ -49,21 +49,30 @@ function shortDate(iso: string): string {
 }
 export function dateGroupLabel(group: DateGroup & { excluded_dates?: string[] }): string {
   // 休業日は本文の「■休業日」に1回だけ出す（0.48.7。ここに括弧書きで重ねない）
-  return formatWorkDateRange(group.from, group.date_mode === "range" ? group.to : "");
+  const dates = formatWorkDateRange(group.from, group.date_mode !== "single" ? group.to : "");
+  if (group.date_mode !== "weekly") return dates;
+  const names = ["月", "火", "水", "木", "金", "土", "日"];
+  return `${dates} 毎週${(group.weekdays ?? []).map((d) => names[d]).join("・")}（祝日を${group.holiday_mode === "include" ? "含む" : "除く"}）`;
 }
 /** 勤務グループの実勤務日（共通の休業日を除く。サーバーの expand_work_days と同じ規則）。 */
 export function groupWorkDates(group: WorkGroup): string[] {
   if (!group.from) return [];
-  const to = group.date_mode === "range" ? group.to : group.from;
+  const to = group.date_mode !== "single" ? group.to : group.from;
   if (!to || to < group.from) return [];
-  const excluded = new Set(group.date_mode === "range" ? group.excluded_dates ?? [] : []);
+  const excluded = new Set(group.date_mode !== "single" ? group.excluded_dates ?? [] : []);
+  const holidays = new Set(group.holiday_dates ?? []);
   const days: string[] = [];
   const cursor = new Date(`${group.from}T00:00:00Z`);
   const last = new Date(`${to}T00:00:00Z`);
-  while (cursor <= last && days.length < 400) {
+  let visited = 0;
+  while (cursor <= last && visited < 3661) {
     const iso = cursor.toISOString().slice(0, 10);
-    if (!excluded.has(iso)) days.push(iso);
+    const weekday = (cursor.getUTCDay() + 6) % 7;
+    const regular = (group.weekdays ?? []).includes(weekday);
+    const selected = group.date_mode !== "weekly" || (group.holiday_mode === "include" ? regular || holidays.has(iso) : regular && !holidays.has(iso));
+    if (!excluded.has(iso) && selected) days.push(iso);
     cursor.setUTCDate(cursor.getUTCDate() + 1);
+    visited++;
   }
   return days;
 }

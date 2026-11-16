@@ -14,6 +14,7 @@ from src.api.jwt_auth import get_current_active_user
 from src.services.auth import has_permission
 from src.models.enums import Permission, UserRole
 from src.models.master import User, Worker
+import src.models.holiday_calendar  # register calendar metadata for application and tests
 from src.models.order_request import (
     ACK_UNACKED,
     SEND_UNSENT,
@@ -227,6 +228,21 @@ class LineLinkCodeBody(BaseModel):
     worker_id: str
 
 
+class HolidayCalendarChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    day: date
+    is_holiday: bool
+    name: str = Field(default="", max_length=200)
+    revision: int = Field(ge=0)
+
+
+class HolidayCalendarConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    start: date
+    end: date
+    days: list[str] = Field(max_length=3660)
+
+
 def _ensure(user: User) -> None:
     if not has_permission(user, Permission.ORDER_READ):
         raise HTTPException(status_code=403, detail="発注依頼書へのアクセス権限がありません")
@@ -256,6 +272,27 @@ def _call(db: Session, action):
     except OrderRequestError as exc:
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@router.get("/holiday-calendar")
+def get_holiday_calendar(start: date, end: date, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure(current_user)
+    from src.services.holiday_calendar import calendar
+    return _call(db, lambda: calendar(db, start, end))
+
+
+@router.put("/holiday-calendar")
+def change_holiday_calendar(body: HolidayCalendarChange, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_write(current_user)
+    from src.services.holiday_calendar import update_day
+    return _call(db, lambda: update_day(db, actor=current_user, **body.model_dump()))
+
+
+@router.post("/holiday-calendar/confirm")
+def confirm_holiday_calendar(body: HolidayCalendarConfirm, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_write(current_user)
+    from src.services.holiday_calendar import confirm_calendar
+    return _call(db, lambda: confirm_calendar(db, actor=current_user, **body.model_dump()))
 
 
 def _user_map(db: Session, user_ids: set[str]) -> dict[str, str]:

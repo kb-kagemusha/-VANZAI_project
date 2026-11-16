@@ -23,9 +23,9 @@ def reusable_payload(version, document) -> dict:
     schedule = sections.get("schedule")
     if schedule:
         for group in schedule["work_groups"]:
-            group.update({"from": "", "to": "", "excluded_dates": []})
+            group.update({"from": "", "to": "", "excluded_dates": [], "holiday_dates": []})
         for group in schedule["rate_groups"]:
-            group.update({"from": "", "to": ""})
+            group.update({"from": "", "to": "", "holiday_dates": []})
     # 時刻・金額は残し、本文の生成済み日付は日付を空にした構造から組み直す。
     conditions = canonical_conditions(sections)
     sections = parse_sections(conditions)

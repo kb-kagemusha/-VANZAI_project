@@ -18,6 +18,7 @@ import src.models.line_order  # noqa: F401
 import src.models.line_daily  # noqa: F401
 import src.models.order_billing_daily
 import src.models.order_formalization
+import src.models.holiday_calendar
 import src.models.staffing_replacement
 import src.models.order_staffing  # noqa: F401
 import src.models.closing_approval

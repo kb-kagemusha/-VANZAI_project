@@ -2,6 +2,7 @@ import { confirmApp } from "../lib/appDialog";
 import { useState } from "react";
 import { MonthCalendar, monthOf } from "./MonthCalendar";
 import { OrderDatePicker } from "./OrderDatePicker";
+import { OrderPublicHolidayPicker } from "./OrderPublicHolidayPicker";
 import "../styles/monthCalendar.css";
 import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
@@ -88,7 +89,7 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
   </div>;
 }
 
-function DateInputs({ group, disabled, prefix, periodFrom, periodTo, onChange }: { group: DateGroup; disabled: boolean; prefix: string; periodFrom: string; periodTo: string; onChange: (group: DateGroup) => void }) {
+function DateInputs({ group, disabled, prefix, periodFrom, periodTo, weeklyAllowed = false, onChange }: { group: DateGroup; disabled: boolean; prefix: string; periodFrom: string; periodTo: string; weeklyAllowed?: boolean; onChange: (group: DateGroup) => void }) {
   const ready = Boolean(periodFrom && periodTo && periodFrom <= periodTo);
   const endMin = group.from && group.from > periodFrom ? group.from : periodFrom;
   return <div className="order-schedule-dates">
@@ -98,16 +99,26 @@ function DateInputs({ group, disabled, prefix, periodFrom, periodTo, onChange }:
         {([ ["single", "1日ごと"], ["range", "複数日の期間"] ] as const).map(([mode, label]) =>
           <button key={mode} type="button" disabled={disabled} aria-pressed={group.date_mode === mode}
             onClick={() => onChange({ ...group, date_mode: mode })}>{label}</button>)}
+        {weeklyAllowed && <button type="button" disabled={disabled} aria-pressed={group.date_mode === "weekly"}
+          onClick={() => onChange({ ...group, date_mode: "weekly", weekdays: group.weekdays ?? [], holiday_mode: group.holiday_mode ?? "exclude" })}>毎週</button>}
       </div>
     </div>
-    <label>{group.date_mode === "range" ? "開始日" : "稼働日"}
+    <label>{group.date_mode !== "single" ? "開始日" : "稼働日"}
       <OrderDatePicker label={`${prefix}開始日`} value={group.from} min={periodFrom || undefined} max={periodTo || undefined} disabled={disabled || !ready}
         onChange={(day) => onChange({ ...group, from: day, to: group.date_mode === "single" ? day : group.to })} />
     </label>
-    {group.date_mode === "range" && <label>終了日
+    {group.date_mode !== "single" && <label>終了日
       <OrderDatePicker label={`${prefix}終了日`} value={group.to} min={endMin || undefined} max={periodTo || undefined} disabled={disabled || !ready || endMin > periodTo}
         onChange={(day) => onChange({ ...group, to: day })} />
     </label>}
+    {group.date_mode === "weekly" && <>
+      <div className="order-option-buttons" role="group" aria-label={`${prefix}曜日`}>
+        {["月", "火", "水", "木", "金", "土", "日"].map((day, i) => <button key={day} type="button" disabled={disabled} aria-pressed={(group.weekdays ?? []).includes(i)}
+          onClick={() => onChange({ ...group, weekdays: (group.weekdays ?? []).includes(i) ? (group.weekdays ?? []).filter((d) => d !== i) : [...(group.weekdays ?? []), i].sort() })}>{day}</button>)}
+      </div>
+      <label className="order-check"><input type="checkbox" checked={group.holiday_mode === "include"} disabled={disabled}
+        onChange={(event) => onChange({ ...group, holiday_mode: event.target.checked ? "include" : "exclude" })} />祝日もこの条件に含める（外すと祝日は対象外）</label>
+    </>}
     {!ready ? <p className="order-field-hint">上の「稼働日」で開始日と終了日を設定してください。</p> : null}
     {ready && [group.from, group.to].some((day) => day && (day < periodFrom || day > periodTo)) ? <p className="form-error">全体の稼働期間外の日付があります。日付を選び直してください。</p> : null}
   </div>;
@@ -148,7 +159,7 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
-        {!templateMode && <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} disabled={disabled} onChange={update} />}
+        {!templateMode && <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} weeklyAllowed={value.rates_follow_work} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>
@@ -163,9 +174,10 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
       </fieldset>;
     })}
     {!disabled && <div className="order-schedule-actions"><button type="button" className="order-action-button is-add" onClick={() => change({ ...value, work_groups: [...value.work_groups, newWorkGroup()] })}><span aria-hidden="true">＋</span> 稼働日・期間を追加</button></div>}
+    {!templateMode && value.work_groups.some((group) => group.date_mode === "weekly") && <OrderPublicHolidayPicker from={periodFrom} to={periodTo} schedule={value} disabled={disabled} onChange={change} />}
 
     <h5>単価</h5>
-    <label className="order-check order-rate-sync"><input type="checkbox" checked={value.rates_follow_work} disabled={disabled} onChange={(e) => void followWork(e.target.checked)} />稼働日の設定で単価設定する</label>
+    <label className="order-check order-rate-sync"><input type="checkbox" checked={value.rates_follow_work} disabled={disabled || value.work_groups.some((group) => group.date_mode === "weekly")} onChange={(e) => void followWork(e.target.checked)} />稼働日の設定で単価設定する</label>
     {value.rate_groups.map((group, index) => {
       const update = (patch: Partial<typeof group>) => change({ ...value, rate_groups: value.rate_groups.map((g) => g.id === group.id ? { ...g, ...patch } : g) });
       return <fieldset key={group.id} className="order-schedule-row order-rate-row" disabled={disabled}>

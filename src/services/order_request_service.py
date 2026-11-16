@@ -402,6 +402,16 @@ class OrderRequestService:
             sections = parse_sections(version.request_conditions)
             if sections and "schedule" in sections:
                 normalize_schedule(sections["schedule"], complete=True)
+                weekly = [g for g in sections["schedule"]["work_groups"] if g["date_mode"] == "weekly"]
+                if weekly:
+                    from src.services.holiday_calendar import calendar
+                    for group in weekly:
+                        entries = calendar(self.session, date.fromisoformat(group["from"]), date.fromisoformat(group["to"]))
+                        expected = [entry["day"] for entry in entries if entry["is_holiday"]]
+                        if group["holiday_dates"] != expected:
+                            raise ValueError("祝日一覧が変更されたか未確認です。最新の祝日を確認してください")
+                        if any(entry["revision"] == 0 for entry in entries):
+                            raise ValueError("祝日一覧を確認して依頼書へ反映してください")
             if sections and "work_period" in sections:
                 normalize_work_period(sections["work_period"], sections.get("schedule"), complete=True)
         except ValueError as exc:

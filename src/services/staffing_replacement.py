@@ -14,7 +14,7 @@ from src.models.transaction import WorkerAvailability, Assignment, ShiftSlot
 from src.services import worker_schedule as ws
 from src.services.audit import AuditService
 from src.services.order_request_service import OrderRequestService, OrderRequestError
-from src.domain.order_schedule import normalize_schedule, normalize_work_period, work_period_label
+from src.domain.order_schedule import group_matches_day, normalize_schedule, normalize_work_period, work_period_label
 from src.services.order_request_format import FORMAT_ID
 
 
@@ -188,10 +188,11 @@ def _one_day_sections(version, value):
     sections["format"]=FORMAT_ID
     schedule=sections.get("schedule")
     if not schedule: raise OrderRequestError(409,"日付別の勤務条件がありません。依頼書を確認してください")
-    work=[g for g in schedule["work_groups"] if g["from"] <= value <= g["to"] and value not in g.get("excluded_dates",[])]
-    rates=[g for g in schedule["rate_groups"] if g["from"] <= value <= g["to"]]
+    work=[g for g in schedule["work_groups"] if group_matches_day(g,value)]
+    rates=[g for g in schedule["rate_groups"] if group_matches_day(g,value)]
     for group in work+rates:
         group.update({"date_mode":"single","from":value,"to":value})
+        group.update({"weekdays":[],"holiday_dates":[],"holiday_mode":"exclude"})
         if "excluded_dates" in group: group["excluded_dates"]=[]
     sections["schedule"]=normalize_schedule({**schedule,"work_groups":work,"rate_groups":rates},complete=True)
     sections["work_period"]=normalize_work_period({"from":value,"to":value,"excluded_dates":[]},sections["schedule"],complete=True)

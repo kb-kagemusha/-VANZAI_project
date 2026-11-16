@@ -56,6 +56,20 @@ test('review actual people, weekday rate and signed adjustment before saving exa
   expect(writes[1].body).not.toHaveProperty('quantity');
 });
 
+test('holiday billing price is sent separately from weekday prices', async ({page}) => {
+  const writes = await mock(page);
+  await page.goto('/billing/order-amounts');
+  await page.getByRole('button',{name:'1人日単価で計算',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'1人日単価で請求金額を確認',exact:true});
+  await dialog.getByLabel('人数を確認する実績の案件').selectOption('p1');
+  await dialog.getByLabel('基本の1人日単価（税抜・円）',{exact:true}).fill('20000');
+  await dialog.getByRole('button',{name:'曜日別に設定する',exact:true}).click();
+  await dialog.getByLabel('祝日（税抜・円、空欄は曜日の単価）',{exact:true}).fill('30000');
+  await dialog.getByRole('button',{name:'単価設定を保存して実績を確認',exact:true}).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].body.weekday_rates).toEqual({holiday:'30000'});
+});
+
 test('changed actuals preserve entered adjustment and ask for another review',async({page})=>{
   await mock(page,true);const dialog=await open(page);
   await dialog.getByLabel('2026-10-23の調整額',{exact:true}).fill('-10000');

@@ -10,7 +10,7 @@ import "../styles/dailyBilling.css";
 
 type Setting={project_id:string;base_rate:string;weekday_rates:Record<string,string>;revision:number};
 type State={setting:Setting|null;reference_rates?:{base_rate:string;weekday_rates:Record<string,string>}|null;dates:string[];is_test:boolean;client_id:string|null;previous_days?:{date:string;adjustment:string;adjustment_reason:string}[];projects:{id:string;name:string;code:string|null}[]};
-type Day={date:string;weekday:number;quantity:number;unit_price:string;subtotal:string;workers:{name:string;worker_id:string;actual_ids:string[];minutes:number}[]};
+type Day={date:string;weekday:number;is_holiday?:boolean;quantity:number;unit_price:string;subtotal:string;workers:{name:string;worker_id:string;actual_ids:string[];minutes:number}[]};
 type Preview={project_name:string;source_digest:string;rates_revision:number;excluded_count:number;needs_review:number;days:Day[]};
 const weekdays=["月","火","水","木","金","土","日"];
 const cents=(text:string):bigint|null=>{
@@ -69,7 +69,7 @@ export function DailyBillingDialog({row,onClose}:{row:BillingOrder;onClose:()=>v
         <BillingAmountInput label="基本の1人日単価（税抜・円）" value={base} disabled={busy} onChange={setBase}/></div>
       {!state.data.projects.length?<p className="form-error">同じクライアントの実績案件がありません。案件を登録し、実績との対応を確認してください。</p>:null}
       <div className="daily-billing-actions" role="group" aria-label="請求単価の設定方法"><button type="button" className="btn btn-line-blue" aria-pressed={!useWeekly} onClick={()=>setUseWeekly(false)}>全曜日で基本単価</button><button type="button" className="btn btn-line-blue" aria-pressed={useWeekly} onClick={()=>setUseWeekly(true)}>曜日別に設定する</button></div>
-      {useWeekly?<><p>変わる曜日だけ入力してください。空欄は基本単価を使います。祝日による自動変更は行いません。</p><div className="daily-billing-weekdays">{weekdays.map((day,i)=><BillingAmountInput key={day} label={`${day}曜日（税抜・円）`} value={weekly[String(i)]??""} disabled={busy} onChange={value=>setWeekly({...weekly,[String(i)]:value})}/>)}</div></>:null}
+      {useWeekly?<><p>変わる曜日だけ入力してください。空欄は基本単価を使います。祝日単価は、祝日を確認した曜日別の依頼書に設定できます。</p><div className="daily-billing-weekdays">{weekdays.map((day,i)=><BillingAmountInput key={day} label={`${day}曜日（税抜・円）`} value={weekly[String(i)]??""} disabled={busy} onChange={value=>setWeekly({...weekly,[String(i)]:value})}/>)}</div><BillingAmountInput label="祝日（税抜・円、空欄は曜日の単価）" value={weekly.holiday??""} disabled={busy} onChange={value=>setWeekly({...weekly,holiday:value})}/></>:null}
       {state.data.setting?<label className="order-field">単価設定を変える理由<textarea value={rateReason} maxLength={2000} onChange={e=>setRateReason(e.target.value)}/></label>:null}
       <button type="button" className="btn create-button" disabled={busy || !project || !isValidBillingAmount(base) || (useWeekly && Object.values(weekly).some(v=>v!==""&&!isValidBillingAmount(v))) || (!!state.data.setting&&!rateReason.trim())} onClick={()=>saveRates.mutate()}>単価設定を保存して実績を確認</button>
     </fieldset>:state.data?.setting?<div className="daily-billing-actions"><p>基本単価 {money(cents(state.data.setting.base_rate)??0n)} ／ 単価設定 第{state.data.setting.revision}版</p><button type="button" className="btn btn-line-blue" disabled={busy} onClick={()=>{setEditing(true);setReview(false);}}>単価設定を変更</button><button type="button" className="btn btn-line-blue" disabled={busy||preview.isFetching} onClick={()=>{setReviewed(false);setReview(false);void preview.refetch();}}>実績を読み直す</button></div>:null}

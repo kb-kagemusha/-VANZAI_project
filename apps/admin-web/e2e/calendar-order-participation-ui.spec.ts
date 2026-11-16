@@ -335,6 +335,45 @@ test("form layout and detail dates stay within the overall work period", async (
   await expect(page.getByRole("button", { name: "稼働日の詳細1の終了日", exact: true })).toContainText("2026/10/30");
 });
 
+test("weekly conditions select weekdays and save the confirmed holiday snapshot", async ({ page }) => {
+  const writes = await adminMocks(page);
+  const candidates = [{ day: "2026-11-03", name: "文化の日", is_holiday: true, revision: 0, source: "library" }];
+  await page.route("**/api/order-requests/holiday-calendar**", async (route) => {
+    const isConfirm = new URL(route.request().url()).pathname.endsWith("/confirm");
+    if (isConfirm) expect(route.request().postDataJSON().days).toEqual(["2026-11-03"]);
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify(isConfirm ? candidates.map((v) => ({ ...v, revision: 1 })) : candidates) });
+  });
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  await page.getByRole("group", { name: "稼働日の詳細1の日付の設定" }).getByRole("button", { name: "毎週" }).click();
+  const weekdays = page.getByRole("group", { name: "稼働日の詳細1の曜日" });
+  for (const day of ["月", "火", "水", "木", "金", "土"]) await weekdays.getByRole("button", { name: day, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日・期間を追加" }).click();
+  await page.getByRole("group", { name: "稼働日の詳細2の日付の設定" }).getByRole("button", { name: "毎週" }).click();
+  await page.getByRole("button", { name: "稼働日の詳細2の開始日" }).click();
+  await page.getByRole("dialog", { name: "稼働日の詳細2の開始日" }).getByRole("button", { name: "2026-10-29" }).click();
+  await page.getByRole("button", { name: "稼働日の詳細2の終了日" }).click();
+  const end = page.getByRole("dialog", { name: "稼働日の詳細2の終了日" });
+  await end.getByRole("button", { name: "次の月" }).click();
+  await end.getByRole("button", { name: "2026-11-04" }).click();
+  await page.getByRole("group", { name: "稼働日の詳細2の曜日" }).getByRole("button", { name: "日", exact: true }).click();
+  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByRole("checkbox", { name: /祝日もこの条件に含める/ }).check();
+  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByLabel("開始時間").fill("08:00");
+  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByLabel("終了時間").fill("19:00");
+  await page.getByRole("group", { name: /単価 2/ }).getByRole("spinbutton", { name: "単価（円・税抜）" }).fill("15000");
+  await page.getByRole("button", { name: "祝日一覧を確認", exact: true }).click();
+  await expect(page.getByText("2026-11-03 文化の日 祝日")).toBeVisible();
+  await page.getByRole("button", { name: "この一覧を確認して依頼書に反映", exact: true }).click();
+  await expect(page.getByText("祝日一覧を依頼書に反映しました。日付と条件を確認してください。")).toBeVisible();
+  await page.getByRole("button", { name: "PDFを確認して送付する", exact: true }).click();
+  const written = JSON.parse(writes[0].body.request_conditions).schedule;
+  expect(written.work_groups[0].holiday_dates).toEqual(["2026-11-03"]);
+  expect(written.work_groups[0].weekdays).toEqual([0,1,2,3,4,5]);
+  expect(written.rate_groups[0].holiday_dates).toEqual(["2026-11-03"]);
+  expect(written.work_groups[1]).toMatchObject({ weekdays: [6], holiday_mode: "include", holiday_dates: ["2026-11-03"], start_time: "08:00", end_time: "19:00" });
+  expect(written.rate_groups[1].amount).toBe("15000");
+});
+
 test("Monday date picker and PDF correction preserve draft and reuse its id", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   await page.goto("/operations/order-requests");

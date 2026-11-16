@@ -16,6 +16,7 @@ from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from src.domain.order_schedule import group_matches_day
 
 from src.models.base import generate_ulid
 from src.models.line_daily import (
@@ -90,6 +91,8 @@ def _rate_for(schedule: dict, entry: WorkerScheduleEntry) -> dict | None:
     for rate in (schedule or {}).get("rate_groups", []) or []:
         start, end = rate.get("from") or "", rate.get("to") or rate.get("from") or ""
         if start and not (start <= day <= end):
+            continue
+        if rate.get("date_mode") == "weekly" and not group_matches_day(rate, day):
             continue
         group = rate.get("work_group_id")
         if group and group != entry.work_group_id:

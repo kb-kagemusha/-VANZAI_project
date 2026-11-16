@@ -84,8 +84,11 @@ def save_setting(db,version_id,project_id,base_rate,weekday_rates,revision,reaso
     row=db.query(OrderBillingRateSetting).filter_by(version_id=version_id).with_for_update().populate_existing().one_or_none()
     if revision != (row.revision if row else 0): raise OrderRequestError(409,"単価設定が変更されました。最新の設定を確認してください")
     if row and not reason.strip(): raise OrderRequestError(422,"単価設定を変更する理由を入力してください")
-    if not set(weekday_rates) <= {str(n) for n in range(7)} or base_rate < 0 or any(v < 0 for v in weekday_rates.values()):
+    if not set(weekday_rates) <= ({str(n) for n in range(7)} | {"holiday"}) or base_rate < 0 or any(v < 0 for v in weekday_rates.values()):
         raise OrderRequestError(422,"基本単価と月〜日の単価を確認してください")
+    groups = (ws._version_sections(version).get("schedule") or {}).get("work_groups", [])
+    if "holiday" in weekday_rates and not any(g.get("date_mode") == "weekly" for g in groups):
+        raise OrderRequestError(422,"祝日単価には祝日を確認した曜日別の依頼書が必要です")
     before=setting_out(row)
     if not row:
         row=OrderBillingRateSetting(version_id=version_id,revision=0)
@@ -125,10 +128,13 @@ def preview(db,version_id,*,for_update=False):
     setting=db.get(OrderBillingRateSetting,version_id)
     if not setting: raise OrderRequestError(409,"先に基本単価と実績の案件を設定してください")
     value=source(db,version,setting.project_id,days,for_update=for_update)
+    groups=(ws._version_sections(version).get("schedule") or {}).get("work_groups", [])
+    holidays={day for group in groups if group.get("date_mode") == "weekly" for day in group.get("holiday_dates", [])}
     for day in value["days"]:
         weekday=date.fromisoformat(day["date"]).weekday()
-        unit=Decimal(setting.weekday_rates.get(str(weekday),str(setting.base_rate)))
-        day.update(weekday=weekday,unit_price=str(unit),subtotal=str((day["quantity"]*unit).quantize(MONEY)))
+        is_holiday=day["date"] in holidays
+        unit=Decimal(setting.weekday_rates.get("holiday") if is_holiday and "holiday" in setting.weekday_rates else setting.weekday_rates.get(str(weekday),str(setting.base_rate)))
+        day.update(weekday=weekday,is_holiday=is_holiday,unit_price=str(unit),subtotal=str((day["quantity"]*unit).quantize(MONEY)))
     value.update(rates_revision=setting.revision,base_rate=str(setting.base_rate),weekday_rates=setting.weekday_rates,is_test=document.kind == "test")
     return value
 
@@ -197,7 +203,7 @@ def confirm(db,version_id,*,billing_month,source_digest,rates_revision,expected_
                 AuditService(db).log("order_billing_actual_claim_released",target_type="order_request_series",target_id=version.series_id,actor=actor.username,actor_role=actor.role,reason=reason,
                     after_value={"project_id":claim.project_id,"date":claim.work_date.isoformat(),"new_amount_id":amount.id})
     for day in lines:
-        db.add(OrderBillingDailyLine(amount_id=amount.id,work_date=date.fromisoformat(day["date"]),quantity=day["quantity"],unit_price=Decimal(day["unit_price"]),adjustment=Decimal(day["adjustment"]),adjustment_reason=day["adjustment_reason"],subtotal=Decimal(day["subtotal"]),source_snapshot={"workers":day["workers"],"weekday":day["weekday"]}))
+        db.add(OrderBillingDailyLine(amount_id=amount.id,work_date=date.fromisoformat(day["date"]),quantity=day["quantity"],unit_price=Decimal(day["unit_price"]),adjustment=Decimal(day["adjustment"]),adjustment_reason=day["adjustment_reason"],subtotal=Decimal(day["subtotal"]),source_snapshot={"workers":day["workers"],"weekday":day["weekday"],"is_holiday":day["is_holiday"]}))
     db.flush()
     AuditService(db).log("order_billing_daily_amount_confirmed",target_type="order_billing_amount",target_id=amount.id,actor=actor.username,actor_role=actor.role,reason=reason,
         after_value={**metadata,"amount":str(total),"days":lines})
