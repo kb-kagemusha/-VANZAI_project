@@ -4261,10 +4261,19 @@ html[data-theme="dark"] .order-schedule-row input:not([type="checkbox"]), html[d
 .order-action-button.is-remove { background: #fff0f0; color: #a91c32; border-color: #bc5261; }
 .order-action-button.is-remove:hover { background: #ffe1e4; }
 .order-created-table td.order-state-cell { white-space: nowrap; }
-.order-weekday-buttons, .order-weekly-hint, .order-schedule-dates > .order-check { grid-column: 1 / -1; }
-.order-weekday-buttons button { min-width: 2.6rem; }
-.order-weekday-buttons .order-holiday-button { flex: 1.4; border-color: #b4402f; color: #9d2f20; }
+.order-page-actions { margin: .75rem 0 .5rem; }
+.order-weekly-hint, .order-schedule-dates > .order-check { grid-column: 1 / -1; }
+.order-schedule-dates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.order-schedule-dates > .order-date-mode { grid-column: 1 / -1; }
+.order-mode-buttons { justify-content: flex-start; }
+.order-mode-buttons button { flex: 0 0 9.5rem; font-size: 1rem; white-space: nowrap; }
+.order-weekday-frame { grid-column: 1 / -1; display: grid; gap: .45rem; padding: .7rem .8rem; border: 1px solid #b6c6d8; border-radius: 8px; background: rgba(255,255,255,.55); }
+.order-weekday-buttons { flex-wrap: wrap; justify-content: flex-start; }
+.order-weekday-buttons button { flex: 0 0 3.4rem; min-width: 0; padding-left: .2rem; padding-right: .2rem; font-size: 1rem; }
+.order-weekday-buttons .order-holiday-button { flex: 0 0 4.4rem; border-color: #b4402f; color: #9d2f20; }
 .order-weekday-buttons .order-holiday-button[aria-pressed="true"] { background: #b4402f; border-color: #b4402f; color: #fff; box-shadow: 0 2px 4px rgba(180,64,47,.18); }
+@media (max-width: 600px) { .order-mode-buttons button { flex: 1 1 0; min-width: 0; padding-left: .3rem; padding-right: .3rem; } .order-weekday-buttons button, .order-weekday-buttons .order-holiday-button { flex: 1 1 3rem; } }
+html[data-theme="dark"] .order-weekday-frame { border-color: #5b6c80; background: rgba(255,255,255,.04); }
 .order-weekly-gap { padding: .5rem .7rem; border-left: 4px solid #c98a12; background: #fff8e6; }
 html[data-theme="dark"] .order-weekday-buttons .order-holiday-button { color: #ffb4a6; border-color: #e07d6c; }
 html[data-theme="dark"] .order-weekday-buttons .order-holiday-button[aria-pressed="true"] { background: #b4402f; color: #fff; }

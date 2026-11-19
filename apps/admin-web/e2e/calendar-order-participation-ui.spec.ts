@@ -110,7 +110,7 @@ test("order name and reference URL stay separate and postal lookup preserves man
   expect(JSON.parse(content.request_conditions).project_name).toBe("案内イベント");
   expect(content.site_name).toBe("会場名のみ");
   expect(content.site_address).toBe("主催者確認済みの住所・建物名");
-  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  await page.getByRole("button", { name: "保存済みテンプレートから作成", exact: true }).click();
   await page.getByRole("button", { name: "このテンプレートで新規作成", exact: true }).click();
   const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
   await expect(draft.getByRole("textbox", { name: "参考URL（任意）", exact: true })).toHaveValue("https://example.com/~event");
@@ -174,7 +174,7 @@ test("direct template creation stores reusable content without creating or sendi
   await expect(editor).toHaveCount(0);
   expect(writes).toHaveLength(1);
   expect(writes[0].path).toBe("/api/order-requests/templates/create");
-  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  await page.getByRole("button", { name: "保存済みテンプレートから作成", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "保存済みテンプレート", exact: true });
   await expect(picker.getByText("直接作成", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: "このテンプレートで新規作成", exact: true }).click();
@@ -183,6 +183,8 @@ test("direct template creation stores reusable content without creating or sendi
   await expect(draft.getByRole("button", { name: "稼働日の開始", exact: true })).toContainText("日付を選択");
   await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("15000");
   await expect(draft.getByRole("textbox", { name: "インセンティブの詳細", exact: true })).toHaveValue("販売1台につき500円");
+  await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toHaveCount(0); // 保存のみでは送付の欄を出さない
+  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
 });
 
@@ -252,10 +254,12 @@ test("saved template can be found and loaded into an independent blank-date draf
   await expect(draft.getByRole("button", { name: "稼働日の開始", exact: true })).toContainText("日付を選択");
   await expect(draft.getByRole("button", { name: "稼働日の終了", exact: true })).toContainText("日付を選択");
   await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("10000");
+  await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toHaveCount(0);
+  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
   await draft.getByRole("textbox", { name: "案件名", exact: true }).fill("今回だけ変更");
   await draft.getByRole("button", { name: "閉じる", exact: true }).click();
-  await page.getByRole("button", { name: "保存済みテンプレート", exact: true }).click();
+  await page.getByRole("button", { name: "保存済みテンプレートから作成", exact: true }).click();
   await expect(picker.getByText("確認用イベント", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: "一覧から外す", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "テンプレートを一覧から外す", exact: true });
@@ -347,6 +351,7 @@ test("form layout and detail dates stay within the overall work period", async (
   const grid = await memo.locator("..").locator("..").boundingBox();
   expect(Math.abs(memoBox!.x + memoBox!.width - grid!.x - grid!.width)).toBeLessThan(2);
   await expect(memo.locator("..").locator(".order-field-hint")).toHaveText("PDFには記載しません");
+  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
   await expect(draft.locator(".order-field-hint").getByText("（保存は空でも可。送付のときに決めます）", { exact: true })).toBeVisible();
   await expect(draft.getByText("期限内に返事がない相手へ案内を送ります", { exact: true })).toBeVisible();
   const phone = draft.getByRole("checkbox", { name: /電話先行/ });
@@ -596,4 +601,79 @@ test("all offered days start selected; unavailable days can be removed across mo
   await page.getByRole("button", { name: "送信", exact: true }).click();
   await expect(page.getByRole("heading", { name: "送信しました", exact: true })).toBeVisible();
   expect(submissions[0].dates).toEqual(offered.filter((day) => day !== "2026-11-04"));
+});
+
+test("page buttons sit under the heading and a saved order can be recalled to edit or go on to sending", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  const heading = await page.getByRole("heading", { name: "発注依頼書", exact: true }).boundingBox();
+  const bar = page.getByRole("group", { name: "依頼書の操作" });
+  await expect(bar.getByRole("button")).toHaveText(["新規の依頼書を作成", "保存した依頼書を呼び出す", "保存済みテンプレートから作成", "テンプレートの作成"]);
+  const first = await bar.getByRole("button").first().boundingBox();
+  expect(first!.y).toBeGreaterThanOrEqual(heading!.y + heading!.height);
+  await page.screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/page-top.png` : testInfo.outputPath("page-top.png") });
+  await bar.getByRole("button", { name: "保存した依頼書を呼び出す", exact: true }).click();
+  const recall = page.getByRole("dialog", { name: "保存した依頼書を呼び出す" });
+  await expect(recall.getByRole("group", { name: "呼び出す依頼書の区分" }).getByRole("button")).toHaveText(["すべて", "正式のみ", "テストのみ"]);
+  await expect(recall.getByText(version.document_number)).toBeVisible();
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/recall.png` });
+  await recall.getByRole("button", { name: "内容を直す", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "第1版", exact: true })).toBeVisible();
+  // 送付先・期限を入力済みの依頼書は、送付の欄つきで開く（入力した内容を隠さない）
+  await expect(page.getByRole("button", { name: "作成して送付まで行う", exact: true })).toHaveClass(/is-active/);
+  await page.getByRole("button", { name: "閉じる", exact: true }).first().click();
+  await bar.getByRole("button", { name: "保存した依頼書を呼び出す", exact: true }).click();
+  await page.getByRole("dialog", { name: "保存した依頼書を呼び出す" }).getByRole("button", { name: "送付へ進む", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "送付の設定", exact: true })).toBeVisible();
+});
+
+test("new orders default to save-only (no sending fields) and the send option shows them", async ({ page }) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  await expect(draft.getByRole("group", { name: "区分" }).getByRole("button")).toHaveText(["正式", "テスト"]);
+  await expect(draft.getByRole("group", { name: "作成のしかた" }).getByRole("button", { name: "保存のみ（あとで送る）" })).toHaveClass(/is-active/);
+  await expect(draft.getByText("送付と追跡", { exact: true })).toHaveCount(0);
+  await expect(draft.getByText("送付先", { exact: true })).toHaveCount(0);
+  await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toBeVisible();
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/new-draft.png` });
+  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
+  await expect(draft.getByText("送付と追跡", { exact: true })).toBeVisible();
+  await expect(draft.getByText("送付先", { exact: true }).first()).toBeVisible();
+});
+
+test("date mode buttons keep one size and position; weekday buttons sit in a framed block", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  const mode = draft.getByRole("group", { name: "稼働日の詳細1の日付の設定" });
+  const boxes: Record<string, any[]> = {};
+  const starts: any[] = [];
+  const shot = (name: string) => process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/${name}` : testInfo.outputPath(name);
+  for (const label of ["1日ごと", "複数日の期間", "毎週"]) {
+    await mode.getByRole("button", { name: label, exact: true }).click();
+    boxes[label] = [];
+    for (const b of ["1日ごと", "複数日の期間", "毎週"]) boxes[label].push(await mode.getByRole("button", { name: b, exact: true }).boundingBox());
+    const fontSize = await mode.getByRole("button", { name: label, exact: true }).evaluate((el) => getComputedStyle(el).fontSize);
+    expect(fontSize).toBe("16px");
+    if (label !== "毎週") starts.push(await draft.getByRole("button", { name: /稼働日の詳細1の開始日|稼働日の開始/ }).last().boundingBox());
+    await draft.getByRole("group", { name: "稼働日の詳細 1" }).screenshot({ path: shot(`mode-${label}.png`) }).catch(() => {});
+  }
+  const ref = boxes["複数日の期間"];
+  for (const label of Object.keys(boxes)) ref.forEach((box, i) => {
+    expect(Math.abs(boxes[label][i].width - box.width)).toBeLessThan(1);
+    expect(Math.abs(boxes[label][i].height - box.height)).toBeLessThan(1);
+    expect(Math.abs(boxes[label][i].x - box.x)).toBeLessThan(1);
+  });
+  expect(Math.abs(starts[0].x - starts[1].x)).toBeLessThan(1);
+  expect(Math.abs(starts[0].width - starts[1].width)).toBeLessThan(1);
+  const frame = draft.locator(".order-weekday-frame").first();
+  await expect(frame.getByText("曜日を選択", { exact: true })).toBeVisible();
+  const f = await frame.boundingBox();
+  const row = await draft.getByRole("group", { name: "稼働日の詳細 1" }).boundingBox();
+  const last = await frame.getByRole("button", { name: "祝日", exact: true }).boundingBox();
+  expect(last!.x + last!.width).toBeLessThan(f!.x + f!.width);
+  expect(f!.width).toBeLessThan(row!.width);
 });

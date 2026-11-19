@@ -238,6 +238,8 @@ export function OrderRequestsPage() {
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [pdfReview, setPdfReview] = useState<{ phase: "settings" | "loading" | "ready"; versionId: string | null; url: string | null } | null>(null);
   const [autoSendId, setAutoSendId] = useState<string | null>(null);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [modeOverride, setModeOverride] = useState<"save" | "send" | null>(null);
   const ackedGapsRef = useRef("");
   const [pdfReviewError, setPdfReviewError] = useState("");
   const [pdfSending, setPdfSending] = useState(false);
@@ -254,6 +256,11 @@ export function OrderRequestsPage() {
   formRef.current = form;
   sectionsRef.current = sections;
 
+  const savedQuery = useQuery({
+    queryKey: ["order-requests-saved", kind],
+    queryFn: () => listOrderRequests({ kind, queue: "saved_unsent", limit: 100, offset: 0 }),
+    enabled: savedOpen,
+  });
   const listQuery = useQuery({
     queryKey: ["order-requests", kind, queue, createdPage, createdLimit],
     queryFn: () => listOrderRequests({ kind, queue, limit: createdLimit, offset: createdPage * createdLimit }),
@@ -494,6 +501,7 @@ export function OrderRequestsPage() {
   }
 
   function showDetail(versionId: string) {
+    setModeOverride(null);
     setTemplateMode(false);
     if (creating || selectedId !== versionId) loadedForRef.current = null;
     setCreating(false);
@@ -507,6 +515,7 @@ export function OrderRequestsPage() {
   }
 
   function startNewDraft() {
+    setModeOverride(null);
     setTemplateMode(false);
     loadedForRef.current = null;
     formRef.current = EMPTY_FORM;
@@ -591,6 +600,7 @@ export function OrderRequestsPage() {
   }
 
   function closeCreateModal() {
+    setModeOverride(null);
     if (templateBusyRef.current) return;
     setTemplateMode(false);
     setCreating(false);
@@ -1101,6 +1111,11 @@ export function OrderRequestsPage() {
     }
   }
 
+  /** 保存のみ（送付の欄を出さない）か、送付まで行うか。送付の欄に入力済みの依頼書は、送付まで行うで開く。 */
+  const hasSendInput = form.worker_ids.length > 0 || Boolean(form.follow_up_due_on) || Boolean(form.phone_first) || Boolean(form.phone_note?.trim()) || Boolean(form.assign_tracker_self);
+  const sendMode: "save" | "send" = modeOverride ?? (hasSendInput ? "send" : "save");
+  const showSendFields = sendMode === "send" || templateMode;
+
   const recipientsSection = (
             <section className="order-draft-section">
               <div className="order-recipients">
@@ -1237,20 +1252,52 @@ export function OrderRequestsPage() {
       >
         {participationFor ? <VersionParticipationSummary versionId={participationFor.versionId} /> : null}
       </FormDialog>
+      <FormDialog open={savedOpen} title="保存した依頼書を呼び出す" onClose={() => setSavedOpen(false)}>
+        <p className="order-field-hint">保存済み（未送付）の依頼書です。内容を直すことも、送付の設定へ進むこともできます。</p>
+        <div className="order-kind-switch" role="group" aria-label="呼び出す依頼書の区分">
+          {([["all", "すべて"], ["formal", "正式のみ"], ["test", "テストのみ"]] as const).map(([value, label]) => (
+            <button key={value} type="button" className={`btn btn-sm${kind === value ? " is-active" : ""}`} aria-pressed={kind === value} onClick={() => { setKind(value); setCreatedPage(0); }}>{label}</button>
+          ))}
+        </div>
+        {savedQuery.isLoading ? <p>読み込んでいます</p> : null}
+        {savedQuery.isError ? <ErrorState title="一覧を取得できませんでした" description={messageOf(savedQuery.error)} /> : null}
+        {savedQuery.data && savedQuery.data.items.length === 0 ? <p className="order-recipient-empty">保存済み（未送付）の依頼書はありません。</p> : null}
+        {savedQuery.data && savedQuery.data.items.length > 0 ? (
+          <div className="order-list-table">
+            <table className="data-table order-saved-table">
+              <thead><tr><th>文書番号</th><th>案件名</th><th>日付</th><th>送付先</th><th>操作</th></tr></thead>
+              <tbody>
+                {savedQuery.data.items.map((item) => (
+                  <tr key={item.version_id}>
+                    <td>{item.document_number}</td>
+                    <td className="order-cell-multiline">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
+                    <td><OrderListDate label={item.work_date_label} /></td>
+                    <td>{item.recipient_count}</td>
+                    <td>
+                      <div className="order-row-actions">
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSavedOpen(false); showDetail(item.version_id); }}>{item.status === "draft" ? "内容を直す" : "開く"}</button>
+                        {canWrite && item.status === "draft" ? <button type="button" className="btn btn-primary btn-sm" onClick={() => { setSavedOpen(false); showDetail(item.version_id); setAutoSendId(item.version_id); }}>送付へ進む</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </FormDialog>
       <PageHeader
         eyebrow="発注依頼"
         title="発注依頼書"
         description="誰が、誰に、どの版を確定したかを担当者間で共有します。返事は本人の受諾か辞退だけです。"
-        titleAction={(
-          <div className="order-template-actions">
-          <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>
-            新規の依頼書を作成
-          </button>
-          <button type="button" className="btn order-template-browse-button" onClick={() => setTemplatesOpen(true)}>保存済みテンプレート</button>
-          {canWrite ? <button type="button" className="btn order-template-create-button" onClick={startNewTemplate}>テンプレートの作成</button> : null}
-          </div>
-        )}
       />
+
+      <div className="order-template-actions order-page-actions" role="group" aria-label="依頼書の操作">
+        <button type="button" className="btn btn-primary create-button" onClick={startNewDraft}>新規の依頼書を作成</button>
+        <button type="button" className="btn btn-line-blue" onClick={() => setSavedOpen(true)}>保存した依頼書を呼び出す</button>
+        <button type="button" className="btn order-template-browse-button" onClick={() => setTemplatesOpen(true)}>保存済みテンプレートから作成</button>
+        {canWrite ? <button type="button" className="btn order-template-create-button" onClick={startNewTemplate}>テンプレートの作成</button> : null}
+      </div>
 
       {!createModal && actionError ? <ErrorState title="処理できませんでした" description={actionError} /> : null}
       {!createModal && actionMessage ? <p>{actionMessage}</p> : null}
@@ -1427,11 +1474,6 @@ export function OrderRequestsPage() {
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
                   <div className="order-row-actions">
-                    {canWrite && item.status === "draft" ? (
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => { showDetail(item.version_id); setAutoSendId(item.version_id); }}>
-                        送付へ進む
-                      </button>
-                    ) : null}
                     {(item.change_documents ?? []).length > 0 ? null : (
                       <button
                         type="button"
@@ -1615,6 +1657,13 @@ export function OrderRequestsPage() {
                     </button>
                   </div>
                 </div>
+                {!templateMode ? <div className="order-field order-span-8">
+                  <span className="order-field-label">作成のしかた</span>
+                  <div className="order-segment" role="group" aria-label="作成のしかた">
+                    <button type="button" className={sendMode === "save" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("save")}>保存のみ（あとで送る）</button>
+                    <button type="button" className={sendMode === "send" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("send")}>作成して送付まで行う</button>
+                  </div>
+                </div> : null}
               </div>
             </section>
 
@@ -1875,7 +1924,7 @@ export function OrderRequestsPage() {
               </div>
             </section>
 
-            {!templateMode && <><section className="order-draft-section">
+            {!templateMode && showSendFields && <><section className="order-draft-section">
               <h4>送付と追跡</h4>
               <div className="order-draft-grid">
                 <label className="order-field order-span-4">
@@ -2118,9 +2167,9 @@ export function OrderRequestsPage() {
               </div>
               <div className="order-draft-foot-end">
                 {templateMode ? <button type="submit" className="btn create-button" disabled={templateSaving || !templateName.trim()}>{templateSaving ? "作成しています…" : "テンプレートを作成"}</button> : <>
-                <button type="button" className="btn btn-ghost" onClick={() => setLinePreviewOpen(true)}>
+                {showSendFields || !editable ? <button type="button" className="btn btn-ghost" onClick={() => setLinePreviewOpen(true)}>
                   送付内容を確認
-                </button>
+                </button> : null}
                 {canSend ? (
                   <button
                     type="button"

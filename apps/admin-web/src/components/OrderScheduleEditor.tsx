@@ -133,7 +133,7 @@ function DateInputs({ group, disabled, prefix, periodFrom, periodTo, weeklyAllow
   return <div className="order-schedule-dates">
     <div className="order-date-mode">
       <span>日付の設定</span>
-      <div className="order-option-buttons" role="group" aria-label={`${prefix}日付の設定`}>
+      <div className="order-option-buttons order-mode-buttons" role="group" aria-label={`${prefix}日付の設定`}>
         {([ ["single", "1日ごと"], ["range", "複数日の期間"] ] as const).map(([mode, label]) =>
           <button key={mode} type="button" disabled={disabled} aria-pressed={group.date_mode === mode}
             onClick={() => chooseMode(mode)}>{label}</button>)}
@@ -149,11 +149,14 @@ function DateInputs({ group, disabled, prefix, periodFrom, periodTo, weeklyAllow
         onChange={(day) => onChange({ ...group, to: day })} />
     </label>}
     {weekly && <>
+      <div className="order-weekday-frame">
+      <span className="order-field-label">曜日を選択</span>
       <div className="order-option-buttons order-weekday-buttons" role="group" aria-label={`${prefix}曜日と祝日`}>
         {WEEKDAY_LABELS.map((day, i) => <button key={day} type="button" disabled={disabled} aria-pressed={weekdays.includes(i)}
           onClick={() => onChange({ ...group, weekdays: weekdays.includes(i) ? weekdays.filter((d) => d !== i) : [...weekdays, i].sort() })}>{day}</button>)}
         {weeklyV2 && <button type="button" className="order-holiday-button" disabled={disabled} aria-pressed={Boolean(group.holiday_selected)}
           onClick={() => onChange({ ...group, holiday_selected: !group.holiday_selected })}>祝日</button>}
+      </div>
       </div>
       {weeklyV2 && <>
         <label className="order-check"><input type="checkbox" checked={Boolean(group.custom_range)} disabled={disabled}
