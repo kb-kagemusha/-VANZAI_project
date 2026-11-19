@@ -1967,7 +1967,7 @@ export function OrderRequestsPage() {
                 {!templateMode && (bundleMode || (creating && !basedOn && !savedDraftId)) ? <div className="order-field order-span-12 order-bundle-toggle">
                   <label className="order-check">
                     <input type="checkbox" checked={bundleMode} disabled={!creating || Boolean(bundle) || !editable} onChange={(event) => void toggleBundle(event.target.checked)} />
-                    ダブルヘッダー（同じ日の2件を、1件の依頼としてまとめて送る）
+                    <span>ダブルヘッダー（同じ日の2件を1件の依頼として送る）</span>
                   </label>
                   {bundleMode ? <span className="order-field-hint">{bundle?.formal_enabled ? "" : "いまはテスト区分だけで作れます（テストで送付から返事・起床確認までを確かめてから正式を開けます）。"}</span> : null}
                 </div> : null}
