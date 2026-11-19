@@ -158,6 +158,21 @@ def partner_summary(session: Session, document_id: str) -> dict | None:
     }
 
 
+def pdf_note(session: Session, document_id: str | None) -> str | None:
+    """PDFの題名の下の1行（DEC-148、本人回答：PDFに1行足す）。番号はLINEと同じく始まりの早い方を1/2にする。"""
+    leg = leg_for_document(session, document_id)
+    if leg is None:
+        return None
+    legs = _legs(session, leg.bundle_id)
+    versions = [latest_version(session, row.document_id) for row in legs]
+    result = rules.check(_schedule(versions[0]), _schedule(versions[1]), 0)
+    index = [row.id for row in legs].index(leg.id)
+    position = result["order"].index(index) + 1 if result["complete"] else leg.leg_no
+    other = legs[1 - index]
+    number = session.get(OrderRequestDocument, other.document_id).document_number
+    return f"ダブルヘッダー {position}/2（同じ日のもう1件：{number}。受諾・辞退は2件まとめて）"
+
+
 def bundle_out(session: Session, bundle: OrderRequestBundle) -> dict:
     legs = _legs(session, bundle.id)
     versions = [latest_version(session, leg.document_id) for leg in legs]

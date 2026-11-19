@@ -291,3 +291,28 @@ def test_travel_minutes_setting_is_provisional_until_changed(api_client, db_sess
 def test_pair_rows_are_unique_per_worker(db_session, sent_bundle):
     assert db_session.query(OrderRequestBundleDelivery).count() == 1
     assert bundles.FORMAL_BUNDLES_ENABLED is False
+
+
+# ---- PDF の1行（本人回答：PDFに1行足す）----------------------------------------------------
+
+def test_pdf_has_one_double_header_line_on_both_documents(api_client, db_session, ops_user, pdf_root):
+    from src.services.order_request_service import OrderRequestService
+    worker = _worker(db_session, "稼働者A")
+    # 2件目の枠に早い時間を入れても、PDFの「1/2」は時間の早い方（LINEの1件目と同じ）
+    legs = _pair_legs([worker.id])
+    legs[0], legs[1] = legs[1], legs[0]
+    legs[0]["worker_ids"] = [worker.id]
+    data = _create(api_client, ops_user, legs).json()
+    late, early = data["versions"]
+    assert bundles.pdf_note(db_session, early["document_id"]) == f"ダブルヘッダー 1/2（同じ日のもう1件：{late['document_number']}。受諾・辞退は2件まとめて）"
+    assert bundles.pdf_note(db_session, late["document_id"]).startswith(f"ダブルヘッダー 2/2（同じ日のもう1件：{early['document_number']}")
+    fitz = pytest.importorskip("fitz")
+    service = OrderRequestService(db_session)
+    for version in (early, late):
+        payload = service.render_draft_preview(db_session.get(OrderRequestVersion, version["id"]))
+        text = "".join(page.get_text() for page in fitz.open(stream=payload, filetype="pdf")).replace("\n", "")
+        assert "ダブルヘッダー" in text
+    single = api_client.post("/api/order-requests", json=_leg([worker.id], project="単独", site="会場C", start="09:00", end="12:00"), headers=_auth(ops_user.username)).json()
+    plain = service.render_draft_preview(db_session.get(OrderRequestVersion, single["id"]))
+    assert "ダブルヘッダー" not in "".join(page.get_text() for page in fitz.open(stream=plain, filetype="pdf"))
+    assert bundles.pdf_note(db_session, single["document_id"]) is None

@@ -77,6 +77,7 @@ def render_order_request_pdf(
     previous_contact_name: str = "",
     previous_contact_desk: str = "",
     previous_counterparty_note: str | None = None,
+    bundle_note: str | None = None,
 ) -> bytes:
     buffer = BytesIO()
     page_width, _page_height = A4
@@ -148,6 +149,10 @@ def render_order_request_pdf(
         styles,
         notice=notice_for_title,
     ))
+    if bundle_note:
+        # ダブルヘッダー（DEC-148）：同じ日のもう1件とまとめた依頼であることを、題名の下に1行で示す
+        story.append(Paragraph(escape(bundle_note), styles["value"]))
+        story.append(Spacer(1, 2 * mm))
     story.append(_field_table(fields, content_width, styles, changed))
     story.append(Spacer(1, 3 * mm))
     if requires_operator_confirmation:

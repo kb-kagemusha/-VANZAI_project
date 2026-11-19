@@ -519,6 +519,7 @@ class OrderRequestService:
             created_at=version.created_at,
             requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
+            bundle_note=self._bundle_pdf_note(version),
         )
         object_key = (
             f"order-requests/{document.document_number}/v{version.version_no}.pdf"
@@ -784,6 +785,7 @@ class OrderRequestService:
             created_at=version.created_at,
             requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
+            bundle_note=self._bundle_pdf_note(version),
         )
 
     def read_pdf(self, version: OrderRequestVersion) -> bytes:
@@ -820,7 +822,12 @@ class OrderRequestService:
             created_at=version.created_at,
             requires_operator_confirmation=bool(version.requires_operator_confirmation),
             **self._notice_pdf_kwargs(version),
+            bundle_note=self._bundle_pdf_note(version),
         )
+
+    def _bundle_pdf_note(self, version: OrderRequestVersion) -> str | None:
+        from src.services.order_bundle import pdf_note
+        return pdf_note(self.session, version.document_id)
 
     def _notice_pdf_kwargs(self, version: OrderRequestVersion) -> dict:
         if version.status == STATUS_CANCELLED:
