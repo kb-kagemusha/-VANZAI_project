@@ -184,7 +184,7 @@ test("direct template creation stores reusable content without creating or sendi
   await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("15000");
   await expect(draft.getByRole("textbox", { name: "インセンティブの詳細", exact: true })).toHaveValue("販売1台につき500円");
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toHaveCount(0); // 保存のみでは送付の欄を出さない
-  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
+  await draft.getByRole("button", { name: "作成して送付", exact: true }).click();
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
 });
 
@@ -255,7 +255,7 @@ test("saved template can be found and loaded into an independent blank-date draf
   await expect(draft.getByRole("button", { name: "稼働日の終了", exact: true })).toContainText("日付を選択");
   await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toHaveValue("10000");
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toHaveCount(0);
-  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
+  await draft.getByRole("button", { name: "作成して送付", exact: true }).click();
   await expect(draft.getByText("まだ送付先は選ばれていません。", { exact: true })).toBeVisible();
   await draft.getByRole("textbox", { name: "案件名", exact: true }).fill("今回だけ変更");
   await draft.getByRole("button", { name: "閉じる", exact: true }).click();
@@ -351,7 +351,7 @@ test("form layout and detail dates stay within the overall work period", async (
   const grid = await memo.locator("..").locator("..").boundingBox();
   expect(Math.abs(memoBox!.x + memoBox!.width - grid!.x - grid!.width)).toBeLessThan(2);
   await expect(memo.locator("..").locator(".order-field-hint")).toHaveText("PDFには記載しません");
-  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
+  await draft.getByRole("button", { name: "作成して送付", exact: true }).click();
   await expect(draft.locator(".order-field-hint").getByText("（保存は空でも可。送付のときに決めます）", { exact: true })).toBeVisible();
   await expect(draft.getByText("期限内に返事がない相手へ案内を送ります", { exact: true })).toBeVisible();
   const phone = draft.getByRole("checkbox", { name: /電話先行/ });
@@ -620,7 +620,7 @@ test("page buttons sit under the heading and a saved order can be recalled to ed
   await recall.getByRole("button", { name: "内容を直す", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "第1版", exact: true })).toBeVisible();
   // 送付先・期限を入力済みの依頼書は、送付の欄つきで開く（入力した内容を隠さない）
-  await expect(page.getByRole("button", { name: "作成して送付まで行う", exact: true })).toHaveClass(/is-active/);
+  await expect(page.getByRole("button", { name: "作成して送付", exact: true })).toHaveClass(/is-active/);
   await page.getByRole("button", { name: "閉じる", exact: true }).first().click();
   await bar.getByRole("button", { name: "保存した依頼書を呼び出す", exact: true }).click();
   await page.getByRole("dialog", { name: "保存した依頼書を呼び出す" }).getByRole("button", { name: "送付へ進む", exact: true }).click();
@@ -633,12 +633,12 @@ test("new orders default to save-only (no sending fields) and the send option sh
   await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
   const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
   await expect(draft.getByRole("group", { name: "区分" }).getByRole("button")).toHaveText(["正式", "テスト"]);
-  await expect(draft.getByRole("group", { name: "作成のしかた" }).getByRole("button", { name: "保存のみ（あとで送る）" })).toHaveClass(/is-active/);
+  await expect(draft.getByRole("group", { name: "作成のしかた" }).getByRole("button", { name: "保存のみ" })).toHaveClass(/is-active/);
   await expect(draft.getByText("送付と追跡", { exact: true })).toHaveCount(0);
   await expect(draft.getByText("送付先", { exact: true })).toHaveCount(0);
   await expect(draft.getByRole("spinbutton", { name: "単価（円・税抜）", exact: true })).toBeVisible();
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/new-draft.png` });
-  await draft.getByRole("button", { name: "作成して送付まで行う", exact: true }).click();
+  await draft.getByRole("button", { name: "作成して送付", exact: true }).click();
   await expect(draft.getByText("送付と追跡", { exact: true })).toBeVisible();
   await expect(draft.getByText("送付先", { exact: true }).first()).toBeVisible();
 });
@@ -676,4 +676,33 @@ test("date mode buttons keep one size and position; weekday buttons sit in a fra
   const last = await frame.getByRole("button", { name: "祝日", exact: true }).boundingBox();
   expect(last!.x + last!.width).toBeLessThan(f!.x + f!.width);
   expect(f!.width).toBeLessThan(row!.width);
+});
+
+test("kind and creation-mode switches are compact, same-sized and told apart by colour", async ({ page }, testInfo) => {
+  await adminMocks(page);
+  await page.goto("/operations/order-requests");
+  await page.getByRole("button", { name: "新規の依頼書を作成", exact: true }).click();
+  const draft = page.getByRole("dialog", { name: "新規の下書き", exact: true });
+  const kind = draft.getByRole("group", { name: "区分" });
+  const mode = draft.getByRole("group", { name: "作成のしかた" });
+  const field = await draft.locator(".order-kind-field").boundingBox();
+  const kindBox = await kind.boundingBox();
+  expect(field!.width - kindBox!.width).toBeGreaterThanOrEqual(38); // 左右10pxずつ（ボタン2つ分）狭い
+  const [a, b] = [await mode.getByRole("button").nth(0).boundingBox(), await mode.getByRole("button").nth(1).boundingBox()];
+  expect(Math.abs(a!.width - b!.width)).toBeLessThan(1);
+  expect(Math.abs(a!.height - b!.height)).toBeLessThan(1);
+  const modeBox = await mode.boundingBox();
+  expect(modeBox!.width).toBeLessThan(field!.width * 2 + 60); // 画面幅いっぱいには広げない
+  expect(modeBox!.width).toBeLessThan(420);
+  await expect(mode.getByRole("button", { name: "保存のみ", exact: true })).toHaveText("保存のみ");
+  await expect(mode.getByRole("button", { name: "作成して送付", exact: true })).toHaveText("作成して送付");
+  const active = await mode.getByRole("button", { name: "保存のみ", exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const kindActive = await kind.getByRole("button", { name: "正式", exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(active).toBe("rgb(37, 99, 235)");
+  expect(kindActive).not.toBe(active);
+  // 押しても大きさが変わらない
+  await mode.getByRole("button", { name: "作成して送付", exact: true }).click();
+  const after = await mode.boundingBox();
+  expect(Math.abs(after!.width - modeBox!.width)).toBeLessThan(1);
+  await draft.locator(".order-draft-grid").first().screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/segments.png` : testInfo.outputPath("segments.png") });
 });

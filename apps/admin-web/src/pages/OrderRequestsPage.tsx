@@ -1636,7 +1636,7 @@ export function OrderRequestsPage() {
             </section> : null}
             <section className="order-draft-section">
               <div className="order-draft-grid">
-                <div className="order-field order-span-4">
+                <div className="order-field order-span-4 order-kind-field">
                   <span className="order-field-label">区分</span>
                   <div className="order-segment" role="group" aria-label="区分">
                     <button
@@ -1657,11 +1657,11 @@ export function OrderRequestsPage() {
                     </button>
                   </div>
                 </div>
-                {!templateMode ? <div className="order-field order-span-8">
+                {!templateMode ? <div className="order-field order-span-8 order-mode-field">
                   <span className="order-field-label">作成のしかた</span>
-                  <div className="order-segment" role="group" aria-label="作成のしかた">
-                    <button type="button" className={sendMode === "save" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("save")}>保存のみ（あとで送る）</button>
-                    <button type="button" className={sendMode === "send" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("send")}>作成して送付まで行う</button>
+                  <div className="order-segment order-mode-segment" role="group" aria-label="作成のしかた">
+                    <button type="button" className={sendMode === "save" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("save")}>保存のみ</button>
+                    <button type="button" className={sendMode === "send" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("send")}>作成して送付</button>
                   </div>
                 </div> : null}
               </div>

@@ -397,7 +397,7 @@ def project_name_from_document(request_conditions: str | None, body: str | None)
 
 def order_request_document_title(*, work_date_label: str, project_name: str, notice: str = "new") -> str:
     """PDFの見出し。1行目が依頼の種類、2行目が稼働日：案件名。"""
-    line = _compose_title(_plain_piece(work_date_label), _display_project_name(project_name), empty="")
+    line = _compose_title(_plain_piece(_title_dates(work_date_label)), _display_project_name(project_name), empty="")
     head = {"change": CHANGE_HEADING, "cancel": CANCEL_HEADING}.get(notice, NEW_HEADING)
     return f"{head}\n{line}" if line else head
 
@@ -413,7 +413,7 @@ def attachment_content_disposition(filename: str) -> str:
 
 def _download_stem(work_date_label: str, project_name: str) -> str:
     return _compose_title(
-        _filename_piece(work_date_label),
+        _filename_piece(_title_dates(work_date_label)),
         _filename_piece(project_name),
         empty="発注依頼書",
     )
@@ -444,7 +444,7 @@ def _title_markup(
     previous_work_date_label: str,
     previous_project_name: str,
 ) -> str:
-    date = _plain_piece(work_date_label)
+    date = _plain_piece(_title_dates(work_date_label))
     project = _display_project_name(project_name)
     line = _compose_title(date, project, empty="")
     if notice == "cancel":
@@ -458,7 +458,7 @@ def _title_markup(
     shown = escape(line)
     if notice == "change":
         previous_line = _compose_title(
-            _plain_piece(previous_work_date_label),
+            _plain_piece(_title_dates(previous_work_date_label)),
             _display_project_name(previous_project_name),
             empty="",
         )
@@ -481,6 +481,21 @@ def changed_field_captions(
 
 def _norm_field(value: str) -> str:
     return (value or "").replace("\r\n", "\n").strip()
+
+
+_JP_DATE = re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日")
+
+
+def _title_dates(label: str) -> str:
+    """見出し・ファイル名の日付。複数行の稼働日（毎週・複数の期間など）は、全体の最初の日～最後の日にまとめる。"""
+    text = label or ""
+    if "毎週" not in text and "祝日" not in text:
+        return text  # 1日ごと・複数日の期間は、そのまま見出しに使う
+    found = sorted({(int(y), int(m), int(d)) for y, m, d in _JP_DATE.findall(text)})
+    if not found:
+        return text
+    fmt = lambda t: f"{t[0]}年{t[1]}月{t[2]}日"
+    return fmt(found[0]) if len(found) == 1 else f"{fmt(found[0])}～{fmt(found[-1])}"
 
 
 def _plain_piece(value: str) -> str:

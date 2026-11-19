@@ -89,13 +89,19 @@ function shortDate(iso: string): string {
   const [, month, day] = iso.split("-").map(Number);
   return `${month}月${day}日`;
 }
-export function dateGroupLabel(group: DateGroup & { excluded_dates?: string[] }): string {
+/** v2：期間の重なる別の行で「祝日」が押されていれば、この行の曜日に当たる祝日はその行の条件になる（サーバーの _overridden と同じ）。 */
+export function holidayOverridden(group: DateGroup, groups: DateGroup[]): boolean {
+  if (group.date_mode !== "weekly" || group.weekly_rule !== "v2" || group.holiday_selected) return false;
+  return groups.some((other) => other !== group && other.date_mode === "weekly" && other.weekly_rule === "v2" && other.holiday_selected
+    && other.from && other.to && group.from && group.to && other.from <= group.to && group.from <= other.to);
+}
+export function dateGroupLabel(group: DateGroup & { excluded_dates?: string[] }, overridden = false): string {
   // 休業日は本文の「■休業日」に1回だけ出す（0.48.7。ここに括弧書きで重ねない）
   const dates = formatWorkDateRange(group.from, group.date_mode !== "single" ? group.to : "");
   if (group.date_mode !== "weekly") return dates;
   const names = ["月", "火", "水", "木", "金", "土", "日"];
   const labels = (group.weekdays ?? []).map((d) => names[d]).join("・");
-  if (group.weekly_rule === "v2") return `${dates} ${group.holiday_selected ? (labels ? `毎週${labels}・祝日` : "祝日") : `毎週${labels}`}`;
+  if (group.weekly_rule === "v2") return `${dates} ${group.holiday_selected ? (labels ? `毎週${labels}・祝日` : "祝日（曜日に関係なく）") : `毎週${labels}（祝日${overridden ? "を除く" : "も含む"}）`}`;
   return `${dates} 毎週${labels}（祝日を${group.holiday_mode === "include" ? "含む" : "除く"}）`;
 }
 /** 勤務グループの実勤務日（共通の休業日を除く。サーバーの expand_work_days と同じ規則）。 */
@@ -129,19 +135,20 @@ export function scheduleWorkDates(schedule: OrderSchedule | undefined): string[]
   return [...new Set(schedule.work_groups.flatMap(groupWorkDates))].sort();
 }
 export function scheduleDateLabel(schedule: OrderSchedule): string {
-  return [...schedule.work_groups].sort((a, b) => a.from.localeCompare(b.from)).map(dateGroupLabel).filter(Boolean).join("\n");
+  return [...schedule.work_groups].sort((a, b) => a.from.localeCompare(b.from)).map((group) => dateGroupLabel(group, holidayOverridden(group, schedule.work_groups))).filter(Boolean).join("\n");
 }
 export function scheduleHours(schedule: OrderSchedule): string {
   return [...schedule.work_groups].sort((a, b) => a.from.localeCompare(b.from)).map((group) => [
-    dateGroupLabel(group),
+    dateGroupLabel(group, holidayOverridden(group, schedule.work_groups)),
     group.gathering_time ? `集合：${group.gathering_time}` : "",
     group.start_time || group.end_time ? `稼働：${group.start_time}～${group.end_next_day ? "翌日 " : ""}${group.end_time}` : "",
     group.notes.trim(),
   ].filter(Boolean).join("\n")).join("\n\n");
 }
 export function scheduleFees(schedule: OrderSchedule): string {
-  return [...syncSchedule(schedule).rate_groups].sort((a, b) => a.from.localeCompare(b.from)).map((group) => [
-    dateGroupLabel(group),
+  const synced = syncSchedule(schedule);
+  return [...synced.rate_groups].sort((a, b) => a.from.localeCompare(b.from)).map((group) => [
+    dateGroupLabel(group, holidayOverridden(group, synced.rate_groups)),
     group.amount ? `${group.unit === "hour" ? "時給" : "日給"}：¥${Number(group.amount).toLocaleString("ja-JP", { maximumFractionDigits: 2 })}（税抜）` : "",
     group.lunch_included ? "昼食代：込み" : `昼食代：別途${group.lunch_note ? `（${group.lunch_note.trim()}）` : ""}`,
     group.transport_included ? "交通費：込み" : `交通費：別途${group.transport_note ? `（${group.transport_note.trim()}）` : ""}`,

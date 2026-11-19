@@ -229,7 +229,7 @@ test("order client selection scopes contacts resets stale selection and stays ou
   await expect(page.getByText(/担当者電話：090-2222-9999/)).toBeVisible();
   await company.selectOption("client-b"); await expect(contact).toHaveValue("");
   await expect(contact.getByRole("option", { name: "内部担当A2", exact: true })).toHaveCount(0);
-  await contact.selectOption("contact-b1"); await page.getByRole("button", { name: "作成して送付まで行う", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
+  await contact.selectOption("contact-b1"); await page.getByRole("button", { name: "作成して送付", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0].body.internal_source).toEqual({ client_id: "client-b", client_staff_id: "contact-b1" });
@@ -280,7 +280,7 @@ test("daily and ranged work preserve matching prices and expense notes in saved 
   await first.screenshot({ path: "../../artifacts/order-date-groups.png" });
   await page.getByLabel("所在地の登録住所").fill("主催者確認住所");
   await page.getByLabel("Google Mapsの共有URL").fill("https://maps.app.goo.gl/TEST-location");
-  await page.getByRole("button", { name: "作成して送付まで行う", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
+  await page.getByRole("button", { name: "作成して送付", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。")).toBeVisible();
   const payload = writes.find((w) => w.path === "/api/order-requests")!.body;
@@ -320,7 +320,7 @@ test("venue and general date notes match project half width and rates only offer
 test("legacy hourly price stays unchanged until explicit daily conversion and new amount entry", async ({ page }) => {
   const writes = await setup(page, { legacyHourly: true }); await page.goto("/operations/order-requests");
   await page.getByRole("button", { name: "新規の依頼書を作成" }).click();
-  await page.getByRole("button", { name: "作成して送付まで行う", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
+  await page.getByRole("button", { name: "作成して送付", exact: true }).click(); await page.getByLabel(/^期限の案内/).fill("2027-02-20");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   const rate = page.locator("fieldset.order-rate-row");
   await expect(rate.getByText("単位：保存済みの旧時給", { exact: true })).toBeVisible();

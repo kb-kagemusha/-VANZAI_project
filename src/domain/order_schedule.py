@@ -372,7 +372,7 @@ def _derive_holiday_skip(groups) -> None:
         group.holiday_skip = sorted(skip)
 
 
-def date_label(group):
+def date_label(group, holiday_overridden=False):
     def jp(value):
         if not value:
             return ""
@@ -385,9 +385,9 @@ def date_label(group):
         names = "月火水木金土日"
         labels = "・".join(names[i] for i in group.get("weekdays", []))
         if group.get("holiday_selected"):
-            labels = f"毎週{labels}・祝日" if labels else "祝日"
+            labels = f"毎週{labels}・祝日" if labels else "祝日（曜日に関係なく）"
         else:
-            labels = f"毎週{labels}"
+            labels = f"毎週{labels}（祝日も含む）" if not holiday_overridden else f"毎週{labels}（祝日を除く）"
         return f"{start}～{end} {labels}"
     if group["date_mode"] == "weekly":
         names = "月火水木金土日"
@@ -400,18 +400,32 @@ def date_label(group):
     return start or (f"～{end}" if end else "")
 
 
+def _overridden(group, groups) -> bool:
+    """v2：期間の重なる別の行で「祝日」が押されていれば、この行の曜日に当たる祝日はその行の条件になる。"""
+    if group.get("weekly_rule") != "v2" or group.get("holiday_selected"):
+        return False
+    return any(
+        other is not group and other.get("weekly_rule") == "v2" and other.get("holiday_selected")
+        and other.get("from") and other.get("to") and group.get("from") and group.get("to")
+        and other["from"] <= group["to"] and group["from"] <= other["to"]
+        for other in groups
+    )
+
+
 def schedule_text(schedule):
     hours, fees = [], []
-    for group in schedule["work_groups"]:
-        lines = [date_label(group)]
+    work, rates = schedule["work_groups"], schedule["rate_groups"]
+    lab = lambda group, groups: date_label(group, _overridden(group, groups))
+    for group in work:
+        lines = [lab(group, work)]
         if group["gathering_time"]:
             lines.append(f"集合：{group['gathering_time']}")
         if group["start_time"] or group["end_time"]:
             lines.append(f"稼働：{group['start_time']}～{'翌日 ' if group['end_next_day'] else ''}{group['end_time']}")
         lines.append(group["notes"].strip())
         hours.append("\n".join(filter(None, lines)))
-    for group in schedule["rate_groups"]:
-        lines = [date_label(group)]
+    for group in rates:
+        lines = [lab(group, rates)]
         if group["amount"]:
             amount = format(Decimal(group["amount"]), ",f").rstrip("0").rstrip(".") if "." in group["amount"] else format(Decimal(group["amount"]), ",f")
             lines.append(f"{'時給' if group['unit'] == 'hour' else '日給'}：¥{amount}（税抜）")
@@ -420,4 +434,4 @@ def schedule_text(schedule):
             lines.append(f"{label}：込み" if group[f"{field}_included"] else f"{label}：別途" + (f"（{note}）" if note else ""))
         lines.append(group["notes"].strip())
         fees.append("\n".join(filter(None, lines)))
-    return "\n".join(filter(None, (date_label(g) for g in schedule["work_groups"]))), "\n\n".join(hours), "\n\n".join(fees)
+    return "\n".join(filter(None, (lab(g, work) for g in work))), "\n\n".join(hours), "\n\n".join(fees)

@@ -4477,6 +4477,13 @@ html[data-theme="dark"] .order-location > a { background: #244735; color: #c5efc
   color: #8a5a00;
 }
 
+/* 区分は左右10pxずつ狭め、作成のしかたは文言に合わせた幅の同じ大きさ2つ（選択中だけ青）で見分ける */
+.order-kind-field .order-segment { width: calc(100% - 40px); }
+.order-mode-segment { width: max-content; max-width: 100%; }
+.order-mode-segment button { padding: 0 1.4rem; white-space: nowrap; }
+.order-mode-segment button.is-active { background: #2563eb; color: #fff; box-shadow: 0 1px 3px rgba(37, 99, 235, 0.35); }
+.order-mode-segment { background: rgba(37, 99, 235, 0.08); border-color: rgba(37, 99, 235, 0.25); }
+html[data-theme="dark"] .order-mode-segment button.is-active { background: #2563eb; color: #fff; }
 .order-segment button:disabled {
   cursor: default;
 }

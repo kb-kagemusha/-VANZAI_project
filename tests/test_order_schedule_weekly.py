@@ -135,3 +135,21 @@ def test_old_exclude_rows_keep_the_old_rule_and_stored_shape():
     for group in [*value["work_groups"], *value["rate_groups"]]:
         assert "weekly_rule" not in group and "holiday_skip" not in group
     assert day_map(value)["2027-01-01"] == "b"  # 旧規則：「祝日を除く」の行は祝日を稼働にせず、「含む」の行が取る
+
+
+def test_pdf_text_shows_how_holidays_are_handled_for_each_row():
+    from src.services.order_request_pdf import order_request_document_title, order_request_pdf_filename
+
+    value = normalize_schedule(v2_schedule(v2_group("a", [0, 1, 2, 3, 4]), v2_group("b", [5, 6]), v2_group("c", [], holiday=True)), complete=True)
+    dates, hours, fees = schedule_text(value)
+    assert "毎週月・火・水・木・金（祝日を除く）" in dates and "毎週土・日（祝日を除く）" in dates
+    assert "祝日（曜日に関係なく）" in dates and "祝日（曜日に関係なく）" in fees and "稼働：08:00～17:00" not in hours
+    # 「祝日」の行がなければ、祝日は曜日の行の条件
+    plain = normalize_schedule(v2_schedule(v2_group("a", [0, 1, 2, 3, 4]), v2_group("b", [5, 6])), complete=True)
+    assert "毎週月・火・水・木・金（祝日も含む）" in schedule_text(plain)[0]
+    # 見出し・ファイル名は、行ごとの長い表記ではなく全体の期間にまとめる
+    title = order_request_document_title(work_date_label=dates, project_name="確認")
+    assert "2027年1月1日～2027年1月14日：確認" in title and "毎週" not in title
+    assert "毎週" not in order_request_pdf_filename(work_date_label=dates, project_name="確認")
+    # 1日ごと・複数日の期間の見出しは今までどおり
+    assert order_request_document_title(work_date_label="2027年3月1日 2027年3月3日", project_name="確認").endswith("2027年3月1日 2027年3月3日：確認")
