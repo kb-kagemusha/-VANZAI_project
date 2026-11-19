@@ -76,6 +76,26 @@ REQUIRE_SCHEDULE_ON_CONFIRM = True
 SCHEDULE_REQUIRED = "稼働時間を「日付・期間ごとの入力」に切り替えてから確定してください。文章の入力のままでは、受諾しても稼働予定（公式LINEの予定・起床報告）が作られません"
 
 
+SEND_STATE_SAVED = "saved_unsent"
+SEND_STATE_PARTIAL = "partial"
+SEND_STATE_SENT = "sent"
+SEND_STATE_CANCELLED = "cancelled"
+SEND_STATES = (SEND_STATE_SAVED, SEND_STATE_PARTIAL, SEND_STATE_SENT, SEND_STATE_CANCELLED)
+
+
+def send_state(version: "OrderRequestVersion", deliveries: list["OrderRequestDelivery"]) -> str:
+    """一覧用の送付の状態。保存（下書き・確定済みで1人も送っていない）／一部送付／送付済み／取消。
+
+    送信が受け付けられた送付行（accepted）だけを「送った」と数える。失敗・結果不明・送信中は送った扱いにしない。
+    """
+    if version.status == STATUS_CANCELLED:
+        return SEND_STATE_CANCELLED
+    accepted = sum(1 for row in deliveries if row.send_status == SEND_ACCEPTED)
+    if version.status == STATUS_DRAFT or accepted == 0:
+        return SEND_STATE_SAVED
+    return SEND_STATE_SENT if accepted == len(deliveries) else SEND_STATE_PARTIAL
+
+
 class OrderRequestError(Exception):
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
@@ -831,7 +851,7 @@ class OrderRequestService:
     ) -> tuple[list[tuple[OrderRequestDocument, OrderRequestVersion]], int]:
         if kind not in (KIND_FORMAL, KIND_TEST, "all"):
             raise OrderRequestError(400, "kind は formal、test、all のいずれかです")
-        if queue not in ("all", "unsent", "unknown", "unacked", "overdue"):
+        if queue not in ("all", "unsent", "unknown", "unacked", "overdue", *SEND_STATES):
             raise OrderRequestError(400, "queue が不正です")
 
         latest_no = (
@@ -964,6 +984,8 @@ class OrderRequestService:
         if queue == "all":
             return True
         deliveries = self._deliveries(version.id)
+        if queue in SEND_STATES:
+            return send_state(version, deliveries) == queue
         if queue == "unsent":
             if version.status == STATUS_CANCELLED or version.dispatch_stopped:
                 return False
@@ -1115,10 +1137,9 @@ class OrderRequestService:
         version.phone_note = None if phone_note is None else _case_text(phone_note)
         version.tracker_user_id = tracker_user_id
         due_on = fields["follow_up_due_on"]
-        if due_on is None:
-            raise OrderRequestError(400, "期限の案内の日付を入れてください")
+        # 下書きの保存では期限は任意（送付のときに決める）。確定（送付）では必須で、confirm が確認する。
         version.follow_up_due_on = due_on
-        version.follow_up_due_at = follow_up_moment(due_on, fields.get("follow_up_due_time"))
+        version.follow_up_due_at = None if due_on is None else follow_up_moment(due_on, fields.get("follow_up_due_time"))
 
     def _apply_follow_up(
         self,

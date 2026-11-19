@@ -783,14 +783,17 @@ def test_40_recipients_can_be_saved_and_confirmed_but_update_to_41_rejected(api_
     assert len(confirmed.json()["deliveries"]) == 40
 
 
-def test_follow_up_due_date_is_required_and_defaults_to_21(api_client, db_session, ops_user):
+def test_follow_up_due_date_is_optional_when_saving_required_when_sending_and_defaults_to_21(api_client, db_session, ops_user, pdf_root):
     worker = _worker(db_session, "稼働者A")
     missing = api_client.post(
         "/api/order-requests",
         json=_body([worker.id], follow_up_due_on=None),
         headers=_auth(ops_user.username),
     )
-    assert missing.status_code == 400, missing.text
+    assert missing.status_code == 200, missing.text  # 保存だけなら期限は未定でよい（送付のときに決める）
+    assert missing.json()["follow_up_due_on"] is None
+    refused = api_client.post(f"/api/order-requests/versions/{missing.json()['id']}/confirm", headers=_auth(ops_user.username))
+    assert refused.status_code == 400 and "期限の案内" in refused.json()["detail"]
 
     created = api_client.post(
         "/api/order-requests",
@@ -1349,3 +1352,49 @@ def test_stored_pdf_with_old_layout_is_regenerated_without_changing_version(
     assert version.counterparty_note == note
     monkeypatch.setattr(service, "_render_stored_pdf", lambda _: pytest.fail("Current PDF should be reused"))
     assert service.read_pdf(version) == current
+
+
+def test_saving_without_recipients_or_due_date_sends_nothing_and_is_listed_as_saved(api_client, db_session, ops_user, pdf_root):
+    """保存だけでは誰にも送らない。送付先・期限が未定でも保存でき、一覧では「保存済み（未送付）」になる。"""
+    body = _body([])
+    body.pop("follow_up_due_on", None)
+    created = api_client.post("/api/order-requests", json=body, headers=_auth(ops_user.username))
+    assert created.status_code == 200, created.text
+    data = created.json()
+    assert data["status"] == "draft" and data["send_state"] == "saved_unsent"
+    assert data["deliveries"] == [] and data["follow_up_due_on"] is None
+    assert db_session.query(OrderRequestDelivery).count() == 0
+    # 保存後に日程などを直せる（版は増えない）
+    edited = api_client.patch(f"/api/order-requests/versions/{data['id']}", json={"work_date_label": "2026-10-09"}, headers=_auth(ops_user.username))
+    assert edited.status_code == 200 and edited.json()["version_no"] == 1 and edited.json()["work_date_label"] == "2026-10-09"
+    listed = api_client.get("/api/order-requests?queue=saved_unsent", headers=_auth(ops_user.username)).json()
+    assert [item["version_id"] for item in listed["items"]] == [data["id"]]
+    assert listed["items"][0]["send_state"] == "saved_unsent"
+    # 送付先なしでは確定（送付）できない
+    refused = api_client.post(f"/api/order-requests/versions/{data['id']}/confirm", headers=_auth(ops_user.username))
+    assert refused.status_code == 400
+
+
+def test_send_state_separates_saved_partial_and_sent(api_client, db_session, ops_user, pdf_root):
+    first, second = _worker(db_session, "稼働者A"), _worker(db_session, "稼働者B")
+    created = api_client.post("/api/order-requests", json=_body([first.id, second.id]), headers=_auth(ops_user.username))
+    version_id = created.json()["id"]
+    confirmed = api_client.post(f"/api/order-requests/versions/{version_id}/confirm", headers=_auth(ops_user.username))
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["send_state"] == "saved_unsent"  # 確定しても、1人も送っていなければ未送付
+
+    rows = db_session.query(OrderRequestDelivery).filter_by(version_id=version_id).order_by(OrderRequestDelivery.worker_name_snapshot).all()
+    rows[0].send_status = "accepted"
+    db_session.commit()
+    detail = api_client.get(f"/api/order-requests/versions/{version_id}", headers=_auth(ops_user.username)).json()
+    assert detail["send_state"] == "partial"
+    assert [i["version_id"] for i in api_client.get("/api/order-requests?queue=partial", headers=_auth(ops_user.username)).json()["items"]] == [version_id]
+    assert api_client.get("/api/order-requests?queue=saved_unsent", headers=_auth(ops_user.username)).json()["total"] == 0
+
+    rows[1].send_status = "accepted"
+    db_session.commit()
+    assert api_client.get(f"/api/order-requests/versions/{version_id}", headers=_auth(ops_user.username)).json()["send_state"] == "sent"
+    assert api_client.get("/api/order-requests?queue=sent", headers=_auth(ops_user.username)).json()["total"] == 1
+
+    cancelled = api_client.post(f"/api/order-requests/versions/{version_id}/cancel", json={"reason": "中止"}, headers=_auth(ops_user.username))
+    assert cancelled.json()["send_state"] == "cancelled"

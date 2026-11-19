@@ -4260,6 +4260,15 @@ html[data-theme="dark"] .order-schedule-row input:not([type="checkbox"]), html[d
 .order-action-button.is-add:hover { background: #0b6134; }
 .order-action-button.is-remove { background: #fff0f0; color: #a91c32; border-color: #bc5261; }
 .order-action-button.is-remove:hover { background: #ffe1e4; }
+.order-created-table td.order-state-cell { white-space: nowrap; }
+.order-weekday-buttons, .order-weekly-hint, .order-schedule-dates > .order-check { grid-column: 1 / -1; }
+.order-weekday-buttons button { min-width: 2.6rem; }
+.order-weekday-buttons .order-holiday-button { flex: 1.4; border-color: #b4402f; color: #9d2f20; }
+.order-weekday-buttons .order-holiday-button[aria-pressed="true"] { background: #b4402f; border-color: #b4402f; color: #fff; box-shadow: 0 2px 4px rgba(180,64,47,.18); }
+.order-weekly-gap { padding: .5rem .7rem; border-left: 4px solid #c98a12; background: #fff8e6; }
+html[data-theme="dark"] .order-weekday-buttons .order-holiday-button { color: #ffb4a6; border-color: #e07d6c; }
+html[data-theme="dark"] .order-weekday-buttons .order-holiday-button[aria-pressed="true"] { background: #b4402f; color: #fff; }
+html[data-theme="dark"] .order-weekly-gap { background: #3a3220; }
 .order-option-buttons button:focus-visible, .order-action-button:focus-visible { outline: 3px solid #326fc2; outline-offset: 3px; }
 .order-expense-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; padding: .8rem; border: 1px solid #d7c494; border-radius: 10px; background: rgba(255,255,255,.8); }
 .order-expense-cell { display: grid; align-content: start; gap: .6rem; min-width: 0; }

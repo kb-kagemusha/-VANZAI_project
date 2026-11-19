@@ -1,6 +1,7 @@
 export type OrderRequestKind = "formal" | "test";
 export type OrderRequestStatus = "draft" | "confirmed" | "cancelled";
-export type OrderRequestQueue = "all" | "unsent" | "unknown" | "unacked" | "overdue";
+export type OrderRequestSendState = "saved_unsent" | "partial" | "sent" | "cancelled";
+export type OrderRequestQueue = "all" | "unsent" | "unknown" | "unacked" | "overdue" | OrderRequestSendState;
 
 export interface OrderRequestTemplateItem {
   id: string;
@@ -135,6 +136,7 @@ export interface OrderRequestChangeLink {
   document_number: string;
   version_no: number;
   status: OrderRequestStatus;
+  send_state?: OrderRequestSendState;
 }
 
 export interface OrderRequestNote {
@@ -154,6 +156,7 @@ export interface OrderRequestVersion {
   id: string;
   version_no: number;
   status: OrderRequestStatus;
+  send_state?: OrderRequestSendState;
   revision_of_version_id: string | null;
   revision_reason: string | null;
   based_on_document_number: string | null;
@@ -205,6 +208,7 @@ export interface OrderRequestListItem {
   version_id: string;
   version_no: number;
   status: OrderRequestStatus;
+  send_state?: OrderRequestSendState;
   project_name: string;
   /** カテゴリ（0.48.10〜。旧データは空） */
   categories?: string[];

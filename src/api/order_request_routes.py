@@ -48,6 +48,7 @@ from src.services.order_request_service import (
     OrderRequestError,
     OrderRequestService,
     follow_up_time_label,
+    send_state,
 )
 
 router = APIRouter(prefix="/api/order-requests", tags=["Order Requests"])
@@ -442,6 +443,7 @@ def _version_out(
         "id": version.id,
         "version_no": version.version_no,
         "status": version.status,
+        "send_state": send_state(version, deliveries),
         "revision_of_version_id": version.revision_of_version_id,
         "revision_reason": version.revision_reason,
         **_relation_fields(version, sources, changes),
@@ -579,6 +581,7 @@ def _list_item(
         "created_by_name": names.get(document.created_by_user_id),
         "tracker_name": names.get(version.tracker_user_id or ""),
         "recipient_count": recipient_count,
+        "send_state": send_state(version, deliveries),
         "unsent_count": sum(1 for row in deliveries if row.send_status == SEND_UNSENT),
         "unacked_count": sum(1 for row in deliveries if row.ack_status == ACK_UNACKED),
         "acked_count": sum(1 for row in deliveries if row.ack_status != ACK_UNACKED),

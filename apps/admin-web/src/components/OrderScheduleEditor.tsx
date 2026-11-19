@@ -5,7 +5,7 @@ import { OrderDatePicker } from "./OrderDatePicker";
 import { OrderPublicHolidayPicker } from "./OrderPublicHolidayPicker";
 import { holidayMark, orderDayColor, useConfirmedHolidays } from "../lib/useConfirmedHolidays";
 import "../styles/monthCalendar.css";
-import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
+import { dateGroupLabel, newRateGroup, newWorkGroup, syncSchedule, weeklyScheduleIssues, type DateGroup, type OrderSchedule } from "../lib/orderSchedule";
 
 /**
  * 全体の稼働日の中の休業日（DEC-065、0.48.5 で全体の稼働日の横へ移動）。
@@ -94,43 +94,85 @@ export function HolidayPicker({ from, to, dates, disabled, onChange }: { from: s
   </div>;
 }
 
+const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
+
 function DateInputs({ group, disabled, prefix, periodFrom, periodTo, weeklyAllowed = false, onChange }: { group: DateGroup; disabled: boolean; prefix: string; periodFrom: string; periodTo: string; weeklyAllowed?: boolean; onChange: (group: DateGroup) => void }) {
   const ready = Boolean(periodFrom && periodTo && periodFrom <= periodTo);
   const endMin = group.from && group.from > periodFrom ? group.from : periodFrom;
+  const weekly = group.date_mode === "weekly";
+  const weeklyV2 = weekly && group.weekly_rule === "v2";
+  // 毎週（新しい形）は、標準では開始日・終了日を出さず、全体の稼働期間の全部を対象にする。
+  const showRange = !weeklyV2 || Boolean(group.custom_range);
+  const weekdays = group.weekdays ?? [];
+
+  function chooseMode(mode: "single" | "range") {
+    onChange({ ...group, date_mode: mode, weekly_rule: undefined, holiday_selected: undefined, holiday_skip: undefined, custom_range: undefined,
+      to: mode === "single" ? group.from : group.to });
+  }
+  function chooseWeekly() {
+    if (weekly) return;
+    onChange({ ...group, date_mode: "weekly", weekly_rule: "v2", weekdays: [], holiday_selected: false, holiday_mode: "include", holiday_dates: [], holiday_skip: [], holiday_review_from: "", holiday_review_to: "",
+      custom_range: false, from: periodFrom, to: periodTo });
+  }
+  function toggleCustomRange(checked: boolean) {
+    // 区切りをやめたら全体の稼働期間に戻し、祝日の確認はやり直す
+    onChange(checked ? { ...group, custom_range: true } : { ...group, custom_range: false, from: periodFrom, to: periodTo, holiday_dates: [], holiday_skip: [], holiday_review_from: "", holiday_review_to: "" });
+  }
+  async function convertLegacy() {
+    const excluded = group.holiday_mode !== "include";
+    const accepted = await confirmApp({
+      title: "新しい設定に切り替え",
+      message: excluded
+        ? "この行は旧設定で「祝日は対象外」です。新しい設定では、祝日は必ず稼働日になります（祝日を稼働しない日にする場合は、休業日に設定してください）。切り替えますか。"
+        : "この行を新しい設定（曜日と祝日のボタン）に切り替えます。祝日はその日の曜日の行の条件のままで、日付は変わりません。切り替えますか。",
+      confirmLabel: "切り替える",
+    });
+    if (accepted) onChange({ ...group, weekly_rule: "v2", holiday_mode: "include", holiday_selected: false, holiday_skip: [], custom_range: true });
+  }
+
   return <div className="order-schedule-dates">
     <div className="order-date-mode">
       <span>日付の設定</span>
       <div className="order-option-buttons" role="group" aria-label={`${prefix}日付の設定`}>
         {([ ["single", "1日ごと"], ["range", "複数日の期間"] ] as const).map(([mode, label]) =>
           <button key={mode} type="button" disabled={disabled} aria-pressed={group.date_mode === mode}
-            onClick={() => onChange({ ...group, date_mode: mode })}>{label}</button>)}
-        {weeklyAllowed && <button type="button" disabled={disabled} aria-pressed={group.date_mode === "weekly"}
-          onClick={() => onChange({ ...group, date_mode: "weekly", weekdays: group.weekdays ?? [], holiday_mode: group.holiday_mode ?? "exclude" })}>毎週</button>}
+            onClick={() => chooseMode(mode)}>{label}</button>)}
+        {weeklyAllowed && <button type="button" disabled={disabled} aria-pressed={weekly} onClick={chooseWeekly}>毎週</button>}
       </div>
     </div>
-    <label>{group.date_mode !== "single" ? "開始日" : "稼働日"}
+    {showRange && <label>{group.date_mode !== "single" ? "開始日" : "稼働日"}
       <OrderDatePicker label={`${prefix}開始日`} value={group.from} min={periodFrom || undefined} max={periodTo || undefined} disabled={disabled || !ready}
         onChange={(day) => onChange({ ...group, from: day, to: group.date_mode === "single" ? day : group.to })} />
-    </label>
-    {group.date_mode !== "single" && <label>終了日
+    </label>}
+    {showRange && group.date_mode !== "single" && <label>終了日
       <OrderDatePicker label={`${prefix}終了日`} value={group.to} min={endMin || undefined} max={periodTo || undefined} disabled={disabled || !ready || endMin > periodTo}
         onChange={(day) => onChange({ ...group, to: day })} />
     </label>}
-    {group.date_mode === "weekly" && <>
-      <div className="order-option-buttons" role="group" aria-label={`${prefix}曜日`}>
-        {["月", "火", "水", "木", "金", "土", "日"].map((day, i) => <button key={day} type="button" disabled={disabled} aria-pressed={(group.weekdays ?? []).includes(i)}
-          onClick={() => onChange({ ...group, weekdays: (group.weekdays ?? []).includes(i) ? (group.weekdays ?? []).filter((d) => d !== i) : [...(group.weekdays ?? []), i].sort() })}>{day}</button>)}
+    {weekly && <>
+      <div className="order-option-buttons order-weekday-buttons" role="group" aria-label={`${prefix}曜日と祝日`}>
+        {WEEKDAY_LABELS.map((day, i) => <button key={day} type="button" disabled={disabled} aria-pressed={weekdays.includes(i)}
+          onClick={() => onChange({ ...group, weekdays: weekdays.includes(i) ? weekdays.filter((d) => d !== i) : [...weekdays, i].sort() })}>{day}</button>)}
+        {weeklyV2 && <button type="button" className="order-holiday-button" disabled={disabled} aria-pressed={Boolean(group.holiday_selected)}
+          onClick={() => onChange({ ...group, holiday_selected: !group.holiday_selected })}>祝日</button>}
       </div>
-      <label className="order-check"><input type="checkbox" checked={group.holiday_mode === "include"} disabled={disabled}
-        onChange={(event) => onChange({ ...group, holiday_mode: event.target.checked ? "include" : "exclude" })} />祝日もこの条件に含める（外すと祝日は対象外）</label>
+      {weeklyV2 && <>
+        <label className="order-check"><input type="checkbox" checked={Boolean(group.custom_range)} disabled={disabled}
+          onChange={(event) => toggleCustomRange(event.target.checked)} />期間を区切る（開始日・終了日を指定）</label>
+        <p className="order-field-hint order-weekly-hint">押した曜日・祝日の日に、この行の時間・報酬を使います。「祝日」はどれかの行で押していれば、その行の条件がいつも優先されます。押した行がなければ、祝日もその日の曜日の行の条件です。</p>
+      </>}
+      {weekly && !weeklyV2 && <div className="order-overnight-notice">
+        <p>旧設定：祝日は{group.holiday_mode === "include" ? "この条件に含む" : "対象外"}</p>
+        {!disabled && <button type="button" className="order-action-button" onClick={() => void convertLegacy()}>新しい設定（曜日と祝日のボタン）に切り替える</button>}
+      </div>}
     </>}
     {!ready ? <p className="order-field-hint">上の「稼働日」で開始日と終了日を設定してください。</p> : null}
     {ready && [group.from, group.to].some((day) => day && (day < periodFrom || day > periodTo)) ? <p className="form-error">全体の稼働期間外の日付があります。日付を選び直してください。</p> : null}
   </div>;
 }
 
-export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, templateMode = false, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; templateMode?: boolean; onChange: (schedule: OrderSchedule) => void }) {
+export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, closedDates = [], templateMode = false, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; closedDates?: string[]; templateMode?: boolean; onChange: (schedule: OrderSchedule) => void }) {
   const value = syncSchedule(schedule);
+  const weeklyIssues = templateMode ? { overlaps: [], gaps: [] } : weeklyScheduleIssues(value, periodFrom, periodTo, closedDates);
   const change = (next: OrderSchedule) => onChange(syncSchedule(next));
 
   async function removeWork(id: string) {
@@ -179,6 +221,8 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
       </fieldset>;
     })}
     {!disabled && <div className="order-schedule-actions"><button type="button" className="order-action-button is-add" onClick={() => change({ ...value, work_groups: [...value.work_groups, newWorkGroup()] })}><span aria-hidden="true">＋</span> 稼働日・期間を追加</button></div>}
+    {weeklyIssues.overlaps.map((message) => <p key={message} className="form-error" role="alert">{message}</p>)}
+    {weeklyIssues.gaps.map((message) => <p key={message} className="order-field-hint order-weekly-gap" role="status">{message}（保存するときに確認します。稼働しない祝日は、休業日にもできます。）</p>)}
     {!templateMode && value.work_groups.some((group) => group.date_mode === "weekly") && <OrderPublicHolidayPicker from={periodFrom} to={periodTo} schedule={value} disabled={disabled} onChange={change} />}
 
     <h5>単価</h5>

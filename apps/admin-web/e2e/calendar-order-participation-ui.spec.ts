@@ -61,7 +61,7 @@ async function adminMocks(page: Page) {
       }
       return respond(version);
     }
-    if (path === "/api/order-requests") return respond({ items: [{ ...version, version_id: version.id, project_name: "確認用イベント", categories: ["フェス系", "研修"], recipient_count: 1 }], total: 1, line_send_available: true });
+    if (path === "/api/order-requests") return respond({ items: [{ ...version, version_id: version.id, project_name: "確認用イベント", categories: ["フェス系", "研修"], recipient_count: 1, send_state: "saved_unsent" }], total: 1, line_send_available: true });
     if (path === "/api/workers") return respond({ items: [{ id: "worker-1", name: "稼働者1", tags: [], is_active: true }], total: 1 });
     return respond({ items: [], total: 0 });
   });
@@ -167,7 +167,7 @@ test("direct template creation stores reusable content without creating or sendi
   await expect(editor.getByRole("button", { name: "稼働日の開始", exact: true })).toHaveCount(0);
   await expect(editor.getByText("送付と追跡", { exact: true })).toHaveCount(0);
   await expect(editor.getByText("送付先", { exact: true })).toHaveCount(0);
-  await expect(editor.getByRole("button", { name: "下書きを保存", exact: true })).toHaveCount(0);
+  await expect(editor.getByRole("button", { name: "保存", exact: true })).toHaveCount(0);
   await expect(editor.getByRole("button", { name: "PDFを確認して送付する", exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("direct-template-editor.png") });
   await editor.getByRole("button", { name: "テンプレートを作成", exact: true }).click();
@@ -347,7 +347,7 @@ test("form layout and detail dates stay within the overall work period", async (
   const grid = await memo.locator("..").locator("..").boundingBox();
   expect(Math.abs(memoBox!.x + memoBox!.width - grid!.x - grid!.width)).toBeLessThan(2);
   await expect(memo.locator("..").locator(".order-field-hint")).toHaveText("PDFには記載しません");
-  await expect(draft.locator(".order-field-hint").getByText("（必須）", { exact: true })).toBeVisible();
+  await expect(draft.locator(".order-field-hint").getByText("（保存は空でも可。送付のときに決めます）", { exact: true })).toBeVisible();
   await expect(draft.getByText("期限内に返事がない相手へ案内を送ります", { exact: true })).toBeVisible();
   const phone = draft.getByRole("checkbox", { name: /電話先行/ });
   const phoneMemo = draft.getByRole("textbox", { name: "電話メモ", exact: true });
@@ -389,7 +389,7 @@ test("form layout and detail dates stay within the overall work period", async (
   await expect(page.getByRole("button", { name: "稼働日の詳細1の終了日", exact: true })).toContainText("2026/10/30");
 });
 
-test("weekly conditions select weekdays and save the confirmed holiday snapshot", async ({ page }) => {
+test("weekly conditions are weekday and holiday buttons; the holiday row always overrides and the snapshot is saved", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
   const candidates = [{ day: "2026-11-03", name: "文化の日", is_holiday: true, revision: 0, source: "library" }];
   await page.route("**/api/order-requests/holiday-calendar**", async (route) => {
@@ -399,33 +399,73 @@ test("weekly conditions select weekdays and save the confirmed holiday snapshot"
   });
   await page.goto("/operations/order-requests");
   await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
-  await page.getByRole("group", { name: "稼働日の詳細1の日付の設定" }).getByRole("button", { name: "毎週" }).click();
-  const weekdays = page.getByRole("group", { name: "稼働日の詳細1の曜日" });
-  for (const day of ["月", "火", "水", "木", "金", "土"]) await weekdays.getByRole("button", { name: day, exact: true }).click();
+  const mode = (n: number) => page.getByRole("group", { name: `稼働日の詳細${n}の日付の設定` });
+  const buttons = (n: number) => page.getByRole("group", { name: `稼働日の詳細${n}の曜日と祝日` });
+  await mode(1).getByRole("button", { name: "毎週" }).click();
+  // 標準では開始日・終了日を出さず、曜日と祝日の8つのボタンだけ
+  await expect(page.getByRole("button", { name: "稼働日の詳細1の開始日", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "稼働日の詳細1の終了日", exact: true })).toHaveCount(0);
+  await expect(buttons(1).getByRole("button")).toHaveText(["月", "火", "水", "木", "金", "土", "日", "祝日"]);
+  await expect(page.getByRole("checkbox", { name: /祝日もこの条件に含める/ })).toHaveCount(0);
+  for (const day of ["月", "火", "水", "木", "金"]) await buttons(1).getByRole("button", { name: day, exact: true }).click();
   await page.getByRole("button", { name: "稼働日・期間を追加" }).click();
-  await page.getByRole("group", { name: "稼働日の詳細2の日付の設定" }).getByRole("button", { name: "毎週" }).click();
-  await page.getByRole("button", { name: "稼働日の詳細2の開始日" }).click();
-  await page.getByRole("dialog", { name: "稼働日の詳細2の開始日" }).getByRole("button", { name: "2026-10-29" }).click();
-  await page.getByRole("button", { name: "稼働日の詳細2の終了日" }).click();
-  const end = page.getByRole("dialog", { name: "稼働日の詳細2の終了日" });
-  await end.getByRole("button", { name: "次の月" }).click();
-  await end.getByRole("button", { name: "2026-11-04" }).click();
-  await page.getByRole("group", { name: "稼働日の詳細2の曜日" }).getByRole("button", { name: "日", exact: true }).click();
-  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByRole("checkbox", { name: /祝日もこの条件に含める/ }).check();
-  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByLabel("開始時間").fill("08:00");
-  await page.getByRole("group", { name: "稼働日の詳細 2" }).getByLabel("終了時間").fill("19:00");
-  await page.getByRole("group", { name: /単価 2/ }).getByRole("spinbutton", { name: "単価（円・税抜）" }).fill("15000");
+  await mode(2).getByRole("button", { name: "毎週" }).click();
+  for (const day of ["土", "日"]) await buttons(2).getByRole("button", { name: day, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日・期間を追加" }).click();
+  await mode(3).getByRole("button", { name: "毎週" }).click();
+  await buttons(3).getByRole("button", { name: "祝日", exact: true }).click();
+  const third = page.getByRole("group", { name: "稼働日の詳細 3" });
+  await third.getByLabel("開始時間").fill("08:00");
+  await third.getByLabel("終了時間").fill("19:00");
+  await page.getByRole("group", { name: /単価 3/ }).getByRole("spinbutton", { name: "単価（円・税抜）" }).fill("20000");
+  // 期間を区切るときだけ開始日・終了日が出る
+  await page.getByRole("group", { name: "稼働日の詳細 3" }).getByRole("checkbox", { name: "期間を区切る（開始日・終了日を指定）" }).check();
+  await expect(page.getByRole("button", { name: "稼働日の詳細3の開始日", exact: true })).toBeVisible();
+  await page.getByRole("group", { name: "稼働日の詳細 3" }).getByRole("checkbox", { name: "期間を区切る（開始日・終了日を指定）" }).uncheck();
+  await expect(page.getByRole("button", { name: "稼働日の詳細3の開始日", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "祝日一覧を確認", exact: true }).click();
   await expect(page.getByText("2026-11-03 文化の日 祝日")).toBeVisible();
   await page.getByRole("button", { name: "この一覧を確認して依頼書に反映", exact: true }).click();
   await expect(page.getByText("祝日一覧を依頼書に反映しました。日付と条件を確認してください。")).toBeVisible();
-  await page.getByRole("button", { name: "PDFを確認して送付する", exact: true }).click();
+  const shot = (name: string) => process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/${name}` : testInfo.outputPath(name);
+  await page.getByRole("group", { name: "稼働日の詳細 1" }).screenshot({ path: shot("weekly-row1.png") });
+  await page.getByRole("group", { name: "稼働日の詳細 3" }).screenshot({ path: shot("weekly-row3.png") });
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(1);
   const written = JSON.parse(writes[0].body.request_conditions).schedule;
-  expect(written.work_groups[0].holiday_dates).toEqual(["2026-11-03"]);
-  expect(written.work_groups[0].weekdays).toEqual([0,1,2,3,4,5]);
-  expect(written.rate_groups[0].holiday_dates).toEqual(["2026-11-03"]);
-  expect(written.work_groups[1]).toMatchObject({ weekdays: [6], holiday_mode: "include", holiday_dates: ["2026-11-03"], start_time: "08:00", end_time: "19:00" });
-  expect(written.rate_groups[1].amount).toBe("15000");
+  expect(written.work_groups[0]).toMatchObject({ date_mode: "weekly", weekly_rule: "v2", custom_range: false, weekdays: [0, 1, 2, 3, 4], holiday_selected: false, holiday_dates: ["2026-11-03"], holiday_skip: ["2026-11-03"] });
+  expect(written.work_groups[1]).toMatchObject({ weekdays: [5, 6], holiday_selected: false, holiday_skip: [] });
+  expect(written.work_groups[2]).toMatchObject({ weekdays: [], holiday_selected: true, holiday_dates: ["2026-11-03"], start_time: "08:00", end_time: "19:00" });
+  expect(written.rate_groups[2]).toMatchObject({ amount: "20000", weekly_rule: "v2", holiday_selected: true });
+  expect(written.rate_groups[0].holiday_skip).toEqual(["2026-11-03"]);
+});
+
+test("weekly rows warn about overlaps before saving and ask before saving days without a condition", async ({ page }) => {
+  const writes = await adminMocks(page);
+  await page.route("**/api/order-requests/holiday-calendar**", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
+  await page.goto("/operations/order-requests");
+  await page.locator(".is-created").getByRole("button", { name: version.document_number, exact: true }).click();
+  const mode = (n: number) => page.getByRole("group", { name: `稼働日の詳細${n}の日付の設定` });
+  const buttons = (n: number) => page.getByRole("group", { name: `稼働日の詳細${n}の曜日と祝日` });
+  await mode(1).getByRole("button", { name: "毎週" }).click();
+  for (const day of ["月", "火", "水"]) await buttons(1).getByRole("button", { name: day, exact: true }).click();
+  await page.getByRole("button", { name: "稼働日・期間を追加" }).click();
+  await mode(2).getByRole("button", { name: "毎週" }).click();
+  for (const day of ["水", "木"]) await buttons(2).getByRole("button", { name: day, exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "「水」が重なっています" })).toBeVisible();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "稼働日の詳細1と2で「水」が重なっています" }).last()).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await buttons(2).getByRole("button", { name: "水", exact: true }).click();
+  await expect(page.getByText("土・日に当たる日の条件がありません", { exact: false }).first()).toBeVisible();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  const ask = page.getByRole("dialog", { name: "稼働しない曜日・祝日があります" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "キャンセル" }).click();
+  expect(writes).toHaveLength(0);
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await page.getByRole("dialog", { name: "稼働しない曜日・祝日があります" }).getByRole("button", { name: "この内容で保存" }).click();
+  await expect.poll(() => writes.length).toBe(1);
 });
 
 test("order calendars mark today in Japan time without replacing selection or weekend colors", async ({ page }, testInfo) => {
@@ -475,31 +515,49 @@ test("order calendars mark today in Japan time without replacing selection or we
   await page.screenshot({ path: testInfo.outputPath("today-closed.png") });
 });
 
-test("Monday date picker and PDF correction preserve draft and reuse its id", async ({ page }, testInfo) => {
+test("saving sends nothing; the send step decides recipients and deadline before the PDF check", async ({ page }, testInfo) => {
   const writes = await adminMocks(page);
+  const requests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/")) requests.push(`${request.method()} ${new URL(request.url()).pathname}`); });
   await page.goto("/operations/order-requests");
   const created = page.locator(".is-created");
   await expect(created.getByRole("columnheader", { name: "区分", exact: true })).toHaveCount(0);
+  // 一覧では保存済み（未送付）と見分けられ、絞り込みもできる
+  await expect(created.locator("td", { hasText: "保存済み（未送付）" }).first()).toBeVisible();
+  await expect(created.getByRole("combobox", { name: "依頼書の一覧条件" }).getByRole("option")).toHaveText(["最新版", "保存済み（未送付）", "一部送付済み", "送付済み", "結果不明", "未受領", "期限超過"]);
   await created.getByRole("button", { name: version.document_number, exact: true }).click();
   await page.getByRole("button", { name: "稼働日の開始", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "稼働日の開始", exact: true });
   await expect(picker.locator(".month-calendar-weekday").first()).toHaveText("月");
-  await page.screenshot({ path: testInfo.outputPath("monday-picker.png") });
   await page.keyboard.press("Escape");
   await expect(picker).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "稼働日の開始", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "PDFを確認して送付する", exact: true }).click();
+  // 保存だけでは送付しない
+  await page.getByRole("textbox", { name: "案件名", exact: true }).fill("修正したイベント");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByText("保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。")).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(requests.filter((line) => /confirm|line-send/.test(line))).toEqual([]);
+  // 送付は別の操作：送付先・期限を決めてからPDFを確認する
+  await page.locator(".order-draft-foot").getByRole("button", { name: "送付へ進む", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "送付の設定", exact: true });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByText("まだ誰にも送っていません。", { exact: false })).toBeVisible();
+  await expect(settings.getByText("送付先", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("send-settings.png") });
+  await settings.getByRole("button", { name: "PDFを確認する", exact: true }).click();
+  await expect(settings.getByText("過ぎています", { exact: false })).toBeVisible();
+  await settings.getByLabel("期限の案内（必須）").fill("2027-12-01");
+  await settings.getByRole("button", { name: "PDFを確認する", exact: true }).click();
   const pdf = page.getByRole("dialog", { name: "PDFの確認", exact: true });
-  await expect(pdf.getByRole("button", { name: "修正する", exact: true })).toBeVisible();
-  await pdf.getByRole("button", { name: "修正する", exact: true }).click();
-  await expect(pdf).toHaveCount(0);
-  const project = page.getByRole("textbox", { name: "案件名", exact: true });
-  await expect(project).toHaveValue("確認用イベント");
-  await project.fill("修正したイベント");
-  await page.getByRole("button", { name: "PDFを確認して送付する", exact: true }).click();
-  await expect(pdf.getByRole("button", { name: "修正する", exact: true })).toBeVisible();
-  expect(writes).toHaveLength(2);
-  expect(writes[1].body.body).toContain("修正したイベント");
+  await expect(pdf.getByRole("button", { name: "今すぐ送付する", exact: true })).toBeVisible();
+  await pdf.getByRole("button", { name: "送付先・期限に戻る", exact: true }).click();
+  await expect(settings).toBeVisible();
+  await settings.getByRole("button", { name: "編集に戻る（保存済み）", exact: true }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "案件名", exact: true })).toHaveValue("修正したイベント");
+  expect(requests.filter((line) => /confirm|line-send/.test(line))).toEqual([]);
+  expect(writes[writes.length - 1].body.follow_up_due_on).toBe("2027-12-01");
+  expect(writes[writes.length - 1].body.body).toContain("修正したイベント");
   expect(writes.every((write) => write.path.endsWith("/version-1"))).toBe(true);
 });
 

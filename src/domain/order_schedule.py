@@ -17,6 +17,13 @@ class DateGroup(BaseModel):
     holiday_dates: list[str] = Field(default_factory=list, max_length=3660)
     holiday_review_from: str = ""
     holiday_review_to: str = ""
+    # 「毎週」の新しい規則（曜日と祝日のボタン）。旧データは欠落＝legacy（holiday_mode の旧規則のまま）。
+    weekly_rule: Literal["legacy", "v2"] = "legacy"
+    holiday_selected: bool = False
+    # v2：他の行の「祝日」で上書きされるため、この行では稼働しない祝日（サーバーが導出）。
+    holiday_skip: list[str] = Field(default_factory=list, max_length=3660)
+    # v2：期間を区切る場合だけ true。false の行は全体の稼働期間の全部が対象。
+    custom_range: bool = False
 
     @field_validator("weekdays")
     @classmethod
@@ -25,7 +32,7 @@ class DateGroup(BaseModel):
             raise ValueError("曜日の指定を確認してください")
         return sorted(value)
 
-    @field_validator("holiday_dates")
+    @field_validator("holiday_dates", "holiday_skip")
     @classmethod
     def valid_holidays(cls, value):
         if len(set(value)) != len(value):
@@ -46,6 +53,8 @@ class DateGroup(BaseModel):
     def bounds(self):
         if self.date_mode == "single":
             self.to = self.from_
+        if self.date_mode != "weekly":
+            self.weekly_rule, self.holiday_selected, self.holiday_skip, self.custom_range = "legacy", False, [], False
         if self.from_ and self.to and self.from_ > self.to:
             raise ValueError("終了日は開始日以降にしてください")
         if self.date_mode == "weekly" and self.from_ and self.to:
@@ -215,10 +224,24 @@ def _ordered(groups):
                 continue
             if group.date_mode != "weekly" and other.date_mode != "weekly":
                 raise ValueError("日付・期間が重複しています")
+            if group.date_mode == "weekly" and other.date_mode == "weekly" and group.weekly_rule == "v2" and other.weekly_rule == "v2":
+                # 新しい規則：同じ曜日、または「祝日」が重なる期間の2行で押されていれば重複（日付の有無に依らず）
+                if set(group.weekdays) & set(other.weekdays) or (group.holiday_selected and other.holiday_selected):
+                    raise ValueError("日付・期間が重複しています")
+                continue
             if set(_days_of(group)) & set(_days_of(other)):
                 raise ValueError("日付・期間が重複しています")
         previous.append(group)
     return result
+
+
+def _weekly_selected(current: date, day: str, *, weekdays, holidays, mode, rule, holiday_selected, skip) -> bool:
+    """「毎週」の行がその日を稼働日にするか。旧規則（legacy）は holiday_mode、新規則（v2）は曜日＋「祝日」ボタン。"""
+    regular = current.weekday() in weekdays
+    if rule == "v2":
+        # 曜日の日は、他の行の「祝日」に上書きされた祝日（skip）を除いて稼働。「祝日」を押した行は祝日に稼働。
+        return (regular and day not in skip) or (holiday_selected and day in holidays)
+    return (regular or day in holidays) if mode == "include" else (regular and day not in holidays)
 
 
 def _days_of(group) -> list[str]:
@@ -230,17 +253,16 @@ def _days_of(group) -> list[str]:
     excluded = set(get("excluded_dates", None) or [])
     first, last = date.fromisoformat(start).toordinal(), date.fromisoformat(end).toordinal()
     weekly = get("date_mode") == "weekly"
-    weekdays = set(get("weekdays", None) or [])
-    holidays = set(get("holiday_dates", None) or [])
-    holiday_mode = get("holiday_mode", "exclude")
+    options = dict(
+        weekdays=set(get("weekdays", None) or []), holidays=set(get("holiday_dates", None) or []),
+        mode=get("holiday_mode", "exclude"), rule=get("weekly_rule", "legacy") or "legacy",
+        holiday_selected=bool(get("holiday_selected", False)), skip=set(get("holiday_skip", None) or []),
+    )
     days = []
     for ordinal in range(first, last + 1):
         current = date.fromordinal(ordinal)
         day = current.isoformat()
-        selected = current.weekday() in weekdays
-        if weekly:
-            selected = (selected or day in holidays) if holiday_mode == "include" else (selected and day not in holidays)
-        if day not in excluded and (not weekly or selected):
+        if day not in excluded and (not weekly or _weekly_selected(current, day, **options)):
             days.append(day)
     return days
 
@@ -252,9 +274,11 @@ def group_matches_day(group: dict, day: str) -> bool:
         return False
     if group.get("date_mode") != "weekly":
         return True
-    holiday = day in (group.get("holiday_dates") or [])
-    weekday = date.fromisoformat(day).weekday() in (group.get("weekdays") or [])
-    return (weekday or holiday) if group.get("holiday_mode") == "include" else (weekday and not holiday)
+    return _weekly_selected(
+        date.fromisoformat(day), day, weekdays=set(group.get("weekdays") or []), holidays=set(group.get("holiday_dates") or []),
+        mode=group.get("holiday_mode"), rule=group.get("weekly_rule") or "legacy",
+        holiday_selected=bool(group.get("holiday_selected")), skip=set(group.get("holiday_skip") or []),
+    )
 
 
 def expand_work_days(schedule) -> list[dict]:
@@ -282,12 +306,13 @@ def normalize_schedule(value, *, complete=False):
         schedule = Schedule.model_validate(value)
     except ValidationError as exc:
         raise ValueError("日付別の勤務条件を確認してください: " + exc.errors()[0]["msg"].removeprefix("Value error, ")) from None
+    _derive_holiday_skip(schedule.work_groups)
     schedule.work_groups = _ordered(schedule.work_groups)
     if schedule.rates_follow_work:
         rates = {g.work_group_id: g for g in schedule.rate_groups}
         if set(rates) != {g.id for g in schedule.work_groups} or len(rates) != len(schedule.rate_groups):
             raise ValueError("単価の設定を稼働日の設定に合わせてください")
-        schedule.rate_groups = [rates[g.id].model_copy(update={"date_mode": g.date_mode, "from_": g.from_, "to": g.to, "weekdays": g.weekdays, "holiday_mode": g.holiday_mode, "holiday_dates": g.holiday_dates, "holiday_review_from": g.holiday_review_from, "holiday_review_to": g.holiday_review_to}) for g in schedule.work_groups]
+        schedule.rate_groups = [rates[g.id].model_copy(update={"date_mode": g.date_mode, "from_": g.from_, "to": g.to, "weekdays": g.weekdays, "holiday_mode": g.holiday_mode, "holiday_dates": g.holiday_dates, "holiday_review_from": g.holiday_review_from, "holiday_review_to": g.holiday_review_to, "weekly_rule": g.weekly_rule, "holiday_selected": g.holiday_selected, "holiday_skip": g.holiday_skip, "custom_range": g.custom_range}) for g in schedule.work_groups]
     elif any(g.work_group_id for g in schedule.rate_groups):
         raise ValueError("個別の単価設定には稼働日の紐付けを指定できません")
     elif any(g.date_mode == "weekly" for g in [*schedule.work_groups, *schedule.rate_groups]):
@@ -302,6 +327,8 @@ def normalize_schedule(value, *, complete=False):
         for group in schedule.work_groups:
             if not group.start_time or not group.end_time:
                 raise ValueError("すべての開始時間・終了時間を入力してください")
+            if group.date_mode == "weekly" and group.weekly_rule == "v2" and not group.weekdays and not group.holiday_selected:
+                raise ValueError("「毎週」の行は、曜日か祝日を1つ以上押してください")
             if group.date_mode == "weekly" and (group.holiday_review_from != group.from_ or group.holiday_review_to != group.to):
                 raise ValueError("曜日指定の期間について祝日一覧を確認してください")
         for group in schedule.rate_groups:
@@ -320,7 +347,29 @@ def normalize_schedule(value, *, complete=False):
             for day in _days_of(work):
                 if day not in rate_days:
                     raise ValueError("単価が設定されていない稼働日があります")
-    return schedule.model_dump(by_alias=True)
+    dumped = schedule.model_dump(by_alias=True)
+    for group in [*dumped["work_groups"], *dumped["rate_groups"]]:
+        # 旧データ・「毎週」以外の行には新しい項目を持たせない（保存済みの内容を変えない）。
+        if group.get("weekly_rule") != "v2":
+            for key in ("weekly_rule", "holiday_selected", "holiday_skip", "custom_range"):
+                group.pop(key, None)
+    return dumped
+
+
+def _derive_holiday_skip(groups) -> None:
+    """v2：「祝日」を押した別の行が同じ祝日を使うとき、曜日の行ではその祝日を稼働にしない（祝日は常に上書き）。"""
+    selectors = [g for g in groups if g.date_mode == "weekly" and g.weekly_rule == "v2" and g.holiday_selected and g.from_ and g.to]
+    for group in groups:
+        if group.date_mode != "weekly" or group.weekly_rule != "v2":
+            continue
+        skip = []
+        if not group.holiday_selected and group.from_ and group.to:
+            for day in group.holiday_dates:
+                if not group.from_ <= day <= group.to or date.fromisoformat(day).weekday() not in group.weekdays:
+                    continue
+                if any(other is not group and other.from_ <= day <= other.to and day in other.holiday_dates for other in selectors):
+                    skip.append(day)
+        group.holiday_skip = sorted(skip)
 
 
 def date_label(group):
@@ -332,6 +381,14 @@ def date_label(group):
     start, end = jp(group["from"]), jp(group["to"])
     if group["date_mode"] == "single":
         return start
+    if group["date_mode"] == "weekly" and group.get("weekly_rule") == "v2":
+        names = "月火水木金土日"
+        labels = "・".join(names[i] for i in group.get("weekdays", []))
+        if group.get("holiday_selected"):
+            labels = f"毎週{labels}・祝日" if labels else "祝日"
+        else:
+            labels = f"毎週{labels}"
+        return f"{start}～{end} {labels}"
     if group["date_mode"] == "weekly":
         names = "月火水木金土日"
         labels = "・".join(names[i] for i in group.get("weekdays", []))

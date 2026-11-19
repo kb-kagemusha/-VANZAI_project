@@ -21,7 +21,7 @@ import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleE
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
 import { VersionParticipationSummary } from "./ParticipationCalendarPage";
-import { applyPeriodHolidays, singleDaysOnHolidays, compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
+import { applyPeriodHolidays, applyWeeklyPeriod, weeklyScheduleIssues, singleDaysOnHolidays, compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
 import {
   ApiError,
@@ -120,6 +120,14 @@ function formatCreatedOn(value: string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
+
+/** 一覧の送付の状態（保存と送付は別の操作）。 */
+const SEND_STATE_LABEL: Record<string, string> = {
+  saved_unsent: "保存済み（未送付）",
+  partial: "一部送付済み",
+  sent: "送付済み",
+  cancelled: "取消",
+};
 
 const STATUS_LABEL: Record<OrderRequestStatus, string> = {
   draft: "下書き",
@@ -228,7 +236,9 @@ export function OrderRequestsPage() {
   const linePreviewOpenRef = useRef(linePreviewOpen);
   linePreviewOpenRef.current = linePreviewOpen;
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
-  const [pdfReview, setPdfReview] = useState<{ phase: "loading" | "ready"; versionId: string | null; url: string | null } | null>(null);
+  const [pdfReview, setPdfReview] = useState<{ phase: "settings" | "loading" | "ready"; versionId: string | null; url: string | null } | null>(null);
+  const [autoSendId, setAutoSendId] = useState<string | null>(null);
+  const ackedGapsRef = useRef("");
   const [pdfReviewError, setPdfReviewError] = useState("");
   const [pdfSending, setPdfSending] = useState(false);
   const pdfReviewRef = useRef(false);
@@ -442,11 +452,12 @@ export function OrderRequestsPage() {
     const from = bound === "from" ? value : workDateFrom;
     const to = bound === "to" ? value : workDateTo;
     // 休業日は残す（期間外になった日は休業日の欄で知らせて外せるようにする）
-    setSections({ ...sections, workPeriod: { ...(sections.workPeriod ?? {}), from, to } });
+    // 期間を区切っていない「毎週」の行は、全体の稼働期間に合わせる
+    setSections({ ...sections, workPeriod: { ...(sections.workPeriod ?? {}), from, to }, schedule: sections.schedule ? syncSchedule(applyWeeklyPeriod(sections.schedule, from, to)) : sections.schedule });
     setForm({ ...form, work_date_label: formatWorkDateRange(from, to) });
   }
   function changeSchedule(schedule: OrderSchedule) {
-    let next = syncSchedule(schedule);
+    let next = syncSchedule(applyWeeklyPeriod(schedule, workDateFrom, workDateTo));
     // 全体の休業日を、稼働日の詳細（期間）に配り直す
     if (sections.workPeriod?.excluded_dates) next = applyPeriodHolidays(next, sections.workPeriod.excluded_dates);
     setSections({ ...sections, schedule: next });
@@ -723,9 +734,28 @@ export function OrderRequestsPage() {
     setSections(sectionsFromStored(detail.request_conditions, detail.body));
   }
 
+  /** 「毎週」の重なりは保存前に直してもらい、漏れ（稼働しない曜日・祝日）は確認してから保存する。 */
+  async function ensureWeeklyOk(): Promise<boolean> {
+    const schedule = sectionsRef.current.schedule;
+    if (!schedule) return true;
+    const period = sectionsRef.current.workPeriod;
+    const issues = weeklyScheduleIssues(syncSchedule(schedule), period?.from ?? workDateFrom, period?.to ?? workDateTo, period?.excluded_dates ?? []);
+    if (issues.overlaps.length > 0) {
+      setActionError(issues.overlaps.join(" "));
+      return false;
+    }
+    const key = issues.gaps.join("|");
+    if (issues.gaps.length > 0 && ackedGapsRef.current !== key) {
+      const accepted = await confirmApp({ title: "稼働しない曜日・祝日があります", message: `${issues.gaps.join("\n")}\nこのまま保存しますか。祝日を稼働しない日にしたい場合は、休業日に設定してください。`, confirmLabel: "この内容で保存" });
+      if (!accepted) return false;
+      ackedGapsRef.current = key;
+    }
+    return true;
+  }
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (dueMissing()) throw new Error("期限の案内の日付を入れてください");
+      if (!(await ensureWeeklyOk())) return null;
       const payload = draftPayload();
       if (creating) {
         return createOrderRequest(
@@ -736,14 +766,15 @@ export function OrderRequestsPage() {
       return updateOrderRequestVersion(detail.id, payload);
     },
     onSuccess: async (version) => {
+      if (!version) return;
       rememberSavedVersion(version);
       setCreating(false);
       setBasedOn(null);
       setSelectedId(version.id);
       setActionMessage(
         version.based_on_document_number
-          ? `${version.based_on_document_number} を基にした下書きを保存しました。確定するまで送付は始まりません。`
-          : "下書きを保存しました。確定するまで送付は始まりません。",
+          ? `${version.based_on_document_number} を基にした依頼書を保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。`
+          : "保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。",
       );
       setActionError("");
       await refresh();
@@ -850,8 +881,8 @@ export function OrderRequestsPage() {
     : null;
   const detailLead = creating
     ? basedOn
-      ? `${basedOn.documentNumber} 第${basedOn.versionNo}版を基に、新しい依頼書を作成します。確定するまで送付は始まりません。`
-      : "案件依頼の項目で下書きします。確定するまで送付は始まりません。"
+      ? `${basedOn.documentNumber} 第${basedOn.versionNo}版を基に、新しい依頼書を作成します。保存しても送付は始まりません。`
+      : "案件依頼の項目で作成します。保存しても送付は始まりません。"
     : [detailSourceNote, detail ? STATUS_LABEL[detail.status] : "", detail?.created_by_name].filter(Boolean).join(" · ");
 
   const canSend = Boolean(
@@ -901,7 +932,14 @@ export function OrderRequestsPage() {
     if (sections.categories.length === 0) missing.push("カテゴリ");
     if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
     if (!form.site_name.trim()) missing.push("稼働場所");
+    return missing;
+  }
+
+  /** 送付の設定（送付先・期限）で足りないもの。保存だけなら未定でよい。 */
+  function missingSendSettings(): string[] {
+    const missing: string[] = [];
     if (!form.follow_up_due_on) missing.push("期限の案内");
+    else if (new Date(`${form.follow_up_due_on}T${form.follow_up_due_time || "21:00"}:00+09:00`).getTime() <= Date.now()) missing.push("期限の案内（過ぎています。日時を直してください）");
     if (form.worker_ids.length === 0) missing.push("送付先");
     if (form.worker_ids.length > MAX_ORDER_RECIPIENTS) missing.push(`送付先は${MAX_ORDER_RECIPIENTS}人まで`);
     return missing;
@@ -915,6 +953,14 @@ export function OrderRequestsPage() {
       basedOn ? { ...payload, based_on_version_id: basedOn.versionId } : payload,
     );
   }
+
+  useEffect(() => {
+    // 読み込んだ内容が画面の状態へ反映されてから開く
+    if (!autoSendId || !detail || detail.id !== autoSendId || creating || loadedForRef.current !== detail.id || formRef.current !== form || sectionsRef.current !== sections) return;
+    setAutoSendId(null);
+    if (detail.status === "draft") void openSendDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSendId, detail, creating, form, sections]);
 
   function dismissPdfReview(nextSelectedId: string | null) {
     setPdfReview((current) => {
@@ -942,13 +988,15 @@ export function OrderRequestsPage() {
     return false;
   }
 
-  async function openPdfReview() {
+  /** 「送付へ進む」：内容を保存してから、送付先・期限を決める画面を開く。ここではまだ誰にも送らない。 */
+  async function openSendDialog() {
     if (!(await acceptWithoutSchedule())) return;
     const missing = missingSendFields();
     if (missing.length > 0) {
       setActionError(`送付前に入力してください: ${missing.join("、")}`);
       return;
     }
+    if (!(await ensureWeeklyOk())) return;
     setActionError("");
     setPdfReviewError("");
     setPdfReview({ phase: "loading", versionId: null, url: null });
@@ -956,15 +1004,43 @@ export function OrderRequestsPage() {
       const saved = await persistCurrentDraft();
       pinSavedVersion(saved);
       setSavedDraftId(saved.id);
-      const blob = await fetchOrderRequestPdfPreview(saved.id);
-      const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
-      const url = URL.createObjectURL(pdfBlob);
-      setPdfReview({ phase: "ready", versionId: saved.id, url });
+      setPdfReview({ phase: "settings", versionId: saved.id, url: null });
       await refresh();
     } catch (error) {
       setPdfReview(null);
       setActionError(messageOf(error));
     }
+  }
+
+  /** 送付先・期限を保存し、送付前のPDFを確認する。 */
+  async function previewForSend() {
+    const missing = missingSendSettings();
+    if (missing.length > 0) {
+      setPdfReviewError(`送付前に決めてください: ${missing.join("、")}`);
+      return;
+    }
+    setPdfReviewError("");
+    setPdfReview((current) => (current ? { ...current, phase: "loading" } : current));
+    try {
+      const saved = await persistCurrentDraft();
+      pinSavedVersion(saved);
+      setSavedDraftId(saved.id);
+      const blob = await fetchOrderRequestPdfPreview(saved.id);
+      const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
+      setPdfReview({ phase: "ready", versionId: saved.id, url: URL.createObjectURL(pdfBlob) });
+      await refresh();
+    } catch (error) {
+      setPdfReview((current) => (current ? { ...current, phase: "settings" } : current));
+      setPdfReviewError(messageOf(error));
+    }
+  }
+
+  function backToSendSettings() {
+    setPdfReview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return current ? { ...current, phase: "settings", url: null } : current;
+    });
+    setPdfReviewError("");
   }
 
   function returnToEditing() {
@@ -976,6 +1052,10 @@ export function OrderRequestsPage() {
 
   async function sendReviewedOrder() {
     if (!pdfReview?.versionId) return;
+    if (missingSendSettings().length > 0) {
+      setPdfReviewError(`送付前に決めてください: ${missingSendSettings().join("、")}`);
+      return;
+    }
     setPdfSending(true);
     setPdfReviewError("");
     try {
@@ -1020,6 +1100,122 @@ export function OrderRequestsPage() {
       setPdfSending(false);
     }
   }
+
+  const recipientsSection = (
+            <section className="order-draft-section">
+              <div className="order-recipients">
+                <div className="order-recipients-head">
+                  <div>
+                    <h4>送付先</h4>
+                    <p>最大{MAX_ORDER_RECIPIENTS}人まで選べます。</p>
+                  </div>
+                  <span className={`order-count${form.worker_ids.length > MAX_ORDER_RECIPIENTS ? " is-over" : ""}`}>
+                    {form.worker_ids.length} / {MAX_ORDER_RECIPIENTS}
+                  </span>
+                </div>
+                <div className="order-recipients-search">
+                  <label className="order-field">氏名・付与ロールで検索
+                  <input
+                    placeholder="氏名・商業Dなどで絞り込み"
+                    value={workerSearch}
+                    disabled={!editable}
+                    onChange={(event) => setWorkerSearch(event.target.value)}
+                  />
+                  </label>
+                </div>
+                <fieldset className="order-role-filters" disabled={!editable || workerRolesQuery.isLoading}>
+                  <legend>付与ロールで絞り込み</legend>
+                  <p className="order-field-hint">複数選択できます。選んだいずれかのロールを持つ人を表示します。未選択なら全員を表示します。</p>
+                  <p className="order-field-hint">イベントDは対応できる最大規模です。小型を選ぶと小型・中型・大型、中型を選ぶと中型・大型、大型を選ぶと大型のロールを持つ人を表示します。</p>
+                  <div className="order-role-options">
+                    {workerRoles.map((role) => <label key={role.code} className={`order-role-option${workerRoleFilters.includes(role.code) ? " is-on" : ""}`}>
+                      <input type="checkbox" checked={workerRoleFilters.includes(role.code)} onChange={(event) => setWorkerRoleFilters((current) => event.target.checked ? [...current, role.code] : current.filter((code) => code !== role.code))} />
+                      {role.label}
+                    </label>)}
+                  </div>
+                  {workerRoleFilters.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => setWorkerRoleFilters([])}>ロールの絞り込みを解除</button>}
+                </fieldset>
+                {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
+                {selectedWorkers.length > 0 ? (
+                  <div className="order-recipient-picks">
+                    {selectedWorkers.map((worker) => {
+                      const absentCount = (form.recipient_absences?.[worker.id] ?? []).filter((day) => workDates.includes(day)).length;
+                      return (
+                        <span key={worker.id} className="order-pick">
+                          {worker.name}
+                          {workDates.length > 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-expanded={absenceWorkerId === worker.id}
+                              onClick={() => setAbsenceWorkerId(absenceWorkerId === worker.id ? null : worker.id)}
+                            >
+                              不参加日{absentCount > 0 ? `（${absentCount}日）` : ""}
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="order-recipient-empty">まだ送付先は選ばれていません。</p>
+                )}
+                {absenceWorker && workDates.length > 0 && (
+                  <fieldset className="order-absence-panel" disabled={!editable}>
+                    <legend>{absenceWorker.name}さんの不参加日</legend>
+                    <p className="order-field-hint">この人だけが休む日を選びます。依頼書のPDFには載らず、本人へのLINEの案内にだけ使います。休業日は「稼働時間の詳細」で設定します。</p>
+                    <div className="order-role-options">
+                      {workDates.map((day) => {
+                        const checked = (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day);
+                        return (
+                          <label key={day} className={`order-role-option${checked ? " is-on" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => {
+                                const current = form.recipient_absences?.[absenceWorker.id] ?? [];
+                                const nextDates = event.target.checked ? [...current, day].sort() : current.filter((d) => d !== day);
+                                setForm({ ...form, recipient_absences: { ...(form.recipient_absences ?? {}), [absenceWorker.id]: nextDates } });
+                              }}
+                            />
+                            {dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {workDates.every((day) => (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day)) && (
+                      <p className="form-error">稼働日が0日になります。この人を送付先から外してください。</p>
+                    )}
+                    <button type="button" className="btn btn-ghost" onClick={() => setAbsenceWorkerId(null)}>閉じる</button>
+                  </fieldset>
+                )}
+                <div className="order-recipient-list">
+                  {visibleWorkers.map((worker) => (
+                    <label
+                      key={worker.id}
+                      className={`order-recipient${form.worker_ids.includes(worker.id) ? " is-on" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.worker_ids.includes(worker.id)}
+                        disabled={!editable || (!form.worker_ids.includes(worker.id) && form.worker_ids.length >= MAX_ORDER_RECIPIENTS)}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...form.worker_ids, worker.id]
+                            : form.worker_ids.filter((id) => id !== worker.id);
+                          setForm({ ...form, worker_ids: next });
+                        }}
+                      />
+                      <span>{worker.name}{(worker.tags ?? []).length > 0 && <small className="order-recipient-roles">{worker.tags!.map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join("・")}</small>}</span>
+                    </label>
+                  ))}
+                  {visibleWorkers.length === 0 ? (
+                    <p className="order-recipient-empty">該当する稼働者はいません。</p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+  );
 
   return (
     <section>
@@ -1170,7 +1366,9 @@ export function OrderRequestsPage() {
             一覧
             <select aria-label="依頼書の一覧条件" value={queue} onChange={(event) => { setQueue(event.target.value as OrderRequestQueue); setCreatedPage(0); }}>
               <option value="all">最新版</option>
-              <option value="unsent">未送付</option>
+              <option value="saved_unsent">保存済み（未送付）</option>
+              <option value="partial">一部送付済み</option>
+              <option value="sent">送付済み</option>
               <option value="unknown">結果不明</option>
               <option value="unacked">未受領</option>
               <option value="overdue">期限超過</option>
@@ -1217,8 +1415,8 @@ export function OrderRequestsPage() {
                 </td>
                 <td className="order-cell-multiline order-project-name">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
                 <td>{item.version_no}</td>
-                <td>
-                  {STATUS_LABEL[item.status]}
+                <td className="order-state-cell">
+                  {SEND_STATE_LABEL[item.send_state ?? ""] ?? STATUS_LABEL[item.status]}
                   {item.phone_first ? " / 電話先行" : ""}
                   {item.dispatch_stopped ? " / 送付停止" : ""}
                 </td>
@@ -1229,6 +1427,11 @@ export function OrderRequestsPage() {
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
                   <div className="order-row-actions">
+                    {canWrite && item.status === "draft" ? (
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => { showDetail(item.version_id); setAutoSendId(item.version_id); }}>
+                        送付へ進む
+                      </button>
+                    ) : null}
                     {(item.change_documents ?? []).length > 0 ? null : (
                       <button
                         type="button"
@@ -1300,7 +1503,6 @@ export function OrderRequestsPage() {
             if (templateMode) { void saveNewTemplate(); return; }
             if (editable) {
               setActionError("");
-              if (dueMissing()) return;
               saveMutation.mutate();
             }
           }}
@@ -1597,7 +1799,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} templateMode={templateMode} disabled={!editable || (templateMode && templateSaving)} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} closedDates={holidays} templateMode={templateMode} disabled={!editable || (templateMode && templateSaving)} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
@@ -1678,12 +1880,11 @@ export function OrderRequestsPage() {
               <div className="order-draft-grid">
                 <label className="order-field order-span-4">
                   <span className="order-field-label">
-                    <span className="order-inline-label">期限の案内<span className="order-field-hint">（必須）</span></span>
+                    <span className="order-inline-label">期限の案内<span className="order-field-hint">（保存は空でも可。送付のときに決めます）</span></span>
                     <span className="order-field-hint">期限内に返事がない相手へ案内を送ります</span>
                   </span>
                   <input
                     type="date"
-                    required
                     value={form.follow_up_due_on ?? ""}
                     disabled={!editable}
                     onChange={(event) => setForm({ ...form, follow_up_due_on: event.target.value || null })}
@@ -1693,7 +1894,6 @@ export function OrderRequestsPage() {
                   <span className="order-field-label">案内の時刻</span>
                   <input
                     type="time"
-                    required
                     value={form.follow_up_due_time || "21:00"}
                     disabled={!editable}
                     onChange={(event) => setForm({ ...form, follow_up_due_time: event.target.value || "21:00" })}
@@ -1740,119 +1940,7 @@ export function OrderRequestsPage() {
               <p className="order-field-hint">依頼書の作成者と管理ロールを持つ担当者が、送付・回答状況を確認します。</p>
             </section>
 
-            <section className="order-draft-section">
-              <div className="order-recipients">
-                <div className="order-recipients-head">
-                  <div>
-                    <h4>送付先</h4>
-                    <p>最大{MAX_ORDER_RECIPIENTS}人まで選べます。</p>
-                  </div>
-                  <span className={`order-count${form.worker_ids.length > MAX_ORDER_RECIPIENTS ? " is-over" : ""}`}>
-                    {form.worker_ids.length} / {MAX_ORDER_RECIPIENTS}
-                  </span>
-                </div>
-                <div className="order-recipients-search">
-                  <label className="order-field">氏名・付与ロールで検索
-                  <input
-                    placeholder="氏名・商業Dなどで絞り込み"
-                    value={workerSearch}
-                    disabled={!editable}
-                    onChange={(event) => setWorkerSearch(event.target.value)}
-                  />
-                  </label>
-                </div>
-                <fieldset className="order-role-filters" disabled={!editable || workerRolesQuery.isLoading}>
-                  <legend>付与ロールで絞り込み</legend>
-                  <p className="order-field-hint">複数選択できます。選んだいずれかのロールを持つ人を表示します。未選択なら全員を表示します。</p>
-                  <p className="order-field-hint">イベントDは対応できる最大規模です。小型を選ぶと小型・中型・大型、中型を選ぶと中型・大型、大型を選ぶと大型のロールを持つ人を表示します。</p>
-                  <div className="order-role-options">
-                    {workerRoles.map((role) => <label key={role.code} className={`order-role-option${workerRoleFilters.includes(role.code) ? " is-on" : ""}`}>
-                      <input type="checkbox" checked={workerRoleFilters.includes(role.code)} onChange={(event) => setWorkerRoleFilters((current) => event.target.checked ? [...current, role.code] : current.filter((code) => code !== role.code))} />
-                      {role.label}
-                    </label>)}
-                  </div>
-                  {workerRoleFilters.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => setWorkerRoleFilters([])}>ロールの絞り込みを解除</button>}
-                </fieldset>
-                {workerRolesQuery.isError && <p className="form-error">付与ロールを取得できませんでした。画面を開き直してください。</p>}
-                {selectedWorkers.length > 0 ? (
-                  <div className="order-recipient-picks">
-                    {selectedWorkers.map((worker) => {
-                      const absentCount = (form.recipient_absences?.[worker.id] ?? []).filter((day) => workDates.includes(day)).length;
-                      return (
-                        <span key={worker.id} className="order-pick">
-                          {worker.name}
-                          {workDates.length > 0 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              aria-expanded={absenceWorkerId === worker.id}
-                              onClick={() => setAbsenceWorkerId(absenceWorkerId === worker.id ? null : worker.id)}
-                            >
-                              不参加日{absentCount > 0 ? `（${absentCount}日）` : ""}
-                            </button>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="order-recipient-empty">まだ送付先は選ばれていません。</p>
-                )}
-                {absenceWorker && workDates.length > 0 && (
-                  <fieldset className="order-absence-panel" disabled={!editable}>
-                    <legend>{absenceWorker.name}さんの不参加日</legend>
-                    <p className="order-field-hint">この人だけが休む日を選びます。依頼書のPDFには載らず、本人へのLINEの案内にだけ使います。休業日は「稼働時間の詳細」で設定します。</p>
-                    <div className="order-role-options">
-                      {workDates.map((day) => {
-                        const checked = (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day);
-                        return (
-                          <label key={day} className={`order-role-option${checked ? " is-on" : ""}`}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) => {
-                                const current = form.recipient_absences?.[absenceWorker.id] ?? [];
-                                const nextDates = event.target.checked ? [...current, day].sort() : current.filter((d) => d !== day);
-                                setForm({ ...form, recipient_absences: { ...(form.recipient_absences ?? {}), [absenceWorker.id]: nextDates } });
-                              }}
-                            />
-                            {dateGroupLabel({ id: day, date_mode: "single", from: day, to: day })}
-                          </label>
-                        );
-                      })}
-                    </div>
-                    {workDates.every((day) => (form.recipient_absences?.[absenceWorker.id] ?? []).includes(day)) && (
-                      <p className="form-error">稼働日が0日になります。この人を送付先から外してください。</p>
-                    )}
-                    <button type="button" className="btn btn-ghost" onClick={() => setAbsenceWorkerId(null)}>閉じる</button>
-                  </fieldset>
-                )}
-                <div className="order-recipient-list">
-                  {visibleWorkers.map((worker) => (
-                    <label
-                      key={worker.id}
-                      className={`order-recipient${form.worker_ids.includes(worker.id) ? " is-on" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.worker_ids.includes(worker.id)}
-                        disabled={!editable || (!form.worker_ids.includes(worker.id) && form.worker_ids.length >= MAX_ORDER_RECIPIENTS)}
-                        onChange={(event) => {
-                          const next = event.target.checked
-                            ? [...form.worker_ids, worker.id]
-                            : form.worker_ids.filter((id) => id !== worker.id);
-                          setForm({ ...form, worker_ids: next });
-                        }}
-                      />
-                      <span>{worker.name}{(worker.tags ?? []).length > 0 && <small className="order-recipient-roles">{worker.tags!.map((code) => workerRoles.find((role) => role.code === code)?.label ?? code).join("・")}</small>}</span>
-                    </label>
-                  ))}
-                  {visibleWorkers.length === 0 ? (
-                    <p className="order-recipient-empty">該当する稼働者はいません。</p>
-                  ) : null}
-                </div>
-              </div>
-            </section>
+            {recipientsSection}
 
             </>}
             {detail && detail.deliveries.length > 0 ? (
@@ -2045,7 +2133,7 @@ export function OrderRequestsPage() {
                 ) : null}
                 {editable ? (
                   <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending || pdfReview?.phase === "loading"}>
-                    下書きを保存
+                    保存
                   </button>
                 ) : null}
                 {editable ? (
@@ -2054,30 +2142,10 @@ export function OrderRequestsPage() {
                     className="btn btn-pdf"
                     disabled={saveMutation.isPending || pdfReview?.phase === "loading"}
                     onClick={() => {
-                      void openPdfReview();
+                      void openSendDialog();
                     }}
                   >
-                    {pdfReview?.phase === "loading" ? "PDFを作成しています" : "PDFを確認して送付する"}
-                  </button>
-                ) : null}
-                {detail?.status === "draft" ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={confirmMutation.isPending || saveMutation.isPending}
-                    onClick={async () => {
-                      setActionError("");
-                      if (dueMissing()) return;
-                      if (!(await acceptWithoutSchedule())) return;
-                      try {
-                  const saved = await updateOrderRequestVersion(detail.id, draftPayload());
-                        confirmMutation.mutate(saved.id);
-                      } catch (error) {
-                        setActionError(messageOf(error));
-                      }
-                    }}
-                  >
-                    確定してPDFを保存
+                    {pdfReview?.phase === "loading" ? "準備しています" : "送付へ進む"}
                   </button>
                 ) : null}
                 </>}
@@ -2100,41 +2168,54 @@ export function OrderRequestsPage() {
             <header className="order-draft-head">
               <div>
                 <p className="order-draft-kicker">発注依頼書</p>
-                <h3 id="order-pdf-review-title">PDFの確認</h3>
-                <p className="order-draft-lead">内容を確認してから送付します。</p>
+                <h3 id="order-pdf-review-title">{pdfReview.phase === "ready" ? "PDFの確認" : "送付の設定"}</h3>
+                <p className="order-draft-lead">{pdfReview.phase === "ready" ? "内容を確認してから、今すぐ送付します。" : "送る相手と期限を決めます。まだ誰にも送っていません。"}</p>
               </div>
             </header>
-            <div className="order-pdf-review-frame">
-              {pdfReview.phase === "ready" && pdfReview.url ? (
-                <iframe title="発注依頼書のPDF" src={pdfReview.url} />
-              ) : (
-                <p className="order-pdf-review-wait">PDFを作成しています</p>
-              )}
-            </div>
+            {pdfReview.phase === "settings" ? (
+              <div className="order-draft-body order-send-settings">
+                <section className="order-draft-section">
+                  <h4>回答の期限</h4>
+                  <div className="order-draft-grid">
+                    <label className="order-field order-span-4">
+                      <span className="order-field-label">期限の案内（必須）</span>
+                      <input type="date" value={form.follow_up_due_on ?? ""} onChange={(event) => setForm({ ...form, follow_up_due_on: event.target.value || null })} />
+                    </label>
+                    <label className="order-field order-span-4">
+                      <span className="order-field-label">案内の時刻</span>
+                      <input type="time" value={form.follow_up_due_time || "21:00"} onChange={(event) => setForm({ ...form, follow_up_due_time: event.target.value || "21:00" })} />
+                    </label>
+                  </div>
+                  <p className="order-field-hint">送付する日に合わせて決めてください。期限内に返事がない相手へ案内を送ります。</p>
+                </section>
+                {recipientsSection}
+              </div>
+            ) : (
+              <div className="order-pdf-review-frame">
+                {pdfReview.phase === "ready" && pdfReview.url ? (
+                  <iframe title="発注依頼書のPDF" src={pdfReview.url} />
+                ) : (
+                  <p className="order-pdf-review-wait">PDFを作成しています</p>
+                )}
+              </div>
+            )}
             {pdfReviewError ? <ErrorState title="送付できませんでした" description={pdfReviewError} /> : null}
+            {pdfReview.phase === "settings" ? (
+              <footer className="order-draft-foot">
+                <div className="order-draft-foot-start" />
+                <div className="order-draft-foot-end">
+                  <button type="button" className="btn btn-ghost" onClick={returnToEditing}>編集に戻る（保存済み）</button>
+                  <button type="button" className="btn btn-primary" onClick={() => { void previewForSend(); }}>PDFを確認する</button>
+                </div>
+              </footer>
+            ) : null}
             {pdfReview.phase === "ready" ? (
               <footer className="order-draft-foot">
                 <div className="order-draft-foot-start" />
                 <div className="order-draft-foot-end">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={pdfSending}
-                    onClick={() => {
-                      returnToEditing();
-                    }}
-                  >
-                    修正する
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={pdfSending}
-                    onClick={() => {
-                      void sendReviewedOrder();
-                    }}
-                  >
-                    {pdfSending ? "送付しています" : "この情報で送付する"}
+                  <button type="button" className="btn btn-ghost" disabled={pdfSending} onClick={backToSendSettings}>送付先・期限に戻る</button>
+                  <button type="button" className="btn btn-primary" disabled={pdfSending} onClick={() => { void sendReviewedOrder(); }}>
+                    {pdfSending ? "送付しています" : "今すぐ送付する"}
                   </button>
                 </div>
               </footer>
