@@ -20,6 +20,8 @@ import { OrderRequestTemplatesDialog } from "../components/OrderRequestTemplates
 import { HolidayPicker, OrderScheduleEditor } from "../components/OrderScheduleEditor";
 import { OrderLocationEditor } from "../components/OrderLocationEditor";
 import { OrderInternalSourceEditor } from "../components/OrderInternalSourceEditor";
+import { OrderBundlePanel } from "../components/OrderBundlePanel";
+import { alignShared, bundleCheck, legSummary, setLegDate, type BundleLegState } from "../lib/orderBundle";
 import { VersionParticipationSummary } from "./ParticipationCalendarPage";
 import { applyPeriodHolidays, applyWeeklyPeriod, weeklyScheduleIssues, singleDaysOnHolidays, compactDateList, dateGroupLabel, emptySchedule, newWorkGroup, scheduleDateLabel, scheduleWorkDates, syncSchedule, type OrderSchedule } from "../lib/orderSchedule";
 import { matchesWorkerRoles } from "../lib/workerRoleFilter";
@@ -28,7 +30,14 @@ import {
   addOrderRequestNote,
   cancelOrderRequest,
   confirmOrderRequest,
+  confirmOrderRequestBundle,
   createOrderRequest,
+  createOrderRequestBundle,
+  getOrderRequestBundle,
+  getOrderRequestBundleSettings,
+  sendOrderRequestBundlePair,
+  updateOrderRequestBundle,
+  updateOrderRequestBundleSettings,
   downloadOrderRequestPdf,
   fetchOrderRequestPdfPreview,
   getOrderRequestVersion,
@@ -76,6 +85,8 @@ import { confirmApp, promptApp } from "../lib/appDialog";
 import { useAuth } from "../lib/auth/auth-context";
 import { hasPermission } from "../lib/auth/permissions";
 import type {
+  OrderRequestBundle,
+  OrderRequestBundlePartner,
   OrderRequestChangeLink,
   OrderRequestDelivery,
   OrderRequestKind,
@@ -255,6 +266,21 @@ export function OrderRequestsPage() {
   const loadedForRef = useRef<string | null>(null);
   formRef.current = form;
   sectionsRef.current = sections;
+  // ダブルヘッダー（DEC-148）。下の入力欄は activeLeg の件。もう1件は otherLeg に持つ。
+  const [bundleMode, setBundleMode] = useState(false);
+  const [activeLeg, setActiveLeg] = useState<0 | 1>(0);
+  const [otherLeg, setOtherLeg] = useState<BundleLegState | null>(null);
+  const [bundle, setBundle] = useState<OrderRequestBundle | null>(null);
+  const [travelMinutes, setTravelMinutes] = useState<number | null>(null);
+  const [gapReason, setGapReason] = useState("");
+  const [bundlePdf, setBundlePdf] = useState<0 | 1>(0);
+  const otherLegRef = useRef(otherLeg);
+  otherLegRef.current = otherLeg;
+  const bundleRef = useRef(bundle);
+  bundleRef.current = bundle;
+  const bundleSettingsQuery = useQuery({ queryKey: ["order-bundle-settings"], queryFn: getOrderRequestBundleSettings, enabled: bundleMode });
+  const defaultTravel = bundleSettingsQuery.data?.default_travel_minutes ?? 60;
+  const travel = travelMinutes ?? bundle?.travel_minutes ?? defaultTravel;
 
   const savedQuery = useQuery({
     queryKey: ["order-requests-saved", kind],
@@ -336,8 +362,11 @@ export function OrderRequestsPage() {
   }
 
   function draftPayload(): OrderRequestWrite {
-    const current = withScheduleDateLabel(formRef.current, sectionsRef.current);
-    const currentSections = sectionsRef.current;
+    return payloadFor(formRef.current, sectionsRef.current);
+  }
+
+  function payloadFor(rawForm: OrderRequestWrite, currentSections: OrderDocumentSections): OrderRequestWrite {
+    const current = withScheduleDateLabel(rawForm, currentSections);
     const phoneNote = current.phone_note?.trim() ? current.phone_note : null;
     return {
       ...current,
@@ -357,6 +386,132 @@ export function OrderRequestsPage() {
       follow_up_due_time: current.follow_up_due_time || "21:00",
       recipient_absences: currentAbsences(current, currentSections),
     };
+  }
+
+  /** 2件を入力欄の順（1件目・2件目）で返す。下の入力欄の件は今の form/sections。 */
+  function bundleLegs(): [BundleLegState, BundleLegState] {
+    const current = { form: formRef.current, sections: sectionsRef.current };
+    const other = otherLegRef.current ?? current;
+    return activeLeg === 0 ? [current, other] : [other, current];
+  }
+
+  function resetBundle() {
+    setBundleMode(false);
+    setActiveLeg(0);
+    setOtherLeg(null);
+    setBundle(null);
+    setTravelMinutes(null);
+    setGapReason("");
+    setBundlePdf(0);
+  }
+
+  /** 2件をまとめて保存し、下の入力欄の件の版を返す（片方だけ保存されることはない）。 */
+  async function saveBundle(): Promise<OrderRequestVersion> {
+    // 共通の欄（送付先・期限など）は、いま下で入力している件の値にそろえる
+    const current = { form: formRef.current, sections: sectionsRef.current };
+    const other = alignShared(otherLegRef.current ?? current, current);
+    const aligned: [BundleLegState, BundleLegState] = activeLeg === 0 ? [current, other] : [other, current];
+    const payloads = aligned.map((leg) => ({ ...payloadFor(leg.form, leg.sections), allow_partial_accept: false, requires_operator_confirmation: false }));
+    const saved = bundle
+      ? await updateOrderRequestBundle(bundle.id, { travel_minutes: travel, legs: payloads.map((payload, index) => ({ ...payload, version_id: bundle.versions[index].id, kind: undefined })) })
+      : await createOrderRequestBundle({ travel_minutes: travel, legs: payloads });
+    bundleRef.current = saved;
+    setBundle(saved);
+    setTravelMinutes(saved.travel_minutes);
+    const partner = saved.versions[activeLeg === 0 ? 1 : 0];
+    loadedForRef.current = saved.versions[activeLeg].id;
+    queryClient.setQueryData(["order-request", partner.id], partner);
+    setOtherLeg({ form: formFromVersion(partner), sections: sectionsFromStored(partner.request_conditions, partner.body) });
+    return saved.versions[activeLeg];
+  }
+
+  /** 下の入力欄を、もう1件に切り替える（入力中の内容は消さない）。 */
+  function switchLeg(index: 0 | 1) {
+    if (index === activeLeg || !otherLegRef.current) return;
+    const current = { form: formRef.current, sections: sectionsRef.current };
+    const next = alignShared(otherLegRef.current, current);
+    setOtherLeg(current);
+    formRef.current = next.form;
+    sectionsRef.current = next.sections;
+    setForm(next.form);
+    setSections(next.sections);
+    setActiveLeg(index);
+    if (bundle) {
+      const id = bundle.versions[index].id;
+      loadedForRef.current = id;
+      setSelectedId(id);
+    }
+  }
+
+  function changeBundleLeg(index: 0 | 1, next: BundleLegState) {
+    if (index === activeLeg) {
+      formRef.current = next.form;
+      sectionsRef.current = next.sections;
+      setForm(next.form);
+      setSections(next.sections);
+    } else {
+      setOtherLeg(next);
+    }
+  }
+
+  function setBundleDate(day: string) {
+    const [first, second] = bundleLegs();
+    changeBundleLeg(0, setLegDate(first, day));
+    changeBundleLeg(1, setLegDate(second, day));
+  }
+
+  async function toggleBundle(checked: boolean) {
+    if (checked) {
+      const current: BundleLegState = {
+        form: { ...formRef.current, kind: "test", allow_partial_accept: false, requires_operator_confirmation: false },
+        sections: sectionsRef.current,
+      };
+      const day = legSummary(current.sections).date || current.sections.workPeriod?.from || "";
+      const first = setLegDate(current, legSummary(current.sections).singleDay ? day : "");
+      const blank: BundleLegState = {
+        form: { ...EMPTY_FORM },
+        sections: { ...EMPTY_ORDER_SECTIONS, workPeriod: { from: "", to: "" }, schedule: syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) },
+      };
+      changeBundleLeg(0, first);
+      setOtherLeg(alignShared(blank, first));
+      setActiveLeg(0);
+      setBundleMode(true);
+      setTravelMinutes(null);
+      return;
+    }
+    const hasSecond = Boolean(otherLegRef.current && (otherLegRef.current.sections.projectName.trim() || otherLegRef.current.form.site_name.trim()));
+    if (hasSecond && !(await confirmApp({ title: "ダブルヘッダーをやめる", message: "2件目の入力は消えます。1件目だけの依頼書にしますか。", confirmLabel: "やめる" }))) return;
+    if (activeLeg === 1 && otherLegRef.current) {
+      const first = otherLegRef.current;
+      formRef.current = first.form;
+      sectionsRef.current = first.sections;
+      setForm(first.form);
+      setSections(first.sections);
+    }
+    resetBundle();
+  }
+
+  async function editDefaultTravel() {
+    const current = bundleSettingsQuery.data;
+    if (!current) return;
+    const value = await promptApp({
+      title: "移動に必要な時間の初期値",
+      message: `新しく作るダブルヘッダーで、最初に入る分数です（今：${current.default_travel_minutes}分${current.provisional ? "、仮の値" : ""}）。作成済みのダブルヘッダーは変わりません。0〜720の分で入力してください。`,
+      confirmLabel: "変更する",
+    });
+    if (value === null || value === undefined) return;
+    const minutes = Number(String(value).replace(/[^0-9]/g, ""));
+    if (!String(value).trim() || !Number.isFinite(minutes) || minutes < 0 || minutes > 720) {
+      setActionError("移動に必要な時間は0〜720分で入力してください");
+      return;
+    }
+    try {
+      await updateOrderRequestBundleSettings({ default_travel_minutes: minutes, revision: current.revision });
+      await queryClient.invalidateQueries({ queryKey: ["order-bundle-settings"] });
+      setActionMessage(`移動に必要な時間の初期値を${minutes}分にしました。`);
+    } catch (error) {
+      setActionError(messageOf(error));
+    }
   }
 
   function pinSavedVersion(version: OrderRequestVersion) {
@@ -379,6 +534,26 @@ export function OrderRequestsPage() {
     setActionError("期限の案内の日付を入れてください");
     return true;
   }
+
+  useEffect(() => {
+    // 束に入った依頼書を開いたら、もう1件も読み込んでダブルヘッダーとして表示する
+    if (!detail || creating || !detail.bundle) return;
+    if (bundle && bundle.id === detail.bundle.bundle_id) return;
+    let cancelled = false;
+    void getOrderRequestBundle(detail.bundle.bundle_id).then((loaded) => {
+      if (cancelled) return;
+      const index = loaded.versions.findIndex((version) => version.id === detail.id);
+      const mine = (index === 1 ? 1 : 0) as 0 | 1;
+      const other = loaded.versions[mine === 0 ? 1 : 0];
+      setBundle(loaded);
+      setTravelMinutes(loaded.travel_minutes);
+      setBundleMode(true);
+      setActiveLeg(mine);
+      setOtherLeg({ form: formFromVersion(other), sections: sectionsFromStored(other.request_conditions, other.body) });
+    }).catch((error) => setActionError(messageOf(error)));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating, detail?.id, detail?.bundle?.bundle_id]);
 
   useEffect(() => {
     if (!detail || creating) return;
@@ -501,6 +676,7 @@ export function OrderRequestsPage() {
   }
 
   function showDetail(versionId: string) {
+    if (!bundle || !bundle.versions.some((version) => version.id === versionId)) resetBundle();
     setModeOverride(null);
     setTemplateMode(false);
     if (creating || selectedId !== versionId) loadedForRef.current = null;
@@ -515,6 +691,7 @@ export function OrderRequestsPage() {
   }
 
   function startNewDraft() {
+    resetBundle();
     setModeOverride(null);
     setTemplateMode(false);
     loadedForRef.current = null;
@@ -576,6 +753,7 @@ export function OrderRequestsPage() {
       if (!(await confirmApp({ title: "テンプレートを呼び出す", message: "入力中の内容をテンプレートの内容に置き換えます。保存済みの依頼書はそのまま残ります。", confirmLabel: "呼び出す" }))) return false;
     }
     const template = await getOrderRequestTemplate(id);
+    if (bundleMode) resetBundle();
     const nextForm = { ...EMPTY_FORM, ...template.payload };
     const stored = sectionsFromStored(nextForm.request_conditions, nextForm.body);
     const nextSections = { ...stored, schedule: stored.schedule ? syncSchedule(stored.schedule) : syncSchedule({ ...emptySchedule(), work_groups: [newWorkGroup()] }) };
@@ -602,6 +780,7 @@ export function OrderRequestsPage() {
   function closeCreateModal() {
     setModeOverride(null);
     if (templateBusyRef.current) return;
+    resetBundle();
     setTemplateMode(false);
     setCreating(false);
     setBasedOn(null);
@@ -630,6 +809,7 @@ export function OrderRequestsPage() {
   }
 
   async function startChange(versionId: string) {
+    resetBundle();
     setChangeLoading(true);
     setActionError("");
     setActionMessage("");
@@ -686,6 +866,7 @@ export function OrderRequestsPage() {
    * 「変更を作成」と違い、元の依頼書の受諾・稼働予定には影響しない。日付と日付に関わる入力は空にする。
    */
   async function startCopy(versionId: string) {
+    resetBundle();
     setChangeLoading(true);
     setActionError("");
     setActionMessage("");
@@ -765,6 +946,7 @@ export function OrderRequestsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (bundleMode) return saveBundle();
       if (!(await ensureWeeklyOk())) return null;
       const payload = draftPayload();
       if (creating) {
@@ -782,7 +964,9 @@ export function OrderRequestsPage() {
       setBasedOn(null);
       setSelectedId(version.id);
       setActionMessage(
-        version.based_on_document_number
+        bundleMode
+          ? "ダブルヘッダーの2件を保存しました。まだ誰にも送っていません。送付は「送付へ進む」で2件まとめて行います。"
+          : version.based_on_document_number
           ? `${version.based_on_document_number} を基にした依頼書を保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。`
           : "保存しました。まだ誰にも送っていません。送付は「送付へ進む」で別に行います。",
       );
@@ -904,6 +1088,35 @@ export function OrderRequestsPage() {
 
   async function sendToLinkedRecipients() {
     if (!detail) return;
+    if (detail.bundle) {
+      setSendingSelected(true);
+      setActionError("");
+      try {
+        const current = await getOrderRequestBundle(detail.bundle.bundle_id);
+        const rows = new Map(current.versions[0].deliveries.map((row) => [row.worker_id, row]));
+        const targets = current.pairs.filter((pair) => {
+          const row = rows.get(pair.worker_id);
+          return row && row.line_linked && !row.view_revoked && row.ack_status === "unacked" && row.send_status !== "accepted";
+        });
+        if (targets.length === 0) {
+          setActionError("送れる紐付け済みの未送信の送付先がありません。");
+          return;
+        }
+        const failed: string[] = [];
+        for (const pair of targets) {
+          try { await sendOrderRequestBundlePair(current.id, pair.id); } catch (error) { failed.push(`${rows.get(pair.worker_id)?.worker_name_snapshot ?? ""}: ${messageOf(error)}`); }
+        }
+        if (failed.length > 0) setActionError(failed.join(" / "));
+        else setActionMessage(`ダブルヘッダーを${targets.length}人へ送信しました（1人に1通）。`);
+        await refresh();
+        await Promise.all(current.versions.map((version) => queryClient.invalidateQueries({ queryKey: ["order-request", version.id] })));
+      } catch (error) {
+        setActionError(messageOf(error));
+      } finally {
+        setSendingSelected(false);
+      }
+      return;
+    }
     const targets = detail.deliveries.filter((row) => (
       row.line_linked
       && !row.view_revoked
@@ -936,12 +1149,20 @@ export function OrderRequestsPage() {
   }
 
   function missingSendFields(): string[] {
+    if (bundleMode) {
+      // ダブルヘッダーは2件とも確かめる
+      return bundleLegs().flatMap((leg, index) => missingLegFields(leg.form, leg.sections).map((name) => `${index + 1}件目の${name}`));
+    }
+    return missingLegFields(form, sections);
+  }
+
+  function missingLegFields(legForm: OrderRequestWrite, legSections: OrderDocumentSections): string[] {
     const missing: string[] = [];
-    if (!sections.projectName.trim()) missing.push("案件名");
-    if (sections.incentiveEnabled && !sections.incentive.trim()) missing.push("インセンティブの詳細");
-    if (sections.categories.length === 0) missing.push("カテゴリ");
-    if (!withScheduleDateLabel(form, sections).work_date_label.trim()) missing.push("稼働日");
-    if (!form.site_name.trim()) missing.push("稼働場所");
+    if (!legSections.projectName.trim()) missing.push("案件名");
+    if (legSections.incentiveEnabled && !legSections.incentive.trim()) missing.push("インセンティブの詳細");
+    if (legSections.categories.length === 0) missing.push("カテゴリ");
+    if (!withScheduleDateLabel(legForm, legSections).work_date_label.trim()) missing.push("稼働日");
+    if (!legForm.site_name.trim()) missing.push("稼働場所");
     return missing;
   }
 
@@ -956,6 +1177,7 @@ export function OrderRequestsPage() {
   }
 
   async function persistCurrentDraft() {
+    if (bundleMode) return saveBundle();
     const payload = draftPayload();
     const existingId = savedDraftId ?? (!creating && detail ? detail.id : null);
     if (existingId) return updateOrderRequestVersion(existingId, payload);
@@ -1014,6 +1236,13 @@ export function OrderRequestsPage() {
       const saved = await persistCurrentDraft();
       pinSavedVersion(saved);
       setSavedDraftId(saved.id);
+      const blockers = bundleMode ? bundleRef.current?.send_blockers ?? [] : [];
+      if (blockers.length > 0) {
+        setPdfReview(null);
+        setActionError(`保存しました。送付の前に直してください: ${blockers[0]}`);
+        await refresh();
+        return;
+      }
       setPdfReview({ phase: "settings", versionId: saved.id, url: null });
       await refresh();
     } catch (error) {
@@ -1035,12 +1264,76 @@ export function OrderRequestsPage() {
       const saved = await persistCurrentDraft();
       pinSavedVersion(saved);
       setSavedDraftId(saved.id);
+      const blockers = bundleMode ? bundleRef.current?.send_blockers ?? [] : [];
+      if (blockers.length > 0) {
+        setPdfReview((current) => (current ? { ...current, phase: "settings" } : current));
+        setPdfReviewError(blockers[0]);
+        return;
+      }
+      if (bundleMode) setBundlePdf(activeLeg);
       const blob = await fetchOrderRequestPdfPreview(saved.id);
       const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
       setPdfReview({ phase: "ready", versionId: saved.id, url: URL.createObjectURL(pdfBlob) });
       await refresh();
     } catch (error) {
       setPdfReview((current) => (current ? { ...current, phase: "settings" } : current));
+      setPdfReviewError(messageOf(error));
+    }
+  }
+
+  /** ダブルヘッダー：2件を同時に確定し、送付先1人に1通で送る。 */
+  async function sendReviewedBundle(bundleId: string, linked: Set<string>) {
+    const short = bundleRef.current?.check.short;
+    if (short && !gapReason.trim()) {
+      setPdfReviewError("移動の間隔が移動に必要な時間より短いです。確認した理由を入力してください。");
+      return;
+    }
+    const confirmed = await confirmOrderRequestBundle(bundleId, short ? gapReason.trim() : null);
+    bundleRef.current = confirmed;
+    setBundle(confirmed);
+    const deliveries = new Map(confirmed.versions[0].deliveries.map((row) => [row.worker_id, row]));
+    const targets = confirmed.pairs.filter((pair) => {
+      const row = deliveries.get(pair.worker_id);
+      return row && linked.has(pair.worker_id) && !row.view_revoked && row.ack_status === "unacked";
+    });
+    const failed: string[] = [];
+    for (const pair of targets) {
+      try {
+        await sendOrderRequestBundlePair(bundleId, pair.id);
+      } catch (error) {
+        const row = deliveries.get(pair.worker_id);
+        failed.push(`${row?.worker_name ?? row?.worker_name_snapshot ?? ""}: ${messageOf(error)}`);
+      }
+    }
+    const sentCount = targets.length - failed.length;
+    const active = confirmed.versions[activeLeg];
+    dismissPdfReview(active.id);
+    loadedForRef.current = null;
+    if (targets.length === 0) setActionError("送れる紐付け済みの送付先がありません。稼働者登録・一覧で本人紐付けを確認してください。");
+    else if (failed.length > 0) {
+      setActionError(failed.join(" / "));
+      if (sentCount > 0) setActionMessage(`ダブルヘッダーを${sentCount}人へ送信しました（1人に1通）。`);
+    } else setActionMessage(`ダブルヘッダーを${sentCount}人へ送信しました（1人に1通、2件まとめて返事を受けます）。`);
+    await refresh();
+    await Promise.all(confirmed.versions.map((version) => queryClient.invalidateQueries({ queryKey: ["order-request", version.id] })));
+    if (targets.length > 0 && failed.length === 0) await offerCloseAfterSend(sentCount);
+  }
+
+  /** ダブルヘッダーの送付前の確認で、もう1件のPDFを表示する。 */
+  async function showBundlePdf(index: 0 | 1) {
+    const target = bundleRef.current?.versions[index];
+    if (!target || !pdfReview) return;
+    setBundlePdf(index);
+    setPdfReview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return current ? { ...current, phase: "loading", url: null } : current;
+    });
+    try {
+      const blob = await fetchOrderRequestPdfPreview(target.id);
+      const pdfBlob = blob.type === "application/pdf" ? blob : new Blob([await blob.arrayBuffer()], { type: "application/pdf" });
+      setPdfReview((current) => (current ? { ...current, phase: "ready", url: URL.createObjectURL(pdfBlob) } : current));
+    } catch (error) {
+      setPdfReview((current) => (current ? { ...current, phase: "ready" } : current));
       setPdfReviewError(messageOf(error));
     }
   }
@@ -1077,6 +1370,10 @@ export function OrderRequestsPage() {
       const linked = new Set(links.items.map((item) => item.worker_id));
       if (!form.worker_ids.some((id) => linked.has(id))) {
         setPdfReviewError("選んだ送付先に、公式LINEと紐付いた人がいません。稼働者登録・一覧で本人紐付けを確認してください。");
+        return;
+      }
+      if (bundleMode && bundleRef.current) {
+        await sendReviewedBundle(bundleRef.current.id, linked);
         return;
       }
       const confirmed = await confirmOrderRequest(pdfReview.versionId);
@@ -1269,7 +1566,7 @@ export function OrderRequestsPage() {
               <tbody>
                 {savedQuery.data.items.map((item) => (
                   <tr key={item.version_id}>
-                    <td>{item.document_number}</td>
+                    <td>{item.document_number}<BundleMark partner={item.bundle} /></td>
                     <td className="order-cell-multiline">{item.kind === "test" ? <TestBadge /> : null}{siteLabelForList(item.project_name)}</td>
                     <td><OrderListDate label={item.work_date_label} /></td>
                     <td>{item.recipient_count}</td>
@@ -1339,6 +1636,7 @@ export function OrderRequestsPage() {
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(row.version_id)}>
                       {row.document_number}
                     </button>
+                    <BundleMark partner={row.bundle} />
                     {basedOnNote(row.document_number, row.based_on_document_number, row.based_on_version_no) ? (
                       <span className="order-change-note">
                         {basedOnNote(row.document_number, row.based_on_document_number, row.based_on_version_no)}
@@ -1363,7 +1661,7 @@ export function OrderRequestsPage() {
                   </td>
                   <td>
                     <div className="order-row-actions">
-                      {(row.change_documents ?? []).length > 0 ? null : (
+                      {(row.change_documents ?? []).length > 0 || row.bundle ? null : (
                         <button
                           type="button"
                           className="btn btn-line-blue btn-sm"
@@ -1445,6 +1743,7 @@ export function OrderRequestsPage() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => showDetail(item.version_id)}>
                     {item.document_number}
                   </button>
+                  <BundleMark partner={item.bundle} />
                   {item.status !== "draft" ? (
                     <button
                       type="button"
@@ -1474,7 +1773,7 @@ export function OrderRequestsPage() {
                 <td>{item.follow_up_due_on ? `${item.follow_up_due_on} ${item.follow_up_due_time || "21:00"}` : "—"}</td>
                 <td>
                   <div className="order-row-actions">
-                    {(item.change_documents ?? []).length > 0 ? null : (
+                    {(item.change_documents ?? []).length > 0 || item.bundle ? null : (
                       <button
                         type="button"
                         className="btn btn-line-blue btn-sm"
@@ -1485,7 +1784,7 @@ export function OrderRequestsPage() {
                       </button>
                     )}
                     {canWrite ? <button type="button" className="btn create-button btn-sm" onClick={() => openTemplateSave(item.version_id, item.project_name || item.document_number)}>テンプレートとして保存</button> : null}
-                    {canWrite&&item.kind==="test"&&item.status!=="cancelled"?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(item.version_id)}>正式版を作成・確認</button>:null}
+                    {canWrite&&item.kind==="test"&&!item.bundle&&item.status!=="cancelled"?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(item.version_id)}>正式版を作成・確認</button>:null}
                     <button
                       type="button"
                       className="btn btn-line-green btn-sm"
@@ -1597,7 +1896,7 @@ export function OrderRequestsPage() {
               ) : (
                 <span className="order-draft-badge">正式</span>
               )}
-              {!creating && detail ? (
+              {!creating && detail && !detail.bundle ? (
                 <button
                   type="button"
                   className="btn btn-line-blue btn-sm"
@@ -1623,7 +1922,7 @@ export function OrderRequestsPage() {
                   この版の内容をフォームに表示
                 </button>
               ) : null}
-              {!creating&&detail?.kind==="test"&&detail.status!=="cancelled"&&canWrite?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(detail.id)}>正式版を作成・確認</button>:null}
+              {!creating&&detail?.kind==="test"&&!detail.bundle&&detail.status!=="cancelled"&&canWrite?<button type="button" className="btn btn-line-purple btn-sm" onClick={()=>setFormalizing(detail.id)}>正式版を作成・確認</button>:null}
             </div>
           </header>
 
@@ -1642,7 +1941,8 @@ export function OrderRequestsPage() {
                     <button
                       type="button"
                       className={form.kind === "formal" ? "is-active" : ""}
-                      disabled={!editable}
+                      disabled={!editable || (bundleMode && !bundle?.formal_enabled)}
+                      title={bundleMode && !bundle?.formal_enabled ? "ダブルヘッダーは、いまはテストだけで作れます" : undefined}
                       onClick={() => setForm({ ...form, kind: "formal" })}
                     >
                       正式
@@ -1664,8 +1964,32 @@ export function OrderRequestsPage() {
                     <button type="button" className={sendMode === "send" ? "is-active" : ""} disabled={!editable} onClick={() => setModeOverride("send")}>作成して送付</button>
                   </div>
                 </div> : null}
+                {!templateMode && (bundleMode || (creating && !basedOn && !savedDraftId)) ? <div className="order-field order-span-12 order-bundle-toggle">
+                  <label className="order-check">
+                    <input type="checkbox" checked={bundleMode} disabled={!creating || Boolean(bundle) || !editable} onChange={(event) => void toggleBundle(event.target.checked)} />
+                    ダブルヘッダー（同じ日の2件を、1件の依頼としてまとめて送る）
+                  </label>
+                  {bundleMode ? <span className="order-field-hint">{bundle?.formal_enabled ? "" : "いまはテスト区分だけで作れます（テストで送付から返事・起床確認までを確かめてから正式を開けます）。"}</span> : null}
+                </div> : null}
               </div>
             </section>
+
+            {bundleMode && otherLeg ? <OrderBundlePanel
+              legs={bundleLegs()}
+              active={activeLeg}
+              onSelect={switchLeg}
+              onChangeLeg={changeBundleLeg}
+              date={legSummary(sections).date}
+              onDate={setBundleDate}
+              travelMinutes={travel}
+              onTravel={(minutes) => setTravelMinutes(minutes)}
+              defaultMinutes={defaultTravel}
+              provisional={Boolean(bundleSettingsQuery.data?.provisional)}
+              onEditDefault={canWrite ? () => void editDefaultTravel() : null}
+              documentNumbers={[bundle?.versions[0]?.document_number ?? null, bundle?.versions[1]?.document_number ?? null]}
+              disabled={!editable}
+            /> : null}
+            {bundleMode ? <h4 className="order-bundle-detail-title">{activeLeg + 1}件目の詳細（依頼元・場所・内容・持ち物など）</h4> : null}
 
             <OrderInternalSourceEditor value={form.internal_source ?? null} disabled={!editable} onChange={(internal_source) => setForm({ ...form, internal_source })} />
             <section className="order-draft-section">
@@ -1767,7 +2091,7 @@ export function OrderRequestsPage() {
                       />
                     </label>
                   </div>
-                  {!templateMode && <><div className="order-field order-span-6 order-work-period-field">
+                  {!templateMode && !bundleMode && <><div className="order-field order-span-6 order-work-period-field">
                     <span className="order-field-label">稼働日</span>
                     <div className="order-date-range">
                       <OrderDatePicker
@@ -1822,7 +2146,7 @@ export function OrderRequestsPage() {
                     />
                   </label>
                   </>}
-                  {sections.schedule ? (
+                  {sections.schedule && !bundleMode ? (
                     <div className="order-field order-span-6 order-partial-accept">
                       <label className="order-check"><input type="checkbox" checked={Boolean(form.requires_operator_confirmation)} disabled={!editable} onChange={(event) => setForm({ ...form, requires_operator_confirmation: event.target.checked })} />運営が人数調整して参加者を確定する</label>
                       <p className="order-field-hint">参加可能の返事だけでは確定しません。依頼書の確定後に日別の上限人数を設定します。</p>
@@ -1848,7 +2172,7 @@ export function OrderRequestsPage() {
                       onChange={(event) => setSections({ ...sections, hours: withFullwidthTilde(event.target.value) })}
                     />
                   </label>}
-                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} closedDates={holidays} templateMode={templateMode} disabled={!editable || (templateMode && templateSaving)} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
+                  {sections.schedule ? <OrderScheduleEditor schedule={sections.schedule} periodFrom={workDateFrom} periodTo={workDateTo} closedDates={holidays} templateMode={templateMode} fixedDay={bundleMode} disabled={!editable || (templateMode && templateSaving)} onChange={changeSchedule} /> : editable && <div className="order-span-12"><button type="button" className="btn btn-ghost" onClick={() => void enableSchedule()}>日付・期間ごとの入力に切り替える</button><div className="order-field-hint">文章の入力のままでは、受諾しても公式LINEの予定・起床報告に載りません。</div></div>}
                   {(sections.previousHours || sections.previousFee) && <details className="order-span-12"><summary>切替前の勤務時間・単価（参考）</summary><pre>{sections.previousHours}{"\n\n"}{sections.previousFee}</pre></details>}
                   <label className="order-field order-span-4">
                     <span className="order-field-label">内容</span>
@@ -2240,6 +2564,25 @@ export function OrderRequestsPage() {
                 {recipientsSection}
               </div>
             ) : (
+              <>
+                {bundleMode && bundle ? (
+                  <div className="order-bundle-review">
+                    <div className="order-segment" role="group" aria-label="確認するPDF">
+                      {bundle.versions.map((version, index) => (
+                        <button key={version.id} type="button" className={bundlePdf === index ? "is-active" : ""} disabled={pdfSending || pdfReview.phase === "loading"} onClick={() => void showBundlePdf(index as 0 | 1)}>
+                          {index + 1}件目のPDF（{version.document_number}）
+                        </button>
+                      ))}
+                    </div>
+                    <p className="order-field-hint">2件とも確認してから送付してください。稼働者には1通で2件の案内と2つのPDFが届きます。</p>
+                    {bundle.check.short ? (
+                      <label className="order-field">
+                        <span className="order-field-label">移動の間隔が{bundle.check.gap_minutes}分で、移動に必要な時間（{bundle.travel_minutes}分）より短いです。確認した理由（必須）</span>
+                        <textarea className="is-short" value={gapReason} maxLength={500} disabled={pdfSending} placeholder="例：同じ建物の別フロアで、移動は5分" onChange={(event) => setGapReason(event.target.value)} />
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
               <div className="order-pdf-review-frame">
                 {pdfReview.phase === "ready" && pdfReview.url ? (
                   <iframe title="発注依頼書のPDF" src={pdfReview.url} />
@@ -2247,6 +2590,7 @@ export function OrderRequestsPage() {
                   <p className="order-pdf-review-wait">PDFを作成しています</p>
                 )}
               </div>
+              </>
             )}
             {pdfReviewError ? <ErrorState title="送付できませんでした" description={pdfReviewError} /> : null}
             {pdfReview.phase === "settings" ? (
@@ -2341,6 +2685,18 @@ export function OrderRequestsPage() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** ダブルヘッダーの印（DEC-148）。相方の依頼書番号と、もう1件の時間を添える。 */
+function BundleMark({ partner }: { partner?: OrderRequestBundlePartner | null }) {
+  if (!partner) return null;
+  const time = partner.partner_start ? `${partner.partner_start}～${partner.partner_end ?? ""}` : "";
+  return (
+    <span className="order-bundle-mark" title={`ダブルヘッダー：もう1件は ${partner.partner_document_number}${partner.partner_project_name ? `（${partner.partner_project_name}）` : ""}`}>
+      <span className="order-bundle-badge">W</span>
+      <span className="order-bundle-partner">{partner.leg_no}/2・相方 {partner.partner_document_number}{time ? ` ${time}` : ""}</span>
+    </span>
   );
 }
 

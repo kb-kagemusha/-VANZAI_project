@@ -148,6 +148,12 @@ export type PortalReplyView = {
   can_pick: boolean;
   pdf_available: boolean;
   decline_pending: boolean;
+  /** ダブルヘッダー（DEC-148）：返事は2件まとめて記録される */
+  bundle?: {
+    legs: Array<{ document_number: string; project_name: string; site_name: string; meeting_place: string | null; start: string | null; end: string | null; end_next_day: boolean; is_this: boolean }>;
+    pay_total: string | null;
+    pay_hourly: boolean;
+  } | null;
 };
 
 export type PortalReplyResult = { outcome: string; message: string; accepted_dates: string[] };

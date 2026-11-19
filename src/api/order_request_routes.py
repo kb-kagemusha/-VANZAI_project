@@ -143,7 +143,11 @@ def preview_formalization(version_id:str,current_user:User=Depends(get_current_a
 def create_formalization(version_id:str,body:FormalizeBody,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     _ensure_write(current_user)
     from src.services.order_formalization import create
-    version=_call(db,lambda:create(db,version_id,actor=current_user,**body.model_dump()))
+    from src.services.order_bundle import ensure_not_bundled
+    def action():
+        ensure_not_bundled(db,_service(db).get_version(version_id).document_id,"ダブルヘッダーのテストは、2件まとめて正式にする機能の追加後に正式化できます")
+        return create(db,version_id,actor=current_user,**body.model_dump())
+    version=_call(db,action)
     return _version_out(db,db.get(OrderRequestDocument,version.document_id),version)
 
 
@@ -435,7 +439,9 @@ def _version_out(
     sources = _source_labels(db, {version.revision_of_version_id})
     changes = _changes_by_source(db, {version.id})
     from src.services.order_formalization import relation
+    from src.services.order_bundle import partner_summary
     return {
+        "bundle": partner_summary(db, document.id),
         "formalization":relation(db,document.id),
         "document_id": document.id,
         "document_number": document.document_number,
@@ -566,7 +572,9 @@ def _list_item(
         .all()
     )
     recipient_count = len(deliveries) if deliveries else len(version.draft_worker_ids or [])
+    from src.services.order_bundle import partner_summary
     return {
+        "bundle": partner_summary(db, document.id),
         "document_id": document.id,
         "document_number": document.document_number,
         "kind": document.kind,
@@ -723,42 +731,50 @@ def update_order_request_version(
     def action():
         service = _service(db)
         version = service.get_version(version_id)
-        return service.update_draft(
-            version,
-            kind=fields.get("kind"),
-            work_date_label=fields.get("work_date_label"),
-            site_name=fields.get("site_name"),
-            site_id=fields.get("site_id"),
-            site_address=fields.get("site_address"),
-            site_address_set="site_address" in fields,
-            clear_site_id="site_id" in fields and fields.get("site_id") is None,
-            request_conditions=fields.get("request_conditions"),
-            body=fields.get("body"),
-            contact_name=fields.get("contact_name"),
-            contact_desk=fields.get("contact_desk"),
-            counterparty_note=fields.get("counterparty_note") if "counterparty_note" in fields else None,
-            worker_ids=fields.get("worker_ids"),
-            phone_first=fields.get("phone_first"),
-            phone_contacted_at=fields.get("phone_contacted_at") if "phone_contacted_at" in fields else None,
-            phone_note=fields.get("phone_note") if "phone_note" in fields else None,
-            phone_note_set="phone_note" in fields,
-            tracker_user_id=fields.get("tracker_user_id"),
-            clear_tracker="tracker_user_id" in fields and fields.get("tracker_user_id") is None,
-            follow_up_due_on=fields.get("follow_up_due_on"),
-            follow_up_due_time=fields.get("follow_up_due_time"),
-            clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
-            internal_source=fields.get("internal_source"),
-            internal_source_set="internal_source" in fields,
-            recipient_absences=fields.get("recipient_absences"),
-            recipient_absences_set="recipient_absences" in fields,
-            allow_partial_accept=fields.get("allow_partial_accept"),
-            requires_operator_confirmation=fields.get("requires_operator_confirmation"),
-            actor=current_user,
-        )
+        from src.services.order_bundle import ensure_not_bundled
+        if version.status == "draft":
+            ensure_not_bundled(db, version.document_id, "ダブルヘッダーの下書きは、2件まとめて保存してください")
+        return apply_version_update(service, version, fields, current_user)
 
     version = _call(db, action)
     document = db.get(OrderRequestDocument, version.document_id)
     return _version_out(db, document, version)
+
+
+def apply_version_update(service: OrderRequestService, version: OrderRequestVersion, fields: dict, current_user: User) -> OrderRequestVersion:
+    """PATCH の項目を版の保存へ渡す（ダブルヘッダーの2件同時保存でも使う）。"""
+    return service.update_draft(
+        version,
+        kind=fields.get("kind"),
+        work_date_label=fields.get("work_date_label"),
+        site_name=fields.get("site_name"),
+        site_id=fields.get("site_id"),
+        site_address=fields.get("site_address"),
+        site_address_set="site_address" in fields,
+        clear_site_id="site_id" in fields and fields.get("site_id") is None,
+        request_conditions=fields.get("request_conditions"),
+        body=fields.get("body"),
+        contact_name=fields.get("contact_name"),
+        contact_desk=fields.get("contact_desk"),
+        counterparty_note=fields.get("counterparty_note") if "counterparty_note" in fields else None,
+        worker_ids=fields.get("worker_ids"),
+        phone_first=fields.get("phone_first"),
+        phone_contacted_at=fields.get("phone_contacted_at") if "phone_contacted_at" in fields else None,
+        phone_note=fields.get("phone_note") if "phone_note" in fields else None,
+        phone_note_set="phone_note" in fields,
+        tracker_user_id=fields.get("tracker_user_id"),
+        clear_tracker="tracker_user_id" in fields and fields.get("tracker_user_id") is None,
+        follow_up_due_on=fields.get("follow_up_due_on"),
+        follow_up_due_time=fields.get("follow_up_due_time"),
+        clear_follow_up="follow_up_due_on" in fields and fields.get("follow_up_due_on") is None,
+        internal_source=fields.get("internal_source"),
+        internal_source_set="internal_source" in fields,
+        recipient_absences=fields.get("recipient_absences"),
+        recipient_absences_set="recipient_absences" in fields,
+        allow_partial_accept=fields.get("allow_partial_accept"),
+        requires_operator_confirmation=fields.get("requires_operator_confirmation"),
+        actor=current_user,
+    )
 
 
 @router.post("/versions/{version_id}/confirm")
@@ -950,8 +966,10 @@ def list_order_request_reply_groups(
     person_fields = {"worker_name_snapshot", "delivery_id", "worker_name", "send_status", "ack_status", "decline_reason", "acked_at", "ack_reminded_at"}
     for group in groups:
         recipients = [_reply_item(d, doc, v, sources, changes, worker_names) for d, doc, v in group]
+        from src.services.order_bundle import partner_summary
         items.append({**{k: v for k, v in recipients[0].items() if k not in person_fields},
-            "document_id": group[0][1].id, "recipients": sorted(recipients, key=lambda p: p["worker_name"])})
+            "document_id": group[0][1].id, "bundle": partner_summary(db, group[0][1].id),
+            "recipients": sorted(recipients, key=lambda p: p["worker_name"])})
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
@@ -1038,6 +1056,9 @@ def send_order_request_line(
 
     def action():
         service = _service(db)
+        from src.services.order_bundle import pair_for_delivery
+        if pair_for_delivery(db, delivery_id) is not None:
+            raise OrderRequestError(409, "ダブルヘッダーは2件をまとめて1通で送ります。ダブルヘッダーの送付から送ってください")
         delivery = LineOrderService(db).send_one(
             actor=current_user,
             delivery=service.get_delivery(delivery_id),

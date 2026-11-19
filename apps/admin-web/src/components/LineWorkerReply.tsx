@@ -131,6 +131,18 @@ export function LineWorkerReply({ token, deliveryId }: { token: string; delivery
       <p className="lw-off-dates">{participationPeriodLabel(view.period)}</p>
       <h2 className="lw-confirm-head">依頼された日（{offered.length}日）</h2>
       <p className="lw-dates">{participationDateLines(offered) || "なし"}</p>
+      {view.bundle ? (
+        <div className="lw-bundle">
+          <h2 className="lw-confirm-head">ダブルヘッダー（同じ日の2件）</h2>
+          <p className="lw-note">この依頼は2件で1つです。受諾も辞退も、2件まとめて記録されます。</p>
+          {view.bundle.legs.map((leg, index) => (
+            <p key={leg.document_number} className="lw-meta">
+              {index + 1}件目{leg.is_this ? "（この依頼書）" : ""}：{leg.start ?? ""}～{leg.end_next_day ? "翌日 " : ""}{leg.end ?? ""}　{(leg.project_name || "案件").split("\n")[0]}（{(leg.site_name || "").split("\n")[0]}）
+            </p>
+          ))}
+          {view.bundle.pay_total ? <p className="lw-meta">報酬の合計（2件）：¥{Number(view.bundle.pay_total).toLocaleString("ja-JP")}（税抜）</p> : view.bundle.pay_hourly ? <p className="lw-meta">時給の件があるため、報酬は実績で決まります。</p> : null}
+        </div>
+      ) : null}
     </>
   );
 
@@ -179,9 +191,9 @@ export function LineWorkerReply({ token, deliveryId }: { token: string; delivery
         ) : null}
         {view.state === "open" ? (
           <>
-            <button type="button" className="lw-primary" onClick={() => { setMessage(""); setPhase("accept"); window.scrollTo(0, 0); }}>{view.requires_operator_confirmation ? "全日程で参加可能" : "全日程で受諾する"}</button>
+            <button type="button" className="lw-primary" onClick={() => { setMessage(""); setPhase("accept"); window.scrollTo(0, 0); }}>{view.requires_operator_confirmation ? "全日程で参加可能" : view.bundle ? "2件とも受諾する" : "全日程で受諾する"}</button>
             {view.can_pick ? <a className="lw-secondary lwp-link-button" href={`?m=pick&d=${encodeURIComponent(view.delivery_id)}`}>{view.requires_operator_confirmation ? "参加可能な日を選ぶ" : "日付を選んで受諾する"}</a> : null}
-            <button type="button" className="lw-secondary lwp-decline-entry" onClick={() => { setMessage(""); setPhase("decline"); window.scrollTo(0, 0); }}>辞退する</button>
+            <button type="button" className="lw-secondary lwp-decline-entry" onClick={() => { setMessage(""); setPhase("decline"); window.scrollTo(0, 0); }}>{view.bundle ? "2件とも辞退する" : "辞退する"}</button>
           </>
         ) : null}
         <a className="lw-secondary lwp-link-button lwp-back" href="?m=home">予定の画面へ戻る</a>

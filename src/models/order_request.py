@@ -249,3 +249,4 @@ class OrderRequestNote(Base):
 
 
 from src.models import line_daily  # noqa: E402,F401 — 系列・稼働予定のテーブルを登録する
+from src.models import order_bundle  # noqa: E402,F401 — ダブルヘッダーの表を登録する（DEC-148）

@@ -147,7 +147,59 @@ export interface OrderRequestNote {
   created_at: string;
 }
 
+/** ダブルヘッダーの相方（DEC-148）。束に入っていない依頼書は null。 */
+export interface OrderRequestBundlePartner {
+  bundle_id: string;
+  leg_no: number;
+  partner_leg_no: number;
+  partner_document_id: string;
+  partner_document_number: string;
+  partner_version_id: string;
+  partner_status: OrderRequestStatus;
+  partner_project_name: string;
+  partner_site_name: string;
+  partner_start: string | null;
+  partner_end: string | null;
+  partner_end_next_day: boolean;
+}
+
+export interface OrderRequestBundleCheck {
+  complete: boolean;
+  issues: string[];
+  overlap: boolean;
+  short: boolean;
+  gap_minutes: number | null;
+  order: number[];
+  date: string | null;
+  travel_minutes: number;
+}
+
+export interface OrderRequestBundle {
+  id: string;
+  kind: OrderRequestKind;
+  travel_minutes: number;
+  gap_ack_reason: string | null;
+  confirmed_at: string | null;
+  legs: { leg_no: number; document_id: string; document_number: string; version_id: string; version_no: number; status: OrderRequestStatus; project_name: string; site_name: string; start: string | null; end: string | null; end_next_day: boolean }[];
+  check: OrderRequestBundleCheck;
+  send_blockers: string[];
+  pay: { total: string | null; hourly: boolean; legs: (string | null)[] };
+  pairs: { id: string; worker_id: string; first_delivery_id: string; second_delivery_id: string }[];
+  formal_enabled: boolean;
+  versions: OrderRequestVersion[];
+}
+
+export interface OrderRequestBundleSettings {
+  default_travel_minutes: number;
+  provisional: boolean;
+  provisional_minutes: number;
+  revision: number;
+  updated_at: string | null;
+  updated_by_name: string | null;
+}
+
 export interface OrderRequestVersion {
+  bundle?: OrderRequestBundlePartner | null;
   formalization?: {source_document_number:string;source_version_id:string;formal_document_number:string;formal_version_id:string;formal_status:string;formal_hidden:boolean}|null;
   internal_source?: InternalOrderSource | null;
   document_id: string;
@@ -199,6 +251,7 @@ export interface OrderRequestVersion {
 }
 
 export interface OrderRequestListItem {
+  bundle?: OrderRequestBundlePartner | null;
   document_id: string;
   document_number: string;
   kind: OrderRequestKind;
@@ -309,6 +362,7 @@ export interface OrderRequestWrite {
 
 export interface OrderRequestReplyGroup extends Omit<OrderRequestReplyItem, "delivery_id" | "worker_name" | "send_status" | "ack_status" | "decline_reason" | "acked_at" | "ack_reminded_at"> {
   document_id: string;
+  bundle?: OrderRequestBundlePartner | null;
   recipients: OrderRequestReplyItem[];
 }
 export interface OrderRequestReplyGroupList {

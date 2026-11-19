@@ -179,6 +179,23 @@ class LineWorkerService:
             "holidays": holidays,
             "accepted_dates": list(current.dates) if current is not None else [],
             "today": ws.today_jst().isoformat(),
+            "bundle": self._bundle_view(delivery.id),
+        }
+
+    def _bundle_view(self, delivery_id: str) -> dict | None:
+        """ダブルヘッダー（DEC-148）：返事は2件まとめて記録されるので、2件の要点を見せる。"""
+        from src.services.line_order import _bundle_legs, bundle_pair
+        from src.domain import order_bundle as rules
+        pair = bundle_pair(self.session, delivery_id)
+        if pair is None:
+            return None
+        legs = _bundle_legs(self.session, pair)
+        pay = rules.legs_pay_total(legs[0]["schedule"], legs[1]["schedule"])
+        return {
+            "legs": [{"document_number": leg["document_number"], "project_name": leg["project_name"], "site_name": leg["site_name"],
+                      "meeting_place": leg["meeting_place"], "start": leg["start"], "end": leg["end"], "end_next_day": leg["end_next_day"],
+                      "is_this": leg["delivery_id"] == delivery_id} for leg in legs],
+            "pay_total": pay["total"], "pay_hourly": pay["hourly"],
         }
 
     @staticmethod
@@ -282,6 +299,11 @@ class LineWorkerService:
         if document.kind == KIND_TEST:
             lines.append("（テストの依頼書です）")
         lines.append(f"依頼書：{display['project_name'] or '案件'}（{document.document_number} 版{version.version_no}）")
+        from src.services.line_order import bundle_pair, bundle_summary
+        pair = bundle_pair(self.session, delivery.id)
+        if pair is not None:
+            lines.append(bundle_summary(self.session, pair))
+            lines.append("2件の両方に同じ返事を記録しました。")
         if outcome == "acked" and dates:
             lines.append(participation_summary(version, dates))
             lines.append("予定はメニューの「スケジュール確認」でも確認できます。")

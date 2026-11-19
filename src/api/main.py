@@ -9898,6 +9898,8 @@ app.include_router(ocr_router)
 app.include_router(inventory_router)
 app.include_router(public_ocr_router)
 app.include_router(order_request_router)
+from src.api.order_bundle_routes import router as order_bundle_router
+app.include_router(order_bundle_router)
 from src.api.order_staffing_routes import router as order_staffing_router
 app.include_router(order_staffing_router)
 from src.api.staffing_replacement_routes import router as staffing_replacement_router, line_router as line_staffing_replacement_router

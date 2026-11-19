@@ -130,6 +130,8 @@ import type {
   OrderRequestReplyGroupList,
   OrderRequestVersion,
   OrderRequestWrite,
+  OrderRequestBundle,
+  OrderRequestBundleSettings,
   OrderRequestTemplateItem,
   OrderRequestTemplateDetail,
   WakeStatusList,
@@ -1767,6 +1769,35 @@ export function updateOrderRequestVersion(
     `/api/order-requests/versions/${versionId}`,
     { method: "PATCH", body: JSON.stringify(body) },
   );
+}
+
+/** ダブルヘッダー（DEC-148）：2件を同じ取引で作る・保存する・確定する。 */
+export function createOrderRequestBundle(body: { travel_minutes?: number | null; legs: OrderRequestWrite[] }) {
+  return apiFetch<OrderRequestBundle>("/api/order-request-bundles", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function getOrderRequestBundle(bundleId: string) {
+  return apiFetch<OrderRequestBundle>(`/api/order-request-bundles/${encodeURIComponent(bundleId)}`);
+}
+
+export function updateOrderRequestBundle(bundleId: string, body: { travel_minutes?: number | null; legs: (Partial<OrderRequestWrite> & { version_id: string })[] }) {
+  return apiFetch<OrderRequestBundle>(`/api/order-request-bundles/${encodeURIComponent(bundleId)}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function confirmOrderRequestBundle(bundleId: string, gapReason: string | null) {
+  return apiFetch<OrderRequestBundle>(`/api/order-request-bundles/${encodeURIComponent(bundleId)}/confirm`, { method: "POST", body: JSON.stringify({ gap_reason: gapReason }) });
+}
+
+export function sendOrderRequestBundlePair(bundleId: string, pairId: string) {
+  return apiFetch<OrderRequestBundle>(`/api/order-request-bundles/${encodeURIComponent(bundleId)}/pairs/${encodeURIComponent(pairId)}/line-send`, { method: "POST" });
+}
+
+export function getOrderRequestBundleSettings() {
+  return apiFetch<OrderRequestBundleSettings>("/api/order-request-bundles/settings");
+}
+
+export function updateOrderRequestBundleSettings(body: { default_travel_minutes: number; revision: number }) {
+  return apiFetch<OrderRequestBundleSettings>("/api/order-request-bundles/settings", { method: "PUT", body: JSON.stringify(body) });
 }
 
 export function confirmOrderRequest(versionId: string) {

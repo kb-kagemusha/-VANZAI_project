@@ -5881,3 +5881,46 @@ html[data-theme="dark"] .operator-profile-dialog .operator-menu-sync { border-co
 html[data-theme="dark"] .access-group-toggle { border-color: #7fb0ea; color: #a9cbf2; }
 html[data-theme="dark"] .access-group-toggle:hover { background: #24364d; }
 html[data-theme="dark"] .access-line-badge { background: #0a8a3e; }
+
+/* ---- ダブルヘッダー（DEC-148）：2件の要点を横に並べる ---- */
+.order-bundle-toggle { padding-top: 0.25rem; }
+.order-bundle-toggle .order-check { font-weight: 700; }
+.order-bundle { border: 1px solid rgba(124, 58, 237, 0.28); background: rgba(124, 58, 237, 0.04); border-radius: 14px; }
+.order-bundle h4 { margin-top: 0; }
+.order-bundle-shared { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem 2rem; margin: 0.5rem 0 0.75rem; }
+.order-bundle-travel { min-width: 12rem; }
+.order-bundle-minutes { display: inline-flex; align-items: center; gap: 0.4rem; }
+.order-bundle-minutes input { width: 6.5rem; }
+.order-bundle-default { margin-left: 0.5rem; }
+.order-bundle-legs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; }
+.order-bundle-leg { display: grid; gap: 0.55rem; align-content: start; padding: 0.85rem; border-radius: 12px; border: 1px solid rgba(29, 39, 49, 0.12); background: #fff; }
+.order-bundle-leg.is-active { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18); }
+.order-bundle-leg-head { display: flex; align-items: center; gap: 0.5rem; min-height: 2.1rem; }
+.order-bundle-leg-head .btn { margin-left: auto; min-width: 7.5rem; }
+.order-bundle-number, .order-bundle-order { font-size: 0.8rem; color: var(--muted); }
+.order-bundle-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.order-bundle-rate { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: end; }
+.order-bundle-unit { width: 8.5rem; }
+.order-bundle-status { margin: 0.75rem 0 0.25rem; padding: 0.55rem 0.75rem; border-radius: 10px; font-weight: 700; }
+.order-bundle-status.is-ok { background: rgba(22, 163, 74, 0.1); color: #166534; }
+.order-bundle-status.is-warn { background: #fff4d6; color: #8a5a00; }
+.order-bundle-status.is-error { background: rgba(220, 38, 38, 0.1); color: #b91c1c; }
+.order-bundle-status.is-muted { background: rgba(29, 39, 49, 0.05); color: var(--muted); font-weight: 400; }
+.order-bundle-pay { margin: 0.25rem 0 0; font-weight: 700; }
+.order-bundle-detail-title { margin: 0.25rem 0 0; padding: 0 0.25rem; color: #6d28d9; }
+.order-bundle-mark { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.35rem; vertical-align: middle; }
+.order-bundle-badge { display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 6px; background: #7c3aed; color: #fff; font-size: 0.75rem; font-weight: 800; }
+.order-bundle-partner { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.order-bundle-review { display: grid; gap: 0.5rem; margin: 0 1.5rem 0.75rem; padding-top: 0.75rem; }
+.order-bundle-review .order-segment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.order-bundle-review .order-segment button { padding: 0 0.75rem; }
+@media (max-width: 720px) {
+  .order-bundle-legs { grid-template-columns: 1fr; }
+  .order-bundle-partner { white-space: normal; }
+}
+html[data-theme="dark"] .order-bundle { background: rgba(124, 58, 237, 0.08); border-color: rgba(167, 139, 250, 0.35); }
+html[data-theme="dark"] .order-bundle-leg { background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.12); }
+html[data-theme="dark"] .order-bundle-detail-title { color: #c4b5fd; }
+html[data-theme="dark"] .order-bundle-status.is-ok { color: #86efac; }
+html[data-theme="dark"] .order-bundle-status.is-warn { background: rgba(250, 204, 21, 0.12); color: #fde68a; }
+html[data-theme="dark"] .order-bundle-status.is-error { color: #fca5a5; }

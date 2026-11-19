@@ -96,6 +96,10 @@ def send_state(version: "OrderRequestVersion", deliveries: list["OrderRequestDel
     return SEND_STATE_SENT if accepted == len(deliveries) else SEND_STATE_PARTIAL
 
 
+# ダブルヘッダーの片方だけの変更は、Q7（片方が変わったときの扱い）の実装後に開ける（DEC-148）。
+BUNDLE_CHANGE_CLOSED = "ダブルヘッダーの依頼書の変更は、まだできません。取り消してから作り直してください"
+
+
 class OrderRequestError(Exception):
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
@@ -185,6 +189,9 @@ class OrderRequestService:
         if site_id:
             self._ensure_site(site_id)
         source = self.get_version(based_on_version_id) if based_on_version_id else None
+        if source is not None:
+            from src.services.order_bundle import ensure_not_bundled
+            ensure_not_bundled(self.session, source.document_id, BUNDLE_CHANGE_CLOSED)
         source_number = self._document(source).document_number if source is not None else None
         document, version = self._insert_numbered_draft(
             actor=actor,
@@ -403,7 +410,11 @@ class OrderRequestService:
         target.internal_client_staff_id = source.internal_client_staff_id
         target.internal_source_snapshot = dict(source.internal_source_snapshot) if source.internal_source_snapshot else None
 
-    def confirm(self, version: OrderRequestVersion, *, actor: User) -> OrderRequestVersion:
+    def confirm(self, version: OrderRequestVersion, *, actor: User, bundle_ok: bool = False) -> OrderRequestVersion:
+        if not bundle_ok:
+            from src.services.order_bundle import ensure_not_bundled
+            # ダブルヘッダーの2件は束の確定で同時に確定する（DEC-148）
+            ensure_not_bundled(self.session, version.document_id, "ダブルヘッダーの依頼書は、2件まとめて送付へ進んでください")
         series_id = ws.ensure_series(self.session, version)
         series = ws.lock_series(self.session, series_id)
         version = self.session.get(OrderRequestVersion, version.id)
@@ -570,6 +581,8 @@ class OrderRequestService:
             raise OrderRequestError(400, "改訂理由を入力してください")
         if version.status == STATUS_DRAFT:
             raise OrderRequestError(409, "下書きは改訂せず、その版を編集してください")
+        from src.services.order_bundle import ensure_not_bundled
+        ensure_not_bundled(self.session, version.document_id, BUNDLE_CHANGE_CLOSED)
         document = self._document(version)
         next_no = (
             self.session.query(func.max(OrderRequestVersion.version_no))

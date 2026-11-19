@@ -1,0 +1,11 @@
+{
+  "label": "（例の名前）朝の飲食店巡回＋昼の商業施設",
+  "source": "（どこから届いたか）",
+  "legs": [
+    {"project": "飲食店巡回", "site": "（場所）", "gathering": "", "start": "08:00", "end": "10:00", "end_next_day": false, "unit": "day", "amount": "9000", "billing": "（請求のしかた）"},
+    {"project": "商業施設", "site": "（場所）", "gathering": "11:30", "start": "12:00", "end": "15:00", "end_next_day": false, "unit": "day", "amount": "12000", "billing": "（請求のしかた）"}
+  ],
+  "actual_travel_minutes": null,
+  "expect": {"overlap": false, "gap_minutes": 90, "pay_total": "21000"},
+  "note": ""
+}

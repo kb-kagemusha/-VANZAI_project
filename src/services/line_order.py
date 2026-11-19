@@ -63,6 +63,7 @@ from src.services.order_request_pdf import (
 )
 from src.services.order_request_service import OrderRequestError
 from src.services import worker_schedule as ws
+from src.models.line_daily import OrderRequestSeries
 
 LINK_CODE_MINUTES = 30
 FILE_TOKEN_DAYS = 7
@@ -88,6 +89,16 @@ DECLINE_RECORDED = "辞退を受け付けました。"
 REMINDER_TEXT = "内容を確認して、受領ボタンを押してください"
 BUTTON_TEMPLATE_TEXT = "内容を確認して、受諾または辞退を押してください。"
 JST = ZoneInfo("Asia/Tokyo")
+# ダブルヘッダー（DEC-148）
+BUNDLE_ACCEPT_LABEL = "2件とも受諾します"
+BUNDLE_DECLINE_LABEL = "2件とも辞退します"
+BUNDLE_WHOLE_ONLY = "ダブルヘッダーの依頼は、2件まとめて受諾するか辞退してください。"
+BUNDLE_CHANGED_REPLY = "このダブルヘッダーの依頼は内容が変わったため、返事を受け付けられません。運営からの連絡をお待ちください。"
+
+
+def bundle_pair(session: Session, delivery_id: str | None):
+    from src.services.order_bundle import pair_for_delivery
+    return pair_for_delivery(session, delivery_id)
 
 
 def _now() -> datetime:
@@ -643,6 +654,9 @@ class LineOrderService:
         return f"https://liff.line.me/{liff_id}?m=pick&d={delivery.id}"
 
     def _accept(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
+        pair = bundle_pair(self.session, delivery_id)
+        if pair is not None:
+            return self.accept_pair(pair, line_user_id, actor="line-webhook")
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
@@ -650,6 +664,9 @@ class LineOrderService:
 
     def accept_all_from_web(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
         """全日程で受諾する（Web確認画面から。統合計画 ③-C）。トークの「受諾」と同じ判定・処理。"""
+        pair = bundle_pair(self.session, delivery_id)
+        if pair is not None:
+            return self.accept_pair(pair, line_user_id, actor="line-web")
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
@@ -660,6 +677,9 @@ class LineOrderService:
         reason = " ".join((reason or "").split())
         if not reason:
             return "decline_reason_required", "辞退の理由を入力してください。"
+        pair = bundle_pair(self.session, delivery_id)
+        if pair is not None:
+            return self.decline_pair(pair, line_user_id, reason, actor="line-web")
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
@@ -673,6 +693,8 @@ class LineOrderService:
 
     def accept_with_dates(self, delivery_id: str, line_user_id: str, dates: list[str]) -> tuple[str, str | None]:
         """日付を選んで受諾する（LIFF画面から。A1+ §3.3）。系列のロックの中で、回答受付版・本人・未回答を確かめる。"""
+        if bundle_pair(self.session, delivery_id) is not None:
+            return "partial_not_allowed", BUNDLE_WHOLE_ONLY
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
@@ -737,6 +759,9 @@ class LineOrderService:
         return "acked", reply
 
     def _begin_decline(self, delivery_id: str, line_user_id: str) -> tuple[str, str | None]:
+        pair = bundle_pair(self.session, delivery_id)
+        if pair is not None:
+            return self._begin_decline_pair(pair, line_user_id)
         delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
         if delivery is None:
             return outcome or "rejected", reply
@@ -777,6 +802,9 @@ class LineOrderService:
             if series.answerable_version_id is not None and series.answerable_version_id != delivery.version_id:
                 delivery.ack_status = ACK_UNACKED
                 return "superseded_version", SUPERSEDED_REPLY
+        pair = bundle_pair(self.session, delivery.id)
+        if pair is not None:
+            return self.decline_pair(pair, line_user_id, reason, actor="line-webhook")
         return self.decline_delivery(delivery, series_id, reason, actor="line-webhook")
 
     def decline_delivery(self, delivery: OrderRequestDelivery, series_id: str | None, reason: str, *, actor: str) -> tuple[str, str | None]:
@@ -807,6 +835,155 @@ class LineOrderService:
             return "declined", DECLINE_THANKS
         return "declined", DECLINE_RECORDED
 
+    # ---- ダブルヘッダー（DEC-148）：1通で送り、2件まとめて返事を受ける ------------------------------
+    def _lock_pair(self, pair) -> None:
+        series_ids = set()
+        for delivery_id in (pair.first_delivery_id, pair.second_delivery_id):
+            delivery = self.session.get(OrderRequestDelivery, delivery_id)
+            version = self.session.get(OrderRequestVersion, delivery.version_id)
+            series_ids.add(ws.ensure_series(self.session, version))
+        for series_id in sorted(series_ids):  # 決まった順にロックして、同時の操作でも食い違わない
+            ws.lock_series(self.session, series_id)
+
+    def _pair_deliveries(self, pair, line_user_id: str):
+        self._lock_pair(pair)
+        found, outcomes = [], []
+        for delivery_id in (pair.first_delivery_id, pair.second_delivery_id):
+            delivery, outcome, reply = self._delivery_for_reply(delivery_id, line_user_id)
+            found.append(delivery)
+            outcomes.append((outcome, reply))
+        if all(d is not None for d in found):
+            return found, None, None
+        if all(d is None for d in found) and outcomes[0][0] == outcomes[1][0]:
+            return None, outcomes[0][0], outcomes[0][1]
+        bad = next(o for d, o in zip(found, outcomes) if d is None)
+        if bad[0] == "rejected":
+            return None, bad[0], bad[1]
+        return None, "bundle_changed", BUNDLE_CHANGED_REPLY
+
+    def accept_pair(self, pair, line_user_id: str, *, actor: str) -> tuple[str, str | None]:
+        deliveries, outcome, reply = self._pair_deliveries(pair, line_user_id)
+        if deliveries is None:
+            return outcome or "rejected", reply
+        statuses = {d.ack_status for d in deliveries}
+        if statuses == {ACK_ACKED}:
+            return "already", "受諾は記録済みです。"
+        if ACK_DECLINED in statuses:
+            return "already", "辞退は記録済みです。"
+        for delivery in deliveries:
+            if delivery.ack_status != ACK_ACKED:
+                self.accept_delivery(delivery, None, actor=actor)
+        self.audit.log("order_request_bundle_acked", target_type="order_request_bundle", target_id=pair.bundle_id, actor=actor,
+                       after_value={"worker_id": pair.worker_id, "delivery_ids": [d.id for d in deliveries]})
+        self.session.flush()
+        return "acked", f"{ACCEPT_REPLY}\n" + bundle_summary(self.session, pair)
+
+    def _begin_decline_pair(self, pair, line_user_id: str) -> tuple[str, str | None]:
+        deliveries, outcome, reply = self._pair_deliveries(pair, line_user_id)
+        if deliveries is None:
+            return outcome or "rejected", reply
+        if any(d.ack_status == ACK_ACKED for d in deliveries):
+            return "already", "受諾は記録済みです。"
+        if all(d.ack_status == ACK_DECLINED for d in deliveries):
+            return "already", "辞退は記録済みです。"
+        for delivery in deliveries:
+            if delivery.ack_status != ACK_DECLINED:
+                delivery.ack_status = ACK_DECLINE_PENDING
+        self.session.flush()
+        return "decline_pending", DECLINE_PROMPT
+
+    def decline_pair(self, pair, line_user_id: str, reason: str, *, actor: str) -> tuple[str, str | None]:
+        deliveries, outcome, reply = self._pair_deliveries(pair, line_user_id)
+        if deliveries is None:
+            for delivery_id in (pair.first_delivery_id, pair.second_delivery_id):
+                row = self.session.get(OrderRequestDelivery, delivery_id)
+                if row is not None and row.ack_status == ACK_DECLINE_PENDING:
+                    row.ack_status = ACK_UNACKED
+            return outcome or "rejected", reply
+        if any(d.ack_status == ACK_ACKED for d in deliveries):
+            return "already", "受諾は記録済みです。"
+        if all(d.ack_status == ACK_DECLINED for d in deliveries):
+            return "already", "辞退は記録済みです。"
+        for delivery in deliveries:
+            if delivery.ack_status != ACK_DECLINED:
+                version = self.session.get(OrderRequestVersion, delivery.version_id)
+                self.decline_delivery(delivery, ws.ensure_series(self.session, version), reason, actor=actor)
+        self.audit.log("order_request_bundle_declined", target_type="order_request_bundle", target_id=pair.bundle_id, actor=actor,
+                       after_value={"worker_id": pair.worker_id, "delivery_ids": [d.id for d in deliveries], "decline_reason": reason[:500]})
+        self.session.flush()
+        return "declined", DECLINE_RECORDED
+
+    def send_bundle_pair(self, *, actor: User, pair) -> list[OrderRequestDelivery]:
+        """1人へ、ダブルヘッダーの2件を1通で送る。2つの送付行に同じ結果を記録する。"""
+        settings = line_settings()
+        if not settings.configured:
+            raise OrderRequestError(503, "サーバーにLINEのチャネル設定がありません。値はチャットに貼らず、サーバーの環境変数へ設定してください")
+        if not settings.public_api_base.startswith("https://"):
+            raise OrderRequestError(503, "PDFの公開URLはhttpsである必要があります")
+        self._lock_pair(pair)
+        rows = []
+        for delivery_id in (pair.first_delivery_id, pair.second_delivery_id):
+            delivery = self.session.get(OrderRequestDelivery, delivery_id)
+            version = self.session.get(OrderRequestVersion, delivery.version_id)
+            document = self.session.get(OrderRequestDocument, version.document_id)
+            series = self.session.get(OrderRequestSeries, version.series_id) if version.series_id else None
+            if series is None or series.answerable_version_id != version.id:
+                raise OrderRequestError(409, "新しい版が確定しているため、この版は送れません")
+            if delivery.ack_status != ACK_UNACKED:
+                raise OrderRequestError(409, "返事がある送付先には再送しません")
+            if version.status != STATUS_CONFIRMED or version.dispatch_stopped:
+                raise OrderRequestError(409, "2件とも確定済みで送付を止めていないときだけ送れます")
+            if delivery.view_revoked:
+                raise OrderRequestError(409, "閲覧を停止した送付先には送れません")
+            if not version.pdf_object_key:
+                raise OrderRequestError(409, "PDFが無いため送れません")
+            rows.append((delivery, version, document))
+        link = self._active_link_for_worker(pair.worker_id)
+        if link is None:
+            raise OrderRequestError(409, "この稼働者は公式LINEと紐付いていません")
+        now = _now()
+        tokens = []
+        for delivery, _version, _document in rows:
+            token = OrderRequestFileToken(id=generate_ulid(), delivery_id=delivery.id, token=secrets.token_urlsafe(32),
+                                          expires_at=now + timedelta(days=FILE_TOKEN_DAYS), created_at=now)
+            self.session.add(token)
+            tokens.append(token)
+            delivery.send_status = SEND_PROCESSING
+        self.session.flush()
+        base = settings.public_api_base.rstrip("/")
+        messages = _bundle_push_messages(
+            self.session, pair,
+            pdf_urls=[f"{base}/api/line/order-request-files/{t.token}" for t in tokens],
+            is_test=rows[0][2].kind == KIND_TEST,
+        )
+        try:
+            result = self.client.push_messages(link.line_user_id, messages)
+        except LineNotConfigured as exc:
+            for token, (delivery, _v, _d) in zip(tokens, rows):
+                token.revoked_at = now
+                delivery.send_status = SEND_FAILED
+            raise OrderRequestError(503, "サーバーにLINEのチャネル設定がありません") from exc
+        for token, (delivery, _version, _document) in zip(tokens, rows):
+            self.session.add(OrderRequestSendAttempt(
+                id=generate_ulid(), delivery_id=delivery.id, result=_attempt_result(result), line_request_id=result.request_id,
+                error_summary=result.message or None, actor_user_id=actor.id, created_at=now,
+            ))
+            if result.status == 200:
+                delivery.send_status, action = SEND_ACCEPTED, AuditAction.ORDER_REQUEST_LINE_SENT
+            elif result.status == 0:
+                delivery.send_status, action = SEND_UNKNOWN, AuditAction.ORDER_REQUEST_LINE_SEND_FAILED
+            else:
+                token.revoked_at = now
+                delivery.send_status, action = SEND_FAILED, AuditAction.ORDER_REQUEST_LINE_SEND_FAILED
+            self.audit.log(
+                action, target_type="order_request_delivery", target_id=delivery.id, actor=actor.id, actor_role=actor.role,
+                after_value={"send_status": delivery.send_status, "worker_id": delivery.worker_id,
+                             "line_request_id": result.request_id, "bundle_id": pair.bundle_id},
+                extra_metadata={"error_summary": result.message or None},
+            )
+        self.session.flush()
+        return [row[0] for row in rows]
+
     def send_due_reminders(self, *, now: datetime | None = None) -> int:
         """期限の日時を過ぎて、まだ返事が無い送信先へ案内を1回送る。"""
         moment = now or datetime.now(JST)
@@ -829,7 +1006,12 @@ class LineOrderService:
             .all()
         )
         sent = 0
+        from src.models.order_bundle import OrderRequestBundleDelivery
+        seconds = {row[0] for row in self.session.query(OrderRequestBundleDelivery.second_delivery_id).filter(
+            OrderRequestBundleDelivery.second_delivery_id.in_([d.id for d in rows] or [""])).all()}
         for delivery in rows:
+            if delivery.id in seconds:
+                continue  # ダブルヘッダーは1件目の送付行で1通だけ案内する（DEC-148）
             version = delivery.version
             if version.requires_operator_confirmation:
                 from src.services.order_staffing import open_response_dates
@@ -1110,3 +1292,97 @@ def participation_summary(version: OrderRequestVersion, dates: list[str]) -> str
         f"参加しない日：\n{lines(absent)}",
     ])
 
+
+
+def _time_label(start: str | None, end: str | None, next_day: bool) -> str:
+    if not start and not end:
+        return "時間は依頼書のとおり"
+    return f"{start or ''}～{'翌日 ' if next_day else ''}{end or ''}"
+
+
+def _bundle_legs(session: Session, pair) -> list[dict]:
+    """返事の組の2件（始まりの早い方を1件目）の表示用の要点。"""
+    from src.domain import order_bundle as rules
+    legs = []
+    for delivery_id in (pair.first_delivery_id, pair.second_delivery_id):
+        delivery = session.get(OrderRequestDelivery, delivery_id)
+        version = session.get(OrderRequestVersion, delivery.version_id)
+        document = session.get(OrderRequestDocument, version.document_id)
+        sections = parse_sections(version.request_conditions) or {}
+        times = rules.leg_times(sections.get("schedule"))
+        display = ws.version_display(version)
+        legs.append({"delivery_id": delivery.id, "document_number": document.document_number, "version_no": version.version_no,
+                     "project_name": display["project_name"], "site_name": display["site_name"],
+                     "meeting_place": display["meeting_place"], "date": times["date"],
+                     "start": times["start"], "end": times["end"], "end_next_day": times["end_next_day"],
+                     "schedule": sections.get("schedule"), "work_date_label": version.work_date_label})
+    legs.sort(key=lambda leg: leg["start"] or "99:99")
+    return legs
+
+
+def bundle_summary(session: Session, pair) -> str:
+    legs = _bundle_legs(session, pair)
+    lines = ["ダブルヘッダー（同じ日の2件）"]
+    for no, leg in enumerate(legs, start=1):
+        lines.append(f"{no}件目：{_time_label(leg['start'], leg['end'], leg['end_next_day'])} {leg['project_name']}（{leg['site_name']}）"[:120])
+    return "\n".join(lines)
+
+
+def _bundle_push_messages(session: Session, pair, *, pdf_urls: list[str], is_test: bool) -> list[dict]:
+    from src.domain import order_bundle as rules
+    legs = _bundle_legs(session, pair)
+    url_by_delivery = dict(zip((pair.first_delivery_id, pair.second_delivery_id), pdf_urls))
+    day = legs[0]["date"] or legs[1]["date"]
+    lines = ["【ダブルヘッダー】同じ日の2件を、1件の依頼としてお願いします。",
+             f"稼働日: {legs[0]['work_date_label'] or day or ''}"[:80]]
+    for no, leg in enumerate(legs, start=1):
+        lines += [
+            f"■{no}件目 {leg['document_number']}（版{leg['version_no']}）",
+            f"時間: {_time_label(leg['start'], leg['end'], leg['end_next_day'])}"[:80],
+            f"案件名: {leg['project_name']}"[:80],
+            f"現場: {leg['site_name']}"[:80],
+            *([f"集合: {leg['meeting_place']}"[:80]] if leg["meeting_place"] else []),
+            f"PDF: {url_by_delivery[leg['delivery_id']]}",
+        ]
+    check = rules.check(legs[0]["schedule"], legs[1]["schedule"], 0)
+    if check["complete"]:
+        lines.append(f"1件目の終了から2件目の開始まで: {check['gap_minutes']}分")
+    pay = rules.legs_pay_total(legs[0]["schedule"], legs[1]["schedule"])
+    if pay["total"] is not None:
+        lines.append(f"報酬の合計（2件）: ¥{pay_label(pay['total'])}（税抜）")
+    elif pay["hourly"]:
+        lines.append("報酬：時給の分は実績で決まります。各PDFをご確認ください。")
+    lines.append("受諾・辞退は2件まとめて決まります。")
+    if is_test:
+        lines = [TEST_BANNER, *lines, "このメッセージはテスト送信です。"]
+    detail = "\n".join(lines)
+    first_id = pair.first_delivery_id
+    return [
+        {"type": "text", "text": detail[:5000]},
+        {
+            "type": "flex",
+            "altText": "ダブルヘッダーの依頼について、2件とも受諾または辞退を押してください。",
+            "contents": {
+                "type": "bubble",
+                "body": {
+                    "type": "box", "layout": "vertical", "spacing": "md",
+                    "contents": [
+                        {"type": "text", "text": "2件の内容を確認して、まとめて受諾または辞退を押してください。", "wrap": True, "size": "sm"},
+                        {"type": "button", "style": "primary", "color": "#06C755", "height": "sm",
+                         "action": {"type": "postback", "label": BUNDLE_ACCEPT_LABEL, "data": f"or_accept:{first_id}", "displayText": BUNDLE_ACCEPT_LABEL}},
+                        {"type": "button", "style": "primary", "color": "#C8553D", "height": "sm",
+                         "action": {"type": "postback", "label": BUNDLE_DECLINE_LABEL, "data": f"or_decline:{first_id}",
+                                    "displayText": BUNDLE_DECLINE_LABEL, "inputOption": "openKeyboard"}},
+                    ],
+                },
+            },
+        },
+    ]
+
+
+def pay_label(amount: str) -> str:
+    """"12345.50" → "12,345.5"、"12345" → "12,345"（表示用。計算には使わない）。"""
+    from decimal import Decimal
+    value = Decimal(amount)
+    text = format(value, ",f")
+    return text.rstrip("0").rstrip(".") if "." in text else text

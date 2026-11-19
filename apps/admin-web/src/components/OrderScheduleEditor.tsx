@@ -173,7 +173,7 @@ function DateInputs({ group, disabled, prefix, periodFrom, periodTo, weeklyAllow
   </div>;
 }
 
-export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, closedDates = [], templateMode = false, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; closedDates?: string[]; templateMode?: boolean; onChange: (schedule: OrderSchedule) => void }) {
+export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, closedDates = [], templateMode = false, fixedDay = false, onChange }: { schedule: OrderSchedule; disabled: boolean; periodFrom: string; periodTo: string; closedDates?: string[]; templateMode?: boolean; /** ダブルヘッダー（DEC-148）：日付は上の「2件の要点」で決め、1日の1行だけにする */ fixedDay?: boolean; onChange: (schedule: OrderSchedule) => void }) {
   const value = syncSchedule(schedule);
   const weeklyIssues = templateMode ? { overlaps: [], gaps: [] } : weeklyScheduleIssues(value, periodFrom, periodTo, closedDates);
   const change = (next: OrderSchedule) => onChange(syncSchedule(next));
@@ -198,7 +198,7 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
 
   return <div className="order-schedule order-span-12">
     <h5>稼働時間の詳細</h5>
-    <p className="order-field-hint">上で設定した全体の稼働期間内で、日ごと・期間ごとの開始時間と終了時間を入力してください。同じ時間・条件の日は期間でまとめられます。</p>
+    <p className="order-field-hint">{fixedDay ? "ダブルヘッダーの稼働日は、上の「2件の要点」の稼働日（2件共通）で決めます。ここでは時間・単価・備考を入力します。" : "上で設定した全体の稼働期間内で、日ごと・期間ごとの開始時間と終了時間を入力してください。同じ時間・条件の日は期間でまとめられます。"}</p>
     {value.work_groups.map((group, index) => {
       const update = (patch: Partial<typeof group>) => change({ ...value, work_groups: value.work_groups.map((g) => {
         if (g.id !== group.id) return g;
@@ -209,7 +209,7 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
       const showOvernight = group.end_next_day || Boolean(group.start_time && group.end_time && group.end_time <= group.start_time);
       return <fieldset key={group.id} className="order-schedule-row order-work-row" disabled={disabled}>
         <legend>稼働日の詳細 {index + 1}</legend>
-        {!templateMode && <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} weeklyAllowed={value.rates_follow_work} disabled={disabled} onChange={update} />}
+        {!templateMode && !fixedDay && <DateInputs group={group} prefix={`稼働日の詳細${index + 1}の`} periodFrom={periodFrom} periodTo={periodTo} weeklyAllowed={value.rates_follow_work} disabled={disabled} onChange={update} />}
         <div className="order-schedule-times">
           <label>開始時間<input type="time" value={group.start_time} onChange={(e) => update({ start_time: e.target.value })} /></label>
           <label>終了時間<input type="time" value={group.end_time} onChange={(e) => update({ end_time: e.target.value })} /></label>
@@ -220,10 +220,10 @@ export function OrderScheduleEditor({ schedule, disabled, periodFrom, periodTo, 
         </div>}
         <label>稼働日の備考<textarea rows={2} value={group.notes} onChange={(e) => update({ notes: e.target.value })} /></label>
         {group.gathering_time && <details className="order-field-hint"><summary>保存済みの旧項目（参考）</summary><p>旧集合時間：{group.gathering_time}</p></details>}
-        {!disabled && <div className="order-schedule-actions"><button type="button" className="order-action-button is-remove" onClick={() => void removeWork(group.id)}>稼働日の詳細 {index + 1} を削除</button></div>}
+        {!disabled && !fixedDay && <div className="order-schedule-actions"><button type="button" className="order-action-button is-remove" onClick={() => void removeWork(group.id)}>稼働日の詳細 {index + 1} を削除</button></div>}
       </fieldset>;
     })}
-    {!disabled && <div className="order-schedule-actions"><button type="button" className="order-action-button is-add" onClick={() => change({ ...value, work_groups: [...value.work_groups, newWorkGroup()] })}><span aria-hidden="true">＋</span> 稼働日・期間を追加</button></div>}
+    {!disabled && !fixedDay && <div className="order-schedule-actions"><button type="button" className="order-action-button is-add" onClick={() => change({ ...value, work_groups: [...value.work_groups, newWorkGroup()] })}><span aria-hidden="true">＋</span> 稼働日・期間を追加</button></div>}
     {weeklyIssues.overlaps.map((message) => <p key={message} className="form-error" role="alert">{message}</p>)}
     {weeklyIssues.gaps.map((message) => <p key={message} className="order-field-hint order-weekly-gap" role="status">{message}（保存するときに確認します。稼働しない祝日は、休業日にもできます。）</p>)}
     {!templateMode && value.work_groups.some((group) => group.date_mode === "weekly") && <OrderPublicHolidayPicker from={periodFrom} to={periodTo} schedule={value} disabled={disabled} onChange={change} />}
