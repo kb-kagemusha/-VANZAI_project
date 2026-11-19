@@ -92,6 +92,7 @@
 2. **CHANGELOG 追記** — ルート `CHANGELOG.md`
 3. **コミット・Push・デプロイ** — テスト → commit → push → VPS で `02_app_deploy.sh` のみ（`git pull` / `stash` 不要）→ 動作確認
 
+- 作業とデプロイのブランチは `main`（2026-11-19 から。DEC-145）。VPS も `main` を取得する
 - 手順の正本: `.cursor/rules/release-workflow.mdc`、`scripts/deploy/DEPLOY_STEPS.md`、実行スクリプト: `scripts/deploy/02_app_deploy.sh`
 - VPS 上で scp 等による直接編集はデプロイと競合するため行わない
 - VPS: `vanzai@220.158.28.35`（SSH鍵 `~/.ssh/vanzai_vps`、設定済みなら `ssh vanzai-vps`）

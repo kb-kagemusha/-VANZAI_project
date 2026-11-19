@@ -73,7 +73,7 @@ URL 形式: `https://vanzai-portal.com/public/ocr-upload?token=...`
 ```powershell
 # ローカル
 cd C:\VANZAI_project
-git push origin feature/2026-03-31-next-work
+git push origin main
 ```
 
 ```bash
@@ -123,4 +123,4 @@ git checkout HEAD -- apps/admin-web/package.json apps/admin-web/index.html apps/
 Remove-Item -Recurse -Force Backup, .tmp -ErrorAction SilentlyContinue
 ```
 
-正本は常に **git の HEAD**（`feature/2026-03-31-next-work` の最新コミット）。
+正本は常に **git の HEAD**（`main` の最新コミット）。

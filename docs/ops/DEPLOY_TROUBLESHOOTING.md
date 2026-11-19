@@ -21,7 +21,7 @@
 ```bash
 # VPS（vanzai ユーザー）
 cd /var/www/vanzai
-git fetch origin && git reset --hard origin/feature/2026-03-31-next-work
+git fetch origin && git reset --hard origin/main
 bash scripts/deploy/03_frontend_only_deploy.sh
 ```
 
@@ -29,7 +29,7 @@ bash scripts/deploy/03_frontend_only_deploy.sh
 
 ```bash
 cd /var/www/vanzai
-git pull origin feature/2026-03-31-next-work   # 必要なら
+git pull origin main   # 必要なら
 bash restart_uvicorn.sh
 curl -sf https://api.vanzai-portal.com/api/health
 ```
@@ -113,9 +113,9 @@ Your local changes would be overwritten by merge
 
 ```bash
 git stash push -u -m "pre-deploy-$(date +%Y%m%d)"
-git pull origin feature/2026-03-31-next-work
+git pull origin main
 # または UI のみなら
-git fetch origin && git reset --hard origin/feature/2026-03-31-next-work
+git fetch origin && git reset --hard origin/main
 ```
 
 stash は `.env` を含まないよう注意（通常 .env は git 管理外）。

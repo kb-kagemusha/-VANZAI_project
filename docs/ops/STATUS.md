@@ -365,7 +365,7 @@ sudo nginx -t && sudo systemctl reload nginx
 cd c:/VANZAI_project
 git add -A
 git commit -m "feat: ..."
-git push origin feature/2026-03-31-next-work
+git push origin main
 ```
 
 ### VPS へ反映（Windows PowerShell から SSH で一括実行）
@@ -373,7 +373,7 @@ git push origin feature/2026-03-31-next-work
 ```powershell
 # 2. git pull + pip + Alembic migrate + npm build（02_app_deploy.sh が全部やる）
 ssh -i "$env:USERPROFILE\.ssh\vanzai_vps" vanzai@220.158.28.35 `
-  "cd /var/www/vanzai && git fetch origin && git checkout feature/2026-03-31-next-work && git pull origin feature/2026-03-31-next-work && bash scripts/deploy/02_app_deploy.sh"
+  "cd /var/www/vanzai && git fetch origin && git checkout main && git pull origin main && bash scripts/deploy/02_app_deploy.sh"
 ```
 
 > **注意**: フロントビルドは `02_app_deploy.sh` に含まれていないことがある。  

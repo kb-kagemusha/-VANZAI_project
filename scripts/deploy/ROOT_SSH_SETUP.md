@@ -31,7 +31,7 @@ su -
 
 ```bash
 cd /var/www/vanzai
-git fetch origin && git reset --hard origin/feature/2026-03-31-next-work
+git fetch origin && git reset --hard origin/main
 bash scripts/deploy/04_root_setup_systemd.sh
 ```
 

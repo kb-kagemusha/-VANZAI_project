@@ -2175,3 +2175,9 @@
 - 保存形式：行に weekly_rule=v2、holiday_selected、custom_range、holiday_skip（他の行の祝日に上書きされる日。サーバーが導出）を追加。旧データ（weekly_rule なし＝旧規則の holiday_mode）は旧規則のまま計算・表示し、保存済みの内容を書き換えない（2-2 A）。旧行には「旧設定：祝日は対象外／含む」と表示し、本人が切り替えを選んだ行だけ新規則へ変換する（旧「対象外」は祝日が稼働日になる旨を確認する）。
 - 検証：同じ曜日・祝日が期間の重なる2行で押されていればサーバーも画面も保存前に拒否（重なり）。条件のない曜日・祝日は、休業日を除いて保存前に確認を出す（保存は可。2-3 B）。1つも押していない行は確定できない（保存は可）。
 - 請求の祝日単価・確定済みの請求書・支払明細・締め済み金額は変更しない（DEC-138のまま）。DDL変更なし。検証：tests/test_order_schedule_weekly.py、画面 calendar-order-participation-ui.spec.ts。
+
+## DEC-145: feature/2026-03-31-next-work を main へまとめ、今後は main で作業・デプロイする（2026-11-19）
+
+- Status: 実施。本人の指示による。main は2026-03-31の初期コミットのままで、feature/2026-03-31-next-work（0.59.0、本番稼働中）が main の子孫のため、履歴を書き換えず早送りでまとめる（強制更新なし）。まとめたあとの main と本番（VPS の HEAD）の中身が同じであることを確認する。
+- 理由の確認：main へまとめない理由は、決定ログ・運用文書・GitHub（保護設定なし、PR #1 はレビューなしの未マージ）のいずれにも記録がなかった。まとめることで main から消えるのは、旧Kintone運用の文書とWebAの試作など32ファイル（Kintone本番撤去の方針で本番側では削除済み）で、src・tests・alembic は影響しない。設計書 DESIGN_SPEC_v0.3.md は feature 側の改訂版（約461行）に置き換わる。
+- 運用：デプロイスクリプト 02_app_deploy.sh は VPS が今いるブランチの origin を取得する。VPS を main に切り替え、運用文書（DEPLOY_TROUBLESHOOTING・STATUS・OCR_PUBLIC_UPLOAD_RUNBOOK・ROOT_SSH_SETUP）の取得先を main に直した。過去の記録・計画書の feature への言及は、当時の記録として残す。
